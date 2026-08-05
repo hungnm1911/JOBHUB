@@ -1,6 +1,24 @@
 import database from "./database.js";
 
 const requiredEnvironmentVariables = [
+  "NODE_ENV",
+  "PORT",
+  "MONGODB_URI",
+  "MONGODB_SERVER_SELECTION_TIMEOUT_MS",
+  "JWT_SECRET",
+  "JWT_EXPIRES_IN",
+  "JWT_ALGORITHM",
+  "JWT_INVITE_SECRET",
+  "JWT_INVITE_EXPIRES_IN",
+  "BCRYPT_SALT_ROUNDS",
+  "ADMIN_EMAIL",
+  "ADMIN_PASSWORD",
+  "SMTP_HOST",
+  "SMTP_PORT",
+  "SMTP_SECURE",
+  "SMTP_USER",
+  "SMTP_PASS",
+  "MAIL_FROM_NAME",
 ];
 
 for (const variableName of requiredEnvironmentVariables) {
