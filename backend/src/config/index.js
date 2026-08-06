@@ -1,10 +1,13 @@
-import database from "./database.js";
-
 const requiredEnvironmentVariables = [
   "NODE_ENV",
   "PORT",
   "MONGODB_URI",
   "MONGODB_SERVER_SELECTION_TIMEOUT_MS",
+  "CLOUDINARY_CLOUD_NAME",
+  "CLOUDINARY_API_KEY",
+  "CLOUDINARY_API_SECRET",
+  "BYTES_PER_MEGABYTE",
+  "MAX_FILE_SIZE_MB",
   "JWT_SECRET",
   "JWT_EXPIRES_IN",
   "JWT_ALGORITHM",
@@ -36,6 +39,67 @@ const PORT = Number(process.env.PORT) || 8000
 if (!Number.isInteger(PORT) || PORT <= 0) {
   throw new Error("PORT must be a positive integer");
 }
+
+// database :
+const uri = process.env.MONGODB_URI;
+
+if (!uri) {
+  throw new Error(
+    "Missing required environment variable: MONGODB_URI",
+  );
+}
+
+const serverSelectionTimeoutMS = Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS|| 10000);
+
+if (!Number.isInteger(serverSelectionTimeoutMS)|| serverSelectionTimeoutMS <= 0) {
+  throw new Error(
+    "MONGODB_SERVER_SELECTION_TIMEOUT_MS must be a positive integer",
+  );
+}
+
+const database = Object.freeze({
+  uri,
+  serverSelectionTimeoutMS,
+});
+
+// cloudinary:
+const cloudinary = Object.freeze({
+  cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+  apiKey: process.env.CLOUDINARY_API_KEY,
+  apiSecret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// file upload:
+const maxFileSizeMB = Number(
+  process.env.MAX_FILE_SIZE_MB,
+);
+
+const bytesPerMegabyte = Number(
+  process.env.BYTES_PER_MEGABYTE,
+);
+
+if (
+  !Number.isInteger(maxFileSizeMB) ||
+  maxFileSizeMB <= 0
+) {
+  throw new Error(
+    "MAX_FILE_SIZE_MB must be a positive integer",
+  );
+}
+
+if (
+  !Number.isInteger(bytesPerMegabyte) ||
+  bytesPerMegabyte <= 0
+) {
+  throw new Error(
+    "BYTES_PER_MEGABYTE must be a positive integer",
+  );
+}
+
+const fileUpload = Object.freeze({
+  maxFileSizeMB,
+  bytesPerMegabyte,
+});
 
 // bcrypt : 
 const bcryptSaltRounds = Number(
@@ -87,8 +151,10 @@ export default Object.freeze({
   env,
   port: PORT,
   database,
+  cloudinary,
   jwt,
   bcrypt,
   admin,
-  smtp
+  smtp,
+  fileUpload
 });

@@ -2,7 +2,15 @@ import "dotenv/config";
 
 import app from "./src/app.js";
 import config from "./src/config/index.js";
-import {connectDatabase,disconnectDatabase} from "./src/config/mongodb.js";
+
+import {
+  verifyCloudinaryConnection,
+} from "./src/config/cloudinary.js";
+
+import {
+  connectDatabase,
+  disconnectDatabase,
+} from "./src/config/mongodb.js";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -112,6 +120,8 @@ const shutdown = async ({
 const startServer = async () => {
   await connectDatabase();
 
+  await verifyCloudinaryConnection();
+
   httpServer = await startHttpServer();
 
   httpServer.on("error", (error) => {
@@ -154,8 +164,11 @@ process.on("uncaughtException", (error) => {
 });
 
 process.on("unhandledRejection", (reason) => {
-  console.error("Unhandled promise rejection:", reason);
-
+  console.error(
+    "Unhandled promise rejection:",
+    reason,
+  );
+  
   if (isShuttingDown) {
     process.exit(1);
   }
@@ -169,7 +182,10 @@ process.on("unhandledRejection", (reason) => {
 try {
   await startServer();
 } catch (error) {
-  console.error("Error starting the server:", error);
+  console.error(
+    "Error starting the server:",
+    error,
+  );
 
   await shutdown({
     reason: "Server startup failed",
