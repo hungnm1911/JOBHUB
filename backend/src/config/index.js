@@ -162,21 +162,37 @@ if (
   );
 }
 
-const authToken = Object.freeze({
-  emailVerificationExpiresInMs,
-  passwordResetExpiresInMs: Number(
-    process.env.PASSWORD_RESET_EXPIRES_IN_MS || 3_600_000,
-  ),
-});
+const passwordResetExpiresInMs = Number(
+  process.env.PASSWORD_RESET_EXPIRES_IN_MS || 3_600_000,
+);
 
 if (
-  !Number.isInteger(authToken.passwordResetExpiresInMs) ||
-  authToken.passwordResetExpiresInMs <= 0
+  !Number.isInteger(passwordResetExpiresInMs) ||
+  passwordResetExpiresInMs <= 0
 ) {
   throw new Error(
     "PASSWORD_RESET_EXPIRES_IN_MS must be a positive integer",
   );
 }
+
+const companyApprovalConfirmationExpiresInMs = Number(
+  process.env.COMPANY_APPROVAL_CONFIRMATION_EXPIRES_IN_MS || 86_400_000,
+);
+
+if (
+  !Number.isInteger(companyApprovalConfirmationExpiresInMs) ||
+  companyApprovalConfirmationExpiresInMs <= 0
+) {
+  throw new Error(
+    "COMPANY_APPROVAL_CONFIRMATION_EXPIRES_IN_MS must be a positive integer",
+  );
+}
+
+const authToken = Object.freeze({
+  emailVerificationExpiresInMs,
+  passwordResetExpiresInMs,
+  companyApprovalConfirmationExpiresInMs,
+});
 
 const authSessionExpiresInMs = Number(
   process.env.AUTH_SESSION_EXPIRES_IN_MS || 604_800_000,

@@ -1,0 +1,62 @@
+import { MongoMemoryReplSet } from "mongodb-memory-server";
+import mongoose from "mongoose";
+import request from "supertest";
+
+import app from "../../src/app.js";
+import { ensureCompanyCollectionInvariants } from "../../src/models/company.model.js";
+
+let mongoMemoryReplicaSet = null;
+
+const connectTestDatabase = async () => {
+  mongoMemoryReplicaSet = await MongoMemoryReplSet.create({
+    replSet: {
+      count: 1,
+      storageEngine: "wiredTiger",
+    },
+  });
+  const uri = mongoMemoryReplicaSet.getUri();
+
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+
+  await mongoose.connect(uri, {
+    serverSelectionTimeoutMS: 5_000,
+  });
+
+  await ensureCompanyCollectionInvariants(mongoose.connection);
+};
+
+const disconnectTestDatabase = async () => {
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+
+  if (mongoMemoryReplicaSet) {
+    await mongoMemoryReplicaSet.stop();
+    mongoMemoryReplicaSet = null;
+  }
+};
+
+const clearDatabase = async () => {
+  if (mongoose.connection.readyState !== 1) {
+    return;
+  }
+
+  const { collections } = mongoose.connection;
+
+  await Promise.all(
+    Object.values(collections).map((collection) => collection.deleteMany({})),
+  );
+};
+
+const createTestAgent = () => {
+  return request(app);
+};
+
+export {
+  clearDatabase,
+  connectTestDatabase,
+  createTestAgent,
+  disconnectTestDatabase,
+};

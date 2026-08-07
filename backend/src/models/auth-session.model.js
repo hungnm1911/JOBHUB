@@ -31,6 +31,7 @@ const authSessionSchema = new Schema(
   },
 );
 
+authSessionSchema.index({ refreshTokenHash: 1 }, { unique: true });
 authSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const AuthSession = model("AuthSession", authSessionSchema);
