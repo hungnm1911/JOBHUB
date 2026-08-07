@@ -1,3 +1,4 @@
+import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import AuthSession from "../models/auth-session.model.js";
 import User from "../models/user.model.js";
@@ -8,7 +9,7 @@ const unauthorized = (message = "Authentication required") => {
   return new AppError(401, message);
 };
 
-const authenticateAccess = async ({ accessToken }) => {
+const resolveAccessCredential = async ({ accessToken }) => {
   if (typeof accessToken !== "string" || accessToken.trim() === "") {
     throw unauthorized();
   }
@@ -64,6 +65,22 @@ const authenticateAccess = async ({ accessToken }) => {
     });
   }
 
+  return {
+    session,
+    user,
+  };
+};
+
+const isCompanyManagerOnboarding = (user) => {
+  return (
+    user.role === USER_ROLE.COMPANY_MANAGER &&
+    user.status === USER_STATUS.PENDING_ACTIVATION
+  );
+};
+
+const authenticateAccess = async ({ accessToken }) => {
+  const { session, user } = await resolveAccessCredential({ accessToken });
+
   if (user.status !== USER_STATUS.ACTIVE) {
     throw new AppError(403, "Account is not active", {
       field: "status",
@@ -76,4 +93,45 @@ const authenticateAccess = async ({ accessToken }) => {
   };
 };
 
-export { authenticateAccess };
+const authenticateOnboardingAccess = async ({ accessToken }) => {
+  const { session, user } = await resolveAccessCredential({ accessToken });
+
+  if (!isCompanyManagerOnboarding(user)) {
+    throw new AppError(
+      403,
+      "Company Manager onboarding access required",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  return {
+    session,
+    user,
+  };
+};
+
+const authenticateSessionAccess = async ({ accessToken }) => {
+  const { session, user } = await resolveAccessCredential({ accessToken });
+
+  if (
+    user.status !== USER_STATUS.ACTIVE &&
+    !isCompanyManagerOnboarding(user)
+  ) {
+    throw new AppError(403, "Account is not active", {
+      field: "status",
+    });
+  }
+
+  return {
+    session,
+    user,
+  };
+};
+
+export {
+  authenticateAccess,
+  authenticateOnboardingAccess,
+  authenticateSessionAccess,
+};

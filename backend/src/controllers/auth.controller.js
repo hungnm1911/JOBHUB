@@ -1,8 +1,10 @@
 import {
+  confirmCompanyApproval,
   login,
   logoutCurrentSession,
   refreshAccess,
   registerCandidate,
+  registerCompanyManager,
   requestPasswordReset,
   resetPassword,
   verifyEmail,
@@ -28,6 +30,27 @@ const registerCandidateHandler = async (request, response, next) => {
   }
 };
 
+const registerCompanyManagerHandler = async (request, response, next) => {
+  try {
+    const { fullName, email, password } = request.body;
+
+    const result = await registerCompanyManager({
+      fullName,
+      email,
+      password,
+    });
+
+    return response.status(201).json({
+      message:
+        "Company Manager registration successful. Complete your company profile to continue onboarding.",
+      user: result.user,
+      company: result.company,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const verifyEmailHandler = async (request, response, next) => {
   try {
     const { token } = request.body;
@@ -37,6 +60,22 @@ const verifyEmailHandler = async (request, response, next) => {
     return response.status(200).json({
       message: "Email verified successfully.",
       user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const confirmCompanyApprovalHandler = async (request, response, next) => {
+  try {
+    const { token } = request.body;
+
+    const result = await confirmCompanyApproval({ token });
+
+    return response.status(200).json({
+      message: "Company approval confirmed. Account and company are now active.",
+      user: result.user,
+      company: result.company,
     });
   } catch (error) {
     next(error);
@@ -120,11 +159,13 @@ const resetPasswordHandler = async (request, response, next) => {
 };
 
 export {
+  confirmCompanyApprovalHandler,
   forgotPasswordHandler,
   loginHandler,
   logoutHandler,
   refreshAccessHandler,
   registerCandidateHandler,
+  registerCompanyManagerHandler,
   resetPasswordHandler,
   verifyEmailHandler,
 };

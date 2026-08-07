@@ -1,0 +1,7 @@
+const COMPANY_OPERATIONAL_STATUS = Object.freeze({
+  INACTIVE: "INACTIVE",
+  ACTIVE: "ACTIVE",
+  LOCKED: "LOCKED",
+});
+
+export default COMPANY_OPERATIONAL_STATUS;
