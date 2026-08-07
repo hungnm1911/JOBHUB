@@ -1,0 +1,7 @@
+const USER_ROLE = Object.freeze({
+  CANDIDATE: "CANDIDATE",
+  COMPANY_MANAGER: "COMPANY_MANAGER",
+  PLATFORM_ADMIN: "PLATFORM_ADMIN",
+});
+
+export default USER_ROLE;

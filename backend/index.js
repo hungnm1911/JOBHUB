@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 import app from "./src/app.js";
 import config from "./src/config/index.js";
 

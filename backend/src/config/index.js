@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 const requiredEnvironmentVariables = [
   "NODE_ENV",
   "PORT",
@@ -147,6 +149,54 @@ const smtp = Object.freeze({
   fromName: process.env.MAIL_FROM_NAME || "JobHub Admin",
 });
 
+const emailVerificationExpiresInMs = Number(
+  process.env.EMAIL_VERIFICATION_EXPIRES_IN_MS || 86_400_000,
+);
+
+if (
+  !Number.isInteger(emailVerificationExpiresInMs) ||
+  emailVerificationExpiresInMs <= 0
+) {
+  throw new Error(
+    "EMAIL_VERIFICATION_EXPIRES_IN_MS must be a positive integer",
+  );
+}
+
+const authToken = Object.freeze({
+  emailVerificationExpiresInMs,
+  passwordResetExpiresInMs: Number(
+    process.env.PASSWORD_RESET_EXPIRES_IN_MS || 3_600_000,
+  ),
+});
+
+if (
+  !Number.isInteger(authToken.passwordResetExpiresInMs) ||
+  authToken.passwordResetExpiresInMs <= 0
+) {
+  throw new Error(
+    "PASSWORD_RESET_EXPIRES_IN_MS must be a positive integer",
+  );
+}
+
+const authSessionExpiresInMs = Number(
+  process.env.AUTH_SESSION_EXPIRES_IN_MS || 604_800_000,
+);
+
+if (
+  !Number.isInteger(authSessionExpiresInMs) ||
+  authSessionExpiresInMs <= 0
+) {
+  throw new Error(
+    "AUTH_SESSION_EXPIRES_IN_MS must be a positive integer",
+  );
+}
+
+const authSession = Object.freeze({
+  expiresInMs: authSessionExpiresInMs,
+});
+
+const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:8000";
+
 export default Object.freeze({
   env,
   port: PORT,
@@ -156,5 +206,8 @@ export default Object.freeze({
   bcrypt,
   admin,
   smtp,
-  fileUpload
+  fileUpload,
+  authToken,
+  authSession,
+  appBaseUrl,
 });
