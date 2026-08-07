@@ -1,0 +1,92 @@
+# Backend Sources of Truth
+
+## Purpose
+
+This document identifies the single canonical owner for each backend responsibility. It is normative for new and changed code, while the **Current known mismatches** section records where the repository does not yet match the target convention.
+
+“Allowed consumers” identifies which code may import or call the owner. It does not grant a consumer permission to take ownership of the responsibility itself.
+
+## Ownership table
+
+| Responsibility | Canonical owner | Allowed consumers | Forbidden duplication |
+| --- | --- | --- | --- |
+| Process entry point, server startup, shutdown, and process-level failure handling | `backend/index.js` | Package start scripts and the Node.js runtime | Additional server listeners, startup entry points, or process signal owners elsewhere |
+| Express application instance and composition order | `backend/src/app.js` | `backend/index.js`; application-level test harnesses when introduced | Creating another production Express app or composing global application middleware in feature modules |
+| Dotenv loading | `backend/src/config/index.js` | No other module loads dotenv | Loading dotenv in any other module or establishing multiple dotenv loaders |
+| Reading environment variables | `backend/src/config/index.js` | No other module reads `process.env`; consumers use its exported configuration | Any direct `process.env` access in another module, including another module inside `src/config/` |
+| Environment validation, parsing, normalization, and approved defaults | `backend/src/config/index.js` | Any backend module may consume the normalized exported values where appropriate | Secondary environment parsers, validators, normalizers, defaults, or config objects representing the same values |
+| MongoDB/Mongoose connection lifecycle | `backend/src/config/mongodb.js` | Startup/shutdown owner; approved database tooling | Calling `mongoose.connect()` or owning connection lifecycle in routes, controllers, services, models, or new connection modules |
+| Cloudinary configured client and connection verification | `backend/src/config/cloudinary.js` | Startup owner and services that perform Cloudinary operations | Reconfiguring Cloudinary or creating another configured Cloudinary client elsewhere |
+| SMTP/Nodemailer transport | `backend/src/config/mailer.js` | Mail service | Creating parallel SMTP transporters or reading SMTP environment variables directly instead of consuming `src/config/index.js` |
+| Sending application email | `backend/src/services/mail.service.js` | Controllers and other services that coordinate an approved workflow | Direct `transporter.sendMail()` calls outside the mail service or additional general-purpose mail senders |
+| Root API router | `backend/src/routes/index.js` | Express application | Additional root API router registries or mounting feature routers directly in the entry point |
+| Feature endpoint declarations and middleware chains | `backend/src/routes/<name>.routes.js` | Root router | Defining the same feature endpoint in multiple routers; embedding business logic or database access in routes |
+| HTTP request/response translation for a feature | `backend/src/controllers/<name>.controller.js` | Feature routes | HTTP handling in services/models/utils; database/model access or business workflow ownership in controllers |
+| Feature business workflows and business validation | `backend/src/services/<name>.service.js` | Controllers and other approved services | Reimplementing the workflow in routes, middleware, controllers, utils, or parallel services |
+| Mongoose schema, model, and persistence representation | `backend/src/models/<name>.model.js` | Services and approved database tooling | Duplicate schemas/models or model ownership in controllers, routes, middleware, or utils |
+| Cross-cutting request processing | `backend/src/middlewares/<name>.js` | Express application and feature routes | Business workflows in middleware or duplicate middleware for an already-owned concern |
+| Session-bound access authentication | `backend/src/services/authenticate-access.service.js` (validation); `backend/src/middlewares/authenticate-access.js` (HTTP extraction and request enrichment) | Protected feature routes and their middleware chains | Reimplementing access/session validity checks in controllers, routes, utils, or parallel auth middlewares |
+| Platform Admin authorization | `backend/src/middlewares/authorize-platform-admin.js` | Platform-admin routes after access authentication | Role checks for Platform Admin workflows duplicated in controllers, routes, or services |
+| Platform Admin account lock (F10) | `backend/src/services/platform-admin.service.js` | Platform-admin controllers | Parallel account-lock workflows in auth or other services |
+| Platform Admin account terminate (F11) | `backend/src/services/platform-admin.service.js` | Platform-admin controllers | Parallel account-termination workflows in auth or other services |
+| Unmatched routes | `backend/src/middlewares/not-found.js` | Express application | Feature-specific or application-wide replacement 404 handlers elsewhere |
+| Final centralized HTTP error handling | `backend/src/middlewares/error-handler.js` | Express application; errors forwarded by the request pipeline | Competing global error handlers or independently defined global error response contracts |
+| Operational application error type | `backend/src/utils/app-error.js` | Routes, middleware, controllers, services, and other helpers as appropriate | Additional general-purpose application error classes representing the same contract |
+| Generic reusable helpers | The relevant module under `backend/src/utils/` | Any layer for which the helper is dependency-safe | Feature business workflows, HTTP handling, or persistence ownership hidden in utils |
+| Shared enum-like constants and fixed mappings | The relevant module under `backend/src/constants/` | Any backend layer that needs the value | Multiple constant modules defining the same domain concept or inline redefinition of canonical values |
+| V1 authentication-token types (`EMAIL_VERIFICATION`, `PASSWORD_RESET`) | `backend/src/constants/auth-token-type.js` | V1 authentication-token persistence and workflows | Additional authentication-token type owners or unsupported V1 authentication-token types |
+| File storage operations | `backend/src/services/file.service.js` | Controllers and approved services | Direct Cloudinary upload/delete operations in routes, controllers, middleware, models, or another general file service |
+| User persistence model | `backend/src/models/user.model.js` | Services and approved database tooling | A second `User` schema/model or direct use from routes/controllers/middleware |
+
+## Consumption rules
+
+- Consumers import the canonical owner; they do not reconstruct its state or configuration.
+- A convenience re-export may expose an owner, but it does not become a second owner.
+- Constants representing one domain concept have one canonical module.
+- Services may access models directly under the current architecture.
+- A repository/data-access layer must not be introduced unless explicitly approved as an architecture change.
+- When an ownership decision changes, this document and the architecture documentation must change with it.
+
+## Current known mismatches
+
+The following items describe the audited repository. They are not target patterns and do not propose a remediation.
+
+### The model barrel is disconnected and empty
+
+[`backend/src/models/index.js`](../../backend/src/models/index.js) exports an empty frozen object. Concrete model modules such as [`backend/src/models/user.model.js`](../../backend/src/models/user.model.js) are imported directly by services rather than through the barrel.
+
+Whether model barrels should be mandatory, optional, or removed is not established by the target conventions. The mismatch recorded here is that the existing barrel presents no usable model ownership or aggregation.
+
+### The middleware barrel is empty
+
+[`backend/src/middlewares/index.js`](../../backend/src/middlewares/index.js) is empty. Middleware consumers currently import concrete files directly. The target conventions do not establish whether a middleware barrel is required.
+
+### Controller error formatting overlaps centralized error handling
+
+[`backend/src/controllers/file.controller.js`](../../backend/src/controllers/file.controller.js) directly constructs error responses for a missing upload, a missing public ID, and a Cloudinary “not found” result. [`backend/src/middlewares/error-handler.js`](../../backend/src/middlewares/error-handler.js) separately owns the centralized error response structure for forwarded errors. The current code therefore has overlapping ownership of expected error formatting.
+
+Controllers are still responsible for translating service outcomes into HTTP semantics under the target convention. The precise boundary between controller translation and centralized response formatting remains a human decision.
+
+### Required configuration values also have unreachable defaults
+
+[`backend/src/config/index.js`](../../backend/src/config/index.js) first rejects absent values in its required-variable loop, then supplies defaults for several of those same values. Examples include `NODE_ENV`, `PORT`, `MONGODB_SERVER_SELECTION_TIMEOUT_MS`, `JWT_EXPIRES_IN`, `JWT_ALGORITHM`, `BCRYPT_SALT_ROUNDS`, `SMTP_PORT`, and `MAIL_FROM_NAME`. When these variables are absent, validation throws before the defaults can be used.
+
+### Input and business validation ownership overlaps
+
+The file controller checks that a delete `publicId` is a non-empty string, and [`backend/src/services/file.service.js`](../../backend/src/services/file.service.js) repeats the same check. Upload existence is checked in the controller, while content type is checked in middleware. The repository does not yet apply a uniform distinction among transport validation, normalization, and business validation.
+
+### Placeholder barrels and database seed files have no active responsibility
+
+The middleware barrel and model barrel do not aggregate their layers. [`backend/src/database/seed.js`](../../backend/src/database/seed.js) is empty, and `backend/src/database/seeds/seed-1.js` contains only a placeholder comment. These files currently represent structure rather than active behavior.
+
+## Decisions still requiring human confirmation
+
+The target conventions do not settle these points:
+
+- whether model and middleware barrel files are required public entry points, optional conveniences, or unwanted;
+- the exact boundary between controller-owned HTTP error translation and centralized error-body formatting;
+- which configuration values are truly required and which are intended to have defaults;
+- whether request-shape validation belongs in route middleware, controllers, or a consistent combination of both; and
+- whether seed scaffolding is intended to remain and, if so, what module owns seed orchestration.
+
+Until those decisions are made, code must not establish a second owner or infer a new architectural layer.

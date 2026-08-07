@@ -1,0 +1,300 @@
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+} from "vitest";
+
+import USER_ROLE from "../../src/constants/user-role.js";
+import USER_STATUS from "../../src/constants/user-status.js";
+import AuthSession from "../../src/models/auth-session.model.js";
+import User from "../../src/models/user.model.js";
+import {
+  createSessionWithRefreshToken,
+  createVerifiedUser,
+  DEFAULT_PASSWORD,
+  loginAndGetAccessToken,
+} from "../helpers/auth-fixtures.js";
+import {
+  clearDatabase,
+  connectTestDatabase,
+  createTestAgent,
+  disconnectTestDatabase,
+} from "../helpers/database.js";
+
+describe("POST /api/platform-admin/accounts/:userId/terminate", () => {
+  beforeAll(async () => {
+    await connectTestDatabase();
+  });
+
+  afterEach(async () => {
+    await clearDatabase();
+  });
+
+  afterAll(async () => {
+    await disconnectTestDatabase();
+  });
+
+  it("terminates an ACTIVE target account, preserves verification data, and revokes all target sessions", async () => {
+    const agent = createTestAgent();
+
+    await createVerifiedUser({
+      email: "admin@example.com",
+      role: USER_ROLE.PLATFORM_ADMIN,
+    });
+    const { user: targetUser } = await createVerifiedUser({
+      email: "target@example.com",
+    });
+
+    const targetLoginResponse = await agent.post("/api/auth/login").send({
+      email: "target@example.com",
+      password: DEFAULT_PASSWORD,
+    });
+
+    expect(targetLoginResponse.status).toBe(200);
+
+    const targetAccessToken = targetLoginResponse.body.accessToken;
+    const { rawRefreshToken } = await createSessionWithRefreshToken(targetUser);
+    await createSessionWithRefreshToken(targetUser);
+
+    const emailVerifiedAtBefore = targetUser.emailVerifiedAt;
+
+    const adminAccessToken = await loginAndGetAccessToken(agent, {
+      email: "admin@example.com",
+    });
+
+    const response = await agent
+      .post(`/api/platform-admin/accounts/${targetUser._id.toString()}/terminate`)
+      .set("Authorization", `Bearer ${adminAccessToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toMatch(/terminated successfully/i);
+    expect(response.body.user).toMatchObject({
+      id: targetUser._id.toString(),
+      email: "target@example.com",
+      fullName: targetUser.fullName,
+      role: USER_ROLE.CANDIDATE,
+      status: USER_STATUS.TERMINATED,
+    });
+
+    const persistedUser = await User.findById(targetUser._id);
+    const targetSessions = await AuthSession.find({ userId: targetUser._id });
+
+    expect(persistedUser.emailVerifiedAt?.toISOString()).toBe(
+      emailVerifiedAtBefore.toISOString(),
+    );
+    expect(targetSessions).toHaveLength(0);
+
+    const targetProtectedResponse = await agent
+      .get("/api/auth-access-probe/protected")
+      .set("Authorization", `Bearer ${targetAccessToken}`);
+
+    expect(targetProtectedResponse.status).toBe(401);
+
+    const refreshResponse = await agent.post("/api/auth/refresh").send({
+      refreshToken: rawRefreshToken,
+    });
+
+    expect(refreshResponse.status).toBe(401);
+
+    const loginResponse = await agent.post("/api/auth/login").send({
+      email: "target@example.com",
+      password: DEFAULT_PASSWORD,
+    });
+
+    expect(loginResponse.status).toBe(403);
+  });
+
+  it("terminates a LOCKED target account and revokes all target sessions", async () => {
+    const agent = createTestAgent();
+
+    await createVerifiedUser({
+      email: "admin@example.com",
+      role: USER_ROLE.PLATFORM_ADMIN,
+    });
+    const { user: targetUser } = await createVerifiedUser({
+      email: "locked-target@example.com",
+      status: USER_STATUS.LOCKED,
+    });
+
+    await createSessionWithRefreshToken(targetUser);
+
+    const adminAccessToken = await loginAndGetAccessToken(agent, {
+      email: "admin@example.com",
+    });
+
+    const response = await agent
+      .post(`/api/platform-admin/accounts/${targetUser._id.toString()}/terminate`)
+      .set("Authorization", `Bearer ${adminAccessToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.user.status).toBe(USER_STATUS.TERMINATED);
+
+    const targetSessions = await AuthSession.find({ userId: targetUser._id });
+
+    expect(targetSessions).toHaveLength(0);
+  });
+
+  it("terminates eligible COMPANY_MANAGER targets", async () => {
+    const agent = createTestAgent();
+
+    await createVerifiedUser({
+      email: "admin@example.com",
+      role: USER_ROLE.PLATFORM_ADMIN,
+    });
+    const { user: targetUser } = await createVerifiedUser({
+      email: "manager@example.com",
+      role: USER_ROLE.COMPANY_MANAGER,
+    });
+
+    const adminAccessToken = await loginAndGetAccessToken(agent, {
+      email: "admin@example.com",
+    });
+
+    const response = await agent
+      .post(`/api/platform-admin/accounts/${targetUser._id.toString()}/terminate`)
+      .set("Authorization", `Bearer ${adminAccessToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.user).toMatchObject({
+      role: USER_ROLE.COMPANY_MANAGER,
+      status: USER_STATUS.TERMINATED,
+    });
+  });
+
+  it("requires Platform Admin authorization", async () => {
+    const agent = createTestAgent();
+
+    await createVerifiedUser({
+      email: "candidate@example.com",
+    });
+    const { user: targetUser } = await createVerifiedUser({
+      email: "target@example.com",
+    });
+
+    const candidateAccessToken = await loginAndGetAccessToken(agent, {
+      email: "candidate@example.com",
+    });
+
+    const response = await agent
+      .post(`/api/platform-admin/accounts/${targetUser._id.toString()}/terminate`)
+      .set("Authorization", `Bearer ${candidateAccessToken}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.message).toBe("Platform Admin access required");
+
+    const unauthenticated = await agent.post(
+      `/api/platform-admin/accounts/${targetUser._id.toString()}/terminate`,
+    );
+
+    expect(unauthenticated.status).toBe(401);
+  });
+
+  it("rejects self-targeting and Platform-Admin-to-Platform-Admin terminate attempts", async () => {
+    const agent = createTestAgent();
+
+    const { user: actingAdmin } = await createVerifiedUser({
+      email: "acting-admin@example.com",
+      role: USER_ROLE.PLATFORM_ADMIN,
+    });
+    const { user: otherAdmin } = await createVerifiedUser({
+      email: "other-admin@example.com",
+      role: USER_ROLE.PLATFORM_ADMIN,
+    });
+
+    const adminAccessToken = await loginAndGetAccessToken(agent, {
+      email: "acting-admin@example.com",
+    });
+
+    const selfResponse = await agent
+      .post(`/api/platform-admin/accounts/${actingAdmin._id.toString()}/terminate`)
+      .set("Authorization", `Bearer ${adminAccessToken}`);
+
+    expect(selfResponse.status).toBe(403);
+
+    const otherAdminResponse = await agent
+      .post(`/api/platform-admin/accounts/${otherAdmin._id.toString()}/terminate`)
+      .set("Authorization", `Bearer ${adminAccessToken}`);
+
+    expect(otherAdminResponse.status).toBe(403);
+
+    const persistedActingAdmin = await User.findById(actingAdmin._id);
+    const persistedOtherAdmin = await User.findById(otherAdmin._id);
+
+    expect(persistedActingAdmin.status).toBe(USER_STATUS.ACTIVE);
+    expect(persistedOtherAdmin.status).toBe(USER_STATUS.ACTIVE);
+  });
+
+  it("rejects already TERMINATED targets and unknown accounts without changing other users", async () => {
+    const agent = createTestAgent();
+
+    await createVerifiedUser({
+      email: "admin@example.com",
+      role: USER_ROLE.PLATFORM_ADMIN,
+    });
+    const { user: terminatedUser } = await createVerifiedUser({
+      email: "terminated@example.com",
+      status: USER_STATUS.TERMINATED,
+    });
+    const { user: activeUser } = await createVerifiedUser({
+      email: "active@example.com",
+    });
+    const { session: activeSession } = await createSessionWithRefreshToken(activeUser);
+
+    const adminAccessToken = await loginAndGetAccessToken(agent, {
+      email: "admin@example.com",
+    });
+
+    const terminatedResponse = await agent
+      .post(`/api/platform-admin/accounts/${terminatedUser._id.toString()}/terminate`)
+      .set("Authorization", `Bearer ${adminAccessToken}`);
+
+    expect(terminatedResponse.status).toBe(409);
+
+    const missingResponse = await agent
+      .post("/api/platform-admin/accounts/507f1f77bcf86cd799439011/terminate")
+      .set("Authorization", `Bearer ${adminAccessToken}`);
+
+    expect(missingResponse.status).toBe(404);
+
+    expect(await User.findById(terminatedUser._id)).toMatchObject({
+      status: USER_STATUS.TERMINATED,
+    });
+    expect(await AuthSession.findById(activeSession._id)).not.toBeNull();
+  });
+
+  it("revokes only the target user's sessions", async () => {
+    const agent = createTestAgent();
+
+    await createVerifiedUser({
+      email: "admin@example.com",
+      role: USER_ROLE.PLATFORM_ADMIN,
+    });
+    const { user: targetUser } = await createVerifiedUser({
+      email: "target@example.com",
+    });
+    const { user: otherUser } = await createVerifiedUser({
+      email: "other@example.com",
+    });
+
+    await createSessionWithRefreshToken(targetUser);
+    await createSessionWithRefreshToken(targetUser);
+    const { session: otherSession } = await createSessionWithRefreshToken(otherUser);
+
+    const adminAccessToken = await loginAndGetAccessToken(agent, {
+      email: "admin@example.com",
+    });
+
+    await agent
+      .post(`/api/platform-admin/accounts/${targetUser._id.toString()}/terminate`)
+      .set("Authorization", `Bearer ${adminAccessToken}`);
+
+    const targetSessions = await AuthSession.find({ userId: targetUser._id });
+    const remainingOtherSession = await AuthSession.findById(otherSession._id);
+
+    expect(targetSessions).toHaveLength(0);
+    expect(remainingOtherSession).not.toBeNull();
+  });
+});
