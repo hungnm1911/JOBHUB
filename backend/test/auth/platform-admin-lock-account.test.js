@@ -7,9 +7,12 @@ import {
   it,
 } from "vitest";
 
+import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
+import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import AuthSession from "../../src/models/auth-session.model.js";
+import Company from "../../src/models/company.model.js";
 import User from "../../src/models/user.model.js";
 import {
   createSessionWithRefreshToken,
@@ -23,6 +26,35 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+
+const createApprovedActiveCompanyForManager = async ({
+  managerUserId,
+  reviewedByUserId,
+  businessRegistrationNumber = "BRN-LOCK-BYPASS-1",
+  name = "Lock Bypass Co",
+}) => {
+  const submittedAt = new Date("2026-01-01T00:00:00.000Z");
+  const reviewedAt = new Date("2026-01-02T00:00:00.000Z");
+  const activatedAt = new Date("2026-01-03T00:00:00.000Z");
+
+  return Company.create({
+    managerUserId,
+    name,
+    businessRegistrationNumber,
+    description: "Active company for account-lock bypass regression",
+    approvalStatus: COMPANY_APPROVAL_STATUS.APPROVED,
+    operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
+    submittedAt,
+    reviewedByUserId,
+    reviewedAt,
+    activatedAt,
+    reviewSnapshot: {
+      name,
+      businessRegistrationNumber,
+      description: "Active company for account-lock bypass regression",
+    },
+  });
+};
 
 describe("POST /api/platform-admin/accounts/:userId/lock", () => {
   beforeAll(async () => {
@@ -258,5 +290,49 @@ describe("POST /api/platform-admin/accounts/:userId/lock", () => {
 
     expect(targetSessions).toHaveLength(0);
     expect(remainingOtherSession).not.toBeNull();
+  });
+
+  it("rejects account-level lock of Company Manager owning APPROVED + ACTIVE Company", async () => {
+    const agent = createTestAgent();
+
+    const { user: admin } = await createVerifiedUser({
+      email: "admin.lock-bypass@example.com",
+      role: USER_ROLE.PLATFORM_ADMIN,
+    });
+    const { user: manager } = await createVerifiedUser({
+      email: "manager.lock-bypass@example.com",
+      role: USER_ROLE.COMPANY_MANAGER,
+      status: USER_STATUS.ACTIVE,
+    });
+
+    const company = await createApprovedActiveCompanyForManager({
+      managerUserId: manager._id,
+      reviewedByUserId: admin._id,
+    });
+    const { session: managerSession } =
+      await createSessionWithRefreshToken(manager);
+
+    const adminAccessToken = await loginAndGetAccessToken(agent, {
+      email: "admin.lock-bypass@example.com",
+    });
+
+    const response = await agent
+      .post(`/api/platform-admin/accounts/${manager._id.toString()}/lock`)
+      .set("Authorization", `Bearer ${adminAccessToken}`);
+
+    expect(response.status).toBe(409);
+
+    const persistedManager = await User.findById(manager._id);
+    const persistedCompany = await Company.findById(company._id);
+    const remainingSession = await AuthSession.findById(managerSession._id);
+
+    expect(persistedManager.status).toBe(USER_STATUS.ACTIVE);
+    expect(persistedCompany.approvalStatus).toBe(
+      COMPANY_APPROVAL_STATUS.APPROVED,
+    );
+    expect(persistedCompany.operationalStatus).toBe(
+      COMPANY_OPERATIONAL_STATUS.ACTIVE,
+    );
+    expect(remainingSession).not.toBeNull();
   });
 });

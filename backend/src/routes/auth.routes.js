@@ -1,16 +1,20 @@
 import express from "express";
 
 import {
+  confirmCompanyApprovalHandler,
   forgotPasswordHandler,
   loginHandler,
   logoutHandler,
   refreshAccessHandler,
   registerCandidateHandler,
+  registerCompanyManagerHandler,
   resetPasswordHandler,
   verifyEmailHandler,
 } from "../controllers/auth.controller.js";
-import authenticateAccess from "../middlewares/authenticate-access.js";
+import authenticateSessionAccess from "../middlewares/authenticate-session-access.js";
 import validateCandidateRegistration from "../middlewares/validate-candidate-registration.js";
+import validateCompanyManagerRegistration from "../middlewares/validate-company-manager-registration.js";
+import validateConfirmCompanyApproval from "../middlewares/validate-confirm-company-approval.js";
 import validateForgotPassword from "../middlewares/validate-forgot-password.js";
 import validateLogin from "../middlewares/validate-login.js";
 import validateRefreshAccess from "../middlewares/validate-refresh-access.js";
@@ -26,9 +30,21 @@ router.post(
 );
 
 router.post(
+  "/register/company-manager",
+  validateCompanyManagerRegistration,
+  registerCompanyManagerHandler,
+);
+
+router.post(
   "/verify-email",
   validateVerifyEmail,
   verifyEmailHandler,
+);
+
+router.post(
+  "/confirm-company-approval",
+  validateConfirmCompanyApproval,
+  confirmCompanyApprovalHandler,
 );
 
 router.post(
@@ -45,7 +61,7 @@ router.post(
 
 router.post(
   "/logout",
-  authenticateAccess,
+  authenticateSessionAccess,
   logoutHandler,
 );
 
