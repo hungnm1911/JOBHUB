@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import request from "supertest";
 
 import app from "../../src/app.js";
+import { ensureCompanyCollectionInvariants } from "../../src/models/company.model.js";
 
 let mongoMemoryReplicaSet = null;
 
@@ -22,6 +23,8 @@ const connectTestDatabase = async () => {
   await mongoose.connect(uri, {
     serverSelectionTimeoutMS: 5_000,
   });
+
+  await ensureCompanyCollectionInvariants(mongoose.connection);
 };
 
 const disconnectTestDatabase = async () => {

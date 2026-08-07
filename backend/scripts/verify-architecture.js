@@ -746,6 +746,7 @@ const checkAuthenticationTokenOwnership = () => {
     const source = sourceByFile.get(canonicalFiles.authTokenType);
     const actualEntries = extractAuthTokenTypeEntries(source).sort();
     const expectedEntries = [
+      ["COMPANY_APPROVAL_CONFIRMATION", "COMPANY_APPROVAL_CONFIRMATION"],
       ["EMAIL_VERIFICATION", "EMAIL_VERIFICATION"],
       ["PASSWORD_RESET", "PASSWORD_RESET"],
     ].sort();
@@ -754,7 +755,8 @@ const checkAuthenticationTokenOwnership = () => {
       addViolation({
         rule: "ARCH-016",
         filePath: canonicalFiles.authTokenType,
-        reason: "V1 authentication-token types must be exactly EMAIL_VERIFICATION and PASSWORD_RESET.",
+        reason:
+          "Authentication-token types must be exactly EMAIL_VERIFICATION, PASSWORD_RESET, and COMPANY_APPROVAL_CONFIRMATION.",
       });
     }
   }

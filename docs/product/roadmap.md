@@ -21,7 +21,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | Version | Scope | Status |
 | --- | --- | --- |
 | V1 | Tài khoản và vòng đời xác thực | COMPLETED AND VERIFIED |
-| V2 | Company onboarding và quản trị cấp nền tảng | READY FOR IMPLEMENTATION |
+| V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
 | V3 | Quản lý nhân sự tuyển dụng của Company | PLANNED |
 | V4 | Danh mục chuẩn của nền tảng | PLANNED |
 | V5 | Job và vòng đời phê duyệt Job | PLANNED |
@@ -64,19 +64,17 @@ The approved business scope of the version has been implemented and the required
 
 ## Current milestone
 
-Current implementation milestone:
+V1 and V2 are `COMPLETED AND VERIFIED`.
 
-**V2 — Company onboarding và quản trị cấp nền tảng**
+There is no further version currently `READY FOR IMPLEMENTATION` or `IN PROGRESS`. Versions V3 through V17 remain `PLANNED` and must not be implemented merely from their roadmap titles.
 
-Canonical specification:
+V2 canonical specification:
 
 `docs/product/versions/v02-company-onboarding-platform-administration.md`
 
-Canonical persistence contract:
+V2 canonical persistence contract:
 
 `docs/data/versions/v02-company-onboarding-platform-administration.md`
-
-V1 is completed and verified. Versions V3 through V17 remain planned and must not be implemented merely from their roadmap titles.
 
 ---
 

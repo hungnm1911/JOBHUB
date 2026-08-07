@@ -26,7 +26,11 @@ Sau khi V02 hoàn thành, hệ thống phải:
 
 ---
 
+
+
 ## 2. Phạm vi
+
+
 
 ### 2.1. Trong phạm vi
 
@@ -44,6 +48,8 @@ Sau khi V02 hoàn thành, hệ thống phải:
 - Platform Admin khóa/chấm dứt hoạt động của Company đang active.
 - Authorization theo quan hệ Company Manager — Company.
 - Tenant boundary cho Company.
+
+
 
 ### 2.2. Ngoài phạm vi
 
@@ -70,18 +76,24 @@ Không suy diễn hoặc tự bổ sung các chức năng ngoài phạm vi đã 
 
 ---
 
+
+
 ## 3. Dependency với các version trước
 
 V02 sử dụng và mở rộng các business concept đã có từ V01:
 
 - `User`.
-- Authentication và điều kiện được đăng nhập.
+- Authentication và điều kiện được đăng nhập của **normal ACTIVE authentication**.
 - Xác thực email.
 - Trạng thái tài khoản `ACTIVE`, `LOCKED`, `TERMINATED`.
-- Quy tắc tài khoản không còn `ACTIVE` thì không được đăng nhập.
+- Quy tắc normal V01 authentication: User chỉ được dùng normal ACTIVE authentication khi đồng thời credentials hợp lệ, email đã được xác thực và `status = ACTIVE`.
 - Quy tắc chấm dứt tài khoản không đồng nghĩa hard delete.
 
 V02 bổ sung trạng thái `PENDING_ACTIVATION` cho Company Manager đang trong onboarding.
+
+V02 **không** nới lỏng normal ACTIVE authentication của V01. Candidate và mọi User `ACTIVE` vẫn tuân theo điều kiện đăng nhập V01 ở trên.
+
+V02 **chốt thêm** một exception riêng: limited onboarding authentication cho Company Manager `PENDING_ACTIVATION` (xem `BR-21`). Exception này tách biệt với normal ACTIVE authentication và không thay thế điều kiện đăng nhập V01.
 
 Đối với Company Manager, V02 thay đổi thời điểm được active:
 
@@ -90,6 +102,8 @@ V02 bổ sung trạng thái `PENDING_ACTIVATION` cho Company Manager đang trong
         ↓
 PENDING_ACTIVATION
         ↓
+Limited onboarding authentication (F02 / F03 / F08)
+        ↓
 Platform Admin chấp thuận Company
         ↓
 Company Manager xác nhận chấp thuận qua email
@@ -97,6 +111,8 @@ Company Manager xác nhận chấp thuận qua email
 Company Manager ACTIVE
 +
 Company ACTIVE
+        ↓
+Normal ACTIVE authentication (V01)
 ```
 
 Company Manager không được active chỉ vì đã bắt đầu đăng ký.
@@ -105,7 +121,11 @@ Candidate flow của V01 không bị thay đổi bởi V02.
 
 ---
 
+
+
 ## 4. Thuật ngữ và chủ thể
+
+
 
 ### 4.1. Company Manager
 
@@ -113,9 +133,9 @@ Company Manager là User đại diện và quản lý một Company.
 
 Company Manager:
 
-- có credentials của User để đăng nhập;
+- có credentials của User để tạo limited onboarding authentication khi `PENDING_ACTIVATION`, và để dùng normal ACTIVE authentication sau F07;
 - đăng ký đồng thời với Company;
-- hoàn thiện và gửi hồ sơ Company;
+- hoàn thiện và gửi hồ sơ Company trong onboarding context;
 - xác nhận chấp thuận sau khi Platform Admin approve;
 - sau khi active, chỉ quản lý Company gắn với chính mình.
 
@@ -133,6 +153,8 @@ Company:
 - là tenant của dữ liệu doanh nghiệp;
 - không có credentials đăng nhập riêng.
 
+
+
 ### 4.3. Platform Admin
 
 Platform Admin là actor quản trị ở cấp nền tảng.
@@ -148,6 +170,8 @@ Platform Admin:
 Quyền quản trị cấp nền tảng không làm Platform Admin trở thành thành viên của Company.
 
 ---
+
+
 
 ## 5. Quan hệ nghiệp vụ chính
 
@@ -174,34 +198,48 @@ Quan hệ `1 Company ↔ 1 Company Manager` là business design của V02, khôn
 
 ---
 
+
+
 ## 6. Trạng thái nghiệp vụ
+
+
 
 ### 6.1. Trạng thái Company Manager liên quan V02
 
-| Trạng thái | Ý nghĩa trong V02 |
-| --- | --- |
-| `PENDING_ACTIVATION` | Company Manager đang trong onboarding và chưa được phép đăng nhập như một tài khoản active. |
-| `ACTIVE` | Company Manager đã hoàn tất onboarding và được phép đăng nhập nếu các điều kiện authentication khác của hệ thống vẫn hợp lệ. |
-| `TERMINATED` | Quyền truy cập của Company Manager đã bị chấm dứt; không được đăng nhập. |
+
+| Trạng thái           | Ý nghĩa trong V02                                                                                                                                                                                                 |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PENDING_ACTIVATION` | Company Manager đang trong onboarding; chưa được dùng normal ACTIVE authentication; được phép dùng limited onboarding authentication theo `BR-21` khi credentials hợp lệ dù `emailVerifiedAt` vẫn `null`. |
+| `ACTIVE`             | Company Manager đã hoàn tất onboarding và được phép dùng normal ACTIVE authentication nếu các điều kiện authentication V01 khác vẫn hợp lệ (`emailVerifiedAt` đã có giá trị).                                      |
+| `TERMINATED`         | Quyền truy cập của Company Manager đã bị chấm dứt; không được dùng normal ACTIVE authentication cũng như limited onboarding authentication.                                                                        |
+
 
 `LOCKED` vẫn là trạng thái tài khoản đã tồn tại từ V01, nhưng hành động khóa Company trong F10 của V02 chuyển Company Manager sang `TERMINATED`.
 
+Limited onboarding authentication **không** làm User thành `ACTIVE` và **không** set `emailVerifiedAt`. `emailVerifiedAt` của Company Manager chỉ được hoàn tất khi F07 / activation thành công.
+
 ### 6.2. Trạng thái xét duyệt Company
 
-| Trạng thái | Ý nghĩa |
-| --- | --- |
-| `NOT_SUBMITTED` | Company Manager đang hoàn thiện hồ sơ và chưa gửi Platform Admin. |
-| `PENDING` | Hồ sơ đã được gửi và đang chờ Platform Admin quyết định. |
-| `APPROVED` | Platform Admin đã chấp thuận Company. |
-| `REJECTED` | Platform Admin đã từ chối Company; đây là trạng thái kết thúc của onboarding trong V02. |
+
+| Trạng thái      | Ý nghĩa                                                                                 |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `NOT_SUBMITTED` | Company Manager đang hoàn thiện hồ sơ và chưa gửi Platform Admin.                       |
+| `PENDING`       | Hồ sơ đã được gửi và đang chờ Platform Admin quyết định.                                |
+| `APPROVED`      | Platform Admin đã chấp thuận Company.                                                   |
+| `REJECTED`      | Platform Admin đã từ chối Company; đây là trạng thái kết thúc của onboarding trong V02. |
+
+
+
 
 ### 6.3. Trạng thái hoạt động Company
 
-| Trạng thái | Ý nghĩa |
-| --- | --- |
-| `INACTIVE` | Company chưa được phép hoạt động trên nền tảng. |
-| `ACTIVE` | Company đang được phép hoạt động. |
-| `LOCKED` | Company đã từng active nhưng đã bị Platform Admin chấm dứt khả năng hoạt động trong V02. |
+
+| Trạng thái | Ý nghĩa                                                                                  |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| `INACTIVE` | Company chưa được phép hoạt động trên nền tảng.                                          |
+| `ACTIVE`   | Company đang được phép hoạt động.                                                        |
+| `LOCKED`   | Company đã từng active nhưng đã bị Platform Admin chấm dứt khả năng hoạt động trong V02. |
+
 
 Trạng thái xét duyệt và trạng thái hoạt động là hai khái niệm độc lập.
 
@@ -209,22 +247,28 @@ Trạng thái xét duyệt và trạng thái hoạt động là hai khái niệm
 
 ---
 
+
+
 ## 7. Tổ hợp trạng thái hợp lệ
 
 Các tổ hợp dưới đây định nghĩa lifecycle Company onboarding và quản trị Company của V02:
 
-| Company Manager | Company approval | Company operational | Ý nghĩa |
-| --- | --- | --- | --- |
-| `PENDING_ACTIVATION` | `NOT_SUBMITTED` | `INACTIVE` | Đang hoàn thiện onboarding. |
-| `PENDING_ACTIVATION` | `PENDING` | `INACTIVE` | Đã submit, đang chờ Platform Admin. |
-| `PENDING_ACTIVATION` | `REJECTED` | `INACTIVE` | Đăng ký bị từ chối; onboarding kết thúc. |
-| `PENDING_ACTIVATION` | `APPROVED` | `INACTIVE` | Admin đã approve, đang chờ Company Manager xác nhận. |
-| `ACTIVE` | `APPROVED` | `ACTIVE` | Company và Company Manager đang hoạt động. |
-| `TERMINATED` | `APPROVED` | `LOCKED` | Company bị khóa/chấm dứt hoạt động và Company Manager không còn quyền đăng nhập. |
+
+| Company Manager      | Company approval | Company operational | Ý nghĩa                                                                          |
+| -------------------- | ---------------- | ------------------- | -------------------------------------------------------------------------------- |
+| `PENDING_ACTIVATION` | `NOT_SUBMITTED`  | `INACTIVE`          | Đang hoàn thiện onboarding.                                                      |
+| `PENDING_ACTIVATION` | `PENDING`        | `INACTIVE`          | Đã submit, đang chờ Platform Admin.                                              |
+| `PENDING_ACTIVATION` | `REJECTED`       | `INACTIVE`          | Đăng ký bị từ chối; onboarding kết thúc.                                         |
+| `PENDING_ACTIVATION` | `APPROVED`       | `INACTIVE`          | Admin đã approve, đang chờ Company Manager xác nhận.                             |
+| `ACTIVE`             | `APPROVED`       | `ACTIVE`            | Company và Company Manager đang hoạt động.                                       |
+| `TERMINATED`         | `APPROVED`       | `LOCKED`            | Company bị khóa/chấm dứt hoạt động và Company Manager không còn quyền dùng bất kỳ authentication context nào. |
+
 
 Các tổ hợp khác không thuộc lifecycle Company của V02 và không được tự bổ sung thành transition mới.
 
 ---
+
+
 
 ## 8. Quy trình nghiệp vụ tổng thể
 
@@ -268,13 +312,21 @@ Terminal                             ↓
 
 ---
 
+
+
 # 9. Functional Requirements
 
+
+
 ## F01 — Khởi tạo onboarding Company Manager và Company
+
+
 
 ### Actor
 
 - Người đăng ký Company Manager.
+
+
 
 ### Mục tiêu
 
@@ -284,6 +336,8 @@ Khởi tạo một onboarding trong đó tài khoản Company Manager và Compan
 
 - Người đăng ký chọn đăng ký với tư cách Company Manager.
 - Các điều kiện tài khoản chung kế thừa từ V01 phải được thỏa mãn.
+
+
 
 ### Luồng chính
 
@@ -295,6 +349,8 @@ Khởi tạo một onboarding trong đó tài khoản Company Manager và Compan
 6. Company bắt đầu ở `NOT_SUBMITTED + INACTIVE`.
 7. Company Manager tiếp tục hoàn thiện hồ sơ Company.
 
+
+
 ### Kết quả
 
 - Company Manager và Company cùng tồn tại trong onboarding.
@@ -302,11 +358,15 @@ Khởi tạo một onboarding trong đó tài khoản Company Manager và Compan
 - Company chưa được phép hoạt động.
 - Company Manager chưa được sử dụng tài khoản như Candidate.
 
+
+
 ### Trường hợp từ chối
 
 - Không cho phép hoàn tất onboarding Company Manager mà không có Company tương ứng.
 - Không cho phép một Company Manager gắn với Company thứ hai.
 - Không cho phép một Company gắn với Company Manager thứ hai.
+
+
 
 ### Business Rules liên quan
 
@@ -314,6 +374,8 @@ Khởi tạo một onboarding trong đó tài khoản Company Manager và Compan
 - `BR-02`
 - `BR-03`
 - `BR-04`
+
+
 
 ### Không thuộc chức năng này
 
@@ -324,11 +386,17 @@ Khởi tạo một onboarding trong đó tài khoản Company Manager và Compan
 
 ---
 
+
+
 ## F02 — Hoàn thiện hồ sơ Company trước khi submit
+
+
 
 ### Actor
 
 - Company Manager của Company.
+
+
 
 ### Mục tiêu
 
@@ -336,12 +404,15 @@ Cho phép Company Manager hoàn thiện hồ sơ Company trước khi gửi xét
 
 ### Tiền điều kiện
 
+- Company Manager đang ở `PENDING_ACTIVATION` và đang dùng limited onboarding authentication (`BR-21`).
 - Company thuộc Company Manager hiện tại.
 - Company đang ở `NOT_SUBMITTED + INACTIVE`.
 
+
+
 ### Luồng chính
 
-1. Company Manager nhập hoặc cập nhật thông tin hồ sơ Company.
+1. Company Manager xem hoặc nhập/cập nhật thông tin hồ sơ Company trong onboarding context.
 2. Hệ thống ghi nhận hồ sơ hiện tại của Company.
 3. Company Manager có thể tiếp tục cập nhật hồ sơ cho đến trước khi submit.
 
@@ -356,14 +427,21 @@ Các thông tin hồ sơ thuộc V02 gồm:
 - thông tin liên hệ;
 - mã số doanh nghiệp.
 
+
+
 ### Kết quả
 
 - Hồ sơ Company được cập nhật nhưng chưa được coi là hồ sơ đã gửi xét duyệt.
 
+
+
 ### Trường hợp từ chối
 
+- Company Manager không có limited onboarding authentication hợp lệ.
 - Company Manager không được cập nhật Company của Company Manager khác.
 - Sau khi Company đã ở `PENDING`, chức năng này không được dùng để sửa hồ sơ đang được xét duyệt.
+
+
 
 ### Business Rules liên quan
 
@@ -372,6 +450,9 @@ Các thông tin hồ sơ thuộc V02 gồm:
 - `BR-08`
 - `BR-17`
 - `BR-18`
+- `BR-21`
+
+
 
 ### Không thuộc chức năng này
 
@@ -381,11 +462,17 @@ Các thông tin hồ sơ thuộc V02 gồm:
 
 ---
 
+
+
 ## F03 — Submit Company để xét duyệt
+
+
 
 ### Actor
 
 - Company Manager của Company.
+
+
 
 ### Mục tiêu
 
@@ -393,11 +480,14 @@ Gửi hồ sơ Company cho Platform Admin xét duyệt và cố định nội du
 
 ### Tiền điều kiện
 
+- Company Manager đang ở `PENDING_ACTIVATION` và đang dùng limited onboarding authentication (`BR-21`).
 - Company đang ở `NOT_SUBMITTED + INACTIVE`.
 - `name` đã có giá trị.
 - `businessRegistrationNumber` đã có giá trị.
 - `businessRegistrationNumber` chưa được sử dụng bởi Company khác.
 - Company thuộc Company Manager hiện tại.
+
+
 
 ### Luồng chính
 
@@ -408,20 +498,27 @@ Gửi hồ sơ Company cho Platform Admin xét duyệt và cố định nội du
 5. Hồ sơ đã submit trở thành nội dung Platform Admin dùng để xét duyệt.
 6. Trong thời gian `PENDING`, Company Manager không được sửa hồ sơ Company.
 
+
+
 ### Kết quả
 
 - Company có đúng một hồ sơ đã gửi để Platform Admin xét duyệt.
 - Nội dung xét duyệt được cố định tại thời điểm submit.
 - Company chưa active.
 
+
+
 ### Trường hợp từ chối
 
+- Company Manager không có limited onboarding authentication hợp lệ.
 - Thiếu `name`.
 - Thiếu `businessRegistrationNumber`.
 - `businessRegistrationNumber` đã thuộc Company khác.
 - Company không ở `NOT_SUBMITTED + INACTIVE`.
 - Company không thuộc Company Manager hiện tại.
 - Company đã từng submit trong lifecycle V02.
+
+
 
 ### Business Rules liên quan
 
@@ -431,6 +528,9 @@ Gửi hồ sơ Company cho Platform Admin xét duyệt và cố định nội du
 - `BR-08`
 - `BR-17`
 - `BR-18`
+- `BR-21`
+
+
 
 ### Không thuộc chức năng này
 
@@ -440,11 +540,17 @@ Gửi hồ sơ Company cho Platform Admin xét duyệt và cố định nội du
 
 ---
 
+
+
 ## F04 — Platform Admin xem đăng ký Company
+
+
 
 ### Actor
 
 - Platform Admin.
+
+
 
 ### Mục tiêu
 
@@ -453,6 +559,8 @@ Cho phép Platform Admin xem các Company đã gửi đăng ký và xem đúng n
 ### Tiền điều kiện
 
 - Actor là Platform Admin.
+
+
 
 ### Luồng chính
 
@@ -463,20 +571,28 @@ Cho phép Platform Admin xem các Company đã gửi đăng ký và xem đúng n
 5. Hệ thống hiển thị snapshot hồ sơ đã được submit.
 6. Platform Admin dùng snapshot đó làm căn cứ cho quyết định approve hoặc reject.
 
+
+
 ### Kết quả
 
 - Platform Admin có đủ nội dung đã submit để đưa ra quyết định xét duyệt.
 - Nội dung được xem để xét duyệt là snapshot của lần submit.
 
+
+
 ### Trường hợp từ chối
 
 - Actor không phải Platform Admin thì không được sử dụng quyền xét duyệt cấp nền tảng.
+
+
 
 ### Business Rules liên quan
 
 - `BR-07`
 - `BR-14`
 - `BR-19`
+
+
 
 ### Không thuộc chức năng này
 
@@ -485,11 +601,17 @@ Cho phép Platform Admin xem các Company đã gửi đăng ký và xem đúng n
 
 ---
 
+
+
 ## F05 — Platform Admin chấp thuận Company
+
+
 
 ### Actor
 
 - Platform Admin.
+
+
 
 ### Mục tiêu
 
@@ -501,6 +623,8 @@ Chấp thuận hồ sơ Company đã được submit nhưng chưa kích hoạt C
 - Company đang ở `PENDING + INACTIVE`.
 - Platform Admin đưa ra quyết định dựa trên snapshot đã submit.
 
+
+
 ### Luồng chính
 
 1. Platform Admin chấp thuận Company.
@@ -509,22 +633,30 @@ Chấp thuận hồ sơ Company đã được submit nhưng chưa kích hoạt C
 4. Hệ thống gửi yêu cầu xác nhận chấp thuận qua email cho Company Manager.
 5. Hệ thống chờ Company Manager xác nhận.
 
+
+
 ### Kết quả
 
 - Company đã được Platform Admin chấp thuận.
 - Company chưa active.
 - Company Manager chưa active.
 
+
+
 ### Trường hợp từ chối
 
 - Company không ở `PENDING + INACTIVE`.
 - Actor không phải Platform Admin.
+
+
 
 ### Business Rules liên quan
 
 - `BR-07`
 - `BR-10`
 - `BR-14`
+
+
 
 ### Không thuộc chức năng này
 
@@ -533,11 +665,17 @@ Chấp thuận hồ sơ Company đã được submit nhưng chưa kích hoạt C
 
 ---
 
+
+
 ## F06 — Platform Admin từ chối Company
+
+
 
 ### Actor
 
 - Platform Admin.
+
+
 
 ### Mục tiêu
 
@@ -549,6 +687,8 @@ Kết thúc onboarding của một Company không được Platform Admin chấp
 - Company đang ở `PENDING + INACTIVE`.
 - Quyết định được đưa ra dựa trên snapshot đã submit.
 
+
+
 ### Luồng chính
 
 1. Platform Admin từ chối Company.
@@ -556,22 +696,30 @@ Kết thúc onboarding của một Company không được Platform Admin chấp
 3. Company Manager vẫn không được active.
 4. Onboarding của Company kết thúc.
 
+
+
 ### Kết quả
 
 - Company không được hoạt động.
 - Company Manager không được active thông qua onboarding này.
 - Không có transition resubmit trong V02.
 
+
+
 ### Trường hợp từ chối
 
 - Company không ở `PENDING + INACTIVE`.
 - Actor không phải Platform Admin.
+
+
 
 ### Business Rules liên quan
 
 - `BR-07`
 - `BR-09`
 - `BR-14`
+
+
 
 ### Không thuộc chức năng này
 
@@ -581,11 +729,17 @@ Kết thúc onboarding của một Company không được Platform Admin chấp
 
 ---
 
+
+
 ## F07 — Company Manager xác nhận chấp thuận và hoàn tất activation
+
+
 
 ### Actor
 
 - Company Manager của Company đã được chấp thuận.
+
+
 
 ### Mục tiêu
 
@@ -598,6 +752,8 @@ Hoàn tất onboarding bằng việc xác nhận chấp thuận và kích hoạt
 - Company Manager là người đại diện của Company đó.
 - Yêu cầu xác nhận chấp thuận còn hợp lệ.
 
+
+
 ### Luồng chính
 
 1. Company Manager nhận yêu cầu xác nhận chấp thuận qua email.
@@ -609,12 +765,18 @@ Hoàn tất onboarding bằng việc xác nhận chấp thuận và kích hoạt
 7. Bước xác nhận email cần thiết cho Company Manager trong onboarding được hoàn tất cùng hành động này.
 8. Onboarding kết thúc thành công.
 
+
+
 ### Kết quả
 
 - Company Manager active.
 - Company active.
-- Company Manager có thể đăng nhập theo các điều kiện authentication chung.
+- `emailVerifiedAt` của Company Manager đã được hoàn tất.
+- Limited onboarding authentication không còn authorize cho User này vì User không còn `PENDING_ACTIVATION`.
+- Company Manager có thể đăng nhập theo các điều kiện normal ACTIVE authentication của V01.
 - Company Manager có thể đại diện cho Company của mình.
+
+
 
 ### Trường hợp từ chối
 
@@ -624,6 +786,8 @@ Hoàn tất onboarding bằng việc xác nhận chấp thuận và kích hoạt
 - Yêu cầu xác nhận không hợp lệ hoặc đã hết hạn.
 - Người xác nhận không phải Company Manager tương ứng.
 
+
+
 ### Business Rules liên quan
 
 - `BR-02`
@@ -631,20 +795,21 @@ Hoàn tất onboarding bằng việc xác nhận chấp thuận và kích hoạt
 - `BR-11`
 - `BR-17`
 - `BR-18`
-
-### Không thuộc chức năng này
-
-- Kích hoạt chỉ Company mà không kích hoạt Company Manager.
-- Kích hoạt chỉ Company Manager mà không kích hoạt Company.
-- Chuyển Company sang một Company Manager khác.
+- `BR-21`
 
 ---
 
+
+
 ## F08 — Company Manager yêu cầu gửi lại xác nhận chấp thuận
+
+
 
 ### Actor
 
 - Company Manager của Company đã được chấp thuận.
+
+
 
 ### Mục tiêu
 
@@ -652,10 +817,12 @@ Cho phép Company Manager tiếp tục onboarding khi yêu cầu xác nhận ch�
 
 ### Tiền điều kiện
 
-- Company Manager đang ở `PENDING_ACTIVATION`.
+- Company Manager đang ở `PENDING_ACTIVATION` và đang dùng limited onboarding authentication (`BR-21`).
 - Company đang ở `APPROVED + INACTIVE`.
 - Yêu cầu xác nhận trước đó đã hết hạn.
 - Company Manager là người đại diện của Company.
+
+
 
 ### Luồng chính
 
@@ -664,21 +831,31 @@ Cho phép Company Manager tiếp tục onboarding khi yêu cầu xác nhận ch�
 3. Hệ thống gửi lại một yêu cầu xác nhận chấp thuận cho Company Manager.
 4. Company và Company Manager không thay đổi trạng thái chỉ vì hành động resend.
 
+
+
 ### Kết quả
 
 - Company Manager có một khả năng xác nhận chấp thuận còn hiệu lực để tiếp tục F07.
 
+
+
 ### Trường hợp từ chối
 
+- Company Manager không có limited onboarding authentication hợp lệ.
 - Company không ở `APPROVED + INACTIVE`.
 - Company Manager không ở `PENDING_ACTIVATION`.
 - Người yêu cầu không phải Company Manager của Company.
+
+
 
 ### Business Rules liên quan
 
 - `BR-12`
 - `BR-17`
 - `BR-18`
+- `BR-21`
+
+
 
 ### Không thuộc chức năng này
 
@@ -688,11 +865,17 @@ Cho phép Company Manager tiếp tục onboarding khi yêu cầu xác nhận ch�
 
 ---
 
+
+
 ## F09 — Company Manager xem và cập nhật hồ sơ Company đang active
+
+
 
 ### Actor
 
 - Company Manager của Company.
+
+
 
 ### Mục tiêu
 
@@ -700,31 +883,37 @@ Cho phép Company Manager quản lý hồ sơ Company của mình sau khi onboar
 
 ### Tiền điều kiện
 
-- Company Manager đang `ACTIVE`.
+- Company Manager đang `ACTIVE` và đang dùng normal ACTIVE authentication của V01.
 - Company đang `APPROVED + ACTIVE`.
 - Company thuộc Company Manager hiện tại.
+
+
 
 ### Luồng chính
 
 1. Company Manager xem hồ sơ Company của mình.
 2. Company Manager có thể cập nhật:
-   - logo;
-   - banner;
-   - website;
-   - địa chỉ;
-   - mô tả;
-   - thông tin liên hệ.
+  - logo;
+  - banner;
+  - website;
+  - địa chỉ;
+  - mô tả;
+  - thông tin liên hệ.
 3. Company Manager không được thay đổi:
-   - tên Company;
-   - mã số doanh nghiệp;
-   - trạng thái xét duyệt;
-   - trạng thái hoạt động.
+  - tên Company;
+  - mã số doanh nghiệp;
+  - trạng thái xét duyệt;
+  - trạng thái hoạt động.
 4. Các cập nhật hồ sơ được phép không đưa Company trở lại quy trình xét duyệt.
+
+
 
 ### Kết quả
 
 - Hồ sơ Company được cập nhật trong phạm vi cho phép.
 - Company tiếp tục ở `APPROVED + ACTIVE`.
+
+
 
 ### Trường hợp từ chối
 
@@ -734,11 +923,15 @@ Cho phép Company Manager quản lý hồ sơ Company của mình sau khi onboar
 - Company Manager cố thay đổi mã số doanh nghiệp.
 - Company Manager cố thay đổi trạng thái do Platform Admin hoặc hệ thống quản lý.
 
+
+
 ### Business Rules liên quan
 
 - `BR-13`
 - `BR-17`
 - `BR-18`
+
+
 
 ### Không thuộc chức năng này
 
@@ -748,15 +941,21 @@ Cho phép Company Manager quản lý hồ sơ Company của mình sau khi onboar
 
 ---
 
+
+
 ## F10 — Platform Admin khóa/chấm dứt Company
+
+
 
 ### Actor
 
 - Platform Admin.
 
+
+
 ### Mục tiêu
 
-Chấm dứt khả năng hoạt động của một Company đang active và đồng thời chấm dứt quyền đăng nhập của Company Manager đại diện.
+Chấm dứt khả năng hoạt động của một Company đang active và đồng thời chấm dứt mọi authentication context của Company Manager đại diện.
 
 ### Tiền điều kiện
 
@@ -764,23 +963,29 @@ Chấm dứt khả năng hoạt động của một Company đang active và đ�
 - Company đang ở `APPROVED + ACTIVE`.
 - Company Manager tương ứng đang `ACTIVE`.
 
+
+
 ### Luồng chính
 
 1. Platform Admin thực hiện khóa Company.
 2. Company chuyển từ `ACTIVE` sang `LOCKED`.
 3. Company Manager chuyển từ `ACTIVE` sang `TERMINATED`.
 4. Company không còn được coi là tenant đang hoạt động.
-5. Company Manager không còn được đăng nhập.
+5. Company Manager không còn được dùng normal ACTIVE authentication cũng như limited onboarding authentication.
 6. Các hoạt động doanh nghiệp yêu cầu Company active phải bị chặn.
 7. Company và dữ liệu đã tồn tại vẫn được giữ lại.
+
+
 
 ### Kết quả
 
 - Company ở `APPROVED + LOCKED`.
 - Company Manager ở `TERMINATED`.
-- Company Manager không thể đăng nhập.
+- Company Manager không thể dùng bất kỳ authentication context nào của V01/V02.
 - Company không tiếp tục thực hiện hoạt động doanh nghiệp yêu cầu trạng thái active.
 - V02 không có transition mở khóa/reactivate từ trạng thái này.
+
+
 
 ### Trường hợp từ chối
 
@@ -788,12 +993,16 @@ Chấm dứt khả năng hoạt động của một Company đang active và đ�
 - Company không ở `APPROVED + ACTIVE`.
 - Actor không phải Platform Admin.
 
+
+
 ### Business Rules liên quan
 
 - `BR-14`
 - `BR-15`
 - `BR-16`
 - `BR-19`
+
+
 
 ### Không thuộc chức năng này
 
@@ -805,7 +1014,11 @@ Chấm dứt khả năng hoạt động của một Company đang active và đ�
 
 ---
 
+
+
 # 10. Business Rules
+
+
 
 ## BR-01 — Company Manager và Company là hai thực thể riêng
 
@@ -817,6 +1030,8 @@ Company không có credentials đăng nhập độc lập.
 
 ---
 
+
+
 ## BR-02 — Quan hệ `1 Company ↔ 1 Company Manager`
 
 Một Company Manager chỉ đại diện đúng một Company.
@@ -827,6 +1042,8 @@ Không có workflow multi-manager, manager replacement hoặc Company không có
 
 ---
 
+
+
 ## BR-03 — Company Manager không phải Candidate
 
 Tài khoản Company Manager không được sử dụng như tài khoản Candidate.
@@ -835,6 +1052,8 @@ Company Manager không được chuyển sang Candidate để bỏ qua Company o
 
 ---
 
+
+
 ## BR-04 — Onboarding Company Manager và Company là một quy trình
 
 Không được hoàn tất việc đăng ký Company Manager như một tài khoản hoạt động độc lập khỏi Company.
@@ -842,6 +1061,8 @@ Không được hoàn tất việc đăng ký Company Manager như một tài kh
 Company Manager chỉ được active sau khi Company đã được Platform Admin chấp thuận và Company Manager hoàn tất xác nhận chấp thuận.
 
 ---
+
+
 
 ## BR-05 — Điều kiện dữ liệu tối thiểu khi submit
 
@@ -854,6 +1075,8 @@ Khi submit Company:
 
 ---
 
+
+
 ## BR-06 — Một lần submit, một snapshot trong V02
 
 Mỗi Company chỉ có một lần submit trong onboarding V02.
@@ -864,6 +1087,8 @@ V02 không có snapshot version hoặc vòng submit thứ hai.
 
 ---
 
+
+
 ## BR-07 — Platform Admin xét duyệt đúng snapshot đã submit
 
 Platform Admin phải đưa ra quyết định approve/reject dựa trên nội dung Company đã gửi tại thời điểm submit.
@@ -872,11 +1097,15 @@ Thay đổi dữ liệu ngoài nội dung đó không được tự thay đổi 
 
 ---
 
+
+
 ## BR-08 — Hồ sơ bị freeze khi `PENDING`
 
 Khi Company đã chuyển sang `PENDING`, Company Manager không được chỉnh sửa hồ sơ Company đang được xét duyệt.
 
 ---
+
+
 
 ## BR-09 — Reject là terminal trong V02
 
@@ -892,6 +1121,8 @@ V02 không có nghiệp vụ rejection reason.
 
 ---
 
+
+
 ## BR-10 — Admin approve không đồng nghĩa Company active
 
 Platform Admin approve chỉ đưa Company tới:
@@ -903,6 +1134,8 @@ APPROVED + INACTIVE
 Company chỉ active sau khi Company Manager xác nhận chấp thuận.
 
 ---
+
+
 
 ## BR-11 — Activation của Company và Company Manager là một business action thống nhất
 
@@ -920,6 +1153,8 @@ Không được xuất hiện kết quả thành công trong đó chỉ một ph
 
 ---
 
+
+
 ## BR-12 — Resend xác nhận chấp thuận
 
 Nếu Company đã `APPROVED + INACTIVE` và yêu cầu xác nhận trước đó đã hết hạn, Company Manager tương ứng được quyền tự yêu cầu gửi lại xác nhận chấp thuận.
@@ -927,6 +1162,8 @@ Nếu Company đã `APPROVED + INACTIVE` và yêu cầu xác nhận trước đ�
 Resend không tự thay đổi trạng thái Company hoặc Company Manager.
 
 ---
+
+
 
 ## BR-13 — Ranh giới cập nhật hồ sơ Company sau activation
 
@@ -948,6 +1185,8 @@ Các thay đổi hồ sơ được phép không tạo một vòng xét duyệt m
 
 ---
 
+
+
 ## BR-14 — Quyền quản trị Company thuộc Platform Admin
 
 Chỉ Platform Admin được:
@@ -959,6 +1198,8 @@ Chỉ Platform Admin được:
 Company Manager không được tự thay đổi approval state hoặc operational state.
 
 ---
+
+
 
 ## BR-15 — Khóa Company đồng thời terminate Company Manager
 
@@ -972,9 +1213,11 @@ Company Manager
 ACTIVE → TERMINATED
 ```
 
-Company Manager không còn được đăng nhập sau transition này.
+Company Manager không còn được dùng normal ACTIVE authentication sau transition này.
 
 ---
+
+
 
 ## BR-16 — Khóa không xóa Company hoặc dữ liệu
 
@@ -989,6 +1232,8 @@ V02 không có transition unlock/reactivate từ trạng thái Company `LOCKED` 
 
 ---
 
+
+
 ## BR-17 — Company là tenant của dữ liệu doanh nghiệp
 
 Mỗi Company tạo một tenant boundary độc lập.
@@ -999,12 +1244,15 @@ Company A không được truy cập dữ liệu nội bộ của Company B.
 
 ---
 
+
+
 ## BR-18 — Tenant authorization phải dựa trên quan hệ đã được hệ thống xác nhận
 
 Quyền truy cập của Company Manager phải được xác định từ:
 
 ```text
 Authenticated Company Manager
+(normal ACTIVE authentication hoặc limited onboarding authentication theo đúng scope)
         ↓
 Quan hệ Company Manager — Company
         ↓
@@ -1017,7 +1265,11 @@ Identifier Company do client cung cấp không tự tạo ra quyền truy cập.
 
 Biết identifier của Company khác không tạo quyền truy cập tới Company đó.
 
+Authentication context hợp lệ không thay thế state/tenant rules của từng chức năng.
+
 ---
+
+
 
 ## BR-19 — Platform Admin có quyền cấp nền tảng nhưng không trở thành thành viên Company
 
@@ -1031,6 +1283,8 @@ Quyền đó không làm Platform Admin:
 - được chỉnh sửa hồ sơ Company thay Company Manager trong luồng thông thường.
 
 ---
+
+
 
 ## BR-20 — Approval state và operational state là hai state dimension độc lập
 
@@ -1048,18 +1302,57 @@ là trạng thái hợp lệ và có nghĩa Platform Admin đã approve nhưng C
 
 ---
 
+
+
+## BR-21 — Limited onboarding authentication cho Company Manager `PENDING_ACTIVATION`
+
+Company Manager có `status = PENDING_ACTIVATION` được phép sử dụng một limited onboarding authentication context trước F07.
+
+Context này:
+
+- tách biệt với normal ACTIVE authentication của V01;
+- được tạo khi credentials hợp lệ dù `emailVerifiedAt = null`;
+- không làm User thành `ACTIVE`;
+- không set `emailVerifiedAt`;
+- chỉ còn authorize khi User vẫn ở `PENDING_ACTIVATION`.
+
+Limited onboarding authentication chỉ được authorize:
+
+- `F02` — xem/cập nhật Company draft của chính mình, theo đúng state boundary của F02;
+- `F03` — submit Company của chính mình;
+- `F08` — resend approval confirmation khi đủ preconditions;
+- refresh và logout của chính onboarding context đó.
+
+Mọi business action vẫn phải enforce state/tenant rules riêng của F02/F03/F08.
+
+Limited onboarding authentication không được:
+
+- truy cập protected business flow dành cho User `ACTIVE`;
+- authorize `F09` hoặc bất kỳ chức năng nào ngoài danh sách trên;
+- thay thế hoặc nới lỏng normal ACTIVE authentication của V01.
+
+Normal ACTIVE authentication tiếp tục yêu cầu User `ACTIVE` và email đã được xác thực.
+
+Sau F07 thành công, User không còn `PENDING_ACTIVATION` nên onboarding context không còn authorize; User phải dùng normal ACTIVE authentication.
+
+---
+
+
+
 # 11. State Transitions
 
-| Hành động | Trước | Sau | Actor |
-| --- | --- | --- | --- |
-| Khởi tạo onboarding | Chưa có onboarding V02 | CM `PENDING_ACTIVATION`; Company `NOT_SUBMITTED + INACTIVE` | Company Manager |
-| Submit Company | CM `PENDING_ACTIVATION`; Company `NOT_SUBMITTED + INACTIVE` | CM `PENDING_ACTIVATION`; Company `PENDING + INACTIVE` | Company Manager |
-| Reject Company | CM `PENDING_ACTIVATION`; Company `PENDING + INACTIVE` | CM `PENDING_ACTIVATION`; Company `REJECTED + INACTIVE` | Platform Admin |
-| Approve Company | CM `PENDING_ACTIVATION`; Company `PENDING + INACTIVE` | CM `PENDING_ACTIVATION`; Company `APPROVED + INACTIVE` | Platform Admin |
-| Xác nhận chấp thuận | CM `PENDING_ACTIVATION`; Company `APPROVED + INACTIVE` | CM `ACTIVE`; Company `APPROVED + ACTIVE` | Company Manager |
-| Resend xác nhận đã hết hạn | CM `PENDING_ACTIVATION`; Company `APPROVED + INACTIVE` | Không đổi state | Company Manager |
-| Cập nhật hồ sơ được phép | CM `ACTIVE`; Company `APPROVED + ACTIVE` | Không đổi state | Company Manager |
-| Khóa/chấm dứt Company | CM `ACTIVE`; Company `APPROVED + ACTIVE` | CM `TERMINATED`; Company `APPROVED + LOCKED` | Platform Admin |
+
+| Hành động                  | Trước                                                       | Sau                                                         | Actor           |
+| -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- | --------------- |
+| Khởi tạo onboarding        | Chưa có onboarding V02                                      | CM `PENDING_ACTIVATION`; Company `NOT_SUBMITTED + INACTIVE` | Company Manager |
+| Submit Company             | CM `PENDING_ACTIVATION`; Company `NOT_SUBMITTED + INACTIVE` | CM `PENDING_ACTIVATION`; Company `PENDING + INACTIVE`       | Company Manager |
+| Reject Company             | CM `PENDING_ACTIVATION`; Company `PENDING + INACTIVE`       | CM `PENDING_ACTIVATION`; Company `REJECTED + INACTIVE`      | Platform Admin  |
+| Approve Company            | CM `PENDING_ACTIVATION`; Company `PENDING + INACTIVE`       | CM `PENDING_ACTIVATION`; Company `APPROVED + INACTIVE`      | Platform Admin  |
+| Xác nhận chấp thuận        | CM `PENDING_ACTIVATION`; Company `APPROVED + INACTIVE`      | CM `ACTIVE`; Company `APPROVED + ACTIVE`                    | Company Manager |
+| Resend xác nhận đã hết hạn | CM `PENDING_ACTIVATION`; Company `APPROVED + INACTIVE`      | Không đổi state                                             | Company Manager |
+| Cập nhật hồ sơ được phép   | CM `ACTIVE`; Company `APPROVED + ACTIVE`                    | Không đổi state                                             | Company Manager |
+| Khóa/chấm dứt Company      | CM `ACTIVE`; Company `APPROVED + ACTIVE`                    | CM `TERMINATED`; Company `APPROVED + LOCKED`                | Platform Admin  |
+
 
 Chỉ các transition được định nghĩa trong tài liệu này mới thuộc business contract của V02.
 
@@ -1074,23 +1367,29 @@ Không tự bổ sung:
 
 ---
 
+
+
 # 12. Authorization và ownership boundary
 
-| Hành động | Actor được phép | Resource / Scope | Điều kiện |
-| --- | --- | --- | --- |
-| Khởi tạo onboarding | Người đăng ký Company Manager | Company của onboarding đó | Quan hệ `1 — 1` được thiết lập trong cùng onboarding |
-| Cập nhật hồ sơ trước submit | Company Manager | Company của chính mình | Company `NOT_SUBMITTED + INACTIVE` |
-| Submit Company | Company Manager | Company của chính mình | Đủ điều kiện F03 |
-| Xem danh sách/chi tiết đăng ký | Platform Admin | Company đăng ký ở cấp nền tảng | Actor là Platform Admin |
-| Approve Company | Platform Admin | Company `PENDING + INACTIVE` | Xét duyệt đúng snapshot |
-| Reject Company | Platform Admin | Company `PENDING + INACTIVE` | Xét duyệt đúng snapshot |
-| Xác nhận chấp thuận | Company Manager | Company của chính mình | Company `APPROVED + INACTIVE` |
-| Resend xác nhận | Company Manager | Company của chính mình | Company vẫn đang chờ xác nhận và xác nhận cũ đã hết hạn |
-| Xem/cập nhật hồ sơ active | Company Manager | Company của chính mình | Chỉ các field F09 cho phép |
-| Khóa/chấm dứt Company | Platform Admin | Company `APPROVED + ACTIVE` | Actor là Platform Admin |
+
+| Hành động                       | Actor được phép               | Auth context                         | Resource / Scope               | Điều kiện                                               |
+| ------------------------------- | ----------------------------- | ------------------------------------ | ------------------------------ | ------------------------------------------------------- |
+| Khởi tạo onboarding             | Người đăng ký Company Manager | Chưa có session                      | Company của onboarding đó      | Quan hệ `1 — 1` được thiết lập trong cùng onboarding    |
+| Cập nhật/xem hồ sơ trước submit | Company Manager               | Limited onboarding authentication    | Company của chính mình         | Company `NOT_SUBMITTED + INACTIVE`; `BR-21`             |
+| Submit Company                  | Company Manager               | Limited onboarding authentication    | Company của chính mình         | Đủ điều kiện F03; `BR-21`                               |
+| Xem danh sách/chi tiết đăng ký  | Platform Admin                | Normal ACTIVE authentication         | Company đăng ký ở cấp nền tảng | Actor là Platform Admin                                 |
+| Approve Company                 | Platform Admin                | Normal ACTIVE authentication         | Company `PENDING + INACTIVE`   | Xét duyệt đúng snapshot                                 |
+| Reject Company                  | Platform Admin                | Normal ACTIVE authentication         | Company `PENDING + INACTIVE`   | Xét duyệt đúng snapshot                                 |
+| Xác nhận chấp thuận             | Company Manager               | Confirmation token (F07)             | Company của chính mình         | Company `APPROVED + INACTIVE`                           |
+| Resend xác nhận                 | Company Manager               | Limited onboarding authentication    | Company của chính mình         | Company vẫn đang chờ xác nhận và xác nhận cũ đã hết hạn; `BR-21` |
+| Refresh/logout onboarding       | Company Manager               | Limited onboarding authentication    | Chính onboarding context       | User vẫn `PENDING_ACTIVATION`; `BR-21`                  |
+| Xem/cập nhật hồ sơ active       | Company Manager               | Normal ACTIVE authentication         | Company của chính mình         | Chỉ các field F09 cho phép                              |
+| Khóa/chấm dứt Company           | Platform Admin                | Normal ACTIVE authentication         | Company `APPROVED + ACTIVE`    | Actor là Platform Admin                                 |
+
 
 Company Manager không được:
 
+- dùng limited onboarding authentication để truy cập flow dành cho User `ACTIVE`;
 - quản lý Company khác;
 - tự approve hoặc reject Company;
 - tự active Company;
@@ -1102,6 +1401,8 @@ Platform Admin không được coi là Company Manager hoặc member của Compa
 
 ---
 
+
+
 # 13. Multi-tenant boundary
 
 Trong V02, mỗi Company là một tenant độc lập.
@@ -1110,6 +1411,7 @@ Nguyên tắc:
 
 ```text
 Authenticated Company Manager
+(normal ACTIVE authentication hoặc limited onboarding authentication theo đúng scope)
         ↓
 Hệ thống xác định Company gắn với Company Manager
         ↓
@@ -1130,6 +1432,8 @@ Các rule bắt buộc:
 V02 chỉ thiết lập tenant boundary. Các resource tuyển dụng cụ thể được bổ sung ở version sau.
 
 ---
+
+
 
 # 14. Lifecycle invariants
 
@@ -1157,8 +1461,13 @@ V02 chỉ thiết lập tenant boundary. Các resource tuyển dụng cụ thể
 22. Khi Company bị khóa theo F10, Company Manager phải ở `TERMINATED`.
 23. Company `LOCKED` theo F10 không có transition reactivate trong V02.
 24. Khóa Company không xóa Company hoặc dữ liệu đã tồn tại.
+25. Normal ACTIVE authentication của V01 vẫn yêu cầu User `ACTIVE` và email đã được xác thực; V02 không nới lỏng điều kiện này.
+26. Limited onboarding authentication chỉ dành cho Company Manager `PENDING_ACTIVATION`, không set `ACTIVE`/`emailVerifiedAt`, và chỉ authorize F02/F03/F08 cùng refresh/logout của chính context đó.
+27. Khi User không còn `PENDING_ACTIVATION`, limited onboarding authentication không còn authorize.
 
 ---
+
+
 
 # 15. Các quyết định chủ động defer
 
@@ -1176,6 +1485,8 @@ Việc thay Company Manager, multi-manager hoặc Company không có Manager kh�
 
 ---
 
+
+
 # 16. Các quyết định chưa chốt
 
 > Không còn business decision chưa chốt ảnh hưởng implementation của V02.
@@ -1183,6 +1494,8 @@ Việc thay Company Manager, multi-manager hoặc Company không có Manager kh�
 Không được dùng data design hoặc implementation hiện tại để tạo thêm business requirement ngoài tài liệu này.
 
 ---
+
+
 
 # 17. Definition of Business Completion
 
@@ -1198,7 +1511,8 @@ V02 được coi là hoàn thành về mặt nghiệp vụ khi:
 - `F08` — resend xác nhận hết hạn được đáp ứng;
 - `F09` — quản lý hồ sơ Company active được đáp ứng;
 - `F10` — khóa/chấm dứt Company được đáp ứng;
-- toàn bộ `BR-01` đến `BR-20` được giữ;
+- toàn bộ `BR-01` đến `BR-21` được giữ;
+- limited onboarding authentication của Company Manager `PENDING_ACTIVATION` được đáp ứng đúng `BR-21` và không nới lỏng normal ACTIVE authentication;
 - chỉ các state combination và transition hợp lệ được phép tồn tại trong lifecycle V02;
 - authorization boundary được giữ;
 - tenant boundary được giữ;
@@ -1209,6 +1523,8 @@ V02 được coi là hoàn thành về mặt nghiệp vụ khi:
 Việc implementation chạy hoặc test pass không tự động đồng nghĩa với Business Completion nếu behavior chưa đáp ứng đầy đủ contract này.
 
 ---
+
+
 
 # 18. Implementation Boundary
 

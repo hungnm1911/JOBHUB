@@ -39,6 +39,8 @@ const authTokenSchema = new Schema(
   },
 );
 
+authTokenSchema.index({ tokenHash: 1 }, { unique: true });
+authTokenSchema.index({ userId: 1, type: 1 });
 authTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const AuthToken = model("AuthToken", authTokenSchema);

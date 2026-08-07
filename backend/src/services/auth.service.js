@@ -1,10 +1,16 @@
+import mongoose from "mongoose";
+
 import AUTH_TOKEN_TYPE from "../constants/auth-token-type.js";
+import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
+import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import config from "../config/index.js";
 import AuthSession from "../models/auth-session.model.js";
 import AuthToken from "../models/auth-token.model.js";
+import Company from "../models/company.model.js";
 import User from "../models/user.model.js";
+import { toPublicCompany } from "./company.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
@@ -93,6 +99,13 @@ const toPublicUser = (user) => {
   };
 };
 
+const isCompanyManagerOnboarding = (user) => {
+  return (
+    user.role === USER_ROLE.COMPANY_MANAGER &&
+    user.status === USER_STATUS.PENDING_ACTIVATION
+  );
+};
+
 const registerCandidate = async ({ fullName, email, password }) => {
   assertPasswordPolicy(password);
 
@@ -174,6 +187,80 @@ const registerCandidate = async ({ fullName, email, password }) => {
   return toPublicUser(user);
 };
 
+const registerCompanyManager = async ({ fullName, email, password }) => {
+  assertPasswordPolicy(password);
+
+  const normalizedEmail = normalizeEmail(email);
+
+  const existingUser = await User.findOne({
+    email: normalizedEmail,
+  }).select("_id");
+
+  if (existingUser) {
+    throw new AppError(409, "Email is already registered", {
+      field: "email",
+    });
+  }
+
+  const passwordHash = await hashPassword(password);
+  const session = await mongoose.startSession();
+
+  let user;
+  let company;
+
+  try {
+    await session.withTransaction(async () => {
+      try {
+        [user] = await User.create(
+          [
+            {
+              fullName: fullName.trim(),
+              email: normalizedEmail,
+              passwordHash,
+              role: USER_ROLE.COMPANY_MANAGER,
+              status: USER_STATUS.PENDING_ACTIVATION,
+              emailVerifiedAt: null,
+              mustChangePassword: false,
+            },
+          ],
+          { session },
+        );
+      } catch (error) {
+        if (error.code === 11000) {
+          throw new AppError(409, "Email is already registered", {
+            field: "email",
+          });
+        }
+
+        throw error;
+      }
+
+      [company] = await Company.create(
+        [
+          {
+            managerUserId: user._id,
+            approvalStatus: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
+            operationalStatus: COMPANY_OPERATIONAL_STATUS.INACTIVE,
+            reviewSnapshot: null,
+            submittedAt: null,
+            reviewedByUserId: null,
+            reviewedAt: null,
+            activatedAt: null,
+          },
+        ],
+        { session },
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    user: toPublicUser(user),
+    company: toPublicCompany(company),
+  };
+};
+
 const verifyEmail = async ({ token }) => {
   const tokenHash = hashAuthToken(token);
   const authToken = await AuthToken.findOne({
@@ -221,6 +308,117 @@ const verifyEmail = async ({ token }) => {
   return toPublicUser(user);
 };
 
+const confirmCompanyApproval = async ({ token }) => {
+  const tokenHash = hashAuthToken(token);
+  const session = await mongoose.startSession();
+  let user;
+  let company;
+
+  try {
+    await session.withTransaction(async () => {
+      const authToken = await AuthToken.findOne({
+        type: AUTH_TOKEN_TYPE.COMPANY_APPROVAL_CONFIRMATION,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .select("+tokenHash")
+        .session(session);
+
+      if (!authToken) {
+        throw new AppError(
+          400,
+          "Invalid or expired company approval confirmation token",
+          {
+            field: "token",
+          },
+        );
+      }
+
+      user = await User.findById(authToken.userId).session(session);
+
+      if (!user || user.role !== USER_ROLE.COMPANY_MANAGER) {
+        throw new AppError(
+          400,
+          "Invalid or expired company approval confirmation token",
+          {
+            field: "token",
+          },
+        );
+      }
+
+      if (user.status !== USER_STATUS.PENDING_ACTIVATION) {
+        throw new AppError(
+          409,
+          "Only PENDING_ACTIVATION Company Managers can confirm approval",
+          {
+            field: "status",
+          },
+        );
+      }
+
+      company = await Company.findOne({
+        managerUserId: user._id,
+      }).session(session);
+
+      if (!company) {
+        throw new AppError(
+          500,
+          "Company for Company Manager is missing",
+        );
+      }
+
+      if (
+        company.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
+        company.operationalStatus !== COMPANY_OPERATIONAL_STATUS.INACTIVE
+      ) {
+        throw new AppError(
+          409,
+          "Only APPROVED and INACTIVE Companies can be activated",
+          {
+            field: "approvalStatus",
+          },
+        );
+      }
+
+      const now = new Date();
+
+      user.status = USER_STATUS.ACTIVE;
+      user.emailVerifiedAt = now;
+      await user.save({ session });
+
+      company.operationalStatus = COMPANY_OPERATIONAL_STATUS.ACTIVE;
+      company.activatedAt = now;
+      await company.save({ session });
+
+      const consumedToken = await AuthToken.findOneAndDelete({
+        _id: authToken._id,
+        type: AUTH_TOKEN_TYPE.COMPANY_APPROVAL_CONFIRMATION,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .session(session)
+        .select("+tokenHash");
+
+      if (!consumedToken) {
+        throw new AppError(
+          400,
+          "Invalid or expired company approval confirmation token",
+          {
+            field: "token",
+          },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    user: toPublicUser(user),
+    company: toPublicCompany(company),
+  };
+};
+
 const login = async ({ email, password }) => {
   const normalizedEmail = normalizeEmail(email);
   const user = await User.findOne({
@@ -241,7 +439,9 @@ const login = async ({ email, password }) => {
     });
   }
 
-  if (!user.emailVerifiedAt) {
+  const onboardingCompanyManager = isCompanyManagerOnboarding(user);
+
+  if (!onboardingCompanyManager && !user.emailVerifiedAt) {
     throw new AppError(403, "Email verification is required before login", {
       field: "email",
     });
@@ -259,7 +459,7 @@ const login = async ({ email, password }) => {
     });
   }
 
-  if (user.status !== USER_STATUS.ACTIVE) {
+  if (!onboardingCompanyManager && user.status !== USER_STATUS.ACTIVE) {
     throw new AppError(403, "Account is not active", {
       field: "status",
     });
@@ -328,7 +528,10 @@ const refreshAccess = async ({ refreshToken }) => {
     });
   }
 
-  if (user.status !== USER_STATUS.ACTIVE) {
+  if (
+    !isCompanyManagerOnboarding(user) &&
+    user.status !== USER_STATUS.ACTIVE
+  ) {
     throw new AppError(403, "Account is not active", {
       field: "status",
     });
@@ -470,10 +673,12 @@ const resetPassword = async ({ token, password }) => {
 };
 
 export {
+  confirmCompanyApproval,
   login,
   logoutCurrentSession,
   refreshAccess,
   registerCandidate,
+  registerCompanyManager,
   requestPasswordReset,
   resetPassword,
   verifyEmail,

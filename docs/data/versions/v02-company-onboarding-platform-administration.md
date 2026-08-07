@@ -93,7 +93,7 @@ Vai trò tổng quát:
 | Entity / Collection | Responsibility |
 | --- | --- |
 | `users` | Identity, credentials, role và account status của Candidate, Company Manager, Platform Admin. |
-| `auth_sessions` | Phiên đăng nhập theo V01; dùng để revoke toàn bộ session khi Company Manager bị terminate. |
+| `auth_sessions` | Phiên đăng nhập theo V01 schema; được dùng cho normal ACTIVE authentication và cho limited onboarding authentication của Company Manager `PENDING_ACTIVATION`; dùng để revoke toàn bộ session khi Company Manager bị terminate. |
 | `auth_tokens` | Token tạm thời của authentication; V02 bổ sung approval confirmation token cho Company Manager. |
 | `companies` | Company profile, manager ownership, approval state, operational state, review snapshot và lifecycle timestamps. |
 | `CompanyReviewSnapshot` | Bản chụp immutable của Company profile tại đúng thời điểm submit. |
@@ -195,6 +195,8 @@ AuthSession.userId → User._id
 
 Khi Company Manager bị terminate bởi F10, toàn bộ `AuthSession` của User đó phải bị revoke theo invariant tài khoản của V01.
 
+Company Manager `PENDING_ACTIVATION` được phép sở hữu `AuthSession` cho limited onboarding authentication theo Product `BR-21`. Việc tồn tại session đó không đồng nghĩa User đã `ACTIVE` hoặc đã có `emailVerifiedAt`.
+
 ### 4.4. User → AuthToken
 
 Giữ quan hệ V01:
@@ -268,7 +270,7 @@ V02 chỉ mở rộng account state để biểu diễn Company Manager chưa ho
 | `passwordHash` | `String` | YES | — | V01 | Credential đã persist theo contract V01. |
 | `role` | `String` | YES | — | enum | Vai trò User. |
 | `status` | `String` | YES | V01 default | enum | Trạng thái account; V02 bổ sung `PENDING_ACTIVATION`. |
-| `emailVerifiedAt` | `Date` | NO | `null` | — | Thời điểm email được xác minh. |
+| `emailVerifiedAt` | `Date` | NO | `null` | — | Thời điểm email được xác minh; với Company Manager onboarding vẫn `null` cho đến F07/TX-03. |
 | `mustChangePassword` | `Boolean` | YES | `false` | V01 | Giữ nguyên persistence field V01; V02 không tạo flow mới cho field này. |
 | `createdAt` | `Date` | YES | automatic | — | Thời điểm tạo. |
 | `updatedAt` | `Date` | YES | automatic | — | Thời điểm cập nhật. |
@@ -309,8 +311,8 @@ TERMINATED
 
 | Giá trị | Ý nghĩa liên quan V02 |
 | --- | --- |
-| `PENDING_ACTIVATION` | Company Manager đã được tạo nhưng onboarding Company chưa hoàn tất. |
-| `ACTIVE` | User active theo authentication contract. |
+| `PENDING_ACTIVATION` | Company Manager đã được tạo nhưng onboarding Company chưa hoàn tất; được phép có limited onboarding authentication session theo Product `BR-21` khi credentials hợp lệ dù `emailVerifiedAt = null`. |
+| `ACTIVE` | User active theo normal authentication contract V01. |
 | `LOCKED` | Trạng thái V01, không phải trạng thái mà F10 dùng cho Company Manager. |
 | `TERMINATED` | Quyền truy cập User đã bị chấm dứt; F10 chuyển Company Manager tới trạng thái này. |
 
@@ -344,11 +346,24 @@ Company.managerUserId → User._id
 
 ## 6.1. Responsibility
 
-Giữ nguyên V01.
+Giữ nguyên schema/persistence contract V01.
 
 `auth_sessions` lưu session của User và là persistence source dùng để revoke quyền truy cập theo session lifecycle.
 
-V02 sử dụng collection này trong F10 khi Company Manager bị chuyển sang `TERMINATED`.
+Trong V02, cùng collection này được dùng để persist:
+
+- session của normal ACTIVE authentication (V01);
+- session của limited onboarding authentication cho Company Manager `PENDING_ACTIVATION` theo Product `BR-21`.
+
+V02 **không** thêm field/enum riêng trên `AuthSession` để phân biệt hai context. Phân biệt authorization context là trách nhiệm service theo `User.role` + `User.status` và Product scope; persistence chỉ cần ghi nhận session thuộc User.
+
+Tạo onboarding session:
+
+- không đổi `User.status`;
+- không set `User.emailVerifiedAt`;
+- không làm User thành `ACTIVE`.
+
+V02 cũng sử dụng collection này trong F10 khi Company Manager bị chuyển sang `TERMINATED` và toàn bộ session phải bị revoke.
 
 ## 6.2. Fields
 
@@ -1267,6 +1282,7 @@ Nếu persistence token thất bại, approval transition không được commit
 
 - `F07`
 - `BR-11`
+- `BR-21`
 
 Trong cùng transaction:
 
@@ -1283,10 +1299,14 @@ Sau commit:
 ```text
 User ACTIVE
 AND
+emailVerifiedAt != null
+AND
 Company APPROVED + ACTIVE
 AND
 confirmation token vừa dùng không còn usable
 ```
+
+Sau activation, User không còn `PENDING_ACTIVATION` nên limited onboarding authentication không còn là authorization context hợp lệ cho User đó; normal ACTIVE authentication áp dụng.
 
 Không được xuất hiện partial state:
 
@@ -1433,6 +1453,9 @@ Service chịu trách nhiệm cho constraint cần actor context, referenced doc
 | Approval confirmation token thuộc đúng CM của Company | Service | Cross-document resolution. |
 | Confirmation token phải còn hạn | Service | TTL cleanup không đủ để xác định validity. |
 | Resend chỉ khi Company `APPROVED + INACTIVE` và token trước hết hạn | Service | Business state + token lifecycle. |
+| Limited onboarding authentication chỉ cho CM `PENDING_ACTIVATION` theo Product `BR-21` | Service | Authorization context; không đổi schema `AuthSession`. |
+| Tạo/duy trì onboarding session không set `ACTIVE` hoặc `emailVerifiedAt` | Service | Product `BR-21` + F07/TX-03 boundary. |
+| Onboarding session không authorize flow dành cho User `ACTIVE` | Service | Scope tách biệt với normal ACTIVE authentication. |
 | Company + User activation đồng bộ | Service + TX-03 | Cross-document invariant. |
 | Company lock + User terminate + session revoke đồng bộ | Service + TX-04 | Cross-document invariant. |
 | Tenant resolution từ authenticated User | Service | Authorization boundary. |
@@ -1755,8 +1778,9 @@ Entity diagram cũ nếu biểu diễn `CompanyReviewSnapshot` như một collec
 - `User.email` vẫn unique.
 - Candidate lifecycle V01 không đổi.
 - Candidate không bị tạo với `PENDING_ACTIVATION` chỉ vì V02 thêm state này.
-- `ACTIVE`, `LOCKED`, `TERMINATED` giữ nguyên ý nghĩa V01.
-- User không còn `ACTIVE` thì không được đăng nhập.
+- `ACTIVE`, `LOCKED`, `TERMINATED` giữ nguyên ý nghĩa V01 đối với normal ACTIVE authentication.
+- Normal ACTIVE authentication vẫn chỉ dành cho User `ACTIVE` có email đã được xác thực; V02 không nới lỏng điều kiện này.
+- V02 chốt exception riêng: Company Manager `PENDING_ACTIVATION` được phép có limited onboarding authentication session theo Product `BR-21` dù `emailVerifiedAt = null`; exception này không thay thế normal ACTIVE authentication.
 - `TERMINATED` không đồng nghĩa hard delete User.
 - Session/token expiration vẫn phải được kiểm tra theo V01.
 - Session revocation vẫn làm session không usable.
@@ -1808,7 +1832,7 @@ companies
 - đổi Candidate registration sang `PENDING_ACTIVATION`;
 - thay đổi Candidate authentication flow;
 - thêm `User.companyId`;
-- thay đổi session semantics V01;
+- thay đổi schema/field semantics của `AuthSession` V01 (V02 được phép tái sử dụng cùng collection cho limited onboarding authentication theo Product `BR-21`, nhưng không thêm enum/field auth-context riêng);
 - dùng Company lock để chuyển User sang `LOCKED`; canonical F10 yêu cầu `TERMINATED`;
 - thêm Company unlock/reactivation;
 - dùng data model cũ để khôi phục behavior đã bị Product Specification loại bỏ.
@@ -1867,6 +1891,9 @@ Các invariant sau phải luôn đúng ở persisted state.
 | 28 | Company `LOCKED` không có transition về `ACTIVE` trong V02. | Service |
 | 29 | Lock không xóa Company, User hoặc snapshot. | Service |
 | 30 | Relationship `managerUserId` không được thay đổi trong V02. | Service |
+| 31 | Limited onboarding authentication không persist `ACTIVE` hoặc `emailVerifiedAt` cho CM onboarding. | Service |
+| 32 | `emailVerifiedAt` của Company Manager onboarding chỉ được set trong TX-03/F07. | TX-03 |
+| 33 | Phân biệt onboarding vs ACTIVE authorization context không yêu cầu schema `AuthSession` mới. | Service / Product `BR-21` |
 
 ---
 
@@ -1876,7 +1903,7 @@ Data contract V02 được coi là hoàn thành khi:
 
 - `users` được mở rộng đúng với `PENDING_ACTIVATION`;
 - Candidate persistence behavior V01 không bị thay đổi;
-- `auth_sessions` được giữ nguyên và có thể tham gia F10 session revocation;
+- `auth_sessions` được giữ nguyên schema V01, hỗ trợ cả normal ACTIVE sessions và limited onboarding sessions theo Product `BR-21`, và tham gia F10 session revocation;
 - `auth_tokens` hỗ trợ `COMPANY_APPROVAL_CONFIRMATION`;
 - `companies` được định nghĩa đầy đủ;
 - relationship `Company.managerUserId → User._id` được bảo vệ;
