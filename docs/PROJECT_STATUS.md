@@ -2,17 +2,19 @@
 
 ## Current milestone
 
-**V2 — Company onboarding và quản trị cấp nền tảng** is `COMPLETED AND VERIFIED`.
+**V3 — Quản lý nhân sự tuyển dụng của Company** is `READY FOR IMPLEMENTATION`.
 
-V2's approved business specification remains at `docs/product/versions/v02-company-onboarding-platform-administration.md`, and its persistence contract remains at `docs/data/versions/v02-company-onboarding-platform-administration.md`.
+V3's approved business specification is at `docs/product/versions/v3-company-recruitment-staff-management.md`, and its approved persistence contract is at `docs/data/versions/v3-company-recruitment-staff-management-data-model.md`.
 
-V1 remains `COMPLETED AND VERIFIED`.
+V1 and V2 remain `COMPLETED AND VERIFIED`.
 
 V2 approved backend business scope (F01–F10) is implemented with automated tests, and V2 acceptance findings #1–#8 have been addressed under the repository verification baseline described below. Frontend verification and live external-service runtime checks remain outside `verify:agent` and are not claimed as verified here.
 
-There is no further product version currently `READY FOR IMPLEMENTATION` or `IN PROGRESS`; V3 through V17 remain `PLANNED`.
+No V3 business behavior has been implemented by the implementation-readiness change. V4 through V17 remain `PLANNED`.
 
 ## Completed and verified
+
+- **Prepared; verified:** V3 Product/Data contract paths and repository milestone status are aligned for `READY FOR IMPLEMENTATION`; the backend replica-set test infrastructure proves transaction rollback; migration tooling ownership is defined by the engineering contracts without implementing TX-07 or any V3 Fxx behavior.
 
 - **Implemented; lint-verified:** the Node.js ES-module backend project foundation, package scripts, Express application bootstrap, `/api` root router, hello-world endpoint, application middleware composition, and process startup/shutdown orchestration exist. The current backend source passes the configured ESLint command.
 - **Implemented; test-verified for registration:** MongoDB connection/disconnection infrastructure and startup integration exist. The candidate registration request path uses MongoDB through `auth.service.js` to persist `User` and `AuthToken` records.
@@ -73,7 +75,8 @@ There is no further product version currently `READY FOR IMPLEMENTATION` or `IN 
 ## Deferred / not started
 
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
-- V3 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
+- V3 business implementation has not started. Begin with V3 Slice 01 under the approved Product/Data contracts after this readiness baseline passes.
+- V4 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
 
 ## Verification status
 
@@ -86,4 +89,4 @@ There is no further product version currently `READY FOR IMPLEMENTATION` or `IN 
 
 ## Next recommended task
 
-V2 is `COMPLETED AND VERIFIED`. Choose the next milestone from the product roadmap only after an approved detailed specification exists (V3+), or address known engineering mismatches under `docs/engineering/` if prioritized.
+After the implementation-readiness verification baseline passes, begin V3 Slice 01 only. Do not pre-implement prerequisites that belong to later V3 slices.
