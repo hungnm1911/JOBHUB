@@ -693,7 +693,142 @@ const resetPassword = async ({ token, password }) => {
   };
 };
 
+const completeRecruiterActivation = async ({ token, password }) => {
+  assertPasswordPolicy(password);
+
+  const tokenHash = hashAuthToken(token);
+  const nextPasswordHash = await hashPassword(password);
+  const session = await mongoose.startSession();
+  let user;
+
+  try {
+    await session.withTransaction(async () => {
+      const authToken = await AuthToken.findOne({
+        type: AUTH_TOKEN_TYPE.RECRUITER_ACTIVATION,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .select("+tokenHash")
+        .session(session);
+
+      if (!authToken) {
+        throw new AppError(
+          400,
+          "Invalid or expired recruiter activation token",
+          {
+            field: "token",
+          },
+        );
+      }
+
+      user = await User.findById(authToken.userId)
+        .select("+passwordHash")
+        .session(session);
+
+      if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+        throw new AppError(
+          400,
+          "Invalid or expired recruiter activation token",
+          {
+            field: "token",
+          },
+        );
+      }
+
+      if (user.status !== USER_STATUS.ACTIVE) {
+        throw new AppError(409, "Account cannot complete activation", {
+          field: "status",
+        });
+      }
+
+      if (!user.mustChangePassword) {
+        throw new AppError(409, "Recruiter activation is already complete", {
+          field: "mustChangePassword",
+        });
+      }
+
+      const membership = await CompanyMember.findOne({
+        userId: user._id,
+        role: COMPANY_MEMBER_ROLE.RECRUITER,
+      }).session(session);
+
+      if (!membership) {
+        throw new AppError(
+          400,
+          "Invalid or expired recruiter activation token",
+          {
+            field: "token",
+          },
+        );
+      }
+
+      if (membership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+        throw new AppError(
+          409,
+          "Company membership does not allow activation",
+          {
+            field: "membershipStatus",
+          },
+        );
+      }
+
+      const company = await Company.findById(membership.companyId).session(
+        session,
+      );
+
+      if (!company) {
+        throw new AppError(500, "Company for Recruiter is missing");
+      }
+
+      if (
+        company.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
+        company.operationalStatus !== COMPANY_OPERATIONAL_STATUS.ACTIVE
+      ) {
+        throw new AppError(409, "Company is not available for activation", {
+          field: "operationalStatus",
+        });
+      }
+
+      const now = new Date();
+
+      // TX-02: password + activation gate + email verification + consume token.
+      // Does not change User.status, CompanyMember, or Company lifecycle.
+      user.passwordHash = nextPasswordHash;
+      user.mustChangePassword = false;
+      user.emailVerifiedAt = now;
+      await user.save({ session });
+
+      const consumedToken = await AuthToken.findOneAndDelete({
+        _id: authToken._id,
+        type: AUTH_TOKEN_TYPE.RECRUITER_ACTIVATION,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .session(session)
+        .select("+tokenHash");
+
+      if (!consumedToken) {
+        throw new AppError(
+          400,
+          "Invalid or expired recruiter activation token",
+          {
+            field: "token",
+          },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    message: "Recruiter activation completed.",
+    user: toPublicUser(user),
+  };
+};
+
 export {
+  completeRecruiterActivation,
   confirmCompanyApproval,
   login,
   logoutCurrentSession,
