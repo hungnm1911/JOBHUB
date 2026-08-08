@@ -1,4 +1,5 @@
 import {
+  completeRecruiterActivation,
   confirmCompanyApproval,
   login,
   logoutCurrentSession,
@@ -158,7 +159,23 @@ const resetPasswordHandler = async (request, response, next) => {
   }
 };
 
+const activateRecruiterHandler = async (request, response, next) => {
+  try {
+    const { token, password } = request.body;
+
+    const result = await completeRecruiterActivation({ token, password });
+
+    return response.status(200).json({
+      message: result.message,
+      user: result.user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
+  activateRecruiterHandler,
   confirmCompanyApprovalHandler,
   forgotPasswordHandler,
   loginHandler,

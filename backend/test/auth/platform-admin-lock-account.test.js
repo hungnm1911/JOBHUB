@@ -8,11 +8,14 @@ import {
 } from "vitest";
 
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import AuthSession from "../../src/models/auth-session.model.js";
 import Company from "../../src/models/company.model.js";
+import CompanyMember from "../../src/models/company-member.model.js";
 import User from "../../src/models/user.model.js";
 import {
   createSessionWithRefreshToken,
@@ -37,8 +40,7 @@ const createApprovedActiveCompanyForManager = async ({
   const reviewedAt = new Date("2026-01-02T00:00:00.000Z");
   const activatedAt = new Date("2026-01-03T00:00:00.000Z");
 
-  return Company.create({
-    managerUserId,
+  const company = await Company.create({
     name,
     businessRegistrationNumber,
     description: "Active company for account-lock bypass regression",
@@ -54,6 +56,15 @@ const createApprovedActiveCompanyForManager = async ({
       description: "Active company for account-lock bypass regression",
     },
   });
+
+  await CompanyMember.create({
+    userId: managerUserId,
+    companyId: company._id,
+    role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+    status: COMPANY_MEMBER_STATUS.ACTIVE,
+  });
+
+  return company;
 };
 
 describe("POST /api/platform-admin/accounts/:userId/lock", () => {
@@ -301,7 +312,7 @@ describe("POST /api/platform-admin/accounts/:userId/lock", () => {
     });
     const { user: manager } = await createVerifiedUser({
       email: "manager.lock-bypass@example.com",
-      role: USER_ROLE.COMPANY_MANAGER,
+      role: USER_ROLE.COMPANY_STAFF,
       status: USER_STATUS.ACTIVE,
     });
 

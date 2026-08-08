@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 
 import AUTH_TOKEN_TYPE from "../constants/auth-token-type.js";
 import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
@@ -9,8 +11,12 @@ import config from "../config/index.js";
 import AuthSession from "../models/auth-session.model.js";
 import AuthToken from "../models/auth-token.model.js";
 import Company from "../models/company.model.js";
+import CompanyMember from "../models/company-member.model.js";
 import User from "../models/user.model.js";
-import { toPublicCompany } from "./company.service.js";
+import {
+  findCompanyManagerMembership,
+  toPublicCompany,
+} from "./company.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
@@ -101,7 +107,7 @@ const toPublicUser = (user) => {
 
 const isCompanyManagerOnboarding = (user) => {
   return (
-    user.role === USER_ROLE.COMPANY_MANAGER &&
+    user.role === USER_ROLE.COMPANY_STAFF &&
     user.status === USER_STATUS.PENDING_ACTIVATION
   );
 };
@@ -217,7 +223,7 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
               fullName: fullName.trim(),
               email: normalizedEmail,
               passwordHash,
-              role: USER_ROLE.COMPANY_MANAGER,
+              role: USER_ROLE.COMPANY_STAFF,
               status: USER_STATUS.PENDING_ACTIVATION,
               emailVerifiedAt: null,
               mustChangePassword: false,
@@ -238,7 +244,6 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
       [company] = await Company.create(
         [
           {
-            managerUserId: user._id,
             approvalStatus: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
             operationalStatus: COMPANY_OPERATIONAL_STATUS.INACTIVE,
             reviewSnapshot: null,
@@ -250,6 +255,18 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
         ],
         { session },
       );
+
+      await CompanyMember.create(
+        [
+          {
+            userId: user._id,
+            companyId: company._id,
+            role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+            status: COMPANY_MEMBER_STATUS.ACTIVE,
+          },
+        ],
+        { session },
+      );
     });
   } finally {
     await session.endSession();
@@ -257,7 +274,7 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
 
   return {
     user: toPublicUser(user),
-    company: toPublicCompany(company),
+    company: toPublicCompany(company, user._id),
   };
 };
 
@@ -336,7 +353,7 @@ const confirmCompanyApproval = async ({ token }) => {
 
       user = await User.findById(authToken.userId).session(session);
 
-      if (!user || user.role !== USER_ROLE.COMPANY_MANAGER) {
+      if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
         throw new AppError(
           400,
           "Invalid or expired company approval confirmation token",
@@ -356,15 +373,19 @@ const confirmCompanyApproval = async ({ token }) => {
         );
       }
 
-      company = await Company.findOne({
-        managerUserId: user._id,
-      }).session(session);
+      const membership = await findCompanyManagerMembership({
+        userId: user._id,
+        session,
+      });
+
+      if (!membership) {
+        throw new AppError(500, "Company for Company Manager is missing");
+      }
+
+      company = await Company.findById(membership.companyId).session(session);
 
       if (!company) {
-        throw new AppError(
-          500,
-          "Company for Company Manager is missing",
-        );
+        throw new AppError(500, "Company for Company Manager is missing");
       }
 
       if (
@@ -415,7 +436,7 @@ const confirmCompanyApproval = async ({ token }) => {
 
   return {
     user: toPublicUser(user),
-    company: toPublicCompany(company),
+    company: toPublicCompany(company, user._id),
   };
 };
 
@@ -566,19 +587,7 @@ const logoutCurrentSession = async ({ sessionId }) => {
   };
 };
 
-const requestPasswordReset = async ({ email }) => {
-  const normalizedEmail = normalizeEmail(email);
-  const user = await User.findOne({
-    email: normalizedEmail,
-    role: USER_ROLE.CANDIDATE,
-  });
-
-  if (!user) {
-    return {
-      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
-    };
-  }
-
+const issuePasswordReset = async (user) => {
   await AuthToken.deleteMany({
     userId: user._id,
     type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
@@ -590,9 +599,7 @@ const requestPasswordReset = async ({ email }) => {
     Date.now() + config.authToken.passwordResetExpiresInMs,
   );
 
-  let createdToken;
-
-  createdToken = await AuthToken.create({
+  const createdToken = await AuthToken.create({
     userId: user._id,
     type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
     tokenHash,
@@ -618,6 +625,43 @@ const requestPasswordReset = async ({ email }) => {
       "Unable to send password reset email. Please try again later.",
     );
   }
+};
+
+const isEligibleSelfPasswordResetUser = async (user) => {
+  if (user.role === USER_ROLE.CANDIDATE) {
+    return true;
+  }
+
+  if (user.role !== USER_ROLE.COMPANY_STAFF) {
+    return false;
+  }
+
+  // F06: PASSWORD_RESET is for post-activation Recruiter recovery only.
+  if (user.mustChangePassword) {
+    return false;
+  }
+
+  const membership = await CompanyMember.findOne({
+    userId: user._id,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+  }).select("_id");
+
+  return membership != null;
+};
+
+const requestPasswordReset = async ({ email }) => {
+  const normalizedEmail = normalizeEmail(email);
+  const user = await User.findOne({
+    email: normalizedEmail,
+  });
+
+  if (!user || !(await isEligibleSelfPasswordResetUser(user))) {
+    return {
+      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    };
+  }
+
+  await issuePasswordReset(user);
 
   return {
     message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
@@ -628,52 +672,206 @@ const resetPassword = async ({ token, password }) => {
   assertPasswordPolicy(password);
 
   const tokenHash = hashAuthToken(token);
-  const authToken = await AuthToken.findOne({
-    type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
-    tokenHash,
-    expiresAt: { $gt: new Date() },
-  }).select("+tokenHash");
+  const nextPasswordHash = await hashPassword(password);
+  const session = await mongoose.startSession();
+  let user;
 
-  if (!authToken) {
-    throw new AppError(400, "Invalid or expired password reset token", {
-      field: "token",
+  try {
+    await session.withTransaction(async () => {
+      const authToken = await AuthToken.findOne({
+        type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .select("+tokenHash")
+        .session(session);
+
+      if (!authToken) {
+        throw new AppError(400, "Invalid or expired password reset token", {
+          field: "token",
+        });
+      }
+
+      user = await User.findById(authToken.userId)
+        .select("+passwordHash")
+        .session(session);
+
+      if (!user) {
+        throw new AppError(400, "Invalid or expired password reset token", {
+          field: "token",
+        });
+      }
+
+      // TX-03: password + mustChangePassword + consume token + revoke sessions.
+      // Does not change User.status, CompanyMember, or Company lifecycle.
+      user.passwordHash = nextPasswordHash;
+      user.mustChangePassword = false;
+      await user.save({ session });
+
+      const consumedToken = await AuthToken.findOneAndDelete({
+        _id: authToken._id,
+        type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .session(session)
+        .select("+tokenHash");
+
+      if (!consumedToken) {
+        throw new AppError(400, "Invalid or expired password reset token", {
+          field: "token",
+        });
+      }
+
+      await AuthSession.deleteMany({ userId: user._id }).session(session);
     });
+  } finally {
+    await session.endSession();
   }
-
-  const user = await User.findById(authToken.userId).select("+passwordHash");
-
-  if (!user) {
-    throw new AppError(400, "Invalid or expired password reset token", {
-      field: "token",
-    });
-  }
-
-  const consumedToken = await AuthToken.findOneAndDelete({
-    _id: authToken._id,
-    type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
-    tokenHash,
-    expiresAt: { $gt: new Date() },
-  }).select("+tokenHash");
-
-  if (!consumedToken) {
-    throw new AppError(400, "Invalid or expired password reset token", {
-      field: "token",
-    });
-  }
-
-  user.passwordHash = await hashPassword(password);
-  user.mustChangePassword = false;
-  await user.save();
-
-  await AuthSession.deleteMany({ userId: user._id });
 
   return {
     message: "Password reset successful.",
   };
 };
 
+const completeRecruiterActivation = async ({ token, password }) => {
+  assertPasswordPolicy(password);
+
+  const tokenHash = hashAuthToken(token);
+  const nextPasswordHash = await hashPassword(password);
+  const session = await mongoose.startSession();
+  let user;
+
+  try {
+    await session.withTransaction(async () => {
+      const authToken = await AuthToken.findOne({
+        type: AUTH_TOKEN_TYPE.RECRUITER_ACTIVATION,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .select("+tokenHash")
+        .session(session);
+
+      if (!authToken) {
+        throw new AppError(
+          400,
+          "Invalid or expired recruiter activation token",
+          {
+            field: "token",
+          },
+        );
+      }
+
+      user = await User.findById(authToken.userId)
+        .select("+passwordHash")
+        .session(session);
+
+      if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+        throw new AppError(
+          400,
+          "Invalid or expired recruiter activation token",
+          {
+            field: "token",
+          },
+        );
+      }
+
+      if (user.status !== USER_STATUS.ACTIVE) {
+        throw new AppError(409, "Account cannot complete activation", {
+          field: "status",
+        });
+      }
+
+      if (!user.mustChangePassword) {
+        throw new AppError(409, "Recruiter activation is already complete", {
+          field: "mustChangePassword",
+        });
+      }
+
+      const membership = await CompanyMember.findOne({
+        userId: user._id,
+        role: COMPANY_MEMBER_ROLE.RECRUITER,
+      }).session(session);
+
+      if (!membership) {
+        throw new AppError(
+          400,
+          "Invalid or expired recruiter activation token",
+          {
+            field: "token",
+          },
+        );
+      }
+
+      if (membership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+        throw new AppError(
+          409,
+          "Company membership does not allow activation",
+          {
+            field: "membershipStatus",
+          },
+        );
+      }
+
+      const company = await Company.findById(membership.companyId).session(
+        session,
+      );
+
+      if (!company) {
+        throw new AppError(500, "Company for Recruiter is missing");
+      }
+
+      if (
+        company.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
+        company.operationalStatus !== COMPANY_OPERATIONAL_STATUS.ACTIVE
+      ) {
+        throw new AppError(409, "Company is not available for activation", {
+          field: "operationalStatus",
+        });
+      }
+
+      const now = new Date();
+
+      // TX-02: password + activation gate + email verification + consume token.
+      // Does not change User.status, CompanyMember, or Company lifecycle.
+      user.passwordHash = nextPasswordHash;
+      user.mustChangePassword = false;
+      user.emailVerifiedAt = now;
+      await user.save({ session });
+
+      const consumedToken = await AuthToken.findOneAndDelete({
+        _id: authToken._id,
+        type: AUTH_TOKEN_TYPE.RECRUITER_ACTIVATION,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .session(session)
+        .select("+tokenHash");
+
+      if (!consumedToken) {
+        throw new AppError(
+          400,
+          "Invalid or expired recruiter activation token",
+          {
+            field: "token",
+          },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    message: "Recruiter activation completed.",
+    user: toPublicUser(user),
+  };
+};
+
 export {
+  completeRecruiterActivation,
   confirmCompanyApproval,
+  issuePasswordReset,
   login,
   logoutCurrentSession,
   refreshAccess,

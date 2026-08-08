@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import AUTH_TOKEN_TYPE from "../constants/auth-token-type.js";
 import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
@@ -9,9 +10,13 @@ import config from "../config/index.js";
 import AuthSession from "../models/auth-session.model.js";
 import AuthToken from "../models/auth-token.model.js";
 import Company from "../models/company.model.js";
+import CompanyMember from "../models/company-member.model.js";
 import User from "../models/user.model.js";
 import sendMail from "./mail.service.js";
-import { toPublicCompany } from "./company.service.js";
+import {
+  findCompanyManagerMembership,
+  toPublicCompany,
+} from "./company.service.js";
 import AppError from "../utils/app-error.js";
 import buildCompanyApprovalConfirmationEmail from "../utils/company-approval-confirmation-email.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
@@ -74,10 +79,10 @@ const PENDING_INACTIVE_SUBMITTED_FILTER = {
 };
 
 const assertApproveRejectManagerSourceState = (manager) => {
-  if (manager.role !== USER_ROLE.COMPANY_MANAGER) {
+  if (manager.role !== USER_ROLE.COMPANY_STAFF) {
     throw new AppError(
       409,
-      "Company Manager for submitted registration must have role COMPANY_MANAGER",
+      "Company Manager for submitted registration must have role COMPANY_STAFF",
       {
         field: "role",
       },
@@ -96,10 +101,10 @@ const assertApproveRejectManagerSourceState = (manager) => {
 };
 
 const assertLockManagerSourceState = (manager) => {
-  if (manager.role !== USER_ROLE.COMPANY_MANAGER) {
+  if (manager.role !== USER_ROLE.COMPANY_STAFF) {
     throw new AppError(
       409,
-      "Company Manager for Company must have role COMPANY_MANAGER",
+      "Company Manager for Company must have role COMPANY_STAFF",
       {
         field: "role",
       },
@@ -115,6 +120,47 @@ const assertLockManagerSourceState = (manager) => {
       },
     );
   }
+};
+
+const loadManagerForCompany = async ({ companyId, session } = {}) => {
+  const membership = await findCompanyManagerMembership({
+    companyId,
+    session,
+  });
+
+  if (!membership) {
+    return null;
+  }
+
+  let query = User.findById(membership.userId);
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  return query;
+};
+
+const loadManagersByCompanyIds = async (companyIds) => {
+  const memberships = await CompanyMember.find({
+    companyId: { $in: companyIds },
+    role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+  });
+
+  const managers = await User.find({
+    _id: { $in: memberships.map((membership) => membership.userId) },
+  });
+
+  const managersById = new Map(
+    managers.map((manager) => [manager._id.toString(), manager]),
+  );
+
+  return new Map(
+    memberships.map((membership) => [
+      membership.companyId.toString(),
+      managersById.get(membership.userId.toString()),
+    ]),
+  );
 };
 
 const toCompanyRegistrationSummary = (company, manager) => {
@@ -146,16 +192,6 @@ const toCompanyRegistrationDetail = (company, manager) => {
   };
 };
 
-const loadManagersById = async (managerUserIds) => {
-  const managers = await User.find({
-    _id: { $in: managerUserIds },
-  });
-
-  return new Map(
-    managers.map((manager) => [manager._id.toString(), manager]),
-  );
-};
-
 const listCompanyRegistrations = async () => {
   const companies = await Company.find({
     approvalStatus: { $ne: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED },
@@ -163,12 +199,12 @@ const listCompanyRegistrations = async () => {
     submittedAt: { $ne: null },
   });
 
-  const managersById = await loadManagersById(
-    companies.map((company) => company.managerUserId),
+  const managersByCompanyId = await loadManagersByCompanyIds(
+    companies.map((company) => company._id),
   );
 
   return companies.map((company) => {
-    const manager = managersById.get(company.managerUserId.toString());
+    const manager = managersByCompanyId.get(company._id.toString());
 
     if (!manager) {
       throw new AppError(
@@ -196,7 +232,7 @@ const getCompanyRegistration = async ({ companyId }) => {
     });
   }
 
-  const manager = await User.findById(company.managerUserId);
+  const manager = await loadManagerForCompany({ companyId: company._id });
 
   if (!manager) {
     throw new AppError(
@@ -238,7 +274,9 @@ const rejectCompanyRegistration = async ({ companyId, actorUserId }) => {
     );
   }
 
-  const manager = await User.findById(pendingCompany.managerUserId);
+  const manager = await loadManagerForCompany({
+    companyId: pendingCompany._id,
+  });
 
   if (!manager) {
     throw new AppError(
@@ -337,7 +375,10 @@ const approveCompanyRegistration = async ({ companyId, actorUserId }) => {
         );
       }
 
-      manager = await User.findById(company.managerUserId).session(session);
+      manager = await loadManagerForCompany({
+        companyId: company._id,
+        session,
+      });
 
       if (!manager) {
         throw new AppError(
@@ -357,7 +398,7 @@ const approveCompanyRegistration = async ({ companyId, actorUserId }) => {
       await AuthToken.create(
         [
           {
-            userId: company.managerUserId,
+            userId: manager._id,
             type: AUTH_TOKEN_TYPE.COMPANY_APPROVAL_CONFIRMATION,
             tokenHash,
             expiresAt,
@@ -409,11 +450,19 @@ const assertAccountStatusPreservesCompanyLifecycle = async ({
   targetUser,
   nextStatus,
 }) => {
-  if (targetUser.role !== USER_ROLE.COMPANY_MANAGER) {
+  if (targetUser.role !== USER_ROLE.COMPANY_STAFF) {
     return;
   }
 
-  const company = await Company.findOne({ managerUserId: targetUser._id });
+  const membership = await findCompanyManagerMembership({
+    userId: targetUser._id,
+  });
+
+  if (!membership) {
+    return;
+  }
+
+  const company = await Company.findById(membership.companyId);
 
   if (!company) {
     return;
@@ -518,7 +567,10 @@ const lockCompany = async ({ companyId }) => {
         );
       }
 
-      manager = await User.findById(company.managerUserId).session(session);
+      manager = await loadManagerForCompany({
+        companyId: company._id,
+        session,
+      });
 
       if (!manager) {
         throw new AppError(500, "Company Manager for Company is missing");
@@ -539,7 +591,7 @@ const lockCompany = async ({ companyId }) => {
   }
 
   return {
-    company: toPublicCompany(company),
+    company: toPublicCompany(company, manager._id),
     manager: toPublicUser(manager),
   };
 };

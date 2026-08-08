@@ -10,11 +10,13 @@ import {
 
 import AUTH_TOKEN_TYPE from "../../src/constants/auth-token-type.js";
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import AuthToken from "../../src/models/auth-token.model.js";
 import Company from "../../src/models/company.model.js";
+import CompanyMember from "../../src/models/company-member.model.js";
 import User from "../../src/models/user.model.js";
 import { confirmCompanyApproval } from "../../src/services/auth.service.js";
 import sendMail from "../../src/services/mail.service.js";
@@ -152,7 +154,7 @@ describe("POST /api/auth/confirm-company-approval", () => {
     expect(response.body.refreshToken).toBeUndefined();
     expect(response.body.user).toMatchObject({
       id: managerId,
-      role: USER_ROLE.COMPANY_MANAGER,
+      role: USER_ROLE.COMPANY_STAFF,
       status: USER_STATUS.ACTIVE,
     });
     expect(response.body.user.emailVerifiedAt).toEqual(expect.any(String));
@@ -246,7 +248,13 @@ describe("POST /api/auth/confirm-company-approval", () => {
     expect(missingTokenResponse.status).toBe(400);
 
     const persistedUser = await User.findById(managerId);
-    const persistedCompany = await Company.findOne({ managerUserId: managerId });
+    const membership = await CompanyMember.findOne({
+      userId: managerId,
+      role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+    });
+    const persistedCompany = membership
+      ? await Company.findById(membership.companyId)
+      : null;
 
     expect(persistedUser.status).toBe(USER_STATUS.PENDING_ACTIVATION);
     expect(persistedCompany.operationalStatus).toBe(

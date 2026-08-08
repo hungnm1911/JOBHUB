@@ -749,6 +749,7 @@ const checkAuthenticationTokenOwnership = () => {
       ["COMPANY_APPROVAL_CONFIRMATION", "COMPANY_APPROVAL_CONFIRMATION"],
       ["EMAIL_VERIFICATION", "EMAIL_VERIFICATION"],
       ["PASSWORD_RESET", "PASSWORD_RESET"],
+      ["RECRUITER_ACTIVATION", "RECRUITER_ACTIVATION"],
     ].sort();
 
     if (JSON.stringify(actualEntries) !== JSON.stringify(expectedEntries)) {
@@ -756,7 +757,7 @@ const checkAuthenticationTokenOwnership = () => {
         rule: "ARCH-016",
         filePath: canonicalFiles.authTokenType,
         reason:
-          "Authentication-token types must be exactly EMAIL_VERIFICATION, PASSWORD_RESET, and COMPANY_APPROVAL_CONFIRMATION.",
+          "Authentication-token types must be exactly EMAIL_VERIFICATION, PASSWORD_RESET, COMPANY_APPROVAL_CONFIRMATION, and RECRUITER_ACTIVATION.",
       });
     }
   }

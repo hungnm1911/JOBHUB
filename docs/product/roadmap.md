@@ -22,7 +22,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | --- | --- | --- |
 | V1 | Tài khoản và vòng đời xác thực | COMPLETED AND VERIFIED |
 | V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
-| V3 | Quản lý nhân sự tuyển dụng của Company | PLANNED |
+| V3 | Quản lý nhân sự tuyển dụng của Company | IN PROGRESS |
 | V4 | Danh mục chuẩn của nền tảng | PLANNED |
 | V5 | Job và vòng đời phê duyệt Job | PLANNED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | PLANNED |
@@ -66,7 +66,22 @@ The approved business scope of the version has been implemented and the required
 
 V1 and V2 are `COMPLETED AND VERIFIED`.
 
-There is no further version currently `READY FOR IMPLEMENTATION` or `IN PROGRESS`. Versions V3 through V17 remain `PLANNED` and must not be implemented merely from their roadmap titles.
+V3 is `IN PROGRESS`. Slices 01–03 (Company Staff foundation &
+cutover; authorization & tenant context; Recruiter creation +
+activation issuance) are implemented under the approved Product
+Specification and Persistence Contract. Remaining V3 slices are not
+complete.
+
+Versions V4 through V17 remain `PLANNED` and must not be implemented merely
+from their roadmap titles.
+
+V3 canonical specification:
+
+`docs/product/versions/v3-company-recruitment-staff-management.md`
+
+V3 canonical persistence contract:
+
+`docs/data/versions/v3-company-recruitment-staff-management-data-model.md`
 
 V2 canonical specification:
 

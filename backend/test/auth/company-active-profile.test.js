@@ -9,10 +9,13 @@ import {
 } from "vitest";
 
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import Company from "../../src/models/company.model.js";
+import CompanyMember from "../../src/models/company-member.model.js";
 import User from "../../src/models/user.model.js";
 import sendMail from "../../src/services/mail.service.js";
 import {
@@ -173,10 +176,15 @@ describe("Active Company profile management (F09)", () => {
     });
 
     const before = await Company.findById(activated.companyId);
+    const membershipBefore = await CompanyMember.findOne({
+      userId: activated.managerId,
+      companyId: activated.companyId,
+      role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+      status: COMPANY_MEMBER_STATUS.ACTIVE,
+    });
     const immutableBefore = {
       name: before.name,
       businessRegistrationNumber: before.businessRegistrationNumber,
-      managerUserId: before.managerUserId.toString(),
       approvalStatus: before.approvalStatus,
       operationalStatus: before.operationalStatus,
       reviewSnapshot: before.reviewSnapshot.toObject(),
@@ -185,6 +193,9 @@ describe("Active Company profile management (F09)", () => {
       reviewedAt: before.reviewedAt?.toISOString(),
       activatedAt: before.activatedAt?.toISOString(),
     };
+
+    expect(membershipBefore).not.toBeNull();
+    expect(before.managerUserId).toBeUndefined();
 
     const patchResponse = await agent
       .patch("/api/company")
@@ -214,6 +225,12 @@ describe("Active Company profile management (F09)", () => {
     });
 
     const after = await Company.findById(activated.companyId);
+    const membershipAfter = await CompanyMember.findOne({
+      userId: activated.managerId,
+      companyId: activated.companyId,
+      role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+      status: COMPANY_MEMBER_STATUS.ACTIVE,
+    });
 
     expect(after.logoUrl).toBe("https://cdn.example/logo-updated.png");
     expect(after.bannerUrl).toBe("https://cdn.example/banner-updated.png");
@@ -225,7 +242,8 @@ describe("Active Company profile management (F09)", () => {
     expect(after.businessRegistrationNumber).toBe(
       immutableBefore.businessRegistrationNumber,
     );
-    expect(after.managerUserId.toString()).toBe(immutableBefore.managerUserId);
+    expect(after.managerUserId).toBeUndefined();
+    expect(membershipAfter).not.toBeNull();
     expect(after.approvalStatus).toBe(immutableBefore.approvalStatus);
     expect(after.operationalStatus).toBe(immutableBefore.operationalStatus);
     expect(after.reviewSnapshot.toObject()).toEqual(
@@ -330,10 +348,17 @@ describe("Active Company profile management (F09)", () => {
     }
 
     const after = await Company.findById(activated.companyId);
+    const membershipAfter = await CompanyMember.findOne({
+      userId: activated.managerId,
+      companyId: activated.companyId,
+      role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+      status: COMPANY_MEMBER_STATUS.ACTIVE,
+    });
 
     expect(after.name).toBe("Immutable Name Co");
     expect(after.businessRegistrationNumber).toBe("BRN-IMMUTABLE-1");
-    expect(after.managerUserId.toString()).toBe(activated.managerId);
+    expect(after.managerUserId).toBeUndefined();
+    expect(membershipAfter).not.toBeNull();
     expect(after.approvalStatus).toBe(COMPANY_APPROVAL_STATUS.APPROVED);
     expect(after.operationalStatus).toBe(COMPANY_OPERATIONAL_STATUS.ACTIVE);
     expect(after.reviewSnapshot.toObject()).toEqual(snapshotBefore);

@@ -73,7 +73,7 @@ const resolveAccessCredential = async ({ accessToken }) => {
 
 const isCompanyManagerOnboarding = (user) => {
   return (
-    user.role === USER_ROLE.COMPANY_MANAGER &&
+    user.role === USER_ROLE.COMPANY_STAFF &&
     user.status === USER_STATUS.PENDING_ACTIVATION
   );
 };
