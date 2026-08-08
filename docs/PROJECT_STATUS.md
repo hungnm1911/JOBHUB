@@ -8,11 +8,15 @@ V3's approved business specification is at `docs/product/versions/v3-company-rec
 
 V1 and V2 remain `COMPLETED AND VERIFIED`.
 
-V3 Slices 01–05 are implemented and verified under the backend gate below. Later V3 slices (password reset, lock/unlock/terminate, and F10 update Recruiter) are not started.
+V3 Slices 01–07 are implemented and verified under the backend gate below. Later V3 slices (terminate F13, and F10 update Recruiter) are not started.
 
 V4 through V17 remain `PLANNED`.
 
 ## Completed and verified
+
+- **Implemented; verified:** V3 Slice 07 — Recruiter lock & unlock (F11, F12 / TX-04; BR-16, BR-17, BR-18, BR-22, BR-23): valid Company Manager locks/unlocks same-tenant Recruiter membership only; lock allows only `ACTIVE → LOCKED` and atomically revokes all Recruiter `AuthSession` records; unlock allows only `LOCKED → ACTIVE` without restoring sessions and rejects platform-restricted Users and `TERMINATED` membership; neither path changes `User.status` or Company lifecycle. Focused coverage in `test/auth/v3-recruiter-lock-unlock.test.js`.
+
+- **Implemented; verified:** V3 Slice 06 — Recruiter password recovery & CM-initiated reset (F06, F07 / TX-03; BR-06, BR-07, BR-12, BR-14, BR-15, BR-17, BR-22): activated Recruiters reuse `PASSWORD_RESET` self forgot/reset; valid CM can initiate same-tenant reset only after initial activation and not for `TERMINATED` membership; completion atomically updates `passwordHash`, sets `mustChangePassword=false`, consumes the token, and revokes all `AuthSession` records without changing User/membership/Company lifecycle; CM never receives password or raw token. Focused coverage in `test/auth/v3-recruiter-password-reset.test.js`.
 
 - **Implemented; verified:** V3 Slice 05 — Recruiter list & detail (F08, F09; BR-06, BR-07, BR-23, BR-29): valid Company Manager lists and reads Recruiter detail only in the membership-derived tenant via `CompanyMember(role=RECRUITER)`; responses expose management fields (`fullName`, `email`, `employeeCode`, `jobTitle`, User/membership status, activation readiness) without passwordHash/token/session credentials; client `companyId` cannot expand scope; Recruiter peers and invalid Company state are rejected. Focused coverage in `test/auth/v3-recruiter-list-detail.test.js`.
 
@@ -85,18 +89,18 @@ V4 through V17 remain `PLANNED`.
 ## Deferred / not started
 
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
-- V3 Slices 01–05 are complete. Remaining V3 slices (password reset, lock/unlock/terminate, F10 update Recruiter) are not started.
+- V3 Slices 01–07 are complete. Remaining V3 slices (terminate F13, F10 update Recruiter) are not started.
 - V4 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
 
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
 - `npm run verify:agent` consists of ESLint, deterministic architecture verification, and Vitest; it was run for this snapshot and passed.
-- The current baseline is 31 passing test files and 165 passing tests: prior V1/V2/V3 Slice 01–04 coverage plus V3 Slice 05 Recruiter list/detail tests.
-- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, and existing V2 registration/onboarding/platform-admin suites.
+- The current baseline is 33 passing test files and 175 passing tests: prior V1/V2/V3 Slice 01–06 coverage plus V3 Slice 07 Recruiter lock/unlock tests.
+- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, and existing V2 registration/onboarding/platform-admin suites.
 - No automated test script is defined outside the backend package; frontend verification is outside `verify:agent` and was not run.
 - Backend startup, Cloudinary connectivity/operations, live SMTP delivery, endpoint smoke tests outside automated registration coverage, and frontend verification are outside `verify:agent` and were not run, so their behavior is not verified by this snapshot.
 
 ## Next recommended task
 
-Continue V3 with the next approved slice after Slice 05 (Recruiter list/detail), typically password reset (F06/F07). Do not pre-implement lock/unlock/terminate or F10.
+Continue V3 with the next approved slice after Slice 07 (lock/unlock), typically Recruiter terminate (F13). Do not pre-implement F10.

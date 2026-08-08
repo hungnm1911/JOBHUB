@@ -6,10 +6,12 @@ import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import config from "../config/index.js";
+import AuthSession from "../models/auth-session.model.js";
 import AuthToken from "../models/auth-token.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import User from "../models/user.model.js";
 import { resolveCompanyManagerRecruiterManagementContext } from "./company.service.js";
+import { issuePasswordReset } from "./auth.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
@@ -297,9 +299,267 @@ const getRecruiterDetail = async ({
   return toPublicRecruiter(user, membership);
 };
 
+const initiateRecruiterPasswordReset = async ({
+  managerUser,
+  recruiterId,
+  clientCompanyId,
+}) => {
+  if (!mongoose.Types.ObjectId.isValid(recruiterId)) {
+    throw new AppError(400, "Invalid recruiter id", {
+      field: "recruiterId",
+    });
+  }
+
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  const membership = await CompanyMember.findOne({
+    companyId: context.companyId,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+    userId: recruiterId,
+  });
+
+  if (!membership) {
+    throw new AppError(404, "Recruiter not found", {
+      field: "recruiterId",
+    });
+  }
+
+  if (membership.status === COMPANY_MEMBER_STATUS.TERMINATED) {
+    throw new AppError(
+      409,
+      "Terminated Recruiters cannot receive password reset",
+      {
+        field: "membershipStatus",
+      },
+    );
+  }
+
+  const user = await User.findById(recruiterId);
+
+  if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+    throw new AppError(404, "Recruiter not found", {
+      field: "recruiterId",
+    });
+  }
+
+  // Settled decision: CM cannot initiate reset before initial activation.
+  if (user.mustChangePassword) {
+    throw new AppError(
+      409,
+      "Recruiter must complete activation before password reset",
+      {
+        field: "mustChangePassword",
+      },
+    );
+  }
+
+  await issuePasswordReset(user);
+
+  return {
+    message: "Password reset initiated for recruiter.",
+    recruiter: toPublicRecruiter(user, membership),
+  };
+};
+
+const loadSameTenantRecruiterMembership = async ({
+  companyId,
+  recruiterId,
+}) => {
+  if (!mongoose.Types.ObjectId.isValid(recruiterId)) {
+    throw new AppError(400, "Invalid recruiter id", {
+      field: "recruiterId",
+    });
+  }
+
+  const membership = await CompanyMember.findOne({
+    companyId,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+    userId: recruiterId,
+  });
+
+  if (!membership) {
+    throw new AppError(404, "Recruiter not found", {
+      field: "recruiterId",
+    });
+  }
+
+  const user = await User.findById(recruiterId);
+
+  if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+    throw new AppError(404, "Recruiter not found", {
+      field: "recruiterId",
+    });
+  }
+
+  return {
+    membership,
+    user,
+  };
+};
+
+const lockRecruiter = async ({
+  managerUser,
+  recruiterId,
+  clientCompanyId,
+}) => {
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  const { membership, user } = await loadSameTenantRecruiterMembership({
+    companyId: context.companyId,
+    recruiterId,
+  });
+
+  if (membership.status === COMPANY_MEMBER_STATUS.TERMINATED) {
+    throw new AppError(409, "Terminated Recruiters cannot be locked", {
+      field: "membershipStatus",
+    });
+  }
+
+  if (membership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+    throw new AppError(409, "Only ACTIVE Recruiters can be locked", {
+      field: "membershipStatus",
+    });
+  }
+
+  const session = await mongoose.startSession();
+  let lockedMembership;
+
+  try {
+    await session.withTransaction(async () => {
+      // TX-04: ACTIVE → LOCKED + revoke all AuthSession atomically.
+      // Does not change User.status or Company lifecycle.
+      lockedMembership = await CompanyMember.findOneAndUpdate(
+        {
+          _id: membership._id,
+          companyId: context.companyId,
+          role: COMPANY_MEMBER_ROLE.RECRUITER,
+          status: COMPANY_MEMBER_STATUS.ACTIVE,
+        },
+        {
+          $set: {
+            status: COMPANY_MEMBER_STATUS.LOCKED,
+          },
+        },
+        {
+          returnDocument: "after",
+          session,
+        },
+      );
+
+      if (!lockedMembership) {
+        throw new AppError(409, "Only ACTIVE Recruiters can be locked", {
+          field: "membershipStatus",
+        });
+      }
+
+      await AuthSession.deleteMany({ userId: user._id }).session(session);
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return toPublicRecruiter(user, lockedMembership);
+};
+
+const unlockRecruiter = async ({
+  managerUser,
+  recruiterId,
+  clientCompanyId,
+}) => {
+  // Actor CM context requires User ACTIVE + membership ACTIVE + Company
+  // APPROVED/ACTIVE (BR-23 for the management action).
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  const { membership, user } = await loadSameTenantRecruiterMembership({
+    companyId: context.companyId,
+    recruiterId,
+  });
+
+  if (membership.status === COMPANY_MEMBER_STATUS.TERMINATED) {
+    throw new AppError(409, "Terminated Recruiters cannot be unlocked", {
+      field: "membershipStatus",
+    });
+  }
+
+  if (membership.status !== COMPANY_MEMBER_STATUS.LOCKED) {
+    throw new AppError(409, "Only LOCKED Recruiters can be unlocked", {
+      field: "membershipStatus",
+    });
+  }
+
+  // BR-22: platform User restriction outranks Company-level unlock.
+  if (user.status === USER_STATUS.LOCKED) {
+    throw new AppError(
+      403,
+      "Cannot unlock a platform-locked Recruiter account",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  if (user.status === USER_STATUS.TERMINATED) {
+    throw new AppError(
+      403,
+      "Cannot unlock a platform-terminated Recruiter account",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  if (user.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(
+      403,
+      "Cannot unlock a Recruiter with restricted platform account status",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  // F12 / BR-18: LOCKED → ACTIVE membership only; do not restore sessions.
+  const unlockedMembership = await CompanyMember.findOneAndUpdate(
+    {
+      _id: membership._id,
+      companyId: context.companyId,
+      role: COMPANY_MEMBER_ROLE.RECRUITER,
+      status: COMPANY_MEMBER_STATUS.LOCKED,
+    },
+    {
+      $set: {
+        status: COMPANY_MEMBER_STATUS.ACTIVE,
+      },
+    },
+    {
+      returnDocument: "after",
+    },
+  );
+
+  if (!unlockedMembership) {
+    throw new AppError(409, "Only LOCKED Recruiters can be unlocked", {
+      field: "membershipStatus",
+    });
+  }
+
+  return toPublicRecruiter(user, unlockedMembership);
+};
+
 export {
   createRecruiter,
   getRecruiterDetail,
+  initiateRecruiterPasswordReset,
   listRecruiters,
+  lockRecruiter,
   toPublicRecruiter,
+  unlockRecruiter,
 };

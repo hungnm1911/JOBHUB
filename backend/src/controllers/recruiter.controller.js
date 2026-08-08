@@ -1,7 +1,10 @@
 import {
   createRecruiter,
   getRecruiterDetail,
+  initiateRecruiterPasswordReset,
   listRecruiters,
+  lockRecruiter,
+  unlockRecruiter,
 } from "../services/recruiter.service.js";
 
 const readClientCompanyId = (request) => {
@@ -66,8 +69,66 @@ const getRecruiterDetailHandler = async (request, response, next) => {
   }
 };
 
+const initiateRecruiterPasswordResetHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const result = await initiateRecruiterPasswordReset({
+      managerUser: request.auth.user,
+      recruiterId: request.params.recruiterId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: result.message,
+      recruiter: result.recruiter,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const lockRecruiterHandler = async (request, response, next) => {
+  try {
+    const recruiter = await lockRecruiter({
+      managerUser: request.auth.user,
+      recruiterId: request.params.recruiterId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Recruiter locked.",
+      recruiter,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const unlockRecruiterHandler = async (request, response, next) => {
+  try {
+    const recruiter = await unlockRecruiter({
+      managerUser: request.auth.user,
+      recruiterId: request.params.recruiterId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Recruiter unlocked.",
+      recruiter,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   createRecruiterHandler,
   getRecruiterDetailHandler,
+  initiateRecruiterPasswordResetHandler,
   listRecruitersHandler,
+  lockRecruiterHandler,
+  unlockRecruiterHandler,
 };
