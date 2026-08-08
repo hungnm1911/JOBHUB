@@ -554,12 +554,99 @@ const unlockRecruiter = async ({
   return toPublicRecruiter(user, unlockedMembership);
 };
 
+const TERMINATABLE_MEMBERSHIP_STATUSES = new Set([
+  COMPANY_MEMBER_STATUS.ACTIVE,
+  COMPANY_MEMBER_STATUS.LOCKED,
+]);
+
+const terminateRecruiter = async ({
+  managerUser,
+  recruiterId,
+  clientCompanyId,
+}) => {
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  const { membership, user } = await loadSameTenantRecruiterMembership({
+    companyId: context.companyId,
+    recruiterId,
+  });
+
+  if (membership.status === COMPANY_MEMBER_STATUS.TERMINATED) {
+    throw new AppError(409, "Recruiter is already terminated", {
+      field: "membershipStatus",
+    });
+  }
+
+  if (!TERMINATABLE_MEMBERSHIP_STATUSES.has(membership.status)) {
+    throw new AppError(
+      409,
+      "Only ACTIVE or LOCKED Recruiters can be terminated",
+      {
+        field: "membershipStatus",
+      },
+    );
+  }
+
+  const session = await mongoose.startSession();
+  let terminatedMembership;
+
+  try {
+    await session.withTransaction(async () => {
+      // TX-05: ACTIVE|LOCKED → TERMINATED + revoke AuthSession atomically.
+      // Retains User/CompanyMember identity, email, employeeCode, jobTitle.
+      // Does not change User.status or Company lifecycle.
+      terminatedMembership = await CompanyMember.findOneAndUpdate(
+        {
+          _id: membership._id,
+          companyId: context.companyId,
+          role: COMPANY_MEMBER_ROLE.RECRUITER,
+          status: {
+            $in: [
+              COMPANY_MEMBER_STATUS.ACTIVE,
+              COMPANY_MEMBER_STATUS.LOCKED,
+            ],
+          },
+        },
+        {
+          $set: {
+            status: COMPANY_MEMBER_STATUS.TERMINATED,
+          },
+        },
+        {
+          returnDocument: "after",
+          session,
+        },
+      );
+
+      if (!terminatedMembership) {
+        throw new AppError(
+          409,
+          "Only ACTIVE or LOCKED Recruiters can be terminated",
+          {
+            field: "membershipStatus",
+          },
+        );
+      }
+
+      await AuthSession.deleteMany({ userId: user._id }).session(session);
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return toPublicRecruiter(user, terminatedMembership);
+};
+
 export {
   createRecruiter,
   getRecruiterDetail,
   initiateRecruiterPasswordReset,
   listRecruiters,
   lockRecruiter,
+  terminateRecruiter,
   toPublicRecruiter,
   unlockRecruiter,
 };

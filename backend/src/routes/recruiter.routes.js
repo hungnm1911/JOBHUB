@@ -6,6 +6,7 @@ import {
   initiateRecruiterPasswordResetHandler,
   listRecruitersHandler,
   lockRecruiterHandler,
+  terminateRecruiterHandler,
   unlockRecruiterHandler,
 } from "../controllers/recruiter.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
@@ -40,6 +41,13 @@ router.post(
   authenticateAccess,
   authorizeCompanyManagerBusinessAccess,
   unlockRecruiterHandler,
+);
+
+router.post(
+  "/:recruiterId/terminate",
+  authenticateAccess,
+  authorizeCompanyManagerBusinessAccess,
+  terminateRecruiterHandler,
 );
 
 router.get(
