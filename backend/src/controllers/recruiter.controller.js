@@ -1,4 +1,17 @@
-import { createRecruiter } from "../services/recruiter.service.js";
+import {
+  createRecruiter,
+  getRecruiterDetail,
+  listRecruiters,
+} from "../services/recruiter.service.js";
+
+const readClientCompanyId = (request) => {
+  return (
+    request.body?.companyId ??
+    request.params?.companyId ??
+    request.query?.companyId ??
+    null
+  );
+};
 
 const createRecruiterHandler = async (request, response, next) => {
   try {
@@ -8,11 +21,7 @@ const createRecruiterHandler = async (request, response, next) => {
       email: request.body.email,
       employeeCode: request.body.employeeCode,
       jobTitle: request.body.jobTitle,
-      clientCompanyId:
-        request.body.companyId ??
-        request.params.companyId ??
-        request.query.companyId ??
-        null,
+      clientCompanyId: readClientCompanyId(request),
     });
 
     return response.status(201).json({
@@ -24,4 +33,41 @@ const createRecruiterHandler = async (request, response, next) => {
   }
 };
 
-export { createRecruiterHandler };
+const listRecruitersHandler = async (request, response, next) => {
+  try {
+    const recruiters = await listRecruiters({
+      managerUser: request.auth.user,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Recruiters retrieved.",
+      recruiters,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getRecruiterDetailHandler = async (request, response, next) => {
+  try {
+    const recruiter = await getRecruiterDetail({
+      managerUser: request.auth.user,
+      recruiterId: request.params.recruiterId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Recruiter retrieved.",
+      recruiter,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export {
+  createRecruiterHandler,
+  getRecruiterDetailHandler,
+  listRecruitersHandler,
+};

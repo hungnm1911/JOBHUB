@@ -275,12 +275,77 @@ const createActiveRecruiterContext = async ({
   };
 };
 
+const createPendingRecruiterWithActivationToken = async ({
+  email = "pending.recruiter@example.com",
+  fullName = "Pending Recruiter",
+  password = DEFAULT_PASSWORD,
+  company,
+  employeeCode = "NV-PENDING",
+  jobTitle = "Recruiter",
+  membershipStatus = COMPANY_MEMBER_STATUS.ACTIVE,
+  userStatus = USER_STATUS.ACTIVE,
+  expiresAt = new Date(
+    Date.now() + config.authToken.emailVerificationExpiresInMs,
+  ),
+} = {}) => {
+  let ownedCompany = company;
+  let manager = null;
+
+  if (!ownedCompany) {
+    const managerContext = await createActiveCompanyManagerContext({
+      email: `cm.for.${email}`,
+      businessRegistrationNumber: `BRN-FOR-${email}`,
+    });
+    ownedCompany = managerContext.company;
+    manager = managerContext.user;
+  }
+
+  const passwordHash = await hashPassword(password);
+  const rawToken = generateAuthToken();
+
+  const user = await User.create({
+    fullName,
+    email,
+    passwordHash,
+    role: USER_ROLE.COMPANY_STAFF,
+    status: userStatus,
+    emailVerifiedAt: null,
+    mustChangePassword: true,
+  });
+
+  const membership = await CompanyMember.create({
+    userId: user._id,
+    companyId: ownedCompany._id,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+    status: membershipStatus,
+    employeeCode,
+    jobTitle,
+  });
+
+  await AuthToken.create({
+    userId: user._id,
+    type: AUTH_TOKEN_TYPE.RECRUITER_ACTIVATION,
+    tokenHash: hashAuthToken(rawToken),
+    expiresAt,
+  });
+
+  return {
+    password,
+    rawToken,
+    user,
+    company: ownedCompany,
+    membership,
+    manager,
+  };
+};
+
 export {
   createActiveCompanyManagerContext,
   createActiveRecruiterContext,
   createApprovedActiveCompanyFields,
   createCompanyStaffWithMembership,
   createPasswordResetToken,
+  createPendingRecruiterWithActivationToken,
   createSessionWithRefreshToken,
   createUnverifiedUserWithVerificationToken,
   createVerifiedUser,

@@ -225,4 +225,81 @@ const createRecruiter = async ({
   return toPublicRecruiter(recruiterUser, membership);
 };
 
-export { createRecruiter, toPublicRecruiter };
+const listRecruiters = async ({ managerUser, clientCompanyId }) => {
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  const memberships = await CompanyMember.find({
+    companyId: context.companyId,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+  }).sort({ createdAt: 1 });
+
+  if (memberships.length === 0) {
+    return [];
+  }
+
+  const users = await User.find({
+    _id: { $in: memberships.map((membership) => membership.userId) },
+  });
+  const usersById = new Map(
+    users.map((user) => [user._id.toString(), user]),
+  );
+
+  return memberships.flatMap((membership) => {
+    const user = usersById.get(membership.userId.toString());
+
+    if (!user) {
+      return [];
+    }
+
+    return [toPublicRecruiter(user, membership)];
+  });
+};
+
+const getRecruiterDetail = async ({
+  managerUser,
+  recruiterId,
+  clientCompanyId,
+}) => {
+  if (!mongoose.Types.ObjectId.isValid(recruiterId)) {
+    throw new AppError(400, "Invalid recruiter id", {
+      field: "recruiterId",
+    });
+  }
+
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  const membership = await CompanyMember.findOne({
+    companyId: context.companyId,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+    userId: recruiterId,
+  });
+
+  if (!membership) {
+    throw new AppError(404, "Recruiter not found", {
+      field: "recruiterId",
+    });
+  }
+
+  const user = await User.findById(recruiterId);
+
+  if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+    throw new AppError(404, "Recruiter not found", {
+      field: "recruiterId",
+    });
+  }
+
+  return toPublicRecruiter(user, membership);
+};
+
+export {
+  createRecruiter,
+  getRecruiterDetail,
+  listRecruiters,
+  toPublicRecruiter,
+};
