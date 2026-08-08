@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 
 import AUTH_TOKEN_TYPE from "../constants/auth-token-type.js";
 import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
@@ -9,8 +11,12 @@ import config from "../config/index.js";
 import AuthSession from "../models/auth-session.model.js";
 import AuthToken from "../models/auth-token.model.js";
 import Company from "../models/company.model.js";
+import CompanyMember from "../models/company-member.model.js";
 import User from "../models/user.model.js";
-import { toPublicCompany } from "./company.service.js";
+import {
+  findCompanyManagerMembership,
+  toPublicCompany,
+} from "./company.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
@@ -101,7 +107,7 @@ const toPublicUser = (user) => {
 
 const isCompanyManagerOnboarding = (user) => {
   return (
-    user.role === USER_ROLE.COMPANY_MANAGER &&
+    user.role === USER_ROLE.COMPANY_STAFF &&
     user.status === USER_STATUS.PENDING_ACTIVATION
   );
 };
@@ -217,7 +223,7 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
               fullName: fullName.trim(),
               email: normalizedEmail,
               passwordHash,
-              role: USER_ROLE.COMPANY_MANAGER,
+              role: USER_ROLE.COMPANY_STAFF,
               status: USER_STATUS.PENDING_ACTIVATION,
               emailVerifiedAt: null,
               mustChangePassword: false,
@@ -238,7 +244,6 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
       [company] = await Company.create(
         [
           {
-            managerUserId: user._id,
             approvalStatus: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
             operationalStatus: COMPANY_OPERATIONAL_STATUS.INACTIVE,
             reviewSnapshot: null,
@@ -250,6 +255,18 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
         ],
         { session },
       );
+
+      await CompanyMember.create(
+        [
+          {
+            userId: user._id,
+            companyId: company._id,
+            role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+            status: COMPANY_MEMBER_STATUS.ACTIVE,
+          },
+        ],
+        { session },
+      );
     });
   } finally {
     await session.endSession();
@@ -257,7 +274,7 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
 
   return {
     user: toPublicUser(user),
-    company: toPublicCompany(company),
+    company: toPublicCompany(company, user._id),
   };
 };
 
@@ -336,7 +353,7 @@ const confirmCompanyApproval = async ({ token }) => {
 
       user = await User.findById(authToken.userId).session(session);
 
-      if (!user || user.role !== USER_ROLE.COMPANY_MANAGER) {
+      if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
         throw new AppError(
           400,
           "Invalid or expired company approval confirmation token",
@@ -356,15 +373,19 @@ const confirmCompanyApproval = async ({ token }) => {
         );
       }
 
-      company = await Company.findOne({
-        managerUserId: user._id,
-      }).session(session);
+      const membership = await findCompanyManagerMembership({
+        userId: user._id,
+        session,
+      });
+
+      if (!membership) {
+        throw new AppError(500, "Company for Company Manager is missing");
+      }
+
+      company = await Company.findById(membership.companyId).session(session);
 
       if (!company) {
-        throw new AppError(
-          500,
-          "Company for Company Manager is missing",
-        );
+        throw new AppError(500, "Company for Company Manager is missing");
       }
 
       if (
@@ -415,7 +436,7 @@ const confirmCompanyApproval = async ({ token }) => {
 
   return {
     user: toPublicUser(user),
-    company: toPublicCompany(company),
+    company: toPublicCompany(company, user._id),
   };
 };
 

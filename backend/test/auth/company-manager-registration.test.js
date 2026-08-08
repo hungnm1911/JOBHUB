@@ -9,11 +9,14 @@ import {
 } from "vitest";
 
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import AuthToken from "../../src/models/auth-token.model.js";
 import Company from "../../src/models/company.model.js";
+import CompanyMember from "../../src/models/company-member.model.js";
 import User from "../../src/models/user.model.js";
 import { registerCompanyManager } from "../../src/services/auth.service.js";
 import {
@@ -41,7 +44,7 @@ describe("POST /api/auth/register/company-manager", () => {
     await disconnectTestDatabase();
   });
 
-  it("creates a pending Company Manager and linked NOT_SUBMITTED Company in one onboarding", async () => {
+  it("creates a pending Company Staff manager and linked NOT_SUBMITTED Company in one onboarding", async () => {
     const agent = createTestAgent();
 
     const response = await agent
@@ -57,7 +60,7 @@ describe("POST /api/auth/register/company-manager", () => {
     expect(response.body.user).toMatchObject({
       fullName: "Chris Manager",
       email: "chris.manager@example.com",
-      role: USER_ROLE.COMPANY_MANAGER,
+      role: USER_ROLE.COMPANY_STAFF,
       status: USER_STATUS.PENDING_ACTIVATION,
       emailVerifiedAt: null,
       mustChangePassword: false,
@@ -83,15 +86,23 @@ describe("POST /api/auth/register/company-manager", () => {
     }).select("+passwordHash");
 
     expect(persistedUser).not.toBeNull();
-    expect(persistedUser.role).toBe(USER_ROLE.COMPANY_MANAGER);
+    expect(persistedUser.role).toBe(USER_ROLE.COMPANY_STAFF);
     expect(persistedUser.status).toBe(USER_STATUS.PENDING_ACTIVATION);
     expect(persistedUser.passwordHash).not.toBe("password123");
 
-    const persistedCompany = await Company.findOne({
-      managerUserId: persistedUser._id,
+    const persistedMembership = await CompanyMember.findOne({
+      userId: persistedUser._id,
+      companyId: response.body.company.id,
+      role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+      status: COMPANY_MEMBER_STATUS.ACTIVE,
     });
 
+    expect(persistedMembership).not.toBeNull();
+
+    const persistedCompany = await Company.findById(response.body.company.id);
+
     expect(persistedCompany).not.toBeNull();
+    expect(persistedCompany.managerUserId).toBeUndefined();
     expect(persistedCompany.approvalStatus).toBe(
       COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
     );
@@ -111,28 +122,40 @@ describe("POST /api/auth/register/company-manager", () => {
     expect(authTokenCount).toBe(0);
 
     const companyIndexes = await Company.collection.indexes();
-    const indexKeys = companyIndexes.map((index) => Object.keys(index.key));
-
-    expect(indexKeys).toEqual(
-      expect.arrayContaining([
-        ["managerUserId"],
-        ["businessRegistrationNumber"],
-        ["approvalStatus"],
-      ]),
+    const companyIndexKeys = companyIndexes.map((index) =>
+      Object.keys(index.key),
     );
 
-    const managerUserIdIndex = companyIndexes.find(
-      (index) => index.key.managerUserId === 1,
+    expect(companyIndexKeys).toEqual(
+      expect.arrayContaining([["businessRegistrationNumber"], ["approvalStatus"]]),
     );
+    expect(
+      companyIndexes.find((index) => index.key.managerUserId === 1),
+    ).toBeUndefined();
+
     const businessRegistrationNumberIndex = companyIndexes.find(
       (index) => index.key.businessRegistrationNumber === 1,
     );
 
-    expect(managerUserIdIndex.unique).toBe(true);
     expect(businessRegistrationNumberIndex.unique).toBe(true);
     expect(businessRegistrationNumberIndex.partialFilterExpression).toEqual({
       businessRegistrationNumber: { $type: "string" },
     });
+
+    const membershipIndexes = await CompanyMember.collection.indexes();
+    const userIdIndex = membershipIndexes.find(
+      (index) => index.key.userId === 1 && Object.keys(index.key).length === 1,
+    );
+    const managerCompanyIndex = membershipIndexes.find(
+      (index) =>
+        index.key.companyId === 1 &&
+        Object.keys(index.key).length === 1 &&
+        index.partialFilterExpression?.role ===
+          COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+    );
+
+    expect(userIdIndex?.unique).toBe(true);
+    expect(managerCompanyIndex?.unique).toBe(true);
   });
 
   it("does not change Candidate registration lifecycle defaults", async () => {
@@ -175,6 +198,7 @@ describe("POST /api/auth/register/company-manager", () => {
 
     expect(await User.countDocuments()).toBe(1);
     expect(await Company.countDocuments()).toBe(1);
+    expect(await CompanyMember.countDocuments()).toBe(1);
   });
 
   it("rejects client-supplied role selection", async () => {
@@ -213,5 +237,6 @@ describe("POST /api/auth/register/company-manager", () => {
       await User.findOne({ email: "rollback.manager@example.com" }),
     ).toBeNull();
     expect(await Company.countDocuments()).toBe(0);
+    expect(await CompanyMember.countDocuments()).toBe(0);
   });
 });

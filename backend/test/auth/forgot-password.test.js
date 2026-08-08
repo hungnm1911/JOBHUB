@@ -107,7 +107,7 @@ describe("POST /api/auth/forgot-password", () => {
     const agent = createTestAgent();
     const { user } = await createVerifiedUser({
       email: "manager@example.com",
-      role: USER_ROLE.COMPANY_MANAGER,
+      role: USER_ROLE.COMPANY_STAFF,
     });
 
     const response = await agent.post("/api/auth/forgot-password").send({

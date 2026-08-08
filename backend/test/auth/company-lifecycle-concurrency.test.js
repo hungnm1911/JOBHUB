@@ -13,6 +13,7 @@ import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import Company from "../../src/models/company.model.js";
+import CompanyMember from "../../src/models/company-member.model.js";
 import User from "../../src/models/user.model.js";
 import {
   submitOwnedCompany,
@@ -68,7 +69,7 @@ const wrapQueryWithReadBarrier = (
 };
 
 const installManagerFindOneBarrier = () => {
-  const originalFindOne = Company.findOne.bind(Company);
+  const originalFindOne = CompanyMember.findOne.bind(CompanyMember);
   let releaseReads;
   const holdReads = new Promise((resolve) => {
     releaseReads = resolve;
@@ -79,10 +80,10 @@ const installManagerFindOneBarrier = () => {
     resolveBothReads = resolve;
   });
 
-  vi.spyOn(Company, "findOne").mockImplementation((filter, ...rest) => {
+  vi.spyOn(CompanyMember, "findOne").mockImplementation((filter, ...rest) => {
     const query = originalFindOne(filter, ...rest);
 
-    if (filter == null || filter.managerUserId == null) {
+    if (filter == null || filter.userId == null) {
       return query;
     }
 
@@ -104,7 +105,7 @@ const installManagerFindOneBarrier = () => {
 };
 
 const installOwnedCompanyFindOneBarrier = () => {
-  const originalFindOne = Company.findOne.bind(Company);
+  const originalFindOne = CompanyMember.findOne.bind(CompanyMember);
   let releaseRead;
   const holdRead = new Promise((resolve) => {
     releaseRead = resolve;
@@ -114,10 +115,10 @@ const installOwnedCompanyFindOneBarrier = () => {
     resolveReadStarted = resolve;
   });
 
-  vi.spyOn(Company, "findOne").mockImplementation((filter, ...rest) => {
+  vi.spyOn(CompanyMember, "findOne").mockImplementation((filter, ...rest) => {
     const query = originalFindOne(filter, ...rest);
 
-    if (filter == null || filter.managerUserId == null) {
+    if (filter == null || filter.userId == null) {
       return query;
     }
 
@@ -134,7 +135,6 @@ const installOwnedCompanyFindOneBarrier = () => {
     releaseRead: () => releaseRead(),
   };
 };
-
 const extractConfirmationTokenFromMailCall = (mailCall) => {
   const match = mailCall.html.match(/confirm-company-approval\?token=([^"]+)/);
 
@@ -495,7 +495,7 @@ describe("Company lifecycle source-state concurrency", () => {
     barrier.releaseRead();
 
     const updateResult = await Promise.allSettled([updatePromise]);
-    Company.findOne.mockRestore();
+    CompanyMember.findOne.mockRestore();
 
     const updateOutcome = settledServiceOutcome(updateResult[0]);
     const persistedCompany = await Company.findById(activated.companyId);
