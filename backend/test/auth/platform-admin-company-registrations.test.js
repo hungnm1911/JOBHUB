@@ -142,7 +142,7 @@ describe("GET /api/platform-admin/company-registrations", () => {
             id: first.manager.id,
             fullName: "Manager A",
             email: "manager.list.a@example.com",
-            role: USER_ROLE.COMPANY_MANAGER,
+            role: USER_ROLE.COMPANY_STAFF,
             status: USER_STATUS.PENDING_ACTIVATION,
           }),
         }),
@@ -249,7 +249,7 @@ describe("GET /api/platform-admin/company-registrations/:companyId", () => {
         id: submitted.manager.id,
         fullName: "Detail Manager",
         email: "manager.detail@example.com",
-        role: USER_ROLE.COMPANY_MANAGER,
+        role: USER_ROLE.COMPANY_STAFF,
         status: USER_STATUS.PENDING_ACTIVATION,
       },
       reviewSnapshot: {

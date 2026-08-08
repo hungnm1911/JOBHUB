@@ -1,0 +1,7 @@
+const COMPANY_MEMBER_STATUS = Object.freeze({
+  ACTIVE: "ACTIVE",
+  LOCKED: "LOCKED",
+  TERMINATED: "TERMINATED",
+});
+
+export default COMPANY_MEMBER_STATUS;

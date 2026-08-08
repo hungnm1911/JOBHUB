@@ -10,10 +10,13 @@ import {
 import mongoose from "mongoose";
 
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import Company from "../../src/models/company.model.js";
+import CompanyMember from "../../src/models/company-member.model.js";
 import User from "../../src/models/user.model.js";
 import {
   createVerifiedUser,
@@ -106,7 +109,7 @@ describe("Company draft profile and tenant ownership (F02)", () => {
     });
 
     expect(loginResponse.user).toMatchObject({
-      role: USER_ROLE.COMPANY_MANAGER,
+      role: USER_ROLE.COMPANY_STAFF,
       status: USER_STATUS.PENDING_ACTIVATION,
       emailVerifiedAt: null,
     });
@@ -175,11 +178,16 @@ describe("Company draft profile and tenant ownership (F02)", () => {
     });
 
     const persistedCompany = await Company.findById(registration.company.id);
+    const persistedMembership = await CompanyMember.findOne({
+      userId: registration.user.id,
+      companyId: registration.company.id,
+      role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+      status: COMPANY_MEMBER_STATUS.ACTIVE,
+    });
 
     expect(persistedCompany.name).toBe("Acme Draft");
-    expect(persistedCompany.managerUserId.toString()).toBe(
-      registration.user.id,
-    );
+    expect(persistedCompany.managerUserId).toBeUndefined();
+    expect(persistedMembership).not.toBeNull();
     expect(persistedCompany.approvalStatus).toBe(
       COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
     );
