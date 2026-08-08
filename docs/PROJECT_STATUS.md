@@ -8,11 +8,13 @@ V3's approved business specification is at `docs/product/versions/v3-company-rec
 
 V1 and V2 remain `COMPLETED AND VERIFIED`.
 
-V3 Slices 01–07 are implemented and verified under the backend gate below. Later V3 slices (terminate F13, and F10 update Recruiter) are not started.
+V3 Slices 01–08 are implemented and verified under the backend gate below. Later V3 slices (F10 update Recruiter) are not started.
 
 V4 through V17 remain `PLANNED`.
 
 ## Completed and verified
+
+- **Implemented; verified:** V3 Slice 08 — Recruiter termination & historical retention (F13, F16 / TX-05; BR-19, BR-20, BR-21): valid Company Manager terminates same-tenant Recruiter membership from `ACTIVE` or `LOCKED` to terminal `TERMINATED`; TX-05 atomically sets membership `TERMINATED` and revokes all `AuthSession` records without hard-deleting User/CompanyMember or changing `User.status`/Company lifecycle; email/`employeeCode`/`jobTitle`/tenant relationship are retained and email cannot be reused for a new Recruiter; lock/unlock/second terminate from `TERMINATED` are rejected. Focused coverage in `test/auth/v3-recruiter-termination.test.js`.
 
 - **Implemented; verified:** V3 Slice 07 — Recruiter lock & unlock (F11, F12 / TX-04; BR-16, BR-17, BR-18, BR-22, BR-23): valid Company Manager locks/unlocks same-tenant Recruiter membership only; lock allows only `ACTIVE → LOCKED` and atomically revokes all Recruiter `AuthSession` records; unlock allows only `LOCKED → ACTIVE` without restoring sessions and rejects platform-restricted Users and `TERMINATED` membership; neither path changes `User.status` or Company lifecycle. Focused coverage in `test/auth/v3-recruiter-lock-unlock.test.js`.
 
@@ -89,18 +91,18 @@ V4 through V17 remain `PLANNED`.
 ## Deferred / not started
 
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
-- V3 Slices 01–07 are complete. Remaining V3 slices (terminate F13, F10 update Recruiter) are not started.
+- V3 Slices 01–08 are complete. Remaining V3 slices (F10 update Recruiter) are not started.
 - V4 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
 
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
 - `npm run verify:agent` consists of ESLint, deterministic architecture verification, and Vitest; it was run for this snapshot and passed.
-- The current baseline is 33 passing test files and 175 passing tests: prior V1/V2/V3 Slice 01–06 coverage plus V3 Slice 07 Recruiter lock/unlock tests.
-- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, and existing V2 registration/onboarding/platform-admin suites.
+- The current baseline is 34 passing test files and 180 passing tests: prior V1/V2/V3 Slice 01–07 coverage plus V3 Slice 08 Recruiter termination tests.
+- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, and existing V2 registration/onboarding/platform-admin suites.
 - No automated test script is defined outside the backend package; frontend verification is outside `verify:agent` and was not run.
 - Backend startup, Cloudinary connectivity/operations, live SMTP delivery, endpoint smoke tests outside automated registration coverage, and frontend verification are outside `verify:agent` and were not run, so their behavior is not verified by this snapshot.
 
 ## Next recommended task
 
-Continue V3 with the next approved slice after Slice 07 (lock/unlock), typically Recruiter terminate (F13). Do not pre-implement F10.
+Continue V3 with the next approved slice after Slice 08 (termination), typically Recruiter update (F10) if that is the remaining approved slice. Do not invent out-of-spec behavior.

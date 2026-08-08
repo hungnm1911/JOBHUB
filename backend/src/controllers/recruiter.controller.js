@@ -4,6 +4,7 @@ import {
   initiateRecruiterPasswordReset,
   listRecruiters,
   lockRecruiter,
+  terminateRecruiter,
   unlockRecruiter,
 } from "../services/recruiter.service.js";
 
@@ -124,11 +125,29 @@ const unlockRecruiterHandler = async (request, response, next) => {
   }
 };
 
+const terminateRecruiterHandler = async (request, response, next) => {
+  try {
+    const recruiter = await terminateRecruiter({
+      managerUser: request.auth.user,
+      recruiterId: request.params.recruiterId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Recruiter terminated.",
+      recruiter,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   createRecruiterHandler,
   getRecruiterDetailHandler,
   initiateRecruiterPasswordResetHandler,
   listRecruitersHandler,
   lockRecruiterHandler,
+  terminateRecruiterHandler,
   unlockRecruiterHandler,
 };
