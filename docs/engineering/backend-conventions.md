@@ -76,6 +76,15 @@ Application routes must be registered before `not-found.js`, and `error-handler.
 
 `backend/src/routes/index.js` is the root API router. Feature routers are mounted there and not directly in `backend/index.js`.
 
+### Database migrations
+
+- `backend/scripts/run-migration.js` owns explicit one-time migration invocation and database connection orchestration.
+- Approved versioned migration definitions live under `backend/src/database/migrations/` and own only the data transformation required by their canonical persistence contract.
+- Migration tooling must consume the canonical configuration and MongoDB connection lifecycle owners rather than configure another connection.
+- Migrations must be invoked explicitly and must not run from application startup, request handling, seed files, or module import side effects.
+- Seed scaffolding is not a migration runner and must not acquire migration responsibility.
+- A migration definition must not add business behavior beyond its approved persistence transition.
+
 ## Layer rules
 
 ### Routes

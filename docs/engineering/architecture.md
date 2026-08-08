@@ -103,6 +103,7 @@ Some expected file errors are currently formatted and returned directly by the c
 - Infrastructure-specific configuration and clients, including MongoDB, Cloudinary, and mail transport, remain under `backend/src/config/`.
 - `backend/src/config/index.js` is the canonical normalized application configuration provider.
 - `backend/index.js` consumes application configuration during runtime bootstrap, but does not own environment loading, parsing, validation, normalization, or defaults.
+- One-time data migrations required by an approved persistence contract are explicit database tooling. `backend/scripts/run-migration.js` owns migration invocation and connection orchestration, while versioned migration definitions live under `backend/src/database/migrations/`. Migrations are never run implicitly during application startup or seed execution.
 - No repository layer is part of the current target architecture. Adding one requires explicit approval as an architecture change.
 
 ### Layer dependency direction

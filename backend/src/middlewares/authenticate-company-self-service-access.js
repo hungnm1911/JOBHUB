@@ -1,8 +1,10 @@
+import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import USER_ROLE from "../constants/user-role.js";
 import {
   authenticateAccess,
   authenticateOnboardingAccess,
 } from "../services/authenticate-access.service.js";
+import { resolveCompanyStaffMembership } from "../services/company.service.js";
 import AppError from "../utils/app-error.js";
 
 const extractBearerToken = (authorizationHeader) => {
@@ -17,6 +19,22 @@ const extractBearerToken = (authorizationHeader) => {
   }
 
   return token;
+};
+
+const assertActiveCompanyManager = async (user) => {
+  if (user.role !== USER_ROLE.COMPANY_STAFF) {
+    throw new AppError(403, "Company Manager access required", {
+      field: "role",
+    });
+  }
+
+  const membership = await resolveCompanyStaffMembership({ userId: user._id });
+
+  if (membership.role !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
+    throw new AppError(403, "Company Manager access required", {
+      field: "role",
+    });
+  }
 };
 
 const authenticateCompanySelfServiceAccess = async (
@@ -34,11 +52,7 @@ const authenticateCompanySelfServiceAccess = async (
     try {
       const { user, session } = await authenticateAccess({ accessToken });
 
-      if (user.role !== USER_ROLE.COMPANY_MANAGER) {
-        throw new AppError(403, "Company Manager access required", {
-          field: "role",
-        });
-      }
+      await assertActiveCompanyManager(user);
 
       request.auth = {
         user,

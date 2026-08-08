@@ -2,11 +2,15 @@ import mongoose from "mongoose";
 
 import AUTH_TOKEN_TYPE from "../constants/auth-token-type.js";
 import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
+import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import config from "../config/index.js";
 import AuthToken from "../models/auth-token.model.js";
 import Company from "../models/company.model.js";
+import CompanyMember from "../models/company-member.model.js";
 import User from "../models/user.model.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
@@ -37,10 +41,10 @@ const ACTIVE_PROFILE_FIELDS = Object.freeze([
   "contactInfo",
 ]);
 
-const toPublicCompany = (company) => {
+const toPublicCompany = (company, managerUserId) => {
   return {
     id: company._id.toString(),
-    managerUserId: company.managerUserId.toString(),
+    managerUserId: managerUserId.toString(),
     name: company.name,
     logoUrl: company.logoUrl,
     bannerUrl: company.bannerUrl,
@@ -75,16 +79,246 @@ const toPublicCompany = (company) => {
   };
 };
 
-const resolveOwnedCompany = async ({ managerUserId }) => {
-  const company = await Company.findOne({
-    managerUserId,
+const findCompanyManagerMembership = async ({
+  userId,
+  companyId,
+  session,
+} = {}) => {
+  const filter = {
+    role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+  };
+
+  if (userId != null) {
+    filter.userId = userId;
+  }
+
+  if (companyId != null) {
+    filter.companyId = companyId;
+  }
+
+  let query = CompanyMember.findOne(filter);
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  return query;
+};
+
+const resolveCompanyStaffMembership = async ({ userId, session } = {}) => {
+  let query = CompanyMember.findOne({ userId });
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  const membership = await query;
+
+  if (!membership) {
+    throw new AppError(404, "Company membership not found for the user", {
+      field: "userId",
+    });
+  }
+
+  return membership;
+};
+
+const resolveOwnedCompany = async ({ managerUserId, session } = {}) => {
+  const membership = await findCompanyManagerMembership({
+    userId: managerUserId,
+    session,
   });
+
+  if (!membership) {
+    throw new AppError(404, "Company not found for the authenticated manager");
+  }
+
+  let query = Company.findById(membership.companyId);
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  const company = await query;
 
   if (!company) {
     throw new AppError(404, "Company not found for the authenticated manager");
   }
 
-  return company;
+  return {
+    company,
+    membership,
+    managerUserId: membership.userId,
+  };
+};
+
+const toComparableId = (value) => {
+  if (value == null) {
+    return null;
+  }
+
+  return value.toString();
+};
+
+const assertClientCompanyIdDoesNotExpandTenant = ({
+  clientCompanyId,
+  tenantCompanyId,
+}) => {
+  if (clientCompanyId == null || clientCompanyId === "") {
+    return;
+  }
+
+  if (toComparableId(clientCompanyId) !== toComparableId(tenantCompanyId)) {
+    throw new AppError(
+      403,
+      "Client-supplied company identifier is not an authorization source",
+      {
+        field: "companyId",
+      },
+    );
+  }
+};
+
+const assertSameCompanyTenant = ({ resourceCompanyId, tenantCompanyId }) => {
+  if (toComparableId(resourceCompanyId) !== toComparableId(tenantCompanyId)) {
+    throw new AppError(403, "Cross-tenant Company access is not allowed", {
+      field: "companyId",
+    });
+  }
+};
+
+const resolveCompanyStaffTenant = async ({
+  userId,
+  session,
+  clientCompanyId,
+} = {}) => {
+  const membership = await resolveCompanyStaffMembership({ userId, session });
+
+  let query = Company.findById(membership.companyId);
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  const company = await query;
+
+  if (!company) {
+    throw new AppError(404, "Company not found for the authenticated staff", {
+      field: "companyId",
+    });
+  }
+
+  assertClientCompanyIdDoesNotExpandTenant({
+    clientCompanyId,
+    tenantCompanyId: company._id,
+  });
+
+  return {
+    membership,
+    company,
+    companyId: company._id,
+  };
+};
+
+const assertCompanyStaffBusinessAccess = ({ user, membership, company }) => {
+  // F15 / BR-22: platform User restriction outranks Company-level membership.
+  if (user.status === USER_STATUS.LOCKED) {
+    throw new AppError(403, "Account is locked", {
+      field: "status",
+    });
+  }
+
+  if (user.status === USER_STATUS.TERMINATED) {
+    throw new AppError(403, "Account is terminated", {
+      field: "status",
+    });
+  }
+
+  if (user.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(403, "Account is not active", {
+      field: "status",
+    });
+  }
+
+  // F15 / BR-23: Company restriction outranks Company-level membership.
+  if (
+    company.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
+    company.operationalStatus !== COMPANY_OPERATIONAL_STATUS.ACTIVE
+  ) {
+    throw new AppError(
+      403,
+      "Company is not available for business access",
+      {
+        field: "operationalStatus",
+      },
+    );
+  }
+
+  if (membership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+    throw new AppError(403, "Company membership is not active", {
+      field: "membershipStatus",
+    });
+  }
+
+  // BR-13: unfinished required password setup blocks business access.
+  if (user.mustChangePassword) {
+    throw new AppError(
+      403,
+      "Password setup is required before business access",
+      {
+        field: "mustChangePassword",
+      },
+    );
+  }
+};
+
+const resolveCompanyStaffBusinessContext = async ({
+  user,
+  session,
+  clientCompanyId,
+} = {}) => {
+  if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+    throw new AppError(403, "Company Staff access required", {
+      field: "role",
+    });
+  }
+
+  const { membership, company, companyId } = await resolveCompanyStaffTenant({
+    userId: user._id,
+    session,
+    clientCompanyId,
+  });
+
+  assertCompanyStaffBusinessAccess({ user, membership, company });
+
+  return {
+    user,
+    membership,
+    company,
+    companyId,
+    companyRole: membership.role,
+  };
+};
+
+const resolveCompanyManagerRecruiterManagementContext = async ({
+  user,
+  session,
+  clientCompanyId,
+} = {}) => {
+  const context = await resolveCompanyStaffBusinessContext({
+    user,
+    session,
+    clientCompanyId,
+  });
+
+  // BR-06 role gate after layered business access; BR-24: RECRUITER peers.
+  if (context.membership.role !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
+    throw new AppError(403, "Company Manager access required", {
+      field: "role",
+    });
+  }
+
+  return context;
 };
 
 const assertCompanyDraftEditable = (company) => {
@@ -166,19 +400,21 @@ const assertCompanySubmittable = (company) => {
 };
 
 const getOwnedCompany = async ({ managerUserId }) => {
-  const company = await resolveOwnedCompany({ managerUserId });
+  const { company, managerUserId: resolvedManagerUserId } =
+    await resolveOwnedCompany({ managerUserId });
 
   assertCompanyDraftAccessible(company);
 
-  return toPublicCompany(company);
+  return toPublicCompany(company, resolvedManagerUserId);
 };
 
 const getOwnedActiveCompany = async ({ managerUserId }) => {
-  const company = await resolveOwnedCompany({ managerUserId });
+  const { company, managerUserId: resolvedManagerUserId } =
+    await resolveOwnedCompany({ managerUserId });
 
   assertCompanyActiveAccessible(company);
 
-  return toPublicCompany(company);
+  return toPublicCompany(company, resolvedManagerUserId);
 };
 
 const normalizeOptionalString = (value) => {
@@ -192,7 +428,8 @@ const normalizeOptionalString = (value) => {
 };
 
 const updateOwnedCompanyDraft = async ({ managerUserId, profile }) => {
-  const company = await resolveOwnedCompany({ managerUserId });
+  const { company, managerUserId: resolvedManagerUserId } =
+    await resolveOwnedCompany({ managerUserId });
 
   assertCompanyDraftEditable(company);
 
@@ -205,7 +442,7 @@ const updateOwnedCompanyDraft = async ({ managerUserId, profile }) => {
   }
 
   if (Object.keys(profileUpdate).length === 0) {
-    return toPublicCompany(company);
+    return toPublicCompany(company, resolvedManagerUserId);
   }
 
   let updatedCompany;
@@ -249,11 +486,12 @@ const updateOwnedCompanyDraft = async ({ managerUserId, profile }) => {
     );
   }
 
-  return toPublicCompany(updatedCompany);
+  return toPublicCompany(updatedCompany, resolvedManagerUserId);
 };
 
 const updateOwnedCompanyActiveProfile = async ({ managerUserId, profile }) => {
-  const company = await resolveOwnedCompany({ managerUserId });
+  const { company, membership, managerUserId: resolvedManagerUserId } =
+    await resolveOwnedCompany({ managerUserId });
 
   assertCompanyActiveAccessible(company);
 
@@ -266,13 +504,30 @@ const updateOwnedCompanyActiveProfile = async ({ managerUserId, profile }) => {
   }
 
   if (Object.keys(profileUpdate).length === 0) {
-    return toPublicCompany(company);
+    return toPublicCompany(company, resolvedManagerUserId);
+  }
+
+  const managerStillOwnsCompany = await findCompanyManagerMembership({
+    userId: resolvedManagerUserId,
+    companyId: company._id,
+  });
+
+  if (
+    !managerStillOwnsCompany ||
+    !managerStillOwnsCompany._id.equals(membership._id)
+  ) {
+    throw new AppError(
+      409,
+      "Company profile can only be updated while APPROVED and ACTIVE",
+      {
+        field: "approvalStatus",
+      },
+    );
   }
 
   const updatedCompany = await Company.findOneAndUpdate(
     {
       _id: company._id,
-      managerUserId,
       approvalStatus: COMPANY_APPROVAL_STATUS.APPROVED,
       operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
     },
@@ -295,11 +550,12 @@ const updateOwnedCompanyActiveProfile = async ({ managerUserId, profile }) => {
     );
   }
 
-  return toPublicCompany(updatedCompany);
+  return toPublicCompany(updatedCompany, resolvedManagerUserId);
 };
 
 const submitOwnedCompany = async ({ managerUserId }) => {
-  const company = await resolveOwnedCompany({ managerUserId });
+  const { company, managerUserId: resolvedManagerUserId } =
+    await resolveOwnedCompany({ managerUserId });
 
   assertCompanySubmittable(company);
 
@@ -363,7 +619,7 @@ const submitOwnedCompany = async ({ managerUserId }) => {
     );
   }
 
-  return toPublicCompany(updatedCompany);
+  return toPublicCompany(updatedCompany, resolvedManagerUserId);
 };
 
 const resendApprovalConfirmation = async ({ managerUserId }) => {
@@ -379,7 +635,8 @@ const resendApprovalConfirmation = async ({ managerUserId }) => {
     );
   }
 
-  const company = await resolveOwnedCompany({ managerUserId });
+  const { company, managerUserId: resolvedManagerUserId } =
+    await resolveOwnedCompany({ managerUserId });
 
   if (
     company.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
@@ -469,7 +726,8 @@ const resendApprovalConfirmation = async ({ managerUserId }) => {
     );
   }
 
-  const companyName = company.reviewSnapshot?.name ?? company.name ?? "your company";
+  const companyName =
+    company.reviewSnapshot?.name ?? company.name ?? "your company";
   const { subject, text, html } = buildCompanyApprovalConfirmationEmail({
     fullName: manager.fullName,
     companyName,
@@ -567,13 +825,22 @@ const resendApprovalConfirmation = async ({ managerUserId }) => {
     await session.endSession();
   }
 
-  return toPublicCompany(company);
+  return toPublicCompany(company, resolvedManagerUserId);
 };
 
 export {
+  assertClientCompanyIdDoesNotExpandTenant,
+  assertCompanyStaffBusinessAccess,
+  assertSameCompanyTenant,
+  findCompanyManagerMembership,
   getOwnedActiveCompany,
   getOwnedCompany,
   resendApprovalConfirmation,
+  resolveCompanyManagerRecruiterManagementContext,
+  resolveCompanyStaffBusinessContext,
+  resolveCompanyStaffMembership,
+  resolveCompanyStaffTenant,
+  resolveOwnedCompany,
   submitOwnedCompany,
   toPublicCompany,
   updateOwnedCompanyActiveProfile,

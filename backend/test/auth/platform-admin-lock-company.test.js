@@ -9,11 +9,14 @@ import {
 } from "vitest";
 
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
+import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import AuthSession from "../../src/models/auth-session.model.js";
 import Company from "../../src/models/company.model.js";
+import CompanyMember from "../../src/models/company-member.model.js";
 import User from "../../src/models/user.model.js";
 import sendMail from "../../src/services/mail.service.js";
 import { lockCompany } from "../../src/services/platform-admin.service.js";
@@ -157,6 +160,12 @@ describe("POST /api/platform-admin/companies/:companyId/lock (F10)", () => {
     await createSessionWithRefreshToken(manager);
 
     const before = await Company.findById(activated.companyId);
+    const membershipBefore = await CompanyMember.findOne({
+      userId: activated.managerId,
+      companyId: activated.companyId,
+      role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+      status: COMPANY_MEMBER_STATUS.ACTIVE,
+    });
     const retentionBefore = {
       name: before.name,
       logoUrl: before.logoUrl,
@@ -166,7 +175,6 @@ describe("POST /api/platform-admin/companies/:companyId/lock (F10)", () => {
       description: before.description,
       contactInfo: before.contactInfo,
       businessRegistrationNumber: before.businessRegistrationNumber,
-      managerUserId: before.managerUserId.toString(),
       reviewSnapshot: before.reviewSnapshot.toObject(),
       submittedAt: before.submittedAt?.toISOString(),
       reviewedByUserId: before.reviewedByUserId?.toString(),
@@ -176,6 +184,9 @@ describe("POST /api/platform-admin/companies/:companyId/lock (F10)", () => {
       fullName: manager.fullName,
       email: manager.email,
     };
+
+    expect(membershipBefore).not.toBeNull();
+    expect(before.managerUserId).toBeUndefined();
 
     const response = await agent
       .post(`/api/platform-admin/companies/${activated.companyId}/lock`)
@@ -193,13 +204,19 @@ describe("POST /api/platform-admin/companies/:companyId/lock (F10)", () => {
     });
     expect(response.body.manager).toMatchObject({
       id: activated.managerId,
-      role: USER_ROLE.COMPANY_MANAGER,
+      role: USER_ROLE.COMPANY_STAFF,
       status: USER_STATUS.TERMINATED,
       email: "manager.lock-happy@example.com",
     });
 
     const persistedCompany = await Company.findById(activated.companyId);
     const persistedManager = await User.findById(activated.managerId);
+    const persistedMembership = await CompanyMember.findOne({
+      userId: activated.managerId,
+      companyId: activated.companyId,
+      role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+      status: COMPANY_MEMBER_STATUS.ACTIVE,
+    });
     const managerSessions = await AuthSession.find({
       userId: activated.managerId,
     });
@@ -220,9 +237,8 @@ describe("POST /api/platform-admin/companies/:companyId/lock (F10)", () => {
     expect(persistedCompany.businessRegistrationNumber).toBe(
       retentionBefore.businessRegistrationNumber,
     );
-    expect(persistedCompany.managerUserId.toString()).toBe(
-      retentionBefore.managerUserId,
-    );
+    expect(persistedCompany.managerUserId).toBeUndefined();
+    expect(persistedMembership).not.toBeNull();
     expect(persistedCompany.reviewSnapshot.toObject()).toEqual(
       retentionBefore.reviewSnapshot,
     );
@@ -343,7 +359,7 @@ describe("POST /api/platform-admin/companies/:companyId/lock (F10)", () => {
     expect(persistedManager.status).toBe(USER_STATUS.ACTIVE);
   });
 
-  it("rejects lock when Manager role is not COMPANY_MANAGER and leaves Company/User/session unchanged", async () => {
+  it("rejects lock when Manager role is not COMPANY_STAFF and leaves Company/User/session unchanged", async () => {
     const agent = createTestAgent();
 
     const activated = await registerActivateOwnedCompany(agent, {
@@ -368,7 +384,7 @@ describe("POST /api/platform-admin/companies/:companyId/lock (F10)", () => {
       .set("Authorization", `Bearer ${activated.adminAccessToken}`);
 
     expect(response.status).toBe(409);
-    expect(response.body.error.message).toMatch(/COMPANY_MANAGER/i);
+    expect(response.body.error.message).toMatch(/COMPANY_STAFF/i);
 
     const persistedCompany = await Company.findById(activated.companyId);
     const persistedManager = await User.findById(activated.managerId);

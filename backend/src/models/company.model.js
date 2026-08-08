@@ -229,11 +229,8 @@ const COMPANY_COLLECTION_VALIDATOR = Object.freeze({
     {
       $jsonSchema: {
         bsonType: "object",
-        required: ["managerUserId", "approvalStatus", "operationalStatus"],
+        required: ["approvalStatus", "operationalStatus"],
         properties: {
-          managerUserId: {
-            bsonType: "objectId",
-          },
           approvalStatus: {
             enum: Object.values(COMPANY_APPROVAL_STATUS),
           },
@@ -269,12 +266,6 @@ const COMPANY_COLLECTION_VALIDATOR = Object.freeze({
 
 const companySchema = new Schema(
   {
-    managerUserId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-
     name: {
       type: String,
       trim: true,
@@ -377,7 +368,6 @@ companySchema.pre("validate", function validateCompanyState() {
   }
 });
 
-companySchema.index({ managerUserId: 1 }, { unique: true });
 companySchema.index(
   { businessRegistrationNumber: 1 },
   {

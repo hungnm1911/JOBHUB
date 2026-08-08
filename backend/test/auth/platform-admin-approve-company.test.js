@@ -154,7 +154,7 @@ describe("POST /api/platform-admin/company-registrations/:companyId/approve", ()
       manager: {
         id: submitted.manager.id,
         status: USER_STATUS.PENDING_ACTIVATION,
-        role: USER_ROLE.COMPANY_MANAGER,
+        role: USER_ROLE.COMPANY_STAFF,
       },
       reviewSnapshot: snapshotBeforeApprove,
     });
@@ -212,7 +212,7 @@ describe("POST /api/platform-admin/company-registrations/:companyId/approve", ()
     expect(confirmationToken.tokenHash).toBe(hashAuthToken(rawToken));
   });
 
-  it("rejects approve when Manager role or status is not COMPANY_MANAGER PENDING_ACTIVATION and leaves Company/User/token unchanged", async () => {
+  it("rejects approve when Manager role or status is not COMPANY_STAFF PENDING_ACTIVATION and leaves Company/User/token unchanged", async () => {
     const agent = createTestAgent();
 
     await createVerifiedUser({
@@ -263,7 +263,7 @@ describe("POST /api/platform-admin/company-registrations/:companyId/approve", ()
     expect(wrongStatusCompany.reviewedByUserId).toBeNull();
     expect(wrongStatusCompany.reviewedAt).toBeNull();
     expect(wrongStatusManager.status).toBe(USER_STATUS.ACTIVE);
-    expect(wrongStatusManager.role).toBe(USER_ROLE.COMPANY_MANAGER);
+    expect(wrongStatusManager.role).toBe(USER_ROLE.COMPANY_STAFF);
     expect(wrongStatusTokenCount).toBe(0);
     expect(sendMail).not.toHaveBeenCalled();
 
@@ -287,7 +287,7 @@ describe("POST /api/platform-admin/company-registrations/:companyId/approve", ()
       .send();
 
     expect(wrongRoleResponse.status).toBe(409);
-    expect(wrongRoleResponse.body.error.message).toMatch(/COMPANY_MANAGER/i);
+    expect(wrongRoleResponse.body.error.message).toMatch(/COMPANY_STAFF/i);
 
     const wrongRoleCompany = await Company.findById(wrongRole.company.id);
     const wrongRoleManager = await User.findById(wrongRole.manager.id);

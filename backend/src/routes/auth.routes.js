@@ -1,6 +1,7 @@
 import express from "express";
 
 import {
+  activateRecruiterHandler,
   confirmCompanyApprovalHandler,
   forgotPasswordHandler,
   loginHandler,
@@ -12,6 +13,7 @@ import {
   verifyEmailHandler,
 } from "../controllers/auth.controller.js";
 import authenticateSessionAccess from "../middlewares/authenticate-session-access.js";
+import validateActivateRecruiter from "../middlewares/validate-activate-recruiter.js";
 import validateCandidateRegistration from "../middlewares/validate-candidate-registration.js";
 import validateCompanyManagerRegistration from "../middlewares/validate-company-manager-registration.js";
 import validateConfirmCompanyApproval from "../middlewares/validate-confirm-company-approval.js";
@@ -75,6 +77,12 @@ router.post(
   "/reset-password",
   validateResetPassword,
   resetPasswordHandler,
+);
+
+router.post(
+  "/activate-recruiter",
+  validateActivateRecruiter,
+  activateRecruiterHandler,
 );
 
 export default router;

@@ -9,11 +9,9 @@ import {
 
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
-import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import Company from "../../src/models/company.model.js";
-import User from "../../src/models/user.model.js";
-import { hashPassword } from "../../src/utils/hash-password.js";
+import { createCompanyStaffWithMembership } from "../helpers/auth-fixtures.js";
 import {
   clearDatabase,
   connectTestDatabase,
@@ -21,23 +19,17 @@ import {
 } from "../helpers/database.js";
 
 const createManagerAndDraftCompany = async ({ email }) => {
-  const passwordHash = await hashPassword("password123");
-  const manager = await User.create({
-    fullName: "State Matrix Manager",
+  const { company, user: manager } = await createCompanyStaffWithMembership({
     email,
-    passwordHash,
-    role: USER_ROLE.COMPANY_MANAGER,
+    fullName: "State Matrix Manager",
     status: USER_STATUS.PENDING_ACTIVATION,
     emailVerifiedAt: null,
-    mustChangePassword: false,
-  });
-
-  const company = await Company.create({
-    managerUserId: manager._id,
-    name: "State Matrix Co",
-    businessRegistrationNumber: `BRN-${email}`,
-    approvalStatus: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
-    operationalStatus: COMPANY_OPERATIONAL_STATUS.INACTIVE,
+    company: {
+      name: "State Matrix Co",
+      businessRegistrationNumber: `BRN-${email}`,
+      approvalStatus: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
+      operationalStatus: COMPANY_OPERATIONAL_STATUS.INACTIVE,
+    },
   });
 
   return { company, manager };
@@ -166,7 +158,7 @@ describe("Company persistence state-matrix enforcement", () => {
   });
 
   it("rejects conditional snapshot/timestamp violations through findOneAndUpdate", async () => {
-    const { company } = await createManagerAndDraftCompany({
+    const { company, manager } = await createManagerAndDraftCompany({
       email: "state.conditional@example.com",
     });
 
@@ -185,7 +177,7 @@ describe("Company persistence state-matrix enforcement", () => {
               businessRegistrationNumber: "BRN-CONDITIONAL",
             },
             submittedAt,
-            reviewedByUserId: company.managerUserId,
+            reviewedByUserId: manager._id,
             reviewedAt,
             activatedAt: new Date("2026-01-03T00:00:00.000Z"),
           },
@@ -207,7 +199,7 @@ describe("Company persistence state-matrix enforcement", () => {
   });
 
   it("rejects timestamp ordering violations through updateOne", async () => {
-    const { company } = await createManagerAndDraftCompany({
+    const { company, manager } = await createManagerAndDraftCompany({
       email: "state.timestamp-order@example.com",
     });
 
@@ -226,7 +218,7 @@ describe("Company persistence state-matrix enforcement", () => {
               businessRegistrationNumber: "BRN-ORDERING",
             },
             submittedAt,
-            reviewedByUserId: company.managerUserId,
+            reviewedByUserId: manager._id,
             reviewedAt,
             activatedAt: null,
           },
@@ -244,7 +236,7 @@ describe("Company persistence state-matrix enforcement", () => {
   });
 
   it("still allows a valid canonical state transition through findOneAndUpdate", async () => {
-    const { company } = await createManagerAndDraftCompany({
+    const { company, manager } = await createManagerAndDraftCompany({
       email: "state.valid-transition@example.com",
     });
 
@@ -262,7 +254,7 @@ describe("Company persistence state-matrix enforcement", () => {
             businessRegistrationNumber: "BRN-VALID",
           },
           submittedAt,
-          reviewedByUserId: company.managerUserId,
+          reviewedByUserId: manager._id,
           reviewedAt,
           activatedAt: null,
         },

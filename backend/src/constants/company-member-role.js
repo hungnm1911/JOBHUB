@@ -1,0 +1,6 @@
+const COMPANY_MEMBER_ROLE = Object.freeze({
+  COMPANY_MANAGER: "COMPANY_MANAGER",
+  RECRUITER: "RECRUITER",
+});
+
+export default COMPANY_MEMBER_ROLE;
