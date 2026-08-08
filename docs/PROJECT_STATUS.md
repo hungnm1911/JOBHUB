@@ -2,17 +2,19 @@
 
 ## Current milestone
 
-**V3 — Quản lý nhân sự tuyển dụng của Company** is `IN PROGRESS`.
+**V3 — Quản lý nhân sự tuyển dụng của Company** is `COMPLETED AND VERIFIED`.
 
 V3's approved business specification is at `docs/product/versions/v3-company-recruitment-staff-management.md`, and its approved persistence contract is at `docs/data/versions/v3-company-recruitment-staff-management-data-model.md`.
 
-V1 and V2 remain `COMPLETED AND VERIFIED`.
+V1, V2, and V3 remain `COMPLETED AND VERIFIED`.
 
-V3 Slices 01–08 are implemented and verified under the backend gate below. Later V3 slices (F10 update Recruiter) are not started.
+V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
 V4 through V17 remain `PLANNED`.
 
 ## Completed and verified
+
+- **Implemented; verified:** V3 Slice 09 — V3 acceptance & regression closure (F01–F09, F11–F17; BR-01–BR-29; TX-01–TX-07 as applied): cross-cutting acceptance suite confirms end-to-end Recruiter lifecycle, cross-tenant/`companyId` non-expansion, invalid-actor matrix, platform/Company restriction precedence, pre-activation denials, TERMINATED terminal transitions, session revocation after lock/reset/terminate, V1 Candidate + V2 CM membership SoT compatibility (no persisted `Company.managerUserId`), credential non-leakage, and explicit F10 PATCH/PUT absence. Coverage in `test/auth/v3-acceptance.test.js` plus prior V3 slice suites.
 
 - **Implemented; verified:** V3 Slice 08 — Recruiter termination & historical retention (F13, F16 / TX-05; BR-19, BR-20, BR-21): valid Company Manager terminates same-tenant Recruiter membership from `ACTIVE` or `LOCKED` to terminal `TERMINATED`; TX-05 atomically sets membership `TERMINATED` and revokes all `AuthSession` records without hard-deleting User/CompanyMember or changing `User.status`/Company lifecycle; email/`employeeCode`/`jobTitle`/tenant relationship are retained and email cannot be reused for a new Recruiter; lock/unlock/second terminate from `TERMINATED` are rejected. Focused coverage in `test/auth/v3-recruiter-termination.test.js`.
 
@@ -29,6 +31,10 @@ V4 through V17 remain `PLANNED`.
 - **Implemented; verified:** V3 Slice 02 — Company Staff authorization & tenant context (F02, F14, F15): tenant resolves from `CompanyMember` only (client `companyId` cannot expand scope); business access requires User `ACTIVE` + membership `ACTIVE` + Company `APPROVED`/`ACTIVE` + `mustChangePassword=false` before Company role; platform User and Company restrictions outrank membership; `RECRUITER` cannot manage other Recruiters. Focused service + non-prod probe coverage in `test/auth/v3-company-staff-authorization.test.js`.
 
 - **Implemented; verified:** V3 Slice 01 — Company Staff foundation and V2 cutover (F01, F17): platform role `COMPANY_STAFF`; `CompanyMember` as sole Company-role source of truth; onboarding TX-06 creates User + Company + `CompanyMember(COMPANY_MANAGER)` while preserving `PENDING_ACTIVATION` semantics; V2 tenant/manager resolution uses membership instead of `Company.managerUserId`; TX-07 migration under approved owners (`scripts/run-migration.js`, `src/database/migrations/v3-tx07-company-manager-to-company-staff.js`) converts legacy pairs, verifies invariants, then removes `managerUserId`.
+
+- **Implemented; verified:** V3 acceptance finding — TX-07 now preserves each legacy `Company.managerUserId` as the exact `CompanyMember(companyId, userId=legacy manager, role=COMPANY_MANAGER)` pair, converts that User `COMPANY_MANAGER → COMPANY_STAFF` only inside the pair persistence-unit transaction, keeps `managerUserId` until post-migrate invariant verification succeeds, then removes it; rejects conflicting non-pair `COMPANY_MANAGER` memberships and does not broad-convert orphan `COMPANY_MANAGER` users. Focused regressions in `test/auth/v3-tx07-company-staff-cutover.test.js`.
+
+- **Implemented; verified:** V3 acceptance finding — TX-07 failure-path evidence now covers missing/invalid-role legacy manager Users, conflicting non-pair `COMPANY_MANAGER` memberships, orphan legacy `COMPANY_MANAGER` Users (verification fail blocks `managerUserId` removal), incomplete global cutover when one persistence unit fails (all `managerUserId` values retained), and pre-removal detection of `COMPANY_MANAGER` memberships pointing at non-`COMPANY_STAFF` Users. Coverage in `test/auth/v3-tx07-company-staff-cutover.test.js`.
 
 - **Prepared; verified:** V3 Product/Data contract paths and repository milestone status were aligned for `READY FOR IMPLEMENTATION` before Slice 01; the backend replica-set test infrastructure proves transaction rollback; migration tooling ownership is defined by the engineering contracts.
 
@@ -91,18 +97,18 @@ V4 through V17 remain `PLANNED`.
 ## Deferred / not started
 
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
-- V3 Slices 01–08 are complete. Remaining V3 slices (F10 update Recruiter) are not started.
+- V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
 - V4 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
 
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
 - `npm run verify:agent` consists of ESLint, deterministic architecture verification, and Vitest; it was run for this snapshot and passed.
-- The current baseline is 34 passing test files and 180 passing tests: prior V1/V2/V3 Slice 01–07 coverage plus V3 Slice 08 Recruiter termination tests.
-- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, and existing V2 registration/onboarding/platform-admin suites.
+- The current baseline is 35 passing test files and 195 passing tests: prior V1/V2/V3 Slice 01–09 coverage plus TX-07 cutover and failure-path acceptance regressions.
+- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, `test/auth/v3-acceptance.test.js`, and existing V2 registration/onboarding/platform-admin suites.
 - No automated test script is defined outside the backend package; frontend verification is outside `verify:agent` and was not run.
 - Backend startup, Cloudinary connectivity/operations, live SMTP delivery, endpoint smoke tests outside automated registration coverage, and frontend verification are outside `verify:agent` and were not run, so their behavior is not verified by this snapshot.
 
 ## Next recommended task
 
-Continue V3 with the next approved slice after Slice 08 (termination), typically Recruiter update (F10) if that is the remaining approved slice. Do not invent out-of-spec behavior.
+Begin the next approved product version only after its Product/Data contracts are approved. Do not implement roadmap titles (V4+) from names alone, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) without a new approved specification.

@@ -21,7 +21,6 @@ const getCollections = (connection) => {
 
 const migrateCompanyUnit = async ({
   company,
-  companies,
   companyMembers,
   users,
   session,
@@ -32,15 +31,47 @@ const migrateCompanyUnit = async ({
     return { skipped: true };
   }
 
-  const existingMembership = await companyMembers.findOne(
+  const manager = await users.findOne({ _id: managerUserId }, { session });
+
+  if (!manager) {
+    throw new Error(
+      `TX-07 legacy manager user ${managerUserId} is missing for company ${company._id}`,
+    );
+  }
+
+  if (
+    manager.role !== LEGACY_COMPANY_MANAGER_ROLE &&
+    manager.role !== USER_ROLE.COMPANY_STAFF
+  ) {
+    throw new Error(
+      `TX-07 legacy manager user ${managerUserId} for company ${company._id} has invalid role ${manager.role}; expected ${LEGACY_COMPANY_MANAGER_ROLE} or ${USER_ROLE.COMPANY_STAFF}`,
+    );
+  }
+
+  const pairMembership = await companyMembers.findOne(
     {
       companyId: company._id,
+      userId: managerUserId,
       role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
     },
     { session },
   );
 
-  if (!existingMembership) {
+  if (!pairMembership) {
+    const conflictingMembership = await companyMembers.findOne(
+      {
+        companyId: company._id,
+        role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+      },
+      { session },
+    );
+
+    if (conflictingMembership) {
+      throw new Error(
+        `TX-07 cannot preserve legacy Company–Manager pair for company ${company._id}: existing COMPANY_MANAGER membership points to user ${conflictingMembership.userId}, expected ${managerUserId}`,
+      );
+    }
+
     await companyMembers.insertOne(
       {
         userId: managerUserId,
@@ -51,6 +82,17 @@ const migrateCompanyUnit = async ({
         jobTitle: null,
         createdAt: new Date(),
         updatedAt: new Date(),
+      },
+      { session },
+    );
+  } else if (pairMembership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+    await companyMembers.updateOne(
+      { _id: pairMembership._id },
+      {
+        $set: {
+          status: COMPANY_MEMBER_STATUS.ACTIVE,
+          updatedAt: new Date(),
+        },
       },
       { session },
     );
@@ -70,80 +112,13 @@ const migrateCompanyUnit = async ({
     { session },
   );
 
-  await companies.updateOne(
-    { _id: company._id },
-    {
-      $unset: { managerUserId: "" },
-      $set: { updatedAt: new Date() },
-    },
-    { session },
-  );
-
   return { skipped: false };
 };
 
-const migrate = async (connection = mongoose.connection) => {
-  if (connection.readyState !== 1) {
-    throw new Error("MongoDB connection must be ready before TX-07 migration");
-  }
-
-  // Ensure Mongoose indexes exist for company_members before cutover writes.
-  await CompanyMember.init();
-
-  const { companies, companyMembers, users } = getCollections(connection);
-  const legacyCompanies = await companies
-    .find({ managerUserId: { $exists: true, $ne: null } })
-    .toArray();
-
-  let migratedCount = 0;
-  let skippedCount = 0;
-
-  for (const company of legacyCompanies) {
-    const session = await connection.startSession();
-
-    try {
-      await session.withTransaction(async () => {
-        const result = await migrateCompanyUnit({
-          company,
-          companies,
-          companyMembers,
-          users,
-          session,
-        });
-
-        if (result.skipped) {
-          skippedCount += 1;
-        } else {
-          migratedCount += 1;
-        }
-      });
-    } finally {
-      await session.endSession();
-    }
-  }
-
-  await users.updateMany(
-    { role: LEGACY_COMPANY_MANAGER_ROLE },
-    {
-      $set: {
-        role: USER_ROLE.COMPANY_STAFF,
-        updatedAt: new Date(),
-      },
-    },
-  );
-
-  return {
-    migratedCount,
-    skippedCount,
-    name,
-  };
-};
-
-const verify = async (connection = mongoose.connection) => {
-  if (connection.readyState !== 1) {
-    throw new Error("MongoDB connection must be ready before TX-07 verify");
-  }
-
+const collectInvariantErrors = async (
+  connection,
+  { expectManagerUserIdRemoved },
+) => {
   const { companies, companyMembers, users } = getCollections(connection);
   const errors = [];
 
@@ -151,10 +126,40 @@ const verify = async (connection = mongoose.connection) => {
     managerUserId: { $exists: true },
   });
 
-  if (remainingManagerUserId > 0) {
-    errors.push(
-      `${remainingManagerUserId} companies still have managerUserId`,
-    );
+  if (expectManagerUserIdRemoved) {
+    if (remainingManagerUserId > 0) {
+      errors.push(
+        `${remainingManagerUserId} companies still have managerUserId`,
+      );
+    }
+  } else {
+    const legacyCompanies = await companies
+      .find({ managerUserId: { $exists: true, $ne: null } })
+      .toArray();
+
+    for (const company of legacyCompanies) {
+      const pairMembership = await companyMembers.findOne({
+        companyId: company._id,
+        userId: company.managerUserId,
+        role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+        status: COMPANY_MEMBER_STATUS.ACTIVE,
+      });
+
+      if (!pairMembership) {
+        errors.push(
+          `company ${company._id} is missing ACTIVE COMPANY_MANAGER membership for legacy managerUserId ${company.managerUserId}`,
+        );
+        continue;
+      }
+
+      const manager = await users.findOne({ _id: company.managerUserId });
+
+      if (!manager || manager.role !== USER_ROLE.COMPANY_STAFF) {
+        errors.push(
+          `legacy manager ${company.managerUserId} for company ${company._id} is not COMPANY_STAFF`,
+        );
+      }
+    }
   }
 
   const remainingLegacyRoles = await users.countDocuments({
@@ -238,9 +243,96 @@ const verify = async (connection = mongoose.connection) => {
     );
   }
 
+  const managerMemberships = await companyMembers
+    .find({ role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER })
+    .toArray();
+
+  for (const membership of managerMemberships) {
+    const memberUser = await users.findOne({ _id: membership.userId });
+
+    if (!memberUser || memberUser.role !== USER_ROLE.COMPANY_STAFF) {
+      errors.push(
+        `COMPANY_MANAGER membership ${membership._id} does not point to a COMPANY_STAFF user`,
+      );
+    }
+  }
+
+  return errors;
+};
+
+const assertInvariants = async (connection, options) => {
+  const errors = await collectInvariantErrors(connection, options);
+
   if (errors.length > 0) {
     throw new Error(`TX-07 verification failed: ${errors.join("; ")}`);
   }
+};
+
+const removeLegacyManagerUserIds = async (companies) => {
+  await companies.updateMany(
+    { managerUserId: { $exists: true } },
+    {
+      $unset: { managerUserId: "" },
+      $set: { updatedAt: new Date() },
+    },
+  );
+};
+
+const migrate = async (connection = mongoose.connection) => {
+  if (connection.readyState !== 1) {
+    throw new Error("MongoDB connection must be ready before TX-07 migration");
+  }
+
+  // Ensure Mongoose indexes exist for company_members before cutover writes.
+  await CompanyMember.init();
+
+  const { companies, companyMembers, users } = getCollections(connection);
+  const legacyCompanies = await companies
+    .find({ managerUserId: { $exists: true, $ne: null } })
+    .toArray();
+
+  let migratedCount = 0;
+  let skippedCount = 0;
+
+  for (const company of legacyCompanies) {
+    const session = await connection.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        const result = await migrateCompanyUnit({
+          company,
+          companyMembers,
+          users,
+          session,
+        });
+
+        if (result.skipped) {
+          skippedCount += 1;
+        } else {
+          migratedCount += 1;
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  await assertInvariants(connection, { expectManagerUserIdRemoved: false });
+  await removeLegacyManagerUserIds(companies);
+
+  return {
+    migratedCount,
+    skippedCount,
+    name,
+  };
+};
+
+const verify = async (connection = mongoose.connection) => {
+  if (connection.readyState !== 1) {
+    throw new Error("MongoDB connection must be ready before TX-07 verify");
+  }
+
+  await assertInvariants(connection, { expectManagerUserIdRemoved: true });
 
   return {
     ok: true,
