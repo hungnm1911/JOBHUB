@@ -587,19 +587,7 @@ const logoutCurrentSession = async ({ sessionId }) => {
   };
 };
 
-const requestPasswordReset = async ({ email }) => {
-  const normalizedEmail = normalizeEmail(email);
-  const user = await User.findOne({
-    email: normalizedEmail,
-    role: USER_ROLE.CANDIDATE,
-  });
-
-  if (!user) {
-    return {
-      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
-    };
-  }
-
+const issuePasswordReset = async (user) => {
   await AuthToken.deleteMany({
     userId: user._id,
     type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
@@ -611,9 +599,7 @@ const requestPasswordReset = async ({ email }) => {
     Date.now() + config.authToken.passwordResetExpiresInMs,
   );
 
-  let createdToken;
-
-  createdToken = await AuthToken.create({
+  const createdToken = await AuthToken.create({
     userId: user._id,
     type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
     tokenHash,
@@ -639,6 +625,43 @@ const requestPasswordReset = async ({ email }) => {
       "Unable to send password reset email. Please try again later.",
     );
   }
+};
+
+const isEligibleSelfPasswordResetUser = async (user) => {
+  if (user.role === USER_ROLE.CANDIDATE) {
+    return true;
+  }
+
+  if (user.role !== USER_ROLE.COMPANY_STAFF) {
+    return false;
+  }
+
+  // F06: PASSWORD_RESET is for post-activation Recruiter recovery only.
+  if (user.mustChangePassword) {
+    return false;
+  }
+
+  const membership = await CompanyMember.findOne({
+    userId: user._id,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+  }).select("_id");
+
+  return membership != null;
+};
+
+const requestPasswordReset = async ({ email }) => {
+  const normalizedEmail = normalizeEmail(email);
+  const user = await User.findOne({
+    email: normalizedEmail,
+  });
+
+  if (!user || !(await isEligibleSelfPasswordResetUser(user))) {
+    return {
+      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    };
+  }
+
+  await issuePasswordReset(user);
 
   return {
     message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
@@ -649,44 +672,62 @@ const resetPassword = async ({ token, password }) => {
   assertPasswordPolicy(password);
 
   const tokenHash = hashAuthToken(token);
-  const authToken = await AuthToken.findOne({
-    type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
-    tokenHash,
-    expiresAt: { $gt: new Date() },
-  }).select("+tokenHash");
+  const nextPasswordHash = await hashPassword(password);
+  const session = await mongoose.startSession();
+  let user;
 
-  if (!authToken) {
-    throw new AppError(400, "Invalid or expired password reset token", {
-      field: "token",
+  try {
+    await session.withTransaction(async () => {
+      const authToken = await AuthToken.findOne({
+        type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .select("+tokenHash")
+        .session(session);
+
+      if (!authToken) {
+        throw new AppError(400, "Invalid or expired password reset token", {
+          field: "token",
+        });
+      }
+
+      user = await User.findById(authToken.userId)
+        .select("+passwordHash")
+        .session(session);
+
+      if (!user) {
+        throw new AppError(400, "Invalid or expired password reset token", {
+          field: "token",
+        });
+      }
+
+      // TX-03: password + mustChangePassword + consume token + revoke sessions.
+      // Does not change User.status, CompanyMember, or Company lifecycle.
+      user.passwordHash = nextPasswordHash;
+      user.mustChangePassword = false;
+      await user.save({ session });
+
+      const consumedToken = await AuthToken.findOneAndDelete({
+        _id: authToken._id,
+        type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
+        tokenHash,
+        expiresAt: { $gt: new Date() },
+      })
+        .session(session)
+        .select("+tokenHash");
+
+      if (!consumedToken) {
+        throw new AppError(400, "Invalid or expired password reset token", {
+          field: "token",
+        });
+      }
+
+      await AuthSession.deleteMany({ userId: user._id }).session(session);
     });
+  } finally {
+    await session.endSession();
   }
-
-  const user = await User.findById(authToken.userId).select("+passwordHash");
-
-  if (!user) {
-    throw new AppError(400, "Invalid or expired password reset token", {
-      field: "token",
-    });
-  }
-
-  const consumedToken = await AuthToken.findOneAndDelete({
-    _id: authToken._id,
-    type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
-    tokenHash,
-    expiresAt: { $gt: new Date() },
-  }).select("+tokenHash");
-
-  if (!consumedToken) {
-    throw new AppError(400, "Invalid or expired password reset token", {
-      field: "token",
-    });
-  }
-
-  user.passwordHash = await hashPassword(password);
-  user.mustChangePassword = false;
-  await user.save();
-
-  await AuthSession.deleteMany({ userId: user._id });
 
   return {
     message: "Password reset successful.",
@@ -830,6 +871,7 @@ const completeRecruiterActivation = async ({ token, password }) => {
 export {
   completeRecruiterActivation,
   confirmCompanyApproval,
+  issuePasswordReset,
   login,
   logoutCurrentSession,
   refreshAccess,
