@@ -1304,6 +1304,108 @@ const reassignPrimaryRecruiter = async ({
   return toPublicJob(updatedJob);
 };
 
+// BR-28 / F09: close authority is current Primary Recruiter or owning Company
+// Manager. Peer Recruiters, creators, and former Primaries do not authorize.
+const assertManualCloseJobAuthority = ({
+  job,
+  companyRole,
+  membershipId,
+  tenantCompanyId,
+} = {}) => {
+  // BR-38: Job id / client companyId alone do not authorize.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId,
+  });
+
+  if (job.status !== JOB_STATUS.PUBLISHED) {
+    throw new AppError(409, "Job can only be closed while PUBLISHED", {
+      field: "status",
+      status: job.status,
+    });
+  }
+
+  if (companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
+    return;
+  }
+
+  if (
+    companyRole === COMPANY_MEMBER_ROLE.RECRUITER &&
+    job.primaryRecruiterCompanyMemberId.toString() === membershipId.toString()
+  ) {
+    return;
+  }
+
+  throw new AppError(
+    403,
+    "Only the current Primary Recruiter or Company Manager can close the Job",
+    {
+      field: "role",
+    },
+  );
+};
+
+const closePublishedJob = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+} = {}) => {
+  // BR-38: membership-derived tenant; client companyId cannot expand authority.
+  const context = await resolveCompanyStaffBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", {
+      field: "jobId",
+    });
+  }
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  assertManualCloseJobAuthority({
+    job,
+    companyRole: context.companyRole,
+    membershipId: context.membership._id,
+    tenantCompanyId: context.companyId,
+  });
+
+  // TX-02 / BR-29 / BR-32: atomic PUBLISHED → CLOSED on the Job document only.
+  // Ownership, creator, current Primary, publishedAt, and content stay unchanged.
+  // CLOSED is retained (no hard-delete) and is terminal in V5 (no reopen).
+  const updatedJob = await Job.findOneAndUpdate(
+    {
+      _id: job._id,
+      companyId: context.companyId,
+      status: JOB_STATUS.PUBLISHED,
+    },
+    {
+      $set: {
+        status: JOB_STATUS.CLOSED,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedJob) {
+    throw new AppError(409, "Job can only be closed while PUBLISHED", {
+      field: "status",
+    });
+  }
+
+  return toPublicJob(updatedJob);
+};
+
 const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
@@ -1371,9 +1473,11 @@ export {
   assertJobInternallyVisible,
   assertJobPrimaryRecruiterValidForLifecycle,
   assertJobReadyForApprovalLifecycle,
+  assertManualCloseJobAuthority,
   assertNoOutstandingPrimaryResponsibility,
   assertRecruiterMembershipValidForJobPrimary,
   buildInternalJobVisibilityFilter,
+  closePublishedJob,
   createDraftJob,
   deletePrePublicationJob,
   findOutstandingPrimaryResponsibility,
