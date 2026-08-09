@@ -1,4 +1,5 @@
 import {
+  approveAndPublishJob,
   createDraftJob,
   getInternalJob,
   listInternalJobs,
@@ -100,7 +101,25 @@ const submitDraftJobHandler = async (request, response, next) => {
   }
 };
 
+const approveAndPublishJobHandler = async (request, response, next) => {
+  try {
+    const job = await approveAndPublishJob({
+      managerUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Job approved and published.",
+      job,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
+  approveAndPublishJobHandler,
   createDraftJobHandler,
   getInternalJobHandler,
   listInternalJobsHandler,

@@ -2,17 +2,22 @@ import mongoose from "mongoose";
 
 import CATEGORY_LEVEL from "../constants/category-level.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_STATUS, {
   OUTSTANDING_PRIMARY_JOB_STATUSES,
 } from "../constants/job-status.js";
 import LOCATION from "../constants/location.js";
+import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
 import Category from "../models/category.model.js";
+import CompanyMember from "../models/company-member.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import Job from "../models/job.model.js";
+import User from "../models/user.model.js";
 import {
   assertSameCompanyTenant,
+  resolveCompanyManagerRecruiterManagementContext,
   resolveCompanyStaffBusinessContext,
   resolveRecruiterBusinessContext,
 } from "./company.service.js";
@@ -658,8 +663,8 @@ const assertJobApplicationDeadlineActive = (job, now = new Date()) => {
   }
 };
 
-// Canonical lifecycle readiness gate: submit now; approve/publish revalidation
-// later. Completeness is separate from create/edit DRAFT validation.
+// Canonical lifecycle readiness gate: submit and approve/publish revalidation.
+// Completeness is separate from create/edit DRAFT validation.
 const assertJobReadyForApprovalLifecycle = async (
   job,
   {
@@ -671,6 +676,52 @@ const assertJobReadyForApprovalLifecycle = async (
   await assertJobCategoryIntegrity(job);
   await assertJobExperienceLevelIntegrity(job);
   assertJobApplicationDeadlineActive(job, now);
+};
+
+// BR-07 / BR-22: Primary must remain an operational Recruiter of Job.companyId.
+const assertJobPrimaryRecruiterValidForLifecycle = async (job) => {
+  const primaryMembership = await CompanyMember.findById(
+    job.primaryRecruiterCompanyMemberId,
+  );
+
+  if (!primaryMembership) {
+    throw new AppError(409, "Job Primary Recruiter is no longer valid", {
+      field: "primaryRecruiterCompanyMemberId",
+    });
+  }
+
+  if (primaryMembership.role !== COMPANY_MEMBER_ROLE.RECRUITER) {
+    throw new AppError(409, "Job Primary Recruiter is no longer valid", {
+      field: "primaryRecruiterCompanyMemberId",
+    });
+  }
+
+  if (
+    primaryMembership.companyId.toString() !== job.companyId.toString()
+  ) {
+    throw new AppError(
+      409,
+      "Job Primary Recruiter must belong to the Job Company",
+      {
+        field: "primaryRecruiterCompanyMemberId",
+      },
+    );
+  }
+
+  if (primaryMembership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+    throw new AppError(409, "Job Primary Recruiter is no longer valid", {
+      field: "primaryRecruiterCompanyMemberId",
+      status: primaryMembership.status,
+    });
+  }
+
+  const primaryUser = await User.findById(primaryMembership.userId);
+
+  if (!primaryUser || primaryUser.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(409, "Job Primary Recruiter is no longer valid", {
+      field: "primaryRecruiterCompanyMemberId",
+    });
+  }
 };
 
 const assertJobDraftSubmittable = (job) => {
@@ -887,6 +938,79 @@ const assertCompanyManagerJobApprovalAuthority = ({
   }
 };
 
+const approveAndPublishJob = async ({
+  managerUser,
+  jobId,
+  clientCompanyId,
+  now = new Date(),
+} = {}) => {
+  // BR-20 / BR-38 / Company validity: trusted CM membership + APPROVED/ACTIVE.
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", {
+      field: "jobId",
+    });
+  }
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  assertCompanyManagerJobApprovalAuthority({
+    job,
+    companyRole: context.companyRole,
+    tenantCompanyId: context.companyId,
+  });
+
+  // BR-22: revalidate conditions that can change after submit.
+  await assertJobPrimaryRecruiterValidForLifecycle(job);
+  await assertJobReadyForApprovalLifecycle(job, {
+    now,
+  });
+
+  // TX-01 / BR-21: single-document atomic PUBLISHED + publishedAt. No
+  // intermediate APPROVED state. Content/ownership/creator/Primary unchanged.
+  // BR-24 / BR-32: publish freezes content and establishes historical boundary.
+  const updatedJob = await Job.findOneAndUpdate(
+    {
+      _id: job._id,
+      companyId: context.companyId,
+      status: JOB_STATUS.PENDING_APPROVAL,
+      publishedAt: null,
+    },
+    {
+      $set: {
+        status: JOB_STATUS.PUBLISHED,
+        publishedAt: now,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedJob) {
+    throw new AppError(
+      409,
+      "Job must be PENDING_APPROVAL for approval decisions",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  return toPublicJob(updatedJob);
+};
+
 const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
@@ -947,8 +1071,10 @@ const getInternalJob = async ({
 };
 
 export {
+  approveAndPublishJob,
   assertCompanyManagerJobApprovalAuthority,
   assertJobInternallyVisible,
+  assertJobPrimaryRecruiterValidForLifecycle,
   assertJobReadyForApprovalLifecycle,
   assertNoOutstandingPrimaryResponsibility,
   buildInternalJobVisibilityFilter,
