@@ -1,5 +1,6 @@
 import {
   approveAndPublishJob,
+  closePublishedJob,
   createDraftJob,
   deletePrePublicationJob,
   getInternalJob,
@@ -174,8 +175,26 @@ const reassignPrimaryRecruiterHandler = async (request, response, next) => {
   }
 };
 
+const closePublishedJobHandler = async (request, response, next) => {
+  try {
+    const job = await closePublishedJob({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Job closed.",
+      job,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   approveAndPublishJobHandler,
+  closePublishedJobHandler,
   createDraftJobHandler,
   deletePrePublicationJobHandler,
   getInternalJobHandler,

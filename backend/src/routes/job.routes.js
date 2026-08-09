@@ -2,6 +2,7 @@ import express from "express";
 
 import {
   approveAndPublishJobHandler,
+  closePublishedJobHandler,
   createDraftJobHandler,
   deletePrePublicationJobHandler,
   getInternalJobHandler,
@@ -70,6 +71,13 @@ router.post(
   authorizeCompanyManagerBusinessAccess,
   validateReassignPrimaryRecruiter,
   reassignPrimaryRecruiterHandler,
+);
+
+router.post(
+  "/:jobId/close",
+  authenticateAccess,
+  authorizeCompanyStaffBusinessAccess,
+  closePublishedJobHandler,
 );
 
 router.delete(
