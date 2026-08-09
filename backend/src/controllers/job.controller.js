@@ -2,6 +2,7 @@ import {
   createDraftJob,
   getInternalJob,
   listInternalJobs,
+  submitDraftJob,
   updateDraftJob,
 } from "../services/job.service.js";
 
@@ -82,9 +83,27 @@ const getInternalJobHandler = async (request, response, next) => {
   }
 };
 
+const submitDraftJobHandler = async (request, response, next) => {
+  try {
+    const job = await submitDraftJob({
+      recruiterUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Job submitted for approval.",
+      job,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   createDraftJobHandler,
   getInternalJobHandler,
   listInternalJobsHandler,
+  submitDraftJobHandler,
   updateDraftJobHandler,
 };

@@ -4,6 +4,7 @@ import {
   createDraftJobHandler,
   getInternalJobHandler,
   listInternalJobsHandler,
+  submitDraftJobHandler,
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
@@ -34,6 +35,13 @@ router.post(
   authorizeRecruiterBusinessAccess,
   validateCreateDraftJob,
   createDraftJobHandler,
+);
+
+router.post(
+  "/:jobId/submit",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  submitDraftJobHandler,
 );
 
 router.patch(
