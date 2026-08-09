@@ -321,6 +321,27 @@ const resolveCompanyManagerRecruiterManagementContext = async ({
   return context;
 };
 
+const resolveRecruiterBusinessContext = async ({
+  user,
+  session,
+  clientCompanyId,
+} = {}) => {
+  const context = await resolveCompanyStaffBusinessContext({
+    user,
+    session,
+    clientCompanyId,
+  });
+
+  // V5 BR-01: only Recruiter may create/operate Job as Recruiter actor.
+  if (context.membership.role !== COMPANY_MEMBER_ROLE.RECRUITER) {
+    throw new AppError(403, "Recruiter access required", {
+      field: "role",
+    });
+  }
+
+  return context;
+};
+
 const assertCompanyDraftEditable = (company) => {
   if (
     company.approvalStatus !== COMPANY_APPROVAL_STATUS.NOT_SUBMITTED ||
@@ -841,6 +862,7 @@ export {
   resolveCompanyStaffMembership,
   resolveCompanyStaffTenant,
   resolveOwnedCompany,
+  resolveRecruiterBusinessContext,
   submitOwnedCompany,
   toPublicCompany,
   updateOwnedCompanyActiveProfile,
