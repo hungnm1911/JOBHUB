@@ -1011,6 +1011,62 @@ const approveAndPublishJob = async ({
   return toPublicJob(updatedJob);
 };
 
+const rejectPendingJob = async ({
+  managerUser,
+  jobId,
+  clientCompanyId,
+} = {}) => {
+  // BR-20 / BR-38: trusted CM membership; Job id / client companyId do not
+  // authorize.
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", {
+      field: "jobId",
+    });
+  }
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  assertCompanyManagerJobApprovalAuthority({
+    job,
+    companyRole: context.companyRole,
+    tenantCompanyId: context.companyId,
+  });
+
+  // TX-04 / BR-23: physical delete only while still PENDING_APPROVAL. No
+  // REJECTED state, rejection metadata, soft-delete flags, or cascade writes
+  // to Company / CompanyMember / Category / ExperienceLevel.
+  const deletedJob = await Job.findOneAndDelete({
+    _id: job._id,
+    companyId: context.companyId,
+    status: JOB_STATUS.PENDING_APPROVAL,
+  });
+
+  if (!deletedJob) {
+    throw new AppError(
+      409,
+      "Job must be PENDING_APPROVAL for approval decisions",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  return {
+    id: deletedJob._id.toString(),
+  };
+};
+
 const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
@@ -1083,6 +1139,7 @@ export {
   getInternalJob,
   isJobInternallyVisible,
   listInternalJobs,
+  rejectPendingJob,
   submitDraftJob,
   toPublicJob,
   updateDraftJob,
