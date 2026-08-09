@@ -1,4 +1,9 @@
-import { createDraftJob, updateDraftJob } from "../services/job.service.js";
+import {
+  createDraftJob,
+  getInternalJob,
+  listInternalJobs,
+  updateDraftJob,
+} from "../services/job.service.js";
 
 const readClientCompanyId = (request) => {
   return (
@@ -44,4 +49,42 @@ const updateDraftJobHandler = async (request, response, next) => {
   }
 };
 
-export { createDraftJobHandler, updateDraftJobHandler };
+const listInternalJobsHandler = async (request, response, next) => {
+  try {
+    const jobs = await listInternalJobs({
+      actorUser: request.auth.user,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Jobs retrieved.",
+      jobs,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getInternalJobHandler = async (request, response, next) => {
+  try {
+    const job = await getInternalJob({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Job retrieved.",
+      job,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export {
+  createDraftJobHandler,
+  getInternalJobHandler,
+  listInternalJobsHandler,
+  updateDraftJobHandler,
+};
