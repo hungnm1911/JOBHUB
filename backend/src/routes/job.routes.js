@@ -1,6 +1,7 @@
 import express from "express";
 
 import {
+  approveAndPublishJobHandler,
   createDraftJobHandler,
   getInternalJobHandler,
   listInternalJobsHandler,
@@ -8,6 +9,7 @@ import {
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
+import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-company-manager-business-access.js";
 import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-company-staff-business-access.js";
 import authorizeRecruiterBusinessAccess from "../middlewares/authorize-recruiter-business-access.js";
 import validateCreateDraftJob from "../middlewares/validate-create-draft-job.js";
@@ -42,6 +44,13 @@ router.post(
   authenticateAccess,
   authorizeRecruiterBusinessAccess,
   submitDraftJobHandler,
+);
+
+router.post(
+  "/:jobId/approve",
+  authenticateAccess,
+  authorizeCompanyManagerBusinessAccess,
+  approveAndPublishJobHandler,
 );
 
 router.patch(
