@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_STATUS, {
   OUTSTANDING_PRIMARY_JOB_STATUSES,
@@ -9,6 +10,7 @@ import WORK_MODE from "../constants/work-mode.js";
 import Job from "../models/job.model.js";
 import {
   assertSameCompanyTenant,
+  resolveCompanyStaffBusinessContext,
   resolveRecruiterBusinessContext,
 } from "./company.service.js";
 import AppError from "../utils/app-error.js";
@@ -461,10 +463,152 @@ const assertNoOutstandingPrimaryResponsibility = async ({
   }
 };
 
+// BR-36 / BR-37: canonical Company-scoped internal visibility filter. Creator
+// / historical Primary are intentionally absent (BR-43). Not for public
+// discovery.
+const buildInternalJobVisibilityFilter = ({
+  companyId,
+  companyRole,
+  membershipId,
+} = {}) => {
+  if (companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
+    return {
+      companyId,
+    };
+  }
+
+  if (companyRole === COMPANY_MEMBER_ROLE.RECRUITER) {
+    return {
+      companyId,
+      $or: [
+        {
+          primaryRecruiterCompanyMemberId: membershipId,
+        },
+        {
+          status: JOB_STATUS.PUBLISHED,
+        },
+      ],
+    };
+  }
+
+  throw new AppError(403, "Job internal visibility is not available", {
+    field: "role",
+  });
+};
+
+const isJobInternallyVisible = ({
+  job,
+  companyRole,
+  membershipId,
+} = {}) => {
+  if (companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
+    return true;
+  }
+
+  if (companyRole === COMPANY_MEMBER_ROLE.RECRUITER) {
+    if (
+      job.primaryRecruiterCompanyMemberId.toString() ===
+      membershipId.toString()
+    ) {
+      return true;
+    }
+
+    return job.status === JOB_STATUS.PUBLISHED;
+  }
+
+  return false;
+};
+
+const assertJobInternallyVisible = ({
+  job,
+  companyRole,
+  membershipId,
+} = {}) => {
+  if (
+    isJobInternallyVisible({
+      job,
+      companyRole,
+      membershipId,
+    })
+  ) {
+    return;
+  }
+
+  // BR-36 / BR-43: same-Company peer DRAFT/PENDING/CLOSED/EXPIRED and
+  // historical creator/old-Primary association do not authorize visibility.
+  throw new AppError(403, "Job is not visible to the current actor", {
+    field: "jobId",
+  });
+};
+
+const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
+  const context = await resolveCompanyStaffBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const filter = buildInternalJobVisibilityFilter({
+    companyId: context.companyId,
+    companyRole: context.companyRole,
+    membershipId: context.membership._id,
+  });
+
+  const jobs = await Job.find(filter).sort({
+    createdAt: 1,
+    _id: 1,
+  });
+
+  return jobs.map((job) => toPublicJob(job));
+};
+
+const getInternalJob = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+} = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", {
+      field: "jobId",
+    });
+  }
+
+  const context = await resolveCompanyStaffBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  // BR-38: Job id alone does not authorize cross-tenant access.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId: context.companyId,
+  });
+
+  assertJobInternallyVisible({
+    job,
+    companyRole: context.companyRole,
+    membershipId: context.membership._id,
+  });
+
+  return toPublicJob(job);
+};
+
 export {
+  assertJobInternallyVisible,
   assertNoOutstandingPrimaryResponsibility,
+  buildInternalJobVisibilityFilter,
   createDraftJob,
   findOutstandingPrimaryResponsibility,
+  getInternalJob,
+  isJobInternallyVisible,
+  listInternalJobs,
   toPublicJob,
   updateDraftJob,
 };
