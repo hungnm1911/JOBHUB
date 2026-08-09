@@ -2,17 +2,19 @@
 
 ## Current milestone
 
-**V4 — Quản lý danh mục chuẩn của nền tảng** is `READY FOR IMPLEMENTATION`.
+**V4 — Quản lý danh mục chuẩn của nền tảng** is `COMPLETED AND VERIFIED`.
 
 V4's approved business specification is at `docs/product/versions/v4-platform-standard-catalogs.md`, and its approved persistence contract is at `docs/data/versions/v4-platform-standard-catalogs-data-model.md`.
 
-V1, V2, and V3 remain `COMPLETED AND VERIFIED`.
+V1, V2, V3, and V4 remain `COMPLETED AND VERIFIED`.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-V4 Slices 01–04 are implemented and verified. Remaining V4 slices are not started. V5 through V17 remain `PLANNED`.
+V4 Slices 01–05 are implemented and verified. V5 through V17 remain `PLANNED`.
 
 ## Completed and verified
+
+- **Implemented; verified:** V4 Slice 05 — V4 acceptance and regression closure (F01–F06; BR-01–BR-20): cross-cutting suite confirms FIELD→POSITION structure and schema immutability, Platform Admin-only Category creation (Candidate/Company Manager/Recruiter denied), absence of Category/ExperienceLevel mutation/list/CRUD surfaces beyond create endpoints, exact closed Location/EmploymentType/WorkMode vocabularies plus six-record ExperienceLevel dataset, no CompanyMember catalog role, and V1/V2/V3 identity surfaces unchanged; Data Contract authorization ownership is aligned to Engineering SoT middleware enforcement without changing business behavior. Coverage in `test/catalog/v4-acceptance.test.js` plus prior V4 slice suites.
 
 - **Implemented; verified:** V4 Slice 04 — ExperienceLevel canonical dataset (F06; BR-01, BR-15, BR-16, BR-17, BR-20): persisted `experience_levels` documents expose only `_id` + immutable unique `code` from the locked six-member set; dataset initialization is owned by `src/database/migrations/v4-experience-level-dataset.js` through the existing `scripts/run-migration.js` runner (idempotent upsert; no seed/startup/API path); re-application does not create duplicates and verification requires exactly the six canonical records. Focused coverage in `test/catalog/v4-experience-level-dataset.test.js`.
 
@@ -108,18 +110,18 @@ V4 Slices 01–04 are implemented and verified. Remaining V4 slices are not star
 
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
-- V4 is `READY FOR IMPLEMENTATION`; Slices 01–04 are complete. Remaining V4 slices (Category read surfaces if specified later, and acceptance) are not started.
+- V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
 - V5 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
 
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
 - `npm run verify:agent` consists of ESLint, deterministic architecture verification, and Vitest; it was run for this snapshot and passed.
-- The current baseline is 39 passing test files and 219 passing tests: prior V1/V2/V3/V4 Slice 01–03 coverage plus V4 Slice 04 ExperienceLevel dataset tests.
-- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, `test/auth/v3-acceptance.test.js`, `test/catalog/v4-fixed-vocabularies.test.js`, `test/catalog/v4-category-field-creation.test.js`, `test/catalog/v4-category-position-creation.test.js`, `test/catalog/v4-experience-level-dataset.test.js`, and existing V2 registration/onboarding/platform-admin suites.
+- The current baseline is 40 passing test files and 224 passing tests: prior V1/V2/V3/V4 Slice 01–04 coverage plus V4 Slice 05 acceptance tests.
+- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, `test/auth/v3-acceptance.test.js`, `test/catalog/v4-fixed-vocabularies.test.js`, `test/catalog/v4-category-field-creation.test.js`, `test/catalog/v4-category-position-creation.test.js`, `test/catalog/v4-experience-level-dataset.test.js`, `test/catalog/v4-acceptance.test.js`, and existing V2 registration/onboarding/platform-admin suites.
 - No automated test script is defined outside the backend package; frontend verification is outside `verify:agent` and was not run.
 - Backend startup, Cloudinary connectivity/operations, live SMTP delivery, endpoint smoke tests outside automated registration coverage, and frontend verification are outside `verify:agent` and were not run, so their behavior is not verified by this snapshot.
 
 ## Next recommended task
 
-Begin V4 acceptance / remaining catalog surfaces only from an approved slice definition in the Product/Data contracts. Do not invent Category list/read or Job/CV ExperienceLevel integration without that authority, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) without a new approved specification.
+Begin V5 only from an approved Product/Data specification when one exists. Do not implement V5–V17 from roadmap titles alone, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) or V4-deferred catalog surfaces (list/read, Job/CV integration) without a new approved specification.
