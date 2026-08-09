@@ -679,50 +679,62 @@ const assertJobReadyForApprovalLifecycle = async (
   assertJobApplicationDeadlineActive(job, now);
 };
 
-// BR-07 / BR-22: Primary must remain an operational Recruiter of Job.companyId.
-const assertJobPrimaryRecruiterValidForLifecycle = async (job) => {
-  const primaryMembership = await CompanyMember.findById(
-    job.primaryRecruiterCompanyMemberId,
-  );
+// BR-07: Recruiter membership must be operational and same-Company as the Job.
+const assertRecruiterMembershipValidForJobPrimary = async ({
+  membershipId,
+  jobCompanyId,
+  field = "primaryRecruiterCompanyMemberId",
+  invalidMessage = "Primary Recruiter must be a valid active Recruiter of the Job Company",
+} = {}) => {
+  const membership = await CompanyMember.findById(membershipId);
 
-  if (!primaryMembership) {
-    throw new AppError(409, "Job Primary Recruiter is no longer valid", {
-      field: "primaryRecruiterCompanyMemberId",
+  if (!membership) {
+    throw new AppError(409, invalidMessage, {
+      field,
     });
   }
 
-  if (primaryMembership.role !== COMPANY_MEMBER_ROLE.RECRUITER) {
-    throw new AppError(409, "Job Primary Recruiter is no longer valid", {
-      field: "primaryRecruiterCompanyMemberId",
+  if (membership.role !== COMPANY_MEMBER_ROLE.RECRUITER) {
+    throw new AppError(409, invalidMessage, {
+      field,
     });
   }
 
-  if (
-    primaryMembership.companyId.toString() !== job.companyId.toString()
-  ) {
+  if (membership.companyId.toString() !== jobCompanyId.toString()) {
     throw new AppError(
       409,
       "Job Primary Recruiter must belong to the Job Company",
       {
-        field: "primaryRecruiterCompanyMemberId",
+        field,
       },
     );
   }
 
-  if (primaryMembership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
-    throw new AppError(409, "Job Primary Recruiter is no longer valid", {
-      field: "primaryRecruiterCompanyMemberId",
-      status: primaryMembership.status,
+  if (membership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+    throw new AppError(409, invalidMessage, {
+      field,
+      status: membership.status,
     });
   }
 
-  const primaryUser = await User.findById(primaryMembership.userId);
+  const user = await User.findById(membership.userId);
 
-  if (!primaryUser || primaryUser.status !== USER_STATUS.ACTIVE) {
-    throw new AppError(409, "Job Primary Recruiter is no longer valid", {
-      field: "primaryRecruiterCompanyMemberId",
+  if (!user || user.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(409, invalidMessage, {
+      field,
     });
   }
+
+  return membership;
+};
+
+// BR-07 / BR-22: current Primary must remain an operational Recruiter of Job.companyId.
+const assertJobPrimaryRecruiterValidForLifecycle = async (job) => {
+  await assertRecruiterMembershipValidForJobPrimary({
+    membershipId: job.primaryRecruiterCompanyMemberId,
+    jobCompanyId: job.companyId,
+    invalidMessage: "Job Primary Recruiter is no longer valid",
+  });
 };
 
 const assertJobDraftSubmittable = (job) => {
@@ -1179,6 +1191,119 @@ const deletePrePublicationJob = async ({
   };
 };
 
+// BR-26 / F08: CM may reassign Primary only while the Job is PUBLISHED.
+const assertCompanyManagerPrimaryReassignmentAuthority = ({
+  job,
+  companyRole,
+  tenantCompanyId,
+} = {}) => {
+  if (companyRole !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
+    throw new AppError(
+      403,
+      "Only the Company Manager can reassign the Job Primary Recruiter",
+      {
+        field: "role",
+      },
+    );
+  }
+
+  // BR-38 / BR-43: Job id, creator, or former-Primary association alone do not
+  // authorize reassignment.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId,
+  });
+
+  if (job.status !== JOB_STATUS.PUBLISHED) {
+    throw new AppError(
+      409,
+      "Job Primary Recruiter can only be reassigned while PUBLISHED",
+      {
+        field: "status",
+        status: job.status,
+      },
+    );
+  }
+};
+
+const reassignPrimaryRecruiter = async ({
+  managerUser,
+  jobId,
+  clientCompanyId,
+  primaryRecruiterCompanyMemberId,
+} = {}) => {
+  // BR-38: trusted CM membership; client companyId / Job id do not authorize.
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", {
+      field: "jobId",
+    });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(primaryRecruiterCompanyMemberId)) {
+    throw new AppError(400, "Invalid Primary Recruiter CompanyMember id", {
+      field: "primaryRecruiterCompanyMemberId",
+    });
+  }
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  assertCompanyManagerPrimaryReassignmentAuthority({
+    job,
+    companyRole: context.companyRole,
+    tenantCompanyId: context.companyId,
+  });
+
+  // BR-06 / BR-07 / BR-27: new Primary must be one valid same-Company Recruiter.
+  // Cross-tenant membership ids are rejected here; they do not authorize.
+  await assertRecruiterMembershipValidForJobPrimary({
+    membershipId: primaryRecruiterCompanyMemberId,
+    jobCompanyId: job.companyId,
+  });
+
+  // TX-03 / BR-05 / BR-26: atomic single-field update only while still
+  // PUBLISHED. Creator, company ownership, content, status, and publishedAt
+  // remain unchanged. No CompanyMember mutation or Primary history document.
+  const updatedJob = await Job.findOneAndUpdate(
+    {
+      _id: job._id,
+      companyId: context.companyId,
+      status: JOB_STATUS.PUBLISHED,
+    },
+    {
+      $set: {
+        primaryRecruiterCompanyMemberId,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedJob) {
+    throw new AppError(
+      409,
+      "Job Primary Recruiter can only be reassigned while PUBLISHED",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  return toPublicJob(updatedJob);
+};
+
 const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
@@ -1242,10 +1367,12 @@ export {
   approveAndPublishJob,
   assertCompanyManagerJobApprovalAuthority,
   assertCompanyManagerPrePublicationDeleteAuthority,
+  assertCompanyManagerPrimaryReassignmentAuthority,
   assertJobInternallyVisible,
   assertJobPrimaryRecruiterValidForLifecycle,
   assertJobReadyForApprovalLifecycle,
   assertNoOutstandingPrimaryResponsibility,
+  assertRecruiterMembershipValidForJobPrimary,
   buildInternalJobVisibilityFilter,
   createDraftJob,
   deletePrePublicationJob,
@@ -1253,6 +1380,7 @@ export {
   getInternalJob,
   isJobInternallyVisible,
   listInternalJobs,
+  reassignPrimaryRecruiter,
   rejectPendingJob,
   submitDraftJob,
   toPublicJob,

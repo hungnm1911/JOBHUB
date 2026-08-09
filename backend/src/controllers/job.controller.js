@@ -4,6 +4,7 @@ import {
   deletePrePublicationJob,
   getInternalJob,
   listInternalJobs,
+  reassignPrimaryRecruiter,
   rejectPendingJob,
   submitDraftJob,
   updateDraftJob,
@@ -154,12 +155,32 @@ const deletePrePublicationJobHandler = async (request, response, next) => {
   }
 };
 
+const reassignPrimaryRecruiterHandler = async (request, response, next) => {
+  try {
+    const job = await reassignPrimaryRecruiter({
+      managerUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+      primaryRecruiterCompanyMemberId:
+        request.body.primaryRecruiterCompanyMemberId,
+    });
+
+    return response.status(200).json({
+      message: "Job Primary Recruiter reassigned.",
+      job,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   approveAndPublishJobHandler,
   createDraftJobHandler,
   deletePrePublicationJobHandler,
   getInternalJobHandler,
   listInternalJobsHandler,
+  reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
   submitDraftJobHandler,
   updateDraftJobHandler,
