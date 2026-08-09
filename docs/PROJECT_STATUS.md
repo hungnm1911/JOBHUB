@@ -2,17 +2,19 @@
 
 ## Current milestone
 
-**V3 — Quản lý nhân sự tuyển dụng của Company** is `COMPLETED AND VERIFIED`.
+**V4 — Quản lý danh mục chuẩn của nền tảng** is `READY FOR IMPLEMENTATION`.
 
-V3's approved business specification is at `docs/product/versions/v3-company-recruitment-staff-management.md`, and its approved persistence contract is at `docs/data/versions/v3-company-recruitment-staff-management-data-model.md`.
+V4's approved business specification is at `docs/product/versions/v4-platform-standard-catalogs.md`, and its approved persistence contract is at `docs/data/versions/v4-platform-standard-catalogs-data-model.md`.
 
 V1, V2, and V3 remain `COMPLETED AND VERIFIED`.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-V4 through V17 remain `PLANNED`.
+No V4 business slice is implemented yet. V5 through V17 remain `PLANNED`.
 
 ## Completed and verified
+
+- **Prepared; verified:** V4 implementation readiness — the approved Product/Data contract paths are established, the Product Location definition is aligned to the canonical fixed snapshot of 63 Vietnam province/city members plus `FOREIGN`, and roadmap/project state now mark V4 `READY FOR IMPLEMENTATION`. No V4 business behavior or persistence was introduced. Slice 01 requires only fixed non-persisted vocabularies, so the existing unit-test infrastructure and backend gate are sufficient; Category authorization ownership is deferred to Slice 02 and ExperienceLevel dataset initialization ownership is deferred to Slice 04.
 
 - **Implemented; verified:** V3 Slice 09 — V3 acceptance & regression closure (F01–F09, F11–F17; BR-01–BR-29; TX-01–TX-07 as applied): cross-cutting acceptance suite confirms end-to-end Recruiter lifecycle, cross-tenant/`companyId` non-expansion, invalid-actor matrix, platform/Company restriction precedence, pre-activation denials, TERMINATED terminal transitions, session revocation after lock/reset/terminate, V1 Candidate + V2 CM membership SoT compatibility (no persisted `Company.managerUserId`), credential non-leakage, and explicit F10 PATCH/PUT absence. Coverage in `test/auth/v3-acceptance.test.js` plus prior V3 slice suites.
 
@@ -98,7 +100,8 @@ V4 through V17 remain `PLANNED`.
 
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
-- V4 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
+- V4 is `READY FOR IMPLEMENTATION`; no V4 business slice has been implemented yet.
+- V5 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
 
 ## Verification status
 
@@ -111,4 +114,4 @@ V4 through V17 remain `PLANNED`.
 
 ## Next recommended task
 
-Begin the next approved product version only after its Product/Data contracts are approved. Do not implement roadmap titles (V4+) from names alone, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) without a new approved specification.
+Begin V4 Slice 01 — fixed platform vocabularies — from the approved V4 Product/Data contracts. Do not add V4 Category or ExperienceLevel behavior before its dependency-ordered slice, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) without a new approved specification.
