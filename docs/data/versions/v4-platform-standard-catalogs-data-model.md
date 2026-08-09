@@ -1072,12 +1072,11 @@ Canonical compound uniqueness:
 
 
 
-## 10.2. Service bảo vệ
-
+## 10.2. Application / service constraint ownership
 
 | Constraint                                       | Owner                              | Lý do                                                                            |
 | ------------------------------------------------ | ---------------------------------- | -------------------------------------------------------------------------------- |
-| Actor tạo Category phải là Platform Admin        | Application authorization boundary | Business authorization rule; enforcement owner do Engineering Contract quy định. |
+| Actor tạo Category phải là Platform Admin        | Application authorization boundary | Business authorization rule. Enforcement owner is defined by the Engineering Contract as `backend/src/middlewares/authorize-platform-admin.js` on Platform Admin Category routes; Category service must not duplicate Platform Admin role checks. |
 | POSITION parent phải tồn tại                     | Service                            | Cross-document validation                                                        |
 | POSITION parent phải có `level = FIELD`          | Service                            | Cross-document business validation                                               |
 | Category không được update                       | Service                            | Business lifecycle rule                                                          |
@@ -1202,6 +1201,11 @@ CompanyMember
 để quyết định quyền tạo Category.
 
 Client-supplied Company identifier không tạo authorization cho V4.
+
+HTTP enforcement của bước `PLATFORM_ADMIN` thuộc Engineering Contract owner
+`backend/src/middlewares/authorize-platform-admin.js` sau access authentication.
+Category creation service nhận request đã được authorize và không tự re-check
+`User.role`.
 
 ---
 

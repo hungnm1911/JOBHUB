@@ -23,7 +23,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V1 | Tài khoản và vòng đời xác thực | COMPLETED AND VERIFIED |
 | V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
 | V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
-| V4 | Danh mục chuẩn của nền tảng | READY FOR IMPLEMENTATION |
+| V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
 | V5 | Job và vòng đời phê duyệt Job | PLANNED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | PLANNED |
 | V7 | Candidate Profile và thư viện CV | PLANNED |
@@ -64,11 +64,7 @@ The approved business scope of the version has been implemented and the required
 
 ## Current milestone
 
-V1, V2, and V3 are `COMPLETED AND VERIFIED`.
-
-V4 is `READY FOR IMPLEMENTATION`. Its approved Product Specification and
-Persistence Contract define the authority for implementation. No V4 business
-slice is implemented by this readiness transition.
+V1, V2, V3, and V4 are `COMPLETED AND VERIFIED`.
 
 Versions V5 through V17 remain `PLANNED` and must not be implemented merely
 from their roadmap titles.
