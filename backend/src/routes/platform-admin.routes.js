@@ -1,6 +1,10 @@
 import express from "express";
 
 import {
+  createFieldCategoryHandler,
+  createPositionCategoryHandler,
+} from "../controllers/category.controller.js";
+import {
   approveCompanyRegistrationHandler,
   getCompanyRegistrationHandler,
   listCompanyRegistrationsHandler,
@@ -11,8 +15,26 @@ import {
 } from "../controllers/platform-admin.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizePlatformAdmin from "../middlewares/authorize-platform-admin.js";
+import validateCreateFieldCategory from "../middlewares/validate-create-field-category.js";
+import validateCreatePositionCategory from "../middlewares/validate-create-position-category.js";
 
 const router = express.Router();
+
+router.post(
+  "/categories/fields",
+  authenticateAccess,
+  authorizePlatformAdmin,
+  validateCreateFieldCategory,
+  createFieldCategoryHandler,
+);
+
+router.post(
+  "/categories/fields/:fieldId/positions",
+  authenticateAccess,
+  authorizePlatformAdmin,
+  validateCreatePositionCategory,
+  createPositionCategoryHandler,
+);
 
 router.post(
   "/accounts/:userId/lock",
