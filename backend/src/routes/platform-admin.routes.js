@@ -1,5 +1,6 @@
 import express from "express";
 
+import { createFieldCategoryHandler } from "../controllers/category.controller.js";
 import {
   approveCompanyRegistrationHandler,
   getCompanyRegistrationHandler,
@@ -11,8 +12,17 @@ import {
 } from "../controllers/platform-admin.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizePlatformAdmin from "../middlewares/authorize-platform-admin.js";
+import validateCreateFieldCategory from "../middlewares/validate-create-field-category.js";
 
 const router = express.Router();
+
+router.post(
+  "/categories/fields",
+  authenticateAccess,
+  authorizePlatformAdmin,
+  validateCreateFieldCategory,
+  createFieldCategoryHandler,
+);
 
 router.post(
   "/accounts/:userId/lock",

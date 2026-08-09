@@ -13,47 +13,50 @@ Tài liệu này định nghĩa canonical persistence/data contract để hỗ t
 
 ```text
 docs/product/versions/v4-platform-standard-catalogs.md
-````
+```
 
 Product Specification là authority đối với business behavior.
 
 Data Contract V4 xác định:
 
-* dữ liệu chuẩn nào cần được persist;
-* dữ liệu chuẩn nào chỉ tồn tại dưới dạng fixed vocabulary;
-* collection chịu trách nhiệm lưu dữ liệu;
-* field và constraint cần thiết;
-* quan hệ giữa Category `FIELD` và `POSITION`;
-* uniqueness của Category;
-* representation của `ExperienceLevel`;
-* representation của `Location`, `EmploymentType` và `WorkMode`;
-* persistence transition;
-* transaction / atomicity requirement;
-* constraint nào do database/schema bảo vệ;
-* constraint nào do service bảo vệ;
-* multi-tenant/data ownership boundary;
-* các field/collection chủ động không được thêm.
+- dữ liệu chuẩn nào cần được persist;
+- dữ liệu chuẩn nào chỉ tồn tại dưới dạng fixed vocabulary;
+- collection chịu trách nhiệm lưu dữ liệu;
+- field và constraint cần thiết;
+- quan hệ giữa Category `FIELD` và `POSITION`;
+- uniqueness của Category;
+- representation của `ExperienceLevel`;
+- representation của `Location`, `EmploymentType` và `WorkMode`;
+- persistence transition;
+- transaction / atomicity requirement;
+- constraint nào do database/schema bảo vệ;
+- constraint nào do service bảo vệ;
+- multi-tenant/data ownership boundary;
+- các field/collection chủ động không được thêm.
 
 Tài liệu này không được thay đổi hoặc mở rộng business behavior đã được Product Specification định nghĩa.
 
 ---
 
+
+
 ## 2. Thay đổi so với version trước
 
 V4 bổ sung hai persisted entity mới:
 
-* `Category`;
-* `ExperienceLevel`.
+- `Category`;
+- `ExperienceLevel`.
 
 V4 đồng thời bổ sung ba fixed vocabulary:
 
-* `Location`;
-* `EmploymentType`;
-* `WorkMode`.
+- `Location`;
+- `EmploymentType`;
+- `WorkMode`.
 
 Ba fixed vocabulary trên không được persist thành catalog collection trong V4.
 
 ### 2.1. Tổng quan thay đổi
+
 
 | Entity / Data Vocabulary | Trạng thái       | Mô tả                                               |
 | ------------------------ | ---------------- | --------------------------------------------------- |
@@ -68,12 +71,17 @@ Ba fixed vocabulary trên không được persist thành catalog collection tron
 | `auth_sessions`          | `UNCHANGED`      | Không thay đổi                                      |
 | `auth_tokens`            | `UNCHANGED`      | Không thay đổi                                      |
 
+
+
+
 ### 2.2. Entity mới
 
 ```text
 categories
 experience_levels
 ```
+
+
 
 ### 2.3. Entity được mở rộng
 
@@ -127,6 +135,8 @@ WorkMode
 
 ---
 
+
+
 ## 3. Collection / Entity tổng thể
 
 Persisted collections mới của V4:
@@ -144,19 +154,25 @@ EmploymentType
 WorkMode
 ```
 
+
+
 ### 3.1. Responsibility
 
-| Entity / Vocabulary | Responsibility                                              |
-| ------------------- | ----------------------------------------------------------- |
-| `categories`        | Lưu Category `FIELD` và `POSITION` dùng chung toàn platform |
-| `experience_levels` | Lưu sáu ExperienceLevel cố định                             |
-| `Location`          | Xác định tập Location chuẩn của platform gồm 63 tỉnh/thành theo canonical snapshot và FOREIGN.                      |
-| `EmploymentType`    | Xác định tập loại hình công việc hợp lệ                     |
-| `WorkMode`          | Xác định tập phương thức làm việc hợp lệ                    |
+
+| Entity / Vocabulary | Responsibility                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| `categories`        | Lưu Category `FIELD` và `POSITION` dùng chung toàn platform                                    |
+| `experience_levels` | Lưu sáu ExperienceLevel cố định                                                                |
+| `Location`          | Xác định tập Location chuẩn của platform gồm 63 tỉnh/thành theo canonical snapshot và FOREIGN. |
+| `EmploymentType`    | Xác định tập loại hình công việc hợp lệ                                                        |
+| `WorkMode`          | Xác định tập phương thức làm việc hợp lệ                                                       |
+
 
 Không tạo thêm collection ngoài danh sách này nếu chưa có canonical requirement mới.
 
 ---
+
+
 
 ## 4. Quan hệ dữ liệu
 
@@ -175,6 +191,8 @@ Category ↔ User
 ExperienceLevel ↔ Company
 ExperienceLevel ↔ User
 ```
+
+
 
 ### 4.1. Category FIELD → Category POSITION
 
@@ -242,7 +260,11 @@ không có lifecycle detach, reassignment hoặc dangling-reference hợp lệ.
 
 ---
 
+
+
 ## 5. Category
+
+
 
 ### 5.1. Responsibility
 
@@ -254,35 +276,39 @@ categories
 
 chịu trách nhiệm lưu:
 
-* Category `FIELD`;
-* Category `POSITION`;
-* tên hiển thị của Category;
-* representation chuẩn hóa dùng cho uniqueness;
-* level;
-* parent của POSITION.
+- Category `FIELD`;
+- Category `POSITION`;
+- tên hiển thị của Category;
+- representation chuẩn hóa dùng cho uniqueness;
+- level;
+- parent của POSITION.
 
 Collection này không chịu trách nhiệm lưu:
 
-* tenant/company ownership;
-* trạng thái active/inactive;
-* delete state;
-* category history;
-* actor tạo Category;
-* Job;
-* CV;
-* usage count;
-* aliases;
-* synonyms.
+- tenant/company ownership;
+- trạng thái active/inactive;
+- delete state;
+- category history;
+- actor tạo Category;
+- Job;
+- CV;
+- usage count;
+- aliases;
+- synonyms.
+
+
 
 ### 5.2. Fields
 
-| Field              | Type               |    Required | Default   | Constraint                          | Ý nghĩa                               |
-| ------------------ | ------------------ | ----------: | --------- | ----------------------------------- | ------------------------------------- |
-| `_id`              | `ObjectId`         |         YES | generated | unique                              | Định danh Category                    |
-| `name`             | `String`           |         YES | —         | non-empty, immutable                | Tên Category                          |
-| `normalizedName`   | `String`           |         YES | —         | derived, immutable                  | Giá trị chuẩn hóa dùng cho uniqueness |
-| `level`            | `String`           |         YES | —         | enum `FIELD`, `POSITION`; immutable | Cấp Category                          |
-| `parentCategoryId` | `ObjectId \| null` | conditional | `null`    | self-reference; immutable           | FIELD cha của POSITION                |
+
+| Field              | Type              | Required    | Default   | Constraint                          | Ý nghĩa                               |
+| ------------------ | ----------------- | ----------- | --------- | ----------------------------------- | ------------------------------------- |
+| `_id`              | `ObjectId`        | YES         | generated | unique                              | Định danh Category                    |
+| `name`             | `String`          | YES         | —         | non-empty, immutable                | Tên Category                          |
+| `normalizedName`   | `String`          | YES         | —         | derived, immutable                  | Giá trị chuẩn hóa dùng cho uniqueness |
+| `level`            | `String`          | YES         | —         | enum `FIELD`, `POSITION`; immutable | Cấp Category                          |
+| `parentCategoryId` | `ObjectId | null` | conditional | `null`    | self-reference; immutable           | FIELD cha của POSITION                |
+
 
 Không có:
 
@@ -300,6 +326,8 @@ trong canonical V4.
 
 ### 5.3. Enum
 
+
+
 #### `Category.level`
 
 ```text
@@ -307,10 +335,12 @@ FIELD
 POSITION
 ```
 
+
 | Giá trị    | Ý nghĩa                       |
 | ---------- | ----------------------------- |
 | `FIELD`    | Nghề hoặc lĩnh vực            |
 | `POSITION` | Vị trí cụ thể thuộc một FIELD |
+
 
 Không được thêm level thứ ba.
 
@@ -350,6 +380,8 @@ Việc quản lý synonym/alias không thuộc V4.
 
 ### 5.5. Indexes
 
+
+
 #### Index 1 — Category uniqueness
 
 ```text
@@ -359,9 +391,9 @@ UNIQUE
 
 Mục đích:
 
-* FIELD có `parentCategoryId = null`, do đó tên FIELD unique toàn platform;
-* POSITION unique trong cùng FIELD;
-* POSITION cùng tên được phép tồn tại ở FIELD khác.
+- FIELD có `parentCategoryId = null`, do đó tên FIELD unique toàn platform;
+- POSITION unique trong cùng FIELD;
+- POSITION cùng tên được phép tồn tại ở FIELD khác.
 
 Ví dụ hợp lệ:
 
@@ -389,11 +421,15 @@ Ngoài index mặc định của `_id`, V4 không yêu cầu index speculative k
 
 > `Category` không sử dụng embedded document trong V4.
 
+
+
 ### 5.7. Reference rules
 
-| Field              | Reference  |                  Required | Cardinality | Rule                                                |
-| ------------------ | ---------- | ------------------------: | ----------- | --------------------------------------------------- |
+
+| Field              | Reference  | Required                  | Cardinality | Rule                                                |
+| ------------------ | ---------- | ------------------------- | ----------- | --------------------------------------------------- |
 | `parentCategoryId` | `Category` | FIELD: NO / POSITION: YES | N → 1       | Chỉ POSITION được có parent và parent phải là FIELD |
+
 
 Database/schema có thể bảo vệ việc FIELD phải có `parentCategoryId = null` và POSITION phải có giá trị parent.
 
@@ -408,7 +444,11 @@ là cross-document validation và thuộc service responsibility.
 
 ---
 
+
+
 ## 6. ExperienceLevel
+
+
 
 ### 6.1. Responsibility
 
@@ -426,20 +466,24 @@ ExperienceLevel không biểu diễn Work Experience chi tiết của Candidate.
 
 Collection này không chịu trách nhiệm lưu:
 
-* số năm chính xác của Candidate;
-* min/max years;
-* Work Experience;
-* Company ownership;
-* trạng thái active/inactive;
-* Job requirement;
-* matching logic.
+- số năm chính xác của Candidate;
+- min/max years;
+- Work Experience;
+- Company ownership;
+- trạng thái active/inactive;
+- Job requirement;
+- matching logic.
+
+
 
 ### 6.2. Fields
 
+
 | Field  | Type       | Required | Default   | Constraint              | Ý nghĩa                             |
-| ------ | ---------- | -------: | --------- | ----------------------- | ----------------------------------- |
-| `_id`  | `ObjectId` |      YES | generated | unique                  | Định danh persisted ExperienceLevel |
-| `code` | `String`   |      YES | —         | enum, unique, immutable | Canonical ExperienceLevel           |
+| ------ | ---------- | -------- | --------- | ----------------------- | ----------------------------------- |
+| `_id`  | `ObjectId` | YES      | generated | unique                  | Định danh persisted ExperienceLevel |
+| `code` | `String`   | YES      | —         | enum, unique, immutable | Canonical ExperienceLevel           |
+
 
 Không thêm:
 
@@ -466,6 +510,7 @@ FIVE_TO_TEN_YEARS
 OVER_TEN_YEARS
 ```
 
+
 | Giá trị               | Ý nghĩa nghiệp vụ    |
 | --------------------- | -------------------- |
 | `NO_EXPERIENCE`       | Không có kinh nghiệm |
@@ -474,6 +519,7 @@ OVER_TEN_YEARS
 | `THREE_TO_FIVE_YEARS` | Từ 3 đến 5 năm       |
 | `FIVE_TO_TEN_YEARS`   | Từ 5 đến 10 năm      |
 | `OVER_TEN_YEARS`      | Trên 10 năm          |
+
 
 Data Contract không tự diễn giải boundary toán học chi tiết của các khoảng để tạo matching logic.
 
@@ -525,14 +571,16 @@ UNIQUE
 
 Mục đích:
 
-* một canonical code chỉ tồn tại tối đa một lần;
-* ngăn duplicate ExperienceLevel persisted state.
+- một canonical code chỉ tồn tại tối đa một lần;
+- ngăn duplicate ExperienceLevel persisted state.
 
 Ngoài `_id` index mặc định, không yêu cầu index khác trong V4.
 
 ### 6.6. Embedded documents
 
 > `ExperienceLevel` không sử dụng embedded document.
+
+
 
 ### 6.7. Reference rules
 
@@ -550,6 +598,8 @@ hoặc bất kỳ reference tương lai nào khác.
 Việc entity nào reference ExperienceLevel và cardinality ra sao phải do Data Contract của version chứa entity đó quyết định.
 
 ---
+
+
 
 ## 6.8. Fixed Vocabulary — EmploymentType
 
@@ -581,6 +631,8 @@ EmploymentType.isActive
 EmploymentType.name
 ```
 
+
+
 ### 6.9. Fixed Vocabulary — WorkMode
 
 `WorkMode` không có collection riêng.
@@ -602,6 +654,8 @@ work_modes
 WorkMode._id
 WorkMode.isActive
 ```
+
+
 
 ### 6.10. Fixed Vocabulary — Location
 
@@ -632,6 +686,8 @@ Không được có enum member đại diện cho:
 - phường/xã;
 - địa chỉ chi tiết;
 - quốc gia cụ thể.
+
+
 
 ### 6.11. Canonical Location member list
 
@@ -721,6 +777,8 @@ nếu Product/Data Contract của version tương ứng chưa thay đổi.
 
 ---
 
+
+
 # 7. State Matrix
 
 Version này không có nhiều state dimension cần State Matrix.
@@ -744,6 +802,8 @@ không phải lifecycle state.
 
 ---
 
+
+
 # 8. Persistence Transitions
 
 V4 chỉ có persistence transition đối với việc tạo Category.
@@ -752,13 +812,19 @@ Không có update/delete persistence transition cho Category.
 
 ---
 
+
+
 ## 8.1. Tạo Category FIELD
+
+
 
 ### Trigger business
 
 ```text
 F01 — Thêm Category FIELD
 ```
+
+
 
 ### Trước
 
@@ -768,6 +834,8 @@ Không tồn tại Category có:
 parentCategoryId = null
 normalizedName = requestedNormalizedName
 ```
+
+
 
 ### Sau
 
@@ -783,11 +851,15 @@ Category
 }
 ```
 
+
+
 ### Entity bị thay đổi
 
 ```text
 categories
 ```
+
+
 
 ### Entity không thay đổi
 
@@ -800,23 +872,31 @@ auth_sessions
 auth_tokens
 ```
 
+
+
 ### Invariant cần giữ
 
-* FIELD không có parent.
-* FIELD unique toàn platform.
-* Category vừa tạo là immutable.
-* Không tạo tenant ownership.
-* Không tạo lifecycle state.
+- FIELD không có parent.
+- FIELD unique toàn platform.
+- Category vừa tạo là immutable.
+- Không tạo tenant ownership.
+- Không tạo lifecycle state.
 
 ---
 
+
+
 ## 8.2. Tạo Category POSITION
+
+
 
 ### Trigger business
 
 ```text
 F02 — Thêm Category POSITION
 ```
+
+
 
 ### Trước
 
@@ -837,6 +917,8 @@ AND
 normalizedName = requestedNormalizedName
 ```
 
+
+
 ### Sau
 
 Một document mới tồn tại:
@@ -851,11 +933,15 @@ Category
 }
 ```
 
+
+
 ### Entity bị thay đổi
 
 ```text
 categories
 ```
+
+
 
 ### Entity không thay đổi
 
@@ -865,14 +951,16 @@ Các entity V1–V3 không bị update.
 
 ### Invariant cần giữ
 
-* POSITION thuộc đúng một FIELD.
-* parent phải tồn tại.
-* parent phải là FIELD.
-* POSITION unique trong FIELD.
-* FIELD cha không bị mutate.
-* POSITION sau khi tạo không được chuyển parent.
+- POSITION thuộc đúng một FIELD.
+- parent phải tồn tại.
+- parent phải là FIELD.
+- POSITION unique trong FIELD.
+- FIELD cha không bị mutate.
+- POSITION sau khi tạo không được chuyển parent.
 
 ---
+
+
 
 ## 8.3. Transition chủ động không tồn tại
 
@@ -893,9 +981,13 @@ Không implementation nào được tự tạo các transition trên.
 
 ---
 
+
+
 # 9. Transaction / Atomicity Requirements
 
 > V4 không bổ sung transaction/atomicity requirement mới.
+
+
 
 ### 9.1. Tạo FIELD
 
@@ -944,9 +1036,14 @@ V4 không có external side effect thuộc atomic completion.
 
 ---
 
+
+
 # 10. Constraint Ownership
 
+
+
 ## 10.1. Database / schema bảo vệ
+
 
 | Constraint                               | Owner    | Lý do                    |
 | ---------------------------------------- | -------- | ------------------------ |
@@ -962,6 +1059,7 @@ V4 không có external side effect thuộc atomic completion.
 | ExperienceLevel code thuộc canonical set | Schema   | Closed enum              |
 | `ExperienceLevel.code` unique            | Database | Unique index             |
 
+
 Canonical compound uniqueness:
 
 ```text
@@ -972,20 +1070,26 @@ Canonical compound uniqueness:
 
 ---
 
+
+
 ## 10.2. Service bảo vệ
 
-| Constraint                                       | Owner            | Lý do                              |
-| ------------------------------------------------ | ---------------- | ---------------------------------- |
-| Actor tạo Category phải là Platform Admin        | Service          | Authorization business rule        |
-| POSITION parent phải tồn tại                     | Service          | Cross-document validation          |
-| POSITION parent phải có `level = FIELD`          | Service          | Cross-document business validation |
-| Category không được update                       | Service          | Business lifecycle rule            |
-| Category không được delete                       | Service          | Business lifecycle rule            |
-| Category không được đổi parent                   | Service          | Business lifecycle rule            |
-| Không actor nào quản trị ExperienceLevel runtime | Service boundary | Fixed dataset                      |
-| Không actor nào quản trị WorkMode                | Service boundary | Fixed vocabulary                   |
-| Không actor nào quản trị EmploymentType          | Service boundary | Fixed vocabulary                   |
-| Không actor nào quản trị Location                | Service boundary | Fixed vocabulary                   |
+
+| Constraint                                       | Owner                              | Lý do                                                                            |
+| ------------------------------------------------ | ---------------------------------- | -------------------------------------------------------------------------------- |
+| Actor tạo Category phải là Platform Admin        | Application authorization boundary | Business authorization rule; enforcement owner do Engineering Contract quy định. |
+| POSITION parent phải tồn tại                     | Service                            | Cross-document validation                                                        |
+| POSITION parent phải có `level = FIELD`          | Service                            | Cross-document business validation                                               |
+| Category không được update                       | Service                            | Business lifecycle rule                                                          |
+| Category không được delete                       | Service                            | Business lifecycle rule                                                          |
+| Category không được đổi parent                   | Service                            | Business lifecycle rule                                                          |
+| Không actor nào quản trị ExperienceLevel runtime | Service boundary                   | Fixed dataset                                                                    |
+| Không actor nào quản trị WorkMode                | Service boundary                   | Fixed vocabulary                                                                 |
+| Không actor nào quản trị EmploymentType          | Service boundary                   | Fixed vocabulary                                                                 |
+| Không actor nào quản trị Location                | Service boundary                   | Fixed vocabulary                                                                 |
+
+
+
 
 ### 10.3. Normalized Category identity
 
@@ -1003,21 +1107,25 @@ Client không được coi là authority của `normalizedName`.
 
 ---
 
+
+
 # 11. Token / TTL Lifecycle
 
 > V4 không bổ sung token/TTL persistence mới.
 
 V4 không thêm:
 
-* token;
-* temporary credential;
-* TTL catalog record;
-* expiring Category;
-* expiring ExperienceLevel.
+- token;
+- temporary credential;
+- TTL catalog record;
+- expiring Category;
+- expiring ExperienceLevel.
 
 Các token/session đã tồn tại từ version trước giữ nguyên contract cũ.
 
 ---
+
+
 
 # 12. Multi-tenant Data Boundary
 
@@ -1041,7 +1149,10 @@ EmploymentType
 WorkMode
 ```
 
+
+
 ### 12.2. Resource ownership
+
 
 | Resource        | Owner    |
 | --------------- | -------- |
@@ -1050,6 +1161,7 @@ WorkMode
 | Location        | Platform |
 | EmploymentType  | Platform |
 | WorkMode        | Platform |
+
 
 Không thêm:
 
@@ -1093,6 +1205,8 @@ Client-supplied Company identifier không tạo authorization cho V4.
 
 ---
 
+
+
 # 13. Snapshot / Historical Data
 
 > V4 không bổ sung snapshot hoặc historical persistence mới.
@@ -1111,6 +1225,8 @@ Category immutable giúp identity hiện tại không bị thay đổi bởi edi
 Việc snapshot Category vào Job, CV, Application hoặc entity tương lai không thuộc V4.
 
 ---
+
+
 
 # 14. Explicitly Excluded Persistence
 
@@ -1170,21 +1286,27 @@ Nếu version sau cần persistence mới, Data Contract của version đó ph�
 
 ---
 
+
+
 # 15. Compatibility với version trước
+
+
 
 ## 15.1. Invariant phải giữ
 
 V4 phải giữ nguyên:
 
-* User identity;
-* User role model;
-* Platform Admin là platform-level actor;
-* Company lifecycle;
-* CompanyMember lifecycle;
-* Company Manager membership;
-* Recruiter membership;
-* authentication/session/token invariants;
-* tenant isolation của Company-owned resource.
+- User identity;
+- User role model;
+- Platform Admin là platform-level actor;
+- Company lifecycle;
+- CompanyMember lifecycle;
+- Company Manager membership;
+- Recruiter membership;
+- authentication/session/token invariants;
+- tenant isolation của Company-owned resource.
+
+
 
 ## 15.2. Persistence behavior phải giữ
 
@@ -1204,27 +1326,30 @@ Không chuyển catalog V4 thành embedded data trong Company hoặc User.
 
 V4 chỉ được:
 
-* thêm `categories`;
-* thêm `experience_levels`;
-* bổ sung canonical fixed vocabularies:
+- thêm `categories`;
+- thêm `experience_levels`;
+- bổ sung canonical fixed vocabularies:
+  - Location;
+  - EmploymentType;
+  - WorkMode.
 
-  * Location;
-  * EmploymentType;
-  * WorkMode.
+
 
 ## 15.4. Thay đổi không được phép
 
 Không được:
 
-* thêm `companyId` vào Category;
-* thêm catalog ownership vào CompanyMember;
-* tạo role `CATALOG_MANAGER`;
-* reinterpret Platform Admin thành Company member;
-* thay đổi User lifecycle;
-* thay đổi Company lifecycle;
-* thay đổi Recruiter lifecycle.
+- thêm `companyId` vào Category;
+- thêm catalog ownership vào CompanyMember;
+- tạo role `CATALOG_MANAGER`;
+- reinterpret Platform Admin thành Company member;
+- thay đổi User lifecycle;
+- thay đổi Company lifecycle;
+- thay đổi Recruiter lifecycle.
 
 ---
+
+
 
 # 16. Persistence Invariants
 
@@ -1233,7 +1358,6 @@ Các invariant sau phải luôn đúng ở persisted state.
 ### Category
 
 1. Mọi Category có đúng một `level`.
-
 2. `level` chỉ có thể là:
 
 ```text
@@ -1241,7 +1365,7 @@ FIELD
 POSITION
 ```
 
-3. Nếu:
+1. Nếu:
 
 ```text
 level = FIELD
@@ -1253,7 +1377,7 @@ thì:
 parentCategoryId = null
 ```
 
-4. Nếu:
+1. Nếu:
 
 ```text
 level = POSITION
@@ -1265,33 +1389,27 @@ thì:
 parentCategoryId != null
 ```
 
-5. Parent của POSITION phải tồn tại.
-
-6. Parent của POSITION phải có:
+1. Parent của POSITION phải tồn tại.
+2. Parent của POSITION phải có:
 
 ```text
 level = FIELD
 ```
 
-7. Không có Category level thứ ba.
+1. Không có Category level thứ ba.
+2. Không có Category self-parent.
+3. FIELD unique toàn platform theo canonical normalized identity.
+4. POSITION unique trong cùng FIELD theo canonical normalized identity.
+5. POSITION cùng tên được phép tồn tại dưới FIELD khác.
+6. Category đã persist không có lifecycle update hợp lệ.
+7. Category đã persist không có lifecycle delete hợp lệ.
+8. Category không có tenant owner.
 
-8. Không có Category self-parent.
 
-9. FIELD unique toàn platform theo canonical normalized identity.
-
-10. POSITION unique trong cùng FIELD theo canonical normalized identity.
-
-11. POSITION cùng tên được phép tồn tại dưới FIELD khác.
-
-12. Category đã persist không có lifecycle update hợp lệ.
-
-13. Category đã persist không có lifecycle delete hợp lệ.
-
-14. Category không có tenant owner.
 
 ### ExperienceLevel
 
-15. Mọi ExperienceLevel persisted phải có code thuộc:
+1. Mọi ExperienceLevel persisted phải có code thuộc:
 
 ```text
 NO_EXPERIENCE
@@ -1302,17 +1420,16 @@ FIVE_TO_TEN_YEARS
 OVER_TEN_YEARS
 ```
 
-16. Mỗi code tồn tại tối đa một document.
+1. Mỗi code tồn tại tối đa một document.
+2. Canonical dataset phải chứa một document cho mỗi code đã chốt.
+3. Không tồn tại runtime mutation lifecycle của ExperienceLevel.
+4. ExperienceLevel không thuộc Company.
 
-17. Canonical dataset phải chứa một document cho mỗi code đã chốt.
 
-18. Không tồn tại runtime mutation lifecycle của ExperienceLevel.
-
-19. ExperienceLevel không thuộc Company.
 
 ### Fixed vocabularies
 
-20. EmploymentType chỉ gồm:
+1. EmploymentType chỉ gồm:
 
 ```text
 FULL_TIME
@@ -1325,7 +1442,7 @@ SEASONAL
 APPRENTICESHIP
 ```
 
-21. WorkMode chỉ gồm:
+1. WorkMode chỉ gồm:
 
 ```text
 ONSITE
@@ -1333,54 +1450,51 @@ HYBRID
 REMOTE
 ```
 
-22. `REMOTE` không được xuất hiện như một Location.
-
-23. Location chỉ được có một trong 64 canonical members đã định nghĩa.
-
-24. Trong 64 members:
-    - 63 members đại diện cho tỉnh/thành thuộc canonical Vietnam location snapshot;
+1. `REMOTE` không được xuất hiện như một Location.
+2. Location chỉ được có một trong 64 canonical members đã định nghĩa.
+3. Trong 64 members:
+  - 63 members đại diện cho tỉnh/thành thuộc canonical Vietnam location snapshot;
     - `FOREIGN` đại diện cho địa điểm ngoài Việt Nam.
+4. `FOREIGN` không đại diện cho một quốc gia cụ thể.
+5. Location không có hierarchy persistence trong V4.
+6. Location, EmploymentType và WorkMode không có collection riêng trong V4.
 
-25. `FOREIGN` không đại diện cho một quốc gia cụ thể.
 
-26. Location không có hierarchy persistence trong V4.
-
-27. Location, EmploymentType và WorkMode không có collection riêng trong V4.
 
 ### Version boundary
 
-26. Không tồn tại V4 reference tới Job hoặc CV.
-
-27. Không tồn tại Company ownership trên dữ liệu chuẩn V4.
-
-28. Không schema V1–V3 nào bị thay đổi bởi V4.
+1. Không tồn tại V4 reference tới Job hoặc CV.
+2. Không tồn tại Company ownership trên dữ liệu chuẩn V4.
+3. Không schema V1–V3 nào bị thay đổi bởi V4.
 
 ---
+
+
 
 # 17. Definition of Data Completion
 
 Data Contract V4 được coi là hoàn thành khi:
 
-* `categories` đã có contract đầy đủ;
-* `experience_levels` đã có contract đầy đủ;
-* Category fields và relationship đã rõ;
-* Category uniqueness được database bảo vệ;
-* FIELD/POSITION structural rule đã rõ;
-* cross-document parent validation có service owner;
-* Category immutability có enforcement owner;
-* ExperienceLevel fixed dataset được xác định;
-* EmploymentType fixed enum được xác định;
-* WorkMode fixed enum được xác định;
-* Location fixed enum được xác định đầy đủ với đúng 64 canonical members;
-* transaction/atomicity requirement đã được xác định;
-* constraint ownership đã rõ;
-* multi-tenant boundary đã rõ;
-* compatibility với V1–V3 được giữ;
-* Explicitly Excluded Persistence không bị implementation ngoài ý muốn.
-
-
+- `categories` đã có contract đầy đủ;
+- `experience_levels` đã có contract đầy đủ;
+- Category fields và relationship đã rõ;
+- Category uniqueness được database bảo vệ;
+- FIELD/POSITION structural rule đã rõ;
+- cross-document parent validation có service owner;
+- Category immutability có enforcement owner;
+- ExperienceLevel fixed dataset được xác định;
+- EmploymentType fixed enum được xác định;
+- WorkMode fixed enum được xác định;
+- Location fixed enum được xác định đầy đủ với đúng 64 canonical members;
+- transaction/atomicity requirement đã được xác định;
+- constraint ownership đã rõ;
+- multi-tenant boundary đã rõ;
+- compatibility với V1–V3 được giữ;
+- Explicitly Excluded Persistence không bị implementation ngoài ý muốn.
 
 ---
+
+
 
 # 18. Implementation Boundary
 
@@ -1395,39 +1509,39 @@ TO SUPPORT THE PRODUCT CONTRACT
 
 Tài liệu này định nghĩa:
 
-* collections;
-* fields;
-* references;
-* relationships;
-* cardinality;
-* enums;
-* indexes;
-* uniqueness;
-* persistence transitions;
-* transaction/atomicity requirements;
-* persistence invariants;
-* constraint ownership;
-* platform data ownership.
+- collections;
+- fields;
+- references;
+- relationships;
+- cardinality;
+- enums;
+- indexes;
+- uniqueness;
+- persistence transitions;
+- transaction/atomicity requirements;
+- persistence invariants;
+- constraint ownership;
+- platform data ownership.
 
 Tài liệu này không định nghĩa:
 
-* REST endpoints;
-* HTTP methods;
-* HTTP status codes;
-* request body;
-* response body;
-* controllers;
-* routes;
-* middleware implementation;
-* service function structure;
-* MongoDB query cụ thể;
-* Mongoose method cụ thể;
-* source-code structure;
-* UI behavior;
-* frontend flow;
-* test framework;
-* seed implementation;
-* migration command.
+- REST endpoints;
+- HTTP methods;
+- HTTP status codes;
+- request body;
+- response body;
+- controllers;
+- routes;
+- middleware implementation;
+- service function structure;
+- MongoDB query cụ thể;
+- Mongoose method cụ thể;
+- source-code structure;
+- UI behavior;
+- frontend flow;
+- test framework;
+- seed implementation;
+- migration command.
 
 Boundary canonical:
 
