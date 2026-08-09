@@ -10,11 +10,13 @@ V1, V2, and V3 remain `COMPLETED AND VERIFIED`.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-No V4 business slice is implemented yet. V5 through V17 remain `PLANNED`.
+V4 Slice 01 is implemented and verified. Remaining V4 slices are not started. V5 through V17 remain `PLANNED`.
 
 ## Completed and verified
 
-- **Prepared; verified:** V4 implementation readiness — the approved Product/Data contract paths are established, the Product Location definition is aligned to the canonical fixed snapshot of 63 Vietnam province/city members plus `FOREIGN`, and roadmap/project state now mark V4 `READY FOR IMPLEMENTATION`. No V4 business behavior or persistence was introduced. Slice 01 requires only fixed non-persisted vocabularies, so the existing unit-test infrastructure and backend gate are sufficient; Category authorization ownership is deferred to Slice 02 and ExperienceLevel dataset initialization ownership is deferred to Slice 04.
+- **Implemented; verified:** V4 Slice 01 — Fixed platform vocabularies (F03, F04, F05; BR-01, BR-11, BR-12, BR-13, BR-14, BR-17, BR-20): canonical non-persisted constant modules provide closed platform sets for `Location` (exactly 64 Data Contract members: 63 Vietnam province/city snapshot values plus `FOREIGN`; `REMOTE` excluded), `EmploymentType` (8 fixed values), and `WorkMode` (`ONSITE`, `HYBRID`, `REMOTE`); no collections, seeds, admin CRUD, or Job/CV integration. Focused coverage in `test/catalog/v4-fixed-vocabularies.test.js`.
+
+- **Prepared; verified:** V4 implementation readiness — the approved Product/Data contract paths are established, the Product Location definition is aligned to the canonical fixed snapshot of 63 Vietnam province/city members plus `FOREIGN`, and roadmap/project state now mark V4 `READY FOR IMPLEMENTATION`. No V4 business behavior or persistence was introduced by the readiness step itself. Slice 01 requires only fixed non-persisted vocabularies, so the existing unit-test infrastructure and backend gate are sufficient; Category authorization ownership is deferred to Slice 02 and ExperienceLevel dataset initialization ownership is deferred to Slice 04.
 
 - **Implemented; verified:** V3 Slice 09 — V3 acceptance & regression closure (F01–F09, F11–F17; BR-01–BR-29; TX-01–TX-07 as applied): cross-cutting acceptance suite confirms end-to-end Recruiter lifecycle, cross-tenant/`companyId` non-expansion, invalid-actor matrix, platform/Company restriction precedence, pre-activation denials, TERMINATED terminal transitions, session revocation after lock/reset/terminate, V1 Candidate + V2 CM membership SoT compatibility (no persisted `Company.managerUserId`), credential non-leakage, and explicit F10 PATCH/PUT absence. Coverage in `test/auth/v3-acceptance.test.js` plus prior V3 slice suites.
 
@@ -100,18 +102,18 @@ No V4 business slice is implemented yet. V5 through V17 remain `PLANNED`.
 
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
-- V4 is `READY FOR IMPLEMENTATION`; no V4 business slice has been implemented yet.
+- V4 is `READY FOR IMPLEMENTATION`; Slice 01 (fixed vocabularies) is complete. Remaining V4 slices (Category, ExperienceLevel, and later acceptance) are not started.
 - V5 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
 
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
 - `npm run verify:agent` consists of ESLint, deterministic architecture verification, and Vitest; it was run for this snapshot and passed.
-- The current baseline is 35 passing test files and 195 passing tests: prior V1/V2/V3 Slice 01–09 coverage plus TX-07 cutover and failure-path acceptance regressions.
-- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, `test/auth/v3-acceptance.test.js`, and existing V2 registration/onboarding/platform-admin suites.
+- The current baseline is 36 passing test files and 200 passing tests: prior V1/V2/V3 coverage plus V4 Slice 01 fixed-vocabulary tests.
+- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, `test/auth/v3-acceptance.test.js`, `test/catalog/v4-fixed-vocabularies.test.js`, and existing V2 registration/onboarding/platform-admin suites.
 - No automated test script is defined outside the backend package; frontend verification is outside `verify:agent` and was not run.
 - Backend startup, Cloudinary connectivity/operations, live SMTP delivery, endpoint smoke tests outside automated registration coverage, and frontend verification are outside `verify:agent` and were not run, so their behavior is not verified by this snapshot.
 
 ## Next recommended task
 
-Begin V4 Slice 01 — fixed platform vocabularies — from the approved V4 Product/Data contracts. Do not add V4 Category or ExperienceLevel behavior before its dependency-ordered slice, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) without a new approved specification.
+Begin V4 Slice 02 — Category foundation and Platform Admin create FIELD/POSITION — from the approved V4 Product/Data contracts. Do not add ExperienceLevel behavior before its dependency-ordered slice, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) without a new approved specification.
