@@ -133,81 +133,170 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
     };
   };
 
-  it.each([JOB_STATUS.DRAFT, JOB_STATUS.PENDING_APPROVAL])(
-    "lets Company Manager physically delete %s without soft-delete fields (BR-33/TX-04)",
-    async (status) => {
-      const agent = createTestAgent();
-      const manager = await createActiveCompanyManagerContext({
-        email: `cm.job.delete.${status}@example.com`,
-        businessRegistrationNumber: `BRN-V5-F12-${status}`,
+  it("lets current Primary Recruiter physically delete DRAFT without soft-delete fields (BR-33/BR-34/TX-04)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.delete.draft@example.com",
+      businessRegistrationNumber: "BRN-V5-F12-DRAFT",
+    });
+    const recruiter = await createActiveRecruiterContext({
+      email: "recruiter.job.delete.draft@example.com",
+      company: manager.company,
+      employeeCode: "NV-F12-DRAFT",
+    });
+    const catalog = await seedCatalog();
+    const { recruiterToken, job: draft } = await createDraftJobViaApi({
+      agent,
+      recruiter,
+      content: buildCompleteContent(catalog, {
+        title: "Partial draft ok",
+        jobDescription: null,
+      }),
+    });
+
+    const companyCountBefore = await Company.countDocuments();
+    const membershipCountBefore = await CompanyMember.countDocuments();
+    const categoryCountBefore = await Category.countDocuments();
+    const experienceLevelCountBefore = await ExperienceLevel.countDocuments();
+
+    const response = await agent
+      .delete(`/api/jobs/${draft.id}`)
+      .set("Authorization", `Bearer ${recruiterToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toMatch(/deleted/i);
+    expect(response.body.jobId).toBe(draft.id);
+    expect(response.body).not.toHaveProperty("job");
+    expect(response.body).not.toHaveProperty("deletedAt");
+    expect(response.body).not.toHaveProperty("isDeleted");
+    expect(response.body).not.toHaveProperty("deletionReason");
+
+    expect(await Job.findById(draft.id)).toBeNull();
+    expect(await Job.countDocuments()).toBe(0);
+
+    expect(await Company.countDocuments()).toBe(companyCountBefore);
+    expect(await CompanyMember.countDocuments()).toBe(membershipCountBefore);
+    expect(await Category.countDocuments()).toBe(categoryCountBefore);
+    expect(await ExperienceLevel.countDocuments()).toBe(
+      experienceLevelCountBefore,
+    );
+  });
+
+  it("lets Company Manager physically delete PENDING_APPROVAL without soft-delete fields (BR-33/TX-04)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.delete.pending@example.com",
+      businessRegistrationNumber: "BRN-V5-F12-PENDING",
+    });
+    const recruiter = await createActiveRecruiterContext({
+      email: "recruiter.job.delete.pending@example.com",
+      company: manager.company,
+      employeeCode: "NV-F12-PENDING",
+    });
+    const catalog = await seedCatalog();
+    const { job: pending } = await createSubmittedPendingJob({
+      agent,
+      recruiter,
+      content: buildCompleteContent(catalog),
+    });
+
+    const companyCountBefore = await Company.countDocuments();
+    const membershipCountBefore = await CompanyMember.countDocuments();
+    const categoryCountBefore = await Category.countDocuments();
+    const experienceLevelCountBefore = await ExperienceLevel.countDocuments();
+
+    const managerToken = await loginAndGetAccessToken(agent, {
+      email: manager.user.email,
+      password: DEFAULT_PASSWORD,
+    });
+
+    const response = await agent
+      .delete(`/api/jobs/${pending.id}`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toMatch(/deleted/i);
+    expect(response.body.jobId).toBe(pending.id);
+    expect(response.body).not.toHaveProperty("job");
+    expect(response.body).not.toHaveProperty("deletedAt");
+    expect(response.body).not.toHaveProperty("isDeleted");
+
+    expect(await Job.findById(pending.id)).toBeNull();
+    expect(await Job.countDocuments()).toBe(0);
+
+    expect(await Company.countDocuments()).toBe(companyCountBefore);
+    expect(await CompanyMember.countDocuments()).toBe(membershipCountBefore);
+    expect(await Category.countDocuments()).toBe(categoryCountBefore);
+    expect(await ExperienceLevel.countDocuments()).toBe(
+      experienceLevelCountBefore,
+    );
+  });
+
+  it("denies Company Manager DRAFT delete, peer Recruiter DRAFT delete, and Primary PENDING delete (BR-33/BR-34)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.delete.auth@example.com",
+      businessRegistrationNumber: "BRN-V5-F12-AUTH",
+    });
+    const primary = await createActiveRecruiterContext({
+      email: "recruiter.job.delete.primary@example.com",
+      company: manager.company,
+      employeeCode: "NV-F12-AUTH-P",
+    });
+    const peer = await createActiveRecruiterContext({
+      email: "recruiter.job.delete.peer@example.com",
+      company: manager.company,
+      employeeCode: "NV-F12-AUTH-PEER",
+    });
+    const catalog = await seedCatalog();
+    const { recruiterToken: primaryToken, job: draft } =
+      await createDraftJobViaApi({
+        agent,
+        recruiter: primary,
+        content: buildCompleteContent(catalog, {
+          title: "Owned draft",
+        }),
       });
-      const recruiter = await createActiveRecruiterContext({
-        email: `recruiter.job.delete.${status}@example.com`,
-        company: manager.company,
-        employeeCode: `NV-F12-${status}`,
-      });
-      const catalog = await seedCatalog();
+    const { job: pending } = await createSubmittedPendingJob({
+      agent,
+      recruiter: primary,
+      content: buildCompleteContent(catalog, {
+        title: "Owned pending",
+      }),
+    });
 
-      const created =
-        status === JOB_STATUS.DRAFT
-          ? await createDraftJobViaApi({
-              agent,
-              recruiter,
-              content: buildCompleteContent(catalog, {
-                title: "Partial draft ok",
-                jobDescription: null,
-              }),
-            })
-          : await createSubmittedPendingJob({
-              agent,
-              recruiter,
-              content: buildCompleteContent(catalog),
-            });
+    const managerToken = await loginAndGetAccessToken(agent, {
+      email: manager.user.email,
+      password: DEFAULT_PASSWORD,
+    });
+    const peerToken = await loginAndGetAccessToken(agent, {
+      email: peer.user.email,
+      password: DEFAULT_PASSWORD,
+    });
 
-      const companyCountBefore = await Company.countDocuments();
-      const membershipCountBefore = await CompanyMember.countDocuments();
-      const categoryCountBefore = await Category.countDocuments();
-      const experienceLevelCountBefore = await ExperienceLevel.countDocuments();
+    const managerDraftDelete = await agent
+      .delete(`/api/jobs/${draft.id}`)
+      .set("Authorization", `Bearer ${managerToken}`);
 
-      const managerToken = await loginAndGetAccessToken(agent, {
-        email: manager.user.email,
-        password: DEFAULT_PASSWORD,
-      });
+    expect(managerDraftDelete.status).toBe(403);
+    expect(await Job.findById(draft.id)).not.toBeNull();
 
-      const response = await agent
-        .delete(`/api/jobs/${created.job.id}`)
-        .set("Authorization", `Bearer ${managerToken}`);
+    const peerDraftDelete = await agent
+      .delete(`/api/jobs/${draft.id}`)
+      .set("Authorization", `Bearer ${peerToken}`);
 
-      expect(response.status).toBe(200);
-      expect(response.body.message).toMatch(/deleted/i);
-      expect(response.body.jobId).toBe(created.job.id);
-      expect(response.body).not.toHaveProperty("job");
-      expect(response.body).not.toHaveProperty("deletedAt");
-      expect(response.body).not.toHaveProperty("isDeleted");
-      expect(response.body).not.toHaveProperty("deletionReason");
+    expect(peerDraftDelete.status).toBe(403);
+    expect(await Job.findById(draft.id)).not.toBeNull();
 
-      expect(await Job.findById(created.job.id)).toBeNull();
-      expect(await Job.countDocuments()).toBe(0);
+    const primaryPendingDelete = await agent
+      .delete(`/api/jobs/${pending.id}`)
+      .set("Authorization", `Bearer ${primaryToken}`);
 
-      expect(await Company.countDocuments()).toBe(companyCountBefore);
-      expect(await CompanyMember.countDocuments()).toBe(membershipCountBefore);
-      expect(await Category.countDocuments()).toBe(categoryCountBefore);
-      expect(await ExperienceLevel.countDocuments()).toBe(
-        experienceLevelCountBefore,
-      );
+    expect(primaryPendingDelete.status).toBe(403);
+    expect(await Job.findById(pending.id)).not.toBeNull();
+  });
 
-      expect(await Company.findById(manager.company._id)).not.toBeNull();
-      expect(
-        await CompanyMember.findById(recruiter.membership._id),
-      ).not.toBeNull();
-      expect(await Category.findById(catalog.field.id)).not.toBeNull();
-      expect(
-        await ExperienceLevel.findById(catalog.experienceLevelId),
-      ).not.toBeNull();
-    },
-  );
-
-  it("denies Recruiter (including Primary) and cross-tenant Manager delete (BR-34/BR-38)", async () => {
+  it("denies cross-tenant Manager delete (BR-38)", async () => {
     const agent = createTestAgent();
     const companyA = await createActiveCompanyManagerContext({
       email: "cm.job.delete.a@example.com",
@@ -223,35 +312,28 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
       employeeCode: "NV-F12-AUTH",
     });
     const catalog = await seedCatalog();
-    const { recruiterToken, job: draft } = await createDraftJobViaApi({
+    const { job: pending } = await createSubmittedPendingJob({
       agent,
       recruiter,
-      content: buildCompleteContent(catalog, {
-        title: "Owned draft",
-      }),
+      content: buildCompleteContent(catalog),
     });
-
-    const recruiterResponse = await agent
-      .delete(`/api/jobs/${draft.id}`)
-      .set("Authorization", `Bearer ${recruiterToken}`);
-
-    expect(recruiterResponse.status).toBe(403);
-    expect(await Job.findById(draft.id)).not.toBeNull();
 
     const foreignToken = await loginAndGetAccessToken(agent, {
       email: companyB.user.email,
       password: DEFAULT_PASSWORD,
     });
     const foreignResponse = await agent
-      .delete(`/api/jobs/${draft.id}`)
+      .delete(`/api/jobs/${pending.id}`)
       .set("Authorization", `Bearer ${foreignToken}`)
       .send({
         companyId: companyA.company._id.toString(),
       });
 
     expect(foreignResponse.status).toBe(403);
-    expect(await Job.findById(draft.id)).not.toBeNull();
-    expect((await Job.findById(draft.id).lean()).status).toBe(JOB_STATUS.DRAFT);
+    expect(await Job.findById(pending.id)).not.toBeNull();
+    expect((await Job.findById(pending.id).lean()).status).toBe(
+      JOB_STATUS.PENDING_APPROVAL,
+    );
   });
 
   it("preserves PUBLISHED, CLOSED, and EXPIRED historical Jobs (BR-32/BR-33)", async () => {
@@ -295,23 +377,33 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
       email: manager.user.email,
       password: DEFAULT_PASSWORD,
     });
+    const recruiterToken = await loginAndGetAccessToken(agent, {
+      email: recruiter.user.email,
+      password: DEFAULT_PASSWORD,
+    });
 
     for (const job of [published, closed, expired]) {
-      const response = await agent
+      const managerResponse = await agent
         .delete(`/api/jobs/${job._id}`)
         .set("Authorization", `Bearer ${managerToken}`);
 
-      expect(response.status).toBe(409);
-      expect(response.body.error.message).toMatch(
+      expect(managerResponse.status).toBe(409);
+      expect(managerResponse.body.error.message).toMatch(
         /never been published|DRAFT or PENDING_APPROVAL/i,
       );
+
+      const recruiterResponse = await agent
+        .delete(`/api/jobs/${job._id}`)
+        .set("Authorization", `Bearer ${recruiterToken}`);
+
+      expect(recruiterResponse.status).toBe(409);
       expect(await Job.findById(job._id)).not.toBeNull();
     }
 
     expect(await Job.countDocuments()).toBe(3);
   });
 
-  it("rejects stale delete after approve and second delete of missing Job (TX-04)", async () => {
+  it("rejects stale delete after approve/submit and second delete of missing Job (TX-04)", async () => {
     const agent = createTestAgent();
     const manager = await createActiveCompanyManagerContext({
       email: "cm.job.delete.stale@example.com",
@@ -323,7 +415,7 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
       employeeCode: "NV-F12-STALE",
     });
     const catalog = await seedCatalog();
-    const { job: pending } = await createSubmittedPendingJob({
+    const { recruiterToken, job: pending } = await createSubmittedPendingJob({
       agent,
       recruiter,
       content: buildCompleteContent(catalog),
@@ -359,16 +451,40 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
       }),
     });
 
-    const deleteResponse = await agent
+    const submitResponse = await agent
+      .post(`/api/jobs/${draft.id}/submit`)
+      .set("Authorization", `Bearer ${recruiterToken}`);
+
+    expect(submitResponse.status).toBe(200);
+
+    const stalePrimaryDelete = await agent
       .delete(`/api/jobs/${draft.id}`)
-      .set("Authorization", `Bearer ${managerToken}`);
+      .set("Authorization", `Bearer ${recruiterToken}`);
+
+    expect(stalePrimaryDelete.status).toBe(403);
+    expect(await Job.findById(draft.id)).not.toBeNull();
+    expect((await Job.findById(draft.id).lean()).status).toBe(
+      JOB_STATUS.PENDING_APPROVAL,
+    );
+
+    const { job: deletableDraft } = await createDraftJobViaApi({
+      agent,
+      recruiter,
+      content: buildCompleteContent(catalog, {
+        title: "Deletable draft",
+      }),
+    });
+
+    const deleteResponse = await agent
+      .delete(`/api/jobs/${deletableDraft.id}`)
+      .set("Authorization", `Bearer ${recruiterToken}`);
 
     expect(deleteResponse.status).toBe(200);
-    expect(await Job.findById(draft.id)).toBeNull();
+    expect(await Job.findById(deletableDraft.id)).toBeNull();
 
     const secondDelete = await agent
-      .delete(`/api/jobs/${draft.id}`)
-      .set("Authorization", `Bearer ${managerToken}`);
+      .delete(`/api/jobs/${deletableDraft.id}`)
+      .set("Authorization", `Bearer ${recruiterToken}`);
 
     expect(secondDelete.status).toBe(404);
   });
@@ -389,34 +505,51 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
       employeeCode: "NV-F12-EXP",
     });
     const catalog = await seedCatalog();
-    const { job: draft } = await createDraftJobViaApi({
+    const { recruiterToken, job: draft } = await createDraftJobViaApi({
       agent,
       recruiter,
       content: buildCompleteContent(catalog, {
         title: "Tenant draft",
       }),
     });
+    const { job: pending } = await createSubmittedPendingJob({
+      agent,
+      recruiter,
+      content: buildCompleteContent(catalog, {
+        title: "Tenant pending",
+      }),
+    });
+
+    const primaryExpanded = await agent
+      .delete(`/api/jobs/${draft.id}`)
+      .set("Authorization", `Bearer ${recruiterToken}`)
+      .send({
+        companyId: companyB.company._id.toString(),
+      });
+
+    expect(primaryExpanded.status).toBe(403);
+    expect(await Job.findById(draft.id)).not.toBeNull();
 
     const managerToken = await loginAndGetAccessToken(agent, {
       email: companyA.user.email,
       password: DEFAULT_PASSWORD,
     });
 
-    const response = await agent
-      .delete(`/api/jobs/${draft.id}`)
+    const managerExpanded = await agent
+      .delete(`/api/jobs/${pending.id}`)
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         companyId: companyB.company._id.toString(),
       });
 
-    expect(response.status).toBe(403);
-    expect(response.body.error.message).toMatch(
+    expect(managerExpanded.status).toBe(403);
+    expect(managerExpanded.body.error.message).toMatch(
       /company identifier is not an authorization source/i,
     );
-    expect(await Job.findById(draft.id)).not.toBeNull();
+    expect(await Job.findById(pending.id)).not.toBeNull();
   });
 
-  it("clears outstanding Primary responsibility after pre-publication delete (BR-41 consequence)", async () => {
+  it("clears outstanding Primary responsibility after Primary DRAFT delete (BR-41 consequence)", async () => {
     const agent = createTestAgent();
     const manager = await createActiveCompanyManagerContext({
       email: "cm.job.delete.br41@example.com",
@@ -428,7 +561,7 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
       employeeCode: "NV-F12-BR41",
     });
     const catalog = await seedCatalog();
-    const { job: draft } = await createDraftJobViaApi({
+    const { recruiterToken, job: draft } = await createDraftJobViaApi({
       agent,
       recruiter,
       content: buildCompleteContent(catalog, {
@@ -449,7 +582,7 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
 
     const deleteResponse = await agent
       .delete(`/api/jobs/${draft.id}`)
-      .set("Authorization", `Bearer ${managerToken}`);
+      .set("Authorization", `Bearer ${recruiterToken}`);
 
     expect(deleteResponse.status).toBe(200);
     expect(await Job.findById(draft.id)).toBeNull();

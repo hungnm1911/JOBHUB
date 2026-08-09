@@ -83,7 +83,7 @@ router.post(
 router.delete(
   "/:jobId",
   authenticateAccess,
-  authorizeCompanyManagerBusinessAccess,
+  authorizeCompanyStaffBusinessAccess,
   deletePrePublicationJobHandler,
 );
 
