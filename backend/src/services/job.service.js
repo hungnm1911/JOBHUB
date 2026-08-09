@@ -7,6 +7,7 @@ import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_STATUS, {
+  COMPANY_MANAGER_INTERNAL_VISIBLE_JOB_STATUSES,
   OUTSTANDING_PRIMARY_JOB_STATUSES,
   PRE_PUBLICATION_DELETABLE_JOB_STATUSES,
 } from "../constants/job-status.js";
@@ -1014,7 +1015,7 @@ const assertNoOutstandingPrimaryResponsibility = async ({
 
 // BR-36 / BR-37: canonical Company-scoped internal visibility filter. Creator
 // / historical Primary are intentionally absent (BR-43). Not for public
-// discovery.
+// discovery. DRAFT remains private to the current Primary Recruiter.
 const buildInternalJobVisibilityFilter = ({
   companyId,
   companyRole,
@@ -1023,6 +1024,9 @@ const buildInternalJobVisibilityFilter = ({
   if (companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
     return {
       companyId,
+      status: {
+        $in: [...COMPANY_MANAGER_INTERNAL_VISIBLE_JOB_STATUSES],
+      },
     };
   }
 
@@ -1051,7 +1055,7 @@ const isJobInternallyVisible = ({
   membershipId,
 } = {}) => {
   if (companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
-    return true;
+    return COMPANY_MANAGER_INTERNAL_VISIBLE_JOB_STATUSES.includes(job.status);
   }
 
   if (companyRole === COMPANY_MEMBER_ROLE.RECRUITER) {
@@ -1125,23 +1129,15 @@ const assertCompanyManagerJobApprovalAuthority = ({
   }
 };
 
-// BR-33 / BR-34 / F12: manual hard-delete authority for pre-publication Jobs.
+// BR-33 / BR-34 / F12: manual hard-delete authority depends on lifecycle state.
 // Distinct from F07 reject (PENDING_APPROVAL outcome) but shares TX-04 delete.
-const assertCompanyManagerPrePublicationDeleteAuthority = ({
+// Historical creator / former Primary do not authorize (BR-43).
+const assertPrePublicationDeleteAuthority = ({
   job,
   companyRole,
+  membershipId,
   tenantCompanyId,
 } = {}) => {
-  if (companyRole !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
-    throw new AppError(
-      403,
-      "Only the Company Manager can delete a pre-publication Job",
-      {
-        field: "role",
-      },
-    );
-  }
-
   // BR-38: Job id / foreign company association alone do not authorize.
   assertSameCompanyTenant({
     resourceCompanyId: job.companyId,
@@ -1160,6 +1156,39 @@ const assertCompanyManagerPrePublicationDeleteAuthority = ({
       },
     );
   }
+
+  if (job.status === JOB_STATUS.DRAFT) {
+    if (
+      companyRole === COMPANY_MEMBER_ROLE.RECRUITER &&
+      job.primaryRecruiterCompanyMemberId.toString() ===
+        membershipId.toString()
+    ) {
+      return;
+    }
+
+    throw new AppError(
+      403,
+      "Only the current Primary Recruiter can delete a DRAFT Job",
+      {
+        field: "role",
+      },
+    );
+  }
+
+  // PENDING_APPROVAL: manual hard-delete is Company Manager only. Recruiter
+  // (including current Primary) is denied. F07 reject remains a separate
+  // CM-only path that also uses TX-04.
+  if (companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
+    return;
+  }
+
+  throw new AppError(
+    403,
+    "Only the Company Manager can delete a PENDING_APPROVAL Job",
+    {
+      field: "role",
+    },
+  );
 };
 
 // TX-04: single-document physical delete. Shared by F07 reject and F12 manual
@@ -1168,14 +1197,21 @@ const hardDeleteJobDocument = async ({
   jobId,
   companyId,
   statuses,
+  primaryRecruiterCompanyMemberId = undefined,
 } = {}) => {
-  return Job.findOneAndDelete({
+  const filter = {
     _id: jobId,
     companyId,
     status: {
       $in: statuses,
     },
-  });
+  };
+
+  if (primaryRecruiterCompanyMemberId != null) {
+    filter.primaryRecruiterCompanyMemberId = primaryRecruiterCompanyMemberId;
+  }
+
+  return Job.findOneAndDelete(filter);
 };
 
 const approveAndPublishJob = async ({
@@ -1308,14 +1344,14 @@ const rejectPendingJob = async ({
 };
 
 const deletePrePublicationJob = async ({
-  managerUser,
+  actorUser,
   jobId,
   clientCompanyId,
 } = {}) => {
-  // BR-34 / BR-38: trusted CM membership only; Recruiter (including current
-  // Primary) and client companyId/Job id alone do not authorize hard-delete.
-  const context = await resolveCompanyManagerRecruiterManagementContext({
-    user: managerUser,
+  // BR-33 / BR-34 / BR-38: membership-derived tenant; client companyId / Job id
+  // alone do not authorize. Authority is lifecycle-state dependent.
+  const context = await resolveCompanyStaffBusinessContext({
+    user: actorUser,
     clientCompanyId,
   });
 
@@ -1333,22 +1369,32 @@ const deletePrePublicationJob = async ({
     });
   }
 
-  assertCompanyManagerPrePublicationDeleteAuthority({
+  assertPrePublicationDeleteAuthority({
     job,
     companyRole: context.companyRole,
+    membershipId: context.membership._id,
     tenantCompanyId: context.companyId,
   });
 
-  // TX-04 / BR-32 / BR-33: conditional physical delete while still DRAFT or
-  // PENDING_APPROVAL for this tenant. Stale requests after publish or terminal
-  // historical transition cannot delete. No DELETED state, isDeleted,
-  // deletedAt, or cascade into Company / CompanyMember / Category /
-  // ExperienceLevel.
-  const deletedJob = await hardDeleteJobDocument({
-    jobId: job._id,
-    companyId: context.companyId,
-    statuses: PRE_PUBLICATION_DELETABLE_JOB_STATUSES,
-  });
+  // TX-04 / BR-32 / BR-33: conditional physical delete for the authorized
+  // lifecycle state at mutation time. Stale requests after submit/publish/
+  // authority change cannot delete. No DELETED state, isDeleted, deletedAt,
+  // or cascade into Company / CompanyMember / Category / ExperienceLevel.
+  const deleteFilter =
+    job.status === JOB_STATUS.DRAFT
+      ? {
+          jobId: job._id,
+          companyId: context.companyId,
+          statuses: [JOB_STATUS.DRAFT],
+          primaryRecruiterCompanyMemberId: context.membership._id,
+        }
+      : {
+          jobId: job._id,
+          companyId: context.companyId,
+          statuses: [JOB_STATUS.PENDING_APPROVAL],
+        };
+
+  const deletedJob = await hardDeleteJobDocument(deleteFilter);
 
   if (!deletedJob) {
     throw new AppError(
@@ -1642,13 +1688,13 @@ const getInternalJob = async ({
 export {
   approveAndPublishJob,
   assertCompanyManagerJobApprovalAuthority,
-  assertCompanyManagerPrePublicationDeleteAuthority,
   assertCompanyManagerPrimaryReassignmentAuthority,
   assertJobInternallyVisible,
   assertJobPrimaryRecruiterValidForLifecycle,
   assertJobReadyForApprovalLifecycle,
   assertManualCloseJobAuthority,
   assertNoOutstandingPrimaryResponsibility,
+  assertPrePublicationDeleteAuthority,
   assertRecruiterMembershipValidForJobPrimary,
   buildInternalJobVisibilityFilter,
   closePublishedJob,

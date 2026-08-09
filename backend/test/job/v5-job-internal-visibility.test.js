@@ -91,7 +91,7 @@ describe("V5 Slice 03 — Internal Job visibility (F03)", () => {
       });
     });
 
-    it("builds Company Manager filter as all Jobs in Company (BR-37)", () => {
+    it("builds Company Manager filter as Company Jobs from PENDING_APPROVAL onward (BR-37)", () => {
       const companyId = new mongoose.Types.ObjectId();
       const membershipId = new mongoose.Types.ObjectId();
 
@@ -103,6 +103,14 @@ describe("V5 Slice 03 — Internal Job visibility (F03)", () => {
         }),
       ).toEqual({
         companyId,
+        status: {
+          $in: [
+            JOB_STATUS.PENDING_APPROVAL,
+            JOB_STATUS.PUBLISHED,
+            JOB_STATUS.CLOSED,
+            JOB_STATUS.EXPIRED,
+          ],
+        },
       });
     });
 
@@ -118,6 +126,19 @@ describe("V5 Slice 03 — Internal Job visibility (F03)", () => {
         },
         companyRole: COMPANY_MEMBER_ROLE.RECRUITER,
         membershipId,
+      });
+
+      expect(visible).toBe(false);
+    });
+
+    it("does not grant Company Manager visibility for DRAFT (BR-37)", () => {
+      const visible = isJobInternallyVisible({
+        job: {
+          primaryRecruiterCompanyMemberId: new mongoose.Types.ObjectId(),
+          status: JOB_STATUS.DRAFT,
+        },
+        companyRole: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+        membershipId: new mongoose.Types.ObjectId(),
       });
 
       expect(visible).toBe(false);
@@ -328,7 +349,7 @@ describe("V5 Slice 03 — Internal Job visibility (F03)", () => {
       }
     });
 
-    it("lets Company Manager list and read every Company Job with content, status, creator, and Primary (BR-37)", async () => {
+    it("lets Company Manager list and read same-Company Jobs from PENDING_APPROVAL onward, excluding DRAFT (BR-37)", async () => {
       const agent = createTestAgent();
       const manager = await createActiveCompanyManagerContext({
         email: "cm.job.vis.cm@example.com",
@@ -349,7 +370,7 @@ describe("V5 Slice 03 — Internal Job visibility (F03)", () => {
         companyId: manager.company._id,
         createdByCompanyMemberId: recruiterA.membership._id,
         status: JOB_STATUS.DRAFT,
-        title: "CM Visible Draft",
+        title: "CM Hidden Draft",
       });
       const pending = await createJob({
         companyId: manager.company._id,
@@ -389,9 +410,6 @@ describe("V5 Slice 03 — Internal Job visibility (F03)", () => {
       expect(jobIds(listResponse.body.jobs)).toEqual(
         jobIds([
           {
-            id: draft._id.toString(),
-          },
-          {
             id: pending._id.toString(),
           },
           {
@@ -405,19 +423,26 @@ describe("V5 Slice 03 — Internal Job visibility (F03)", () => {
           },
         ]),
       );
+      expect(jobIds(listResponse.body.jobs)).not.toContain(draft._id.toString());
+
+      const draftDetail = await agent
+        .get(`/api/jobs/${draft._id}`)
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      expect(draftDetail.status).toBe(403);
 
       const detailResponse = await agent
-        .get(`/api/jobs/${draft._id}`)
+        .get(`/api/jobs/${pending._id}`)
         .set("Authorization", `Bearer ${accessToken}`);
 
       expect(detailResponse.status).toBe(200);
       expect(detailResponse.body.job).toMatchObject({
-        id: draft._id.toString(),
+        id: pending._id.toString(),
         companyId: manager.company._id.toString(),
-        title: "CM Visible Draft",
-        status: JOB_STATUS.DRAFT,
-        createdByCompanyMemberId: recruiterA.membership._id.toString(),
-        primaryRecruiterCompanyMemberId: recruiterA.membership._id.toString(),
+        title: "CM Visible Pending",
+        status: JOB_STATUS.PENDING_APPROVAL,
+        createdByCompanyMemberId: recruiterB.membership._id.toString(),
+        primaryRecruiterCompanyMemberId: recruiterB.membership._id.toString(),
       });
     });
 

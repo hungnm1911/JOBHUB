@@ -156,8 +156,11 @@ Recruiter không được:
 * tự publish Job;
 * chỉnh sửa Job sau khi đã submit;
 * thay Primary Recruiter;
-* xóa hoàn toàn Job;
+* hard-delete Job sau khi Job đã rời `DRAFT`;
 * tạo catalog riêng trong quá trình tạo Job.
+
+Current Primary Recruiter được hard-delete Job mình phụ trách khi Job vẫn đang
+ở `DRAFT`.
 
 ### 4.3. Primary Recruiter
 
@@ -191,15 +194,20 @@ Company Manager là actor có authority xét duyệt Job của Company mình.
 
 Company Manager được:
 
-* xem toàn bộ Job của Company;
-* xem nội dung Job;
+* xem các Job thuộc Company mình từ `PENDING_APPROVAL` trở đi;
+* xem nội dung Job trong phạm vi được phép xem;
 * xem người tạo Job;
 * xem Primary Recruiter hiện tại;
 * approve Job;
-* reject Job;
+* reject Job `PENDING_APPROVAL`;
+* hard-delete Job `PENDING_APPROVAL` khi business rule cho phép;
 * thay Primary Recruiter khi Job đang `PUBLISHED`;
 * đóng Job đang `PUBLISHED`;
 * xóa hoàn toàn Job chưa từng được publish khi business rule cho phép.
+
+Company Manager không được xem Job `DRAFT`.
+
+Company Manager không được xem hoặc hard-delete Job `DRAFT`.
 
 Company Manager không được chỉnh sửa nội dung tuyển dụng thay Recruiter.
 
@@ -542,9 +550,9 @@ Cho phép actor xem Job trong phạm vi Company và responsibility được V5 c
 
 Đối với Company Manager:
 
-1. Company Manager được xem toàn bộ Job thuộc Company mình.
-2. Company Manager được xem người tạo Job.
-3. Company Manager được xem Primary Recruiter hiện tại.
+1. Company Manager được xem Job thuộc Company mình khi Job đang ở `PENDING_APPROVAL`, `PUBLISHED`, `CLOSED` hoặc `EXPIRED`.
+2. Company Manager không được xem Job `DRAFT`.
+3. Trong phạm vi Job được phép xem, Company Manager được xem nội dung, trạng thái, người tạo Job và Primary Recruiter hiện tại.
 
 ### Kết quả
 
@@ -1004,10 +1012,11 @@ Job không được coi là cơ hội công khai nếu:
 
 ---
 
-## F12 — Company Manager xóa Job chưa từng publish
+## F12 — Hard-delete Job trước publication theo lifecycle authority
 
 ### Actor
 
+* Primary Recruiter
 * Company Manager
 
 ### Mục tiêu
@@ -1018,13 +1027,28 @@ Loại bỏ hoàn toàn một Job nội bộ chưa từng trở thành Job công
 
 * Job thuộc Company của Company Manager;
 * Job chưa từng được publish;
-* Job đang ở trạng thái cho phép xóa trong pre-publication lifecycle.
+* actor thuộc đúng Company của Job;
+* nếu Job đang `DRAFT`, actor phải là current Primary Recruiter;
+* nếu Job đang `PENDING_APPROVAL`, actor phải là Company Manager của Company sở hữu Job.
 
 ### Luồng chính
 
-1. Company Manager yêu cầu xóa Job.
-2. Job bị loại bỏ hoàn toàn.
-3. Job không còn tham gia bất kỳ business operation nào.
+1. Actor yêu cầu hard-delete Job.
+2. Hệ thống xác định tenant, lifecycle state và actor authority.
+3. Nếu Job đang `DRAFT`, chỉ current Primary Recruiter được phép tiếp tục.
+4. Nếu Job đang `PENDING_APPROVAL`, chỉ Company Manager của Company sở hữu Job
+   được phép tiếp tục.
+5. Job bị xóa hoàn toàn.
+6. Job không còn tham gia bất kỳ business operation nào.
+
+### Trường hợp từ chối
+
+* Company Manager cố hard-delete `DRAFT`;
+* Recruiter không phải current Primary cố hard-delete `DRAFT`;
+* Recruiter cố hard-delete `PENDING_APPROVAL`;
+* actor thuộc Company khác;
+* Job đang `PUBLISHED`, `CLOSED` hoặc `EXPIRED`;
+* historical creator/former Primary không còn current authority.
 
 ### Kết quả
 
@@ -1411,22 +1435,42 @@ Không hard-delete:
 
 ---
 
-## BR-33 — Hard-delete chỉ áp dụng trước publication
+## BR-33 — Hard-delete trước publication theo lifecycle authority
 
-Company Manager có thể xóa hoàn toàn Job chưa từng publish khi Job đang:
+Hard-delete chỉ áp dụng trước publication.
 
-* `DRAFT`;
-* `PENDING_APPROVAL`.
+Khi Job đang `DRAFT`:
 
-Reject là trường hợp riêng của `PENDING_APPROVAL` cũng dẫn đến hard-delete.
+* chỉ current Primary Recruiter được hard-delete;
+* Company Manager không được hard-delete;
+* Recruiter khác không được hard-delete.
+
+Khi Job đang `PENDING_APPROVAL`:
+
+* chỉ Company Manager thuộc Company sở hữu Job được manual hard-delete;
+* Recruiter không được hard-delete.
+
+Reject là trường hợp riêng của `PENDING_APPROVAL` do Company Manager thực hiện
+và cũng dẫn đến hard-delete.
+
+Không hard-delete `PUBLISHED`, `CLOSED` hoặc `EXPIRED`.
 
 ---
 
-## BR-34 — Recruiter không hard-delete Job
+## BR-34 — Primary Recruiter chỉ hard-delete DRAFT mình phụ trách
 
-Recruiter không có quyền xóa hoàn toàn Job.
+Current Primary Recruiter được hard-delete Job khi và chỉ khi Job đang `DRAFT`.
 
-Primary Recruiter chỉ có quyền đóng Job khi Job đang `PUBLISHED`.
+Recruiter không được hard-delete:
+
+* DRAFT của Recruiter khác;
+* `PENDING_APPROVAL`;
+* `PUBLISHED`;
+* `CLOSED`;
+* `EXPIRED`.
+
+Historical creator hoặc former Primary association không tự tạo hard-delete
+authority.
 
 ---
 
@@ -1457,7 +1501,16 @@ V5 không cấp thêm visibility ngoài các scope trên.
 
 ## BR-37 — Company Manager visibility
 
-Company Manager được xem toàn bộ Job thuộc Company mình, bao gồm:
+Company Manager được xem Job thuộc Company mình khi Job đang ở một trong các trạng thái:
+
+* `PENDING_APPROVAL`;
+* `PUBLISHED`;
+* `CLOSED`;
+* `EXPIRED`.
+
+Company Manager không được xem Job `DRAFT`.
+
+Đối với Job thuộc scope được phép xem, Company Manager được xem:
 
 * nội dung;
 * trạng thái;
@@ -1542,7 +1595,7 @@ không tự động cấp quyền hiện tại ngoài những quyền visibility
 | Submit duyệt                        | `DRAFT`            | `PENDING_APPROVAL` | Primary Recruiter                   |
 | Approve + publish                   | `PENDING_APPROVAL` | `PUBLISHED`        | Company Manager                     |
 | Reject                              | `PENDING_APPROVAL` | Không tồn tại      | Company Manager                     |
-| Xóa DRAFT                           | `DRAFT`            | Không tồn tại      | Company Manager                     |
+| Xóa DRAFT | `DRAFT` | Không tồn tại | Primary Recruiter |
 | Xóa Job chưa publish đang chờ duyệt | `PENDING_APPROVAL` | Không tồn tại      | Company Manager                     |
 | Thay Primary                        | `PUBLISHED`        | `PUBLISHED`        | Company Manager                     |
 | Đóng Job                            | `PUBLISHED`        | `CLOSED`           | Primary Recruiter / Company Manager |
@@ -1571,7 +1624,7 @@ Chỉ các transition được định nghĩa trong tài liệu này thuộc bus
 | Tạo Job                         | Recruiter                | Company của chính Recruiter | Recruiter hợp lệ                |
 | Xem Job mình là Primary         | Primary Recruiter        | Job thuộc cùng Company      | Mọi state còn tồn tại           |
 | Xem Job `PUBLISHED` của Company | Recruiter                | Company mình                | Job `PUBLISHED`                 |
-| Xem toàn bộ Job Company         | Company Manager          | Company mình                | Mọi state còn tồn tại           |
+| Xem Job Company từ `PENDING_APPROVAL` trở đi | Company Manager | Company mình | `PENDING_APPROVAL`, `PUBLISHED`, `CLOSED`, `EXPIRED` |
 | Sửa DRAFT                       | Primary Recruiter        | Job mình phụ trách          | `DRAFT`                         |
 | Submit                          | Primary Recruiter        | Job mình phụ trách          | `DRAFT` và đủ điều kiện         |
 | Approve                         | Company Manager          | Job Company mình            | `PENDING_APPROVAL`              |
@@ -1579,8 +1632,9 @@ Chỉ các transition được định nghĩa trong tài liệu này thuộc bus
 | Thay Primary                    | Company Manager          | Job Company mình            | `PUBLISHED`                     |
 | Close                           | Primary Recruiter        | Job mình phụ trách          | `PUBLISHED`                     |
 | Close                           | Company Manager          | Job Company mình            | `PUBLISHED`                     |
-| Hard-delete pre-publication Job | Company Manager          | Job Company mình            | `DRAFT` hoặc `PENDING_APPROVAL` |
-| Hard-delete Job đã publish      | Không actor nào trong V5 | —                           | Bị cấm                          |
+| Hard-delete DRAFT | Primary Recruiter | Job mình phụ trách | `DRAFT` |
+| Hard-delete pending Job | Company Manager | Job Company mình | `PENDING_APPROVAL` |
+| Hard-delete Job đã publish | Không actor nào trong V5 | — | Bị cấm |
 
 Các quyền được xác định từ:
 

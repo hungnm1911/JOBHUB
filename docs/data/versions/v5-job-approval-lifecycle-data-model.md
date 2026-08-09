@@ -669,7 +669,7 @@ V5 không duplicate hoặc redefine các enum set đó.
 
 Hỗ trợ:
 
-* Company Manager xem Job thuộc Company;
+* Company Manager xem các Job thuộc Company từ `PENDING_APPROVAL` trở đi;
 * Recruiter xem `PUBLISHED` Job của Company;
 * tenant-scoped lifecycle queries.
 
@@ -1158,15 +1158,24 @@ DRAFT → hard delete
 PENDING_APPROVAL → hard delete
 ```
 
-Chỉ Company Manager hợp lệ của Company owner được thực hiện theo Product Contract.
-
-Không tạo:
+Authorization phụ thuộc persisted lifecycle state:
 
 ```text
-DELETED
-isDeleted
-deletedAt
+DRAFT
+→ current Primary Recruiter của Job
+
+PENDING_APPROVAL
+→ Company Manager của Company owner
 ```
+
+Company Manager không có hard-delete authority đối với DRAFT.
+
+Recruiter không có hard-delete authority sau khi Job đã rời DRAFT.
+
+Mọi operation vẫn phải giữ canonical tenant boundary.
+
+
+Phần không tạo `DELETED`, `isDeleted`, `deletedAt` giữ nguyên.
 
 ---
 
@@ -1363,6 +1372,14 @@ Không có cascade write bắt buộc sang:
 
 Không yêu cầu transaction nhiều document.
 
+
+Authorization trước TX-04 phụ thuộc lifecycle state theo Product Contract:
+
+* `DRAFT` manual delete: current Primary Recruiter;
+* `PENDING_APPROVAL` manual delete/reject: Company Manager.
+
+TX-04 không tự mở rộng actor authority.
+
 ---
 
 ## 9.2. Recruiter lock/terminate interaction
@@ -1457,12 +1474,15 @@ Schema **không** được yêu cầu tất cả content field luôn non-null v�
 | chỉ `PUBLISHED` được reassign Primary             | Service | Lifecycle                         |
 | Primary mới cùng Company và hợp lệ                | Service | Cross-document                    |
 | close chỉ bởi Primary/CM                          | Service | Authorization                     |
-| hard-delete chỉ pre-publication                   | Service | Historical boundary               |
+| hard-delete chỉ pre-publication | Service | Historical boundary |
+| `DRAFT` hard-delete chỉ bởi current Primary | Service | Responsibility + lifecycle authorization |
+| `PENDING_APPROVAL` hard-delete chỉ bởi CM | Service | Role + lifecycle authorization |
 | published Job không hard-delete                   | Service | Historical invariant              |
 | expiration dùng deadline                          | Service | Effective-state rule              |
 | public eligibility xét Company + deadline         | Service | Cross-document/business rule      |
 | cross-tenant Job access bị cấm                    | Service | Tenant authorization              |
 | Recruiter lock/terminate phải xét outstanding Job | Service | Cross-collection business guard   |
+| Company Manager chỉ đọc Job từ `PENDING_APPROVAL` trở đi | Service | Authorization phụ thuộc role + Job lifecycle state |
 
 ---
 
@@ -1896,7 +1916,9 @@ Các invariant sau phải luôn được giữ ở canonical persisted state ho�
 29. Completed Job có đúng một ExperienceLevel.
 30. Reject không persist `REJECTED`.
 31. Reject xóa Job document.
-32. Manual pre-publication delete xóa Job document.
+32. Manual pre-publication delete xóa Job document; `DRAFT` delete chỉ bởi
+    current Primary Recruiter, còn `PENDING_APPROVAL` manual delete chỉ bởi
+    Company Manager của tenant owner.
 33. Published Job không bị hard-delete.
 34. `CLOSED` được giữ.
 35. `EXPIRED` được giữ.

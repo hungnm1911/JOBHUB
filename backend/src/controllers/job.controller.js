@@ -142,7 +142,7 @@ const rejectPendingJobHandler = async (request, response, next) => {
 const deletePrePublicationJobHandler = async (request, response, next) => {
   try {
     const result = await deletePrePublicationJob({
-      managerUser: request.auth.user,
+      actorUser: request.auth.user,
       jobId: request.params.jobId,
       clientCompanyId: readClientCompanyId(request),
     });
