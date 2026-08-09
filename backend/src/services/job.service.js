@@ -7,12 +7,29 @@ import JOB_STATUS, {
 import LOCATION from "../constants/location.js";
 import WORK_MODE from "../constants/work-mode.js";
 import Job from "../models/job.model.js";
-import { resolveRecruiterBusinessContext } from "./company.service.js";
+import {
+  assertSameCompanyTenant,
+  resolveRecruiterBusinessContext,
+} from "./company.service.js";
 import AppError from "../utils/app-error.js";
 
 const LOCATION_VALUES = new Set(Object.values(LOCATION));
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
+
+const DRAFT_CONTENT_FIELDS = Object.freeze([
+  "title",
+  "jobDescription",
+  "requiredSkills",
+  "salaryText",
+  "fieldCategoryIds",
+  "positionCategoryIds",
+  "location",
+  "employmentType",
+  "workModes",
+  "experienceLevelId",
+  "applicationDeadline",
+]);
 
 const toPublicJob = (job) => {
   return {
@@ -214,33 +231,59 @@ const normalizeOptionalDeadline = (value) => {
   return date;
 };
 
-const buildDraftContent = (content = {}) => {
-  const title = normalizeOptionalTrimmedString(content.title);
-  const jobDescription = normalizeOptionalTrimmedString(content.jobDescription);
-  const salaryText = normalizeOptionalTrimmedString(content.salaryText);
+const normalizeDraftContentField = (field, value) => {
+  switch (field) {
+    case "title":
+    case "jobDescription":
+    case "salaryText":
+      return normalizeOptionalTrimmedString(value);
+    case "requiredSkills":
+      return normalizeRequiredSkills(value);
+    case "fieldCategoryIds":
+    case "positionCategoryIds":
+      return normalizeObjectIdArray(value, field);
+    case "location":
+      return normalizeOptionalLocation(value);
+    case "employmentType":
+      return normalizeOptionalEmploymentType(value);
+    case "workModes":
+      return normalizeWorkModes(value);
+    case "experienceLevelId":
+      return normalizeOptionalObjectId(value, field);
+    case "applicationDeadline":
+      return normalizeOptionalDeadline(value);
+    default:
+      throw new AppError(400, `Unsupported Job content field: ${field}`, {
+        field,
+      });
+  }
+};
 
-  return {
-    title,
-    jobDescription,
-    requiredSkills: normalizeRequiredSkills(content.requiredSkills),
-    salaryText,
-    fieldCategoryIds: normalizeObjectIdArray(
-      content.fieldCategoryIds,
-      "fieldCategoryIds",
-    ),
-    positionCategoryIds: normalizeObjectIdArray(
-      content.positionCategoryIds,
-      "positionCategoryIds",
-    ),
-    location: normalizeOptionalLocation(content.location),
-    employmentType: normalizeOptionalEmploymentType(content.employmentType),
-    workModes: normalizeWorkModes(content.workModes),
-    experienceLevelId: normalizeOptionalObjectId(
-      content.experienceLevelId,
-      "experienceLevelId",
-    ),
-    applicationDeadline: normalizeOptionalDeadline(content.applicationDeadline),
-  };
+const buildDraftContent = (content = {}) => {
+  const draftContent = {};
+
+  for (const field of DRAFT_CONTENT_FIELDS) {
+    draftContent[field] = normalizeDraftContentField(
+      field,
+      Object.hasOwn(content, field) ? content[field] : undefined,
+    );
+  }
+
+  return draftContent;
+};
+
+const buildDraftContentPatch = (content = {}) => {
+  const patch = {};
+
+  for (const field of DRAFT_CONTENT_FIELDS) {
+    if (!Object.hasOwn(content, field)) {
+      continue;
+    }
+
+    patch[field] = normalizeDraftContentField(field, content[field]);
+  }
+
+  return patch;
 };
 
 const createDraftJob = async ({
@@ -268,6 +311,116 @@ const createDraftJob = async ({
   });
 
   return toPublicJob(job);
+};
+
+const loadJobForRecruiterMutation = async ({
+  jobId,
+  companyId,
+  primaryRecruiterCompanyMemberId,
+}) => {
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", {
+      field: "jobId",
+    });
+  }
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  // BR-38: knowing Job id does not authorize cross-tenant access.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId: companyId,
+  });
+
+  // BR-09: only current Primary Recruiter may edit DRAFT content.
+  if (
+    job.primaryRecruiterCompanyMemberId.toString() !==
+    primaryRecruiterCompanyMemberId.toString()
+  ) {
+    throw new AppError(403, "Only the Primary Recruiter can edit this Job", {
+      field: "primaryRecruiterCompanyMemberId",
+    });
+  }
+
+  return job;
+};
+
+const assertJobDraftContentMutable = (job) => {
+  if (job.status === JOB_STATUS.DRAFT) {
+    return;
+  }
+
+  // BR-19 / BR-24 / BR-25: non-DRAFT Jobs reject content mutation.
+  throw new AppError(
+    409,
+    "Job content can only be edited while the Job is DRAFT",
+    {
+      field: "status",
+      status: job.status,
+    },
+  );
+};
+
+const updateDraftJob = async ({
+  recruiterUser,
+  jobId,
+  clientCompanyId,
+  content = {},
+} = {}) => {
+  const context = await resolveRecruiterBusinessContext({
+    user: recruiterUser,
+    clientCompanyId,
+  });
+
+  const job = await loadJobForRecruiterMutation({
+    jobId,
+    companyId: context.companyId,
+    primaryRecruiterCompanyMemberId: context.membership._id,
+  });
+
+  assertJobDraftContentMutable(job);
+
+  const contentPatch = buildDraftContentPatch(content);
+
+  if (Object.keys(contentPatch).length === 0) {
+    return toPublicJob(job);
+  }
+
+  // Content-mutation boundary: only DRAFT content fields; ownership,
+  // creator, Primary, status, and publishedAt stay outside this operation.
+  const updatedJob = await Job.findOneAndUpdate(
+    {
+      _id: job._id,
+      companyId: context.companyId,
+      primaryRecruiterCompanyMemberId: context.membership._id,
+      status: JOB_STATUS.DRAFT,
+    },
+    {
+      $set: contentPatch,
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedJob) {
+    throw new AppError(
+      409,
+      "Job content can only be edited while the Job is DRAFT",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  return toPublicJob(updatedJob);
 };
 
 const findOutstandingPrimaryResponsibility = async ({
@@ -313,4 +466,5 @@ export {
   createDraftJob,
   findOutstandingPrimaryResponsibility,
   toPublicJob,
+  updateDraftJob,
 };
