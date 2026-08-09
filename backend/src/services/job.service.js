@@ -1,8 +1,10 @@
 import mongoose from "mongoose";
 
 import CATEGORY_LEVEL from "../constants/category-level.js";
+import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
+import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_STATUS, {
   OUTSTANDING_PRIMARY_JOB_STATUSES,
@@ -664,6 +666,163 @@ const assertJobApplicationDeadlineActive = (job, now = new Date()) => {
   }
 };
 
+// BR-30: deadline is the source of truth for expiration semantics.
+const getJobApplicationDeadline = (job) => {
+  if (job == null || job.applicationDeadline == null) {
+    return null;
+  }
+
+  const deadline =
+    job.applicationDeadline instanceof Date
+      ? job.applicationDeadline
+      : new Date(job.applicationDeadline);
+
+  if (Number.isNaN(deadline.getTime())) {
+    return null;
+  }
+
+  return deadline;
+};
+
+const hasJobApplicationDeadlinePassed = (job, now = new Date()) => {
+  const deadline = getJobApplicationDeadline(job);
+
+  if (deadline == null) {
+    return false;
+  }
+
+  return now.getTime() >= deadline.getTime();
+};
+
+// BR-30 / BR-31: persisted PUBLISHED past deadline is effectively EXPIRED even
+// before lifecycle processing persists the transition.
+const resolveEffectiveJobStatus = (job, now = new Date()) => {
+  if (job == null) {
+    return null;
+  }
+
+  if (
+    job.status === JOB_STATUS.PUBLISHED &&
+    hasJobApplicationDeadlinePassed(job, now)
+  ) {
+    return JOB_STATUS.EXPIRED;
+  }
+
+  return job.status;
+};
+
+const isJobEffectivelyPublished = (job, now = new Date()) => {
+  return resolveEffectiveJobStatus(job, now) === JOB_STATUS.PUBLISHED;
+};
+
+// BR-35: owning Company must still be operationally active.
+const isOwningCompanyActiveForPublicEligibility = (company) => {
+  if (company == null) {
+    return false;
+  }
+
+  return (
+    company.approvalStatus === COMPANY_APPROVAL_STATUS.APPROVED &&
+    company.operationalStatus === COMPANY_OPERATIONAL_STATUS.ACTIVE
+  );
+};
+
+// F11 / BR-35 / BR-40: reusable public-eligibility boundary only. Not a
+// discovery/search/Application surface.
+const isJobPubliclyEligible = ({
+  job,
+  company,
+  now = new Date(),
+} = {}) => {
+  if (job == null) {
+    return false;
+  }
+
+  // Effective PUBLISHED already requires now < applicationDeadline (BR-30/31).
+  if (!isJobEffectivelyPublished(job, now)) {
+    return false;
+  }
+
+  return isOwningCompanyActiveForPublicEligibility(company);
+};
+
+// F10 / TX-02: optional atomic persist of lifecycle expiration. Correctness of
+// business expiration does not depend on this write having already occurred.
+const expirePublishedJobIfDue = async ({
+  jobId,
+  now = new Date(),
+} = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", {
+      field: "jobId",
+    });
+  }
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  if (job.status !== JOB_STATUS.PUBLISHED) {
+    throw new AppError(
+      409,
+      "Only PUBLISHED Jobs may transition to EXPIRED",
+      {
+        field: "status",
+        status: job.status,
+      },
+    );
+  }
+
+  if (!hasJobApplicationDeadlinePassed(job, now)) {
+    throw new AppError(
+      409,
+      "Job applicationDeadline has not been reached",
+      {
+        field: "applicationDeadline",
+      },
+    );
+  }
+
+  // TX-02 / BR-32: status-only atomic transition. Ownership, creator, Primary,
+  // publishedAt, and content remain unchanged. EXPIRED is retained (no
+  // hard-delete) and terminal in V5 (no reopen).
+  const updatedJob = await Job.findOneAndUpdate(
+    {
+      _id: job._id,
+      status: JOB_STATUS.PUBLISHED,
+      applicationDeadline: {
+        $ne: null,
+        $lte: now,
+      },
+    },
+    {
+      $set: {
+        status: JOB_STATUS.EXPIRED,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedJob) {
+    throw new AppError(
+      409,
+      "Only PUBLISHED Jobs past applicationDeadline may transition to EXPIRED",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  return toPublicJob(updatedJob);
+};
+
 // Canonical lifecycle readiness gate: submit and approve/publish revalidation.
 // Completeness is separate from create/edit DRAFT validation.
 const assertJobReadyForApprovalLifecycle = async (
@@ -803,26 +962,41 @@ const submitDraftJob = async ({
 const findOutstandingPrimaryResponsibility = async ({
   companyId,
   primaryRecruiterCompanyMemberId,
+  now = new Date(),
 } = {}) => {
+  // BR-41 with BR-30/BR-31: DRAFT/PENDING always block; PUBLISHED blocks only
+  // while still effectively published (deadline not yet reached). Persisted
+  // PUBLISHED past deadline is treated as finished even before EXPIRED write.
   return Job.findOne({
     companyId,
     primaryRecruiterCompanyMemberId,
     status: {
       $in: OUTSTANDING_PRIMARY_JOB_STATUSES,
     },
+    $nor: [
+      {
+        status: JOB_STATUS.PUBLISHED,
+        applicationDeadline: {
+          $ne: null,
+          $lte: now,
+        },
+      },
+    ],
   })
-    .select("_id status")
+    .select("_id status applicationDeadline")
     .lean();
 };
 
 const assertNoOutstandingPrimaryResponsibility = async ({
   companyId,
   primaryRecruiterCompanyMemberId,
+  now = new Date(),
 } = {}) => {
-  // BR-41: blocking statuses only; CLOSED/EXPIRED are not outstanding.
+  // BR-41: CLOSED/EXPIRED (persisted or effective) are not outstanding.
   const outstanding = await findOutstandingPrimaryResponsibility({
     companyId,
     primaryRecruiterCompanyMemberId,
+    now,
   });
 
   if (outstanding) {
@@ -1480,12 +1654,19 @@ export {
   closePublishedJob,
   createDraftJob,
   deletePrePublicationJob,
+  expirePublishedJobIfDue,
   findOutstandingPrimaryResponsibility,
   getInternalJob,
+  getJobApplicationDeadline,
+  hasJobApplicationDeadlinePassed,
+  isJobEffectivelyPublished,
   isJobInternallyVisible,
+  isJobPubliclyEligible,
+  isOwningCompanyActiveForPublicEligibility,
   listInternalJobs,
   reassignPrimaryRecruiter,
   rejectPendingJob,
+  resolveEffectiveJobStatus,
   submitDraftJob,
   toPublicJob,
   updateDraftJob,
