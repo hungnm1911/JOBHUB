@@ -2,17 +2,19 @@
 
 ## Current milestone
 
-**V4 — Quản lý danh mục chuẩn của nền tảng** is `COMPLETED AND VERIFIED`.
+**V5 — Job và vòng đời phê duyệt Job** is `READY FOR IMPLEMENTATION`.
 
-V4's approved business specification is at `docs/product/versions/v4-platform-standard-catalogs.md`, and its approved persistence contract is at `docs/data/versions/v4-platform-standard-catalogs-data-model.md`.
+V5's approved business specification is at `docs/product/versions/v5-job-approval-lifecycle.md`, and its approved persistence contract is at `docs/data/versions/v5-job-approval-lifecycle-data-model.md`.
 
 V1, V2, V3, and V4 remain `COMPLETED AND VERIFIED`.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-V4 Slices 01–05 are implemented and verified. V5 through V17 remain `PLANNED`.
+V4 Slices 01–05 are implemented and verified. V5 is ready to begin Slice 01. V6 through V17 remain `PLANNED`.
 
 ## Completed and verified
+
+- **Prepared; verified:** V5 implementation readiness — the approved Product/Data contracts are established as repository sources of truth; roadmap and project status mark V5 `READY FOR IMPLEMENTATION`; the existing MongoDB replica-set test harness supports the persistence and transaction invariants needed by Slice 01; and the backend verification gate accepts the current pre-V5 baseline without weakening architecture or regression checks. No V5 Fxx behavior is implemented by this readiness step. Slice 01 must combine Job foundation/create DRAFT with the BR-41 Recruiter lock/terminate responsibility guard.
 
 - **Implemented; verified:** V4 Slice 05 — V4 acceptance and regression closure (F01–F06; BR-01–BR-20): cross-cutting suite confirms FIELD→POSITION structure and schema immutability, Platform Admin-only Category creation (Candidate/Company Manager/Recruiter denied), absence of Category/ExperienceLevel mutation/list/CRUD surfaces beyond create endpoints, exact closed Location/EmploymentType/WorkMode vocabularies plus six-record ExperienceLevel dataset, no CompanyMember catalog role, and V1/V2/V3 identity surfaces unchanged; Data Contract authorization ownership is aligned to Engineering SoT middleware enforcement without changing business behavior. Coverage in `test/catalog/v4-acceptance.test.js` plus prior V4 slice suites.
 
@@ -111,7 +113,7 @@ V4 Slices 01–05 are implemented and verified. V5 through V17 remain `PLANNED`.
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
-- V5 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
+- V5 is `READY FOR IMPLEMENTATION`; no V5 business slice has started. V6 through V17 remain `PLANNED`, and their roadmap titles are not approved detailed specifications or implementation authority.
 
 ## Verification status
 
@@ -124,4 +126,4 @@ V4 Slices 01–05 are implemented and verified. V5 through V17 remain `PLANNED`.
 
 ## Next recommended task
 
-Begin V5 only from an approved Product/Data specification when one exists. Do not implement V5–V17 from roadmap titles alone, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) or V4-deferred catalog surfaces (list/read, Job/CV integration) without a new approved specification.
+Begin V5 Slice 01 — Job foundation + Create DRAFT + Responsibility guard (F01; BR-01–BR-08, BR-38, BR-41, BR-42) from the approved V5 Product/Data contracts. Slice 01 must preserve partial DRAFT persistence, reuse the V4 catalog representations without creating replacement catalog collections, and extend Recruiter lock/terminate workflows with the canonical outstanding-Primary guard. Do not implement later V5 slices or add V3/V4-deferred capabilities outside this approved scope.

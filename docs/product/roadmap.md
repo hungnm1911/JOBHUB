@@ -24,7 +24,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
 | V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
-| V5 | Job và vòng đời phê duyệt Job | PLANNED |
+| V5 | Job và vòng đời phê duyệt Job | READY FOR IMPLEMENTATION |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | PLANNED |
 | V7 | Candidate Profile và thư viện CV | PLANNED |
 | V8 | Job Discovery | PLANNED |
@@ -66,8 +66,17 @@ The approved business scope of the version has been implemented and the required
 
 V1, V2, V3, and V4 are `COMPLETED AND VERIFIED`.
 
-Versions V5 through V17 remain `PLANNED` and must not be implemented merely
-from their roadmap titles.
+V5 is `READY FOR IMPLEMENTATION` based on its approved canonical Product and
+Data contracts. V6 through V17 remain `PLANNED` and must not be implemented
+merely from their roadmap titles.
+
+V5 canonical specification:
+
+`docs/product/versions/v5-job-approval-lifecycle.md`
+
+V5 canonical persistence contract:
+
+`docs/data/versions/v5-job-approval-lifecycle-data-model.md`
 
 V4 canonical specification:
 
