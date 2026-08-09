@@ -3,6 +3,7 @@ import {
   createDraftJob,
   getInternalJob,
   listInternalJobs,
+  rejectPendingJob,
   submitDraftJob,
   updateDraftJob,
 } from "../services/job.service.js";
@@ -118,11 +119,29 @@ const approveAndPublishJobHandler = async (request, response, next) => {
   }
 };
 
+const rejectPendingJobHandler = async (request, response, next) => {
+  try {
+    const result = await rejectPendingJob({
+      managerUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Job rejected.",
+      jobId: result.id,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   approveAndPublishJobHandler,
   createDraftJobHandler,
   getInternalJobHandler,
   listInternalJobsHandler,
+  rejectPendingJobHandler,
   submitDraftJobHandler,
   updateDraftJobHandler,
 };

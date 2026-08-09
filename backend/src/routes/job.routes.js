@@ -5,6 +5,7 @@ import {
   createDraftJobHandler,
   getInternalJobHandler,
   listInternalJobsHandler,
+  rejectPendingJobHandler,
   submitDraftJobHandler,
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
@@ -51,6 +52,13 @@ router.post(
   authenticateAccess,
   authorizeCompanyManagerBusinessAccess,
   approveAndPublishJobHandler,
+);
+
+router.post(
+  "/:jobId/reject",
+  authenticateAccess,
+  authorizeCompanyManagerBusinessAccess,
+  rejectPendingJobHandler,
 );
 
 router.patch(
