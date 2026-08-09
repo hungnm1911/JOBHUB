@@ -10,9 +10,13 @@ V1, V2, and V3 remain `COMPLETED AND VERIFIED`.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-V4 Slices 01–02 are implemented and verified. Remaining V4 slices are not started. V5 through V17 remain `PLANNED`.
+V4 Slices 01–04 are implemented and verified. Remaining V4 slices are not started. V5 through V17 remain `PLANNED`.
 
 ## Completed and verified
+
+- **Implemented; verified:** V4 Slice 04 — ExperienceLevel canonical dataset (F06; BR-01, BR-15, BR-16, BR-17, BR-20): persisted `experience_levels` documents expose only `_id` + immutable unique `code` from the locked six-member set; dataset initialization is owned by `src/database/migrations/v4-experience-level-dataset.js` through the existing `scripts/run-migration.js` runner (idempotent upsert; no seed/startup/API path); re-application does not create duplicates and verification requires exactly the six canonical records. Focused coverage in `test/catalog/v4-experience-level-dataset.test.js`.
+
+- **Implemented; verified:** V4 Slice 03 — Category POSITION creation (F02; BR-01, BR-02, BR-04, BR-05, BR-06, BR-07, BR-08, BR-10, BR-18, BR-19, BR-20): valid Platform Admin creates immutable platform-scoped `Category` documents at `level=POSITION` under an existing `FIELD` via `POST /api/platform-admin/categories/fields/:fieldId/positions`; parent must exist and be `FIELD` (not another POSITION); uniqueness is scoped by `{ parentCategoryId, normalizedName }` so same names may exist under different FIELDs while same-FIELD duplicates including concurrent creates are rejected; parent FIELD is not mutated; authorization reuses `authorize-platform-admin` without service role re-checks. Focused coverage in `test/catalog/v4-category-position-creation.test.js`.
 
 - **Implemented; verified:** V4 Slice 02 — Category FIELD creation (F01; BR-01, BR-02, BR-03, BR-05, BR-06, BR-07, BR-08, BR-09, BR-18, BR-19, BR-20): valid Platform Admin creates immutable platform-scoped `Category` documents at `level=FIELD` with `parentCategoryId=null` via `POST /api/platform-admin/categories/fields`; `normalizedName` is derived by the Category model (trim, collapse whitespace, case-fold) and compound unique `{ parentCategoryId, normalizedName }` rejects duplicates including concurrent creates; authorization reuses `authorize-platform-admin` without service role re-checks; no POSITION creation, list/read, edit/delete, or tenant ownership fields. Focused coverage in `test/catalog/v4-category-field-creation.test.js`.
 
@@ -104,18 +108,18 @@ V4 Slices 01–02 are implemented and verified. Remaining V4 slices are not star
 
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
-- V4 is `READY FOR IMPLEMENTATION`; Slices 01–02 are complete. Remaining V4 slices (POSITION creation, Category read surfaces, ExperienceLevel, and later acceptance) are not started.
+- V4 is `READY FOR IMPLEMENTATION`; Slices 01–04 are complete. Remaining V4 slices (Category read surfaces if specified later, and acceptance) are not started.
 - V5 through V17 remain `PLANNED`. Their roadmap titles are not approved detailed specifications and are not implementation authority.
 
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
 - `npm run verify:agent` consists of ESLint, deterministic architecture verification, and Vitest; it was run for this snapshot and passed.
-- The current baseline is 37 passing test files and 207 passing tests: prior V1/V2/V3/V4 Slice 01 coverage plus V4 Slice 02 Category FIELD creation tests.
-- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, `test/auth/v3-acceptance.test.js`, `test/catalog/v4-fixed-vocabularies.test.js`, `test/catalog/v4-category-field-creation.test.js`, and existing V2 registration/onboarding/platform-admin suites.
+- The current baseline is 39 passing test files and 219 passing tests: prior V1/V2/V3/V4 Slice 01–03 coverage plus V4 Slice 04 ExperienceLevel dataset tests.
+- Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, `test/auth/v3-acceptance.test.js`, `test/catalog/v4-fixed-vocabularies.test.js`, `test/catalog/v4-category-field-creation.test.js`, `test/catalog/v4-category-position-creation.test.js`, `test/catalog/v4-experience-level-dataset.test.js`, and existing V2 registration/onboarding/platform-admin suites.
 - No automated test script is defined outside the backend package; frontend verification is outside `verify:agent` and was not run.
 - Backend startup, Cloudinary connectivity/operations, live SMTP delivery, endpoint smoke tests outside automated registration coverage, and frontend verification are outside `verify:agent` and were not run, so their behavior is not verified by this snapshot.
 
 ## Next recommended task
 
-Begin V4 Slice 03 — Category POSITION creation (F02) — from the approved V4 Product/Data contracts. Do not add ExperienceLevel behavior before its dependency-ordered slice, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) without a new approved specification.
+Begin V4 acceptance / remaining catalog surfaces only from an approved slice definition in the Product/Data contracts. Do not invent Category list/read or Job/CV ExperienceLevel integration without that authority, and do not add V3-deferred capabilities (F10 Recruiter update, activation resend, Job/Application/Invitation) without a new approved specification.
