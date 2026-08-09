@@ -3,6 +3,7 @@ import express from "express";
 import {
   approveAndPublishJobHandler,
   createDraftJobHandler,
+  deletePrePublicationJobHandler,
   getInternalJobHandler,
   listInternalJobsHandler,
   rejectPendingJobHandler,
@@ -59,6 +60,13 @@ router.post(
   authenticateAccess,
   authorizeCompanyManagerBusinessAccess,
   rejectPendingJobHandler,
+);
+
+router.delete(
+  "/:jobId",
+  authenticateAccess,
+  authorizeCompanyManagerBusinessAccess,
+  deletePrePublicationJobHandler,
 );
 
 router.patch(
