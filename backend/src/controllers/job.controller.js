@@ -1,4 +1,4 @@
-import { createDraftJob } from "../services/job.service.js";
+import { createDraftJob, updateDraftJob } from "../services/job.service.js";
 
 const readClientCompanyId = (request) => {
   return (
@@ -26,4 +26,22 @@ const createDraftJobHandler = async (request, response, next) => {
   }
 };
 
-export { createDraftJobHandler };
+const updateDraftJobHandler = async (request, response, next) => {
+  try {
+    const job = await updateDraftJob({
+      recruiterUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+      content: request.body,
+    });
+
+    return response.status(200).json({
+      message: "Job draft updated.",
+      job,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export { createDraftJobHandler, updateDraftJobHandler };
