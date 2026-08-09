@@ -852,6 +852,41 @@ const assertJobInternallyVisible = ({
   });
 };
 
+// BR-20 / F05: approval-decision authority only. Does not persist approve,
+// reject, or any review/marker state — F06/F07 own those transitions.
+const assertCompanyManagerJobApprovalAuthority = ({
+  job,
+  companyRole,
+  tenantCompanyId,
+} = {}) => {
+  if (companyRole !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
+    throw new AppError(
+      403,
+      "Only the Company Manager can approve or reject the Job",
+      {
+        field: "role",
+      },
+    );
+  }
+
+  // BR-38: Job id / foreign company association alone do not authorize.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId,
+  });
+
+  if (job.status !== JOB_STATUS.PENDING_APPROVAL) {
+    throw new AppError(
+      409,
+      "Job must be PENDING_APPROVAL for approval decisions",
+      {
+        field: "status",
+        status: job.status,
+      },
+    );
+  }
+};
+
 const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
@@ -912,6 +947,7 @@ const getInternalJob = async ({
 };
 
 export {
+  assertCompanyManagerJobApprovalAuthority,
   assertJobInternallyVisible,
   assertJobReadyForApprovalLifecycle,
   assertNoOutstandingPrimaryResponsibility,
