@@ -6,6 +6,7 @@ import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_STATUS, {
   OUTSTANDING_PRIMARY_JOB_STATUSES,
+  PRE_PUBLICATION_DELETABLE_JOB_STATUSES,
 } from "../constants/job-status.js";
 import LOCATION from "../constants/location.js";
 import USER_STATUS from "../constants/user-status.js";
@@ -938,6 +939,59 @@ const assertCompanyManagerJobApprovalAuthority = ({
   }
 };
 
+// BR-33 / BR-34 / F12: manual hard-delete authority for pre-publication Jobs.
+// Distinct from F07 reject (PENDING_APPROVAL outcome) but shares TX-04 delete.
+const assertCompanyManagerPrePublicationDeleteAuthority = ({
+  job,
+  companyRole,
+  tenantCompanyId,
+} = {}) => {
+  if (companyRole !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
+    throw new AppError(
+      403,
+      "Only the Company Manager can delete a pre-publication Job",
+      {
+        field: "role",
+      },
+    );
+  }
+
+  // BR-38: Job id / foreign company association alone do not authorize.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId,
+  });
+
+  if (!PRE_PUBLICATION_DELETABLE_JOB_STATUSES.includes(job.status)) {
+    // BR-32: publication establishes a historical boundary; CLOSED/EXPIRED
+    // remain non-deletable terminal historical states.
+    throw new AppError(
+      409,
+      "Only DRAFT or PENDING_APPROVAL Jobs that have never been published may be deleted",
+      {
+        field: "status",
+        status: job.status,
+      },
+    );
+  }
+};
+
+// TX-04: single-document physical delete. Shared by F07 reject and F12 manual
+// delete — no separate soft-delete / deletion-record persistence layer.
+const hardDeleteJobDocument = async ({
+  jobId,
+  companyId,
+  statuses,
+} = {}) => {
+  return Job.findOneAndDelete({
+    _id: jobId,
+    companyId,
+    status: {
+      $in: statuses,
+    },
+  });
+};
+
 const approveAndPublishJob = async ({
   managerUser,
   jobId,
@@ -1046,16 +1100,74 @@ const rejectPendingJob = async ({
   // TX-04 / BR-23: physical delete only while still PENDING_APPROVAL. No
   // REJECTED state, rejection metadata, soft-delete flags, or cascade writes
   // to Company / CompanyMember / Category / ExperienceLevel.
-  const deletedJob = await Job.findOneAndDelete({
-    _id: job._id,
+  const deletedJob = await hardDeleteJobDocument({
+    jobId: job._id,
     companyId: context.companyId,
-    status: JOB_STATUS.PENDING_APPROVAL,
+    statuses: [JOB_STATUS.PENDING_APPROVAL],
   });
 
   if (!deletedJob) {
     throw new AppError(
       409,
       "Job must be PENDING_APPROVAL for approval decisions",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  return {
+    id: deletedJob._id.toString(),
+  };
+};
+
+const deletePrePublicationJob = async ({
+  managerUser,
+  jobId,
+  clientCompanyId,
+} = {}) => {
+  // BR-34 / BR-38: trusted CM membership only; Recruiter (including current
+  // Primary) and client companyId/Job id alone do not authorize hard-delete.
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", {
+      field: "jobId",
+    });
+  }
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  assertCompanyManagerPrePublicationDeleteAuthority({
+    job,
+    companyRole: context.companyRole,
+    tenantCompanyId: context.companyId,
+  });
+
+  // TX-04 / BR-32 / BR-33: conditional physical delete while still DRAFT or
+  // PENDING_APPROVAL for this tenant. Stale requests after publish or terminal
+  // historical transition cannot delete. No DELETED state, isDeleted,
+  // deletedAt, or cascade into Company / CompanyMember / Category /
+  // ExperienceLevel.
+  const deletedJob = await hardDeleteJobDocument({
+    jobId: job._id,
+    companyId: context.companyId,
+    statuses: PRE_PUBLICATION_DELETABLE_JOB_STATUSES,
+  });
+
+  if (!deletedJob) {
+    throw new AppError(
+      409,
+      "Only DRAFT or PENDING_APPROVAL Jobs that have never been published may be deleted",
       {
         field: "status",
       },
@@ -1129,12 +1241,14 @@ const getInternalJob = async ({
 export {
   approveAndPublishJob,
   assertCompanyManagerJobApprovalAuthority,
+  assertCompanyManagerPrePublicationDeleteAuthority,
   assertJobInternallyVisible,
   assertJobPrimaryRecruiterValidForLifecycle,
   assertJobReadyForApprovalLifecycle,
   assertNoOutstandingPrimaryResponsibility,
   buildInternalJobVisibilityFilter,
   createDraftJob,
+  deletePrePublicationJob,
   findOutstandingPrimaryResponsibility,
   getInternalJob,
   isJobInternallyVisible,

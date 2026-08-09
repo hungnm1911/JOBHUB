@@ -1,6 +1,7 @@
 import {
   approveAndPublishJob,
   createDraftJob,
+  deletePrePublicationJob,
   getInternalJob,
   listInternalJobs,
   rejectPendingJob,
@@ -136,9 +137,27 @@ const rejectPendingJobHandler = async (request, response, next) => {
   }
 };
 
+const deletePrePublicationJobHandler = async (request, response, next) => {
+  try {
+    const result = await deletePrePublicationJob({
+      managerUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Job deleted.",
+      jobId: result.id,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   approveAndPublishJobHandler,
   createDraftJobHandler,
+  deletePrePublicationJobHandler,
   getInternalJobHandler,
   listInternalJobsHandler,
   rejectPendingJobHandler,
