@@ -1,3 +1,5 @@
+import mongoose from "mongoose";
+
 import CATEGORY_LEVEL from "../constants/category-level.js";
 import Category, {
   canonicalizeCategoryDisplayName,
@@ -18,7 +20,7 @@ const toPublicCategory = (category) => {
   };
 };
 
-const createFieldCategory = async ({ name }) => {
+const resolveCategoryDisplayName = (name) => {
   const displayName = canonicalizeCategoryDisplayName(name);
 
   if (displayName === "") {
@@ -27,6 +29,11 @@ const createFieldCategory = async ({ name }) => {
     });
   }
 
+  return displayName;
+};
+
+const createFieldCategory = async ({ name }) => {
+  const displayName = resolveCategoryDisplayName(name);
   const normalizedName = normalizeCategoryName(displayName);
 
   const existingField = await Category.findOne({
@@ -61,4 +68,70 @@ const createFieldCategory = async ({ name }) => {
   return toPublicCategory(category);
 };
 
-export { createFieldCategory, toPublicCategory };
+const createPositionCategory = async ({ name, parentCategoryId }) => {
+  if (!mongoose.Types.ObjectId.isValid(parentCategoryId)) {
+    throw new AppError(400, "Invalid parent FIELD id", {
+      field: "fieldId",
+    });
+  }
+
+  const displayName = resolveCategoryDisplayName(name);
+  const normalizedName = normalizeCategoryName(displayName);
+
+  const parentField = await Category.findById(parentCategoryId).select(
+    "_id level",
+  );
+
+  if (!parentField) {
+    throw new AppError(404, "Parent FIELD category not found", {
+      field: "fieldId",
+    });
+  }
+
+  if (parentField.level !== CATEGORY_LEVEL.FIELD) {
+    throw new AppError(409, "Parent category must be a FIELD", {
+      field: "fieldId",
+    });
+  }
+
+  const existingPosition = await Category.findOne({
+    parentCategoryId: parentField._id,
+    normalizedName,
+  }).select("_id");
+
+  if (existingPosition) {
+    throw new AppError(
+      409,
+      "POSITION category already exists in this FIELD",
+      {
+        field: "name",
+      },
+    );
+  }
+
+  let category;
+
+  try {
+    category = await Category.create({
+      name: displayName,
+      level: CATEGORY_LEVEL.POSITION,
+      parentCategoryId: parentField._id,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      throw new AppError(
+        409,
+        "POSITION category already exists in this FIELD",
+        {
+          field: "name",
+        },
+      );
+    }
+
+    throw error;
+  }
+
+  return toPublicCategory(category);
+};
+
+export { createFieldCategory, createPositionCategory, toPublicCategory };
