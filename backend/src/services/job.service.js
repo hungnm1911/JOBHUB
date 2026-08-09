@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+import CATEGORY_LEVEL from "../constants/category-level.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_STATUS, {
@@ -7,6 +8,8 @@ import JOB_STATUS, {
 } from "../constants/job-status.js";
 import LOCATION from "../constants/location.js";
 import WORK_MODE from "../constants/work-mode.js";
+import Category from "../models/category.model.js";
+import ExperienceLevel from "../models/experience-level.model.js";
 import Job from "../models/job.model.js";
 import {
   assertSameCompanyTenant,
@@ -340,14 +343,18 @@ const loadJobForRecruiterMutation = async ({
     tenantCompanyId: companyId,
   });
 
-  // BR-09: only current Primary Recruiter may edit DRAFT content.
+  // BR-09 / BR-18: only current Primary Recruiter may mutate/submit.
   if (
     job.primaryRecruiterCompanyMemberId.toString() !==
     primaryRecruiterCompanyMemberId.toString()
   ) {
-    throw new AppError(403, "Only the Primary Recruiter can edit this Job", {
-      field: "primaryRecruiterCompanyMemberId",
-    });
+    throw new AppError(
+      403,
+      "Only the Primary Recruiter can perform this operation on the Job",
+      {
+        field: "primaryRecruiterCompanyMemberId",
+      },
+    );
   }
 
   return job;
@@ -420,6 +427,310 @@ const updateDraftJob = async ({
         field: "status",
       },
     );
+  }
+
+  return toPublicJob(updatedJob);
+};
+
+const assertRequiredSubmitString = (value, field) => {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new AppError(400, `Job ${field} is required before submit`, {
+      field,
+    });
+  }
+};
+
+const assertJobContentCompleteForLifecycle = (job) => {
+  // BR-10: business completeness gate (not schema-required on DRAFT).
+  assertRequiredSubmitString(job.title, "title");
+  assertRequiredSubmitString(job.jobDescription, "jobDescription");
+  assertRequiredSubmitString(job.salaryText, "salaryText");
+
+  if (!Array.isArray(job.requiredSkills) || job.requiredSkills.length === 0) {
+    throw new AppError(400, "Job requiredSkills is required before submit", {
+      field: "requiredSkills",
+    });
+  }
+
+  // BR-11: at least one FIELD and one POSITION.
+  if (
+    !Array.isArray(job.fieldCategoryIds) ||
+    job.fieldCategoryIds.length === 0
+  ) {
+    throw new AppError(400, "Job fieldCategoryIds is required before submit", {
+      field: "fieldCategoryIds",
+    });
+  }
+
+  if (
+    !Array.isArray(job.positionCategoryIds) ||
+    job.positionCategoryIds.length === 0
+  ) {
+    throw new AppError(
+      400,
+      "Job positionCategoryIds is required before submit",
+      {
+        field: "positionCategoryIds",
+      },
+    );
+  }
+
+  // BR-12 / BR-13: exactly one Location and one Employment Type.
+  if (job.location == null || job.location === "") {
+    throw new AppError(400, "Job location is required before submit", {
+      field: "location",
+    });
+  }
+
+  if (job.employmentType == null || job.employmentType === "") {
+    throw new AppError(400, "Job employmentType is required before submit", {
+      field: "employmentType",
+    });
+  }
+
+  // BR-14: at least one Work Mode.
+  if (!Array.isArray(job.workModes) || job.workModes.length === 0) {
+    throw new AppError(400, "Job workModes is required before submit", {
+      field: "workModes",
+    });
+  }
+
+  // BR-15: exactly one ExperienceLevel.
+  if (job.experienceLevelId == null) {
+    throw new AppError(400, "Job experienceLevelId is required before submit", {
+      field: "experienceLevelId",
+    });
+  }
+
+  if (job.applicationDeadline == null) {
+    throw new AppError(
+      400,
+      "Job applicationDeadline is required before submit",
+      {
+        field: "applicationDeadline",
+      },
+    );
+  }
+};
+
+const assertJobFixedVocabularyIntegrity = (job) => {
+  // BR-12 / BR-16: Location is the fixed platform vocabulary (REMOTE excluded).
+  if (!LOCATION_VALUES.has(job.location)) {
+    throw new AppError(400, "Job location must be a canonical Location value", {
+      field: "location",
+    });
+  }
+
+  // BR-13 / BR-16.
+  if (!EMPLOYMENT_TYPE_VALUES.has(job.employmentType)) {
+    throw new AppError(
+      400,
+      "Job employmentType must be a canonical EmploymentType value",
+      {
+        field: "employmentType",
+      },
+    );
+  }
+
+  // BR-14 / BR-16.
+  for (const workMode of job.workModes) {
+    if (!WORK_MODE_VALUES.has(workMode)) {
+      throw new AppError(
+        400,
+        "Job workModes must use canonical WorkMode values",
+        {
+          field: "workModes",
+        },
+      );
+    }
+  }
+};
+
+const assertJobCategoryIntegrity = async (job) => {
+  const fieldIds = job.fieldCategoryIds.map((id) => id.toString());
+  const positionIds = job.positionCategoryIds.map((id) => id.toString());
+  const allIds = [...new Set([...fieldIds, ...positionIds])];
+
+  const categories = await Category.find({
+    _id: {
+      $in: allIds,
+    },
+  });
+  const categoriesById = new Map(
+    categories.map((category) => [category._id.toString(), category]),
+  );
+
+  const fieldIdSet = new Set();
+
+  for (const fieldId of fieldIds) {
+    const category = categoriesById.get(fieldId);
+
+    if (!category) {
+      throw new AppError(400, "Job fieldCategoryIds references unknown Category", {
+        field: "fieldCategoryIds",
+      });
+    }
+
+    if (category.level !== CATEGORY_LEVEL.FIELD) {
+      throw new AppError(
+        400,
+        "Job fieldCategoryIds must reference FIELD categories",
+        {
+          field: "fieldCategoryIds",
+        },
+      );
+    }
+
+    fieldIdSet.add(fieldId);
+  }
+
+  for (const positionId of positionIds) {
+    const category = categoriesById.get(positionId);
+
+    if (!category) {
+      throw new AppError(
+        400,
+        "Job positionCategoryIds references unknown Category",
+        {
+          field: "positionCategoryIds",
+        },
+      );
+    }
+
+    if (category.level !== CATEGORY_LEVEL.POSITION) {
+      throw new AppError(
+        400,
+        "Job positionCategoryIds must reference POSITION categories",
+        {
+          field: "positionCategoryIds",
+        },
+      );
+    }
+
+    // BR-11: each POSITION parent must be in the Job's selected FIELD set.
+    const parentId =
+      category.parentCategoryId == null
+        ? null
+        : category.parentCategoryId.toString();
+
+    if (parentId == null || !fieldIdSet.has(parentId)) {
+      throw new AppError(
+        400,
+        "Each Job POSITION Category must belong to a selected FIELD Category",
+        {
+          field: "positionCategoryIds",
+        },
+      );
+    }
+  }
+};
+
+const assertJobExperienceLevelIntegrity = async (job) => {
+  // BR-15 / BR-16: ExperienceLevel must exist in the canonical V4 dataset.
+  const experienceLevel = await ExperienceLevel.findById(job.experienceLevelId);
+
+  if (!experienceLevel) {
+    throw new AppError(
+      400,
+      "Job experienceLevelId must reference a canonical ExperienceLevel",
+      {
+        field: "experienceLevelId",
+      },
+    );
+  }
+};
+
+const assertJobApplicationDeadlineActive = (job, now = new Date()) => {
+  // BR-17: now < applicationDeadline.
+  const deadline =
+    job.applicationDeadline instanceof Date
+      ? job.applicationDeadline
+      : new Date(job.applicationDeadline);
+
+  if (Number.isNaN(deadline.getTime()) || !(now.getTime() < deadline.getTime())) {
+    throw new AppError(
+      400,
+      "Job applicationDeadline must be in the future",
+      {
+        field: "applicationDeadline",
+      },
+    );
+  }
+};
+
+// Canonical lifecycle readiness gate: submit now; approve/publish revalidation
+// later. Completeness is separate from create/edit DRAFT validation.
+const assertJobReadyForApprovalLifecycle = async (
+  job,
+  {
+    now = new Date(),
+  } = {},
+) => {
+  assertJobContentCompleteForLifecycle(job);
+  assertJobFixedVocabularyIntegrity(job);
+  await assertJobCategoryIntegrity(job);
+  await assertJobExperienceLevelIntegrity(job);
+  assertJobApplicationDeadlineActive(job, now);
+};
+
+const assertJobDraftSubmittable = (job) => {
+  if (job.status === JOB_STATUS.DRAFT) {
+    return;
+  }
+
+  throw new AppError(409, "Job can only be submitted while DRAFT", {
+    field: "status",
+    status: job.status,
+  });
+};
+
+const submitDraftJob = async ({
+  recruiterUser,
+  jobId,
+  clientCompanyId,
+  now = new Date(),
+} = {}) => {
+  // BR-01 / BR-18 / BR-38: trusted Recruiter membership + Company ACTIVE.
+  const context = await resolveRecruiterBusinessContext({
+    user: recruiterUser,
+    clientCompanyId,
+  });
+
+  const job = await loadJobForRecruiterMutation({
+    jobId,
+    companyId: context.companyId,
+    primaryRecruiterCompanyMemberId: context.membership._id,
+  });
+
+  assertJobDraftSubmittable(job);
+  await assertJobReadyForApprovalLifecycle(job, {
+    now,
+  });
+
+  // Persist only the lifecycle transition; content/ownership/creator/Primary
+  // remain unchanged. Source-state guard prevents partial concurrent submits.
+  const updatedJob = await Job.findOneAndUpdate(
+    {
+      _id: job._id,
+      companyId: context.companyId,
+      primaryRecruiterCompanyMemberId: context.membership._id,
+      status: JOB_STATUS.DRAFT,
+    },
+    {
+      $set: {
+        status: JOB_STATUS.PENDING_APPROVAL,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedJob) {
+    throw new AppError(409, "Job can only be submitted while DRAFT", {
+      field: "status",
+    });
   }
 
   return toPublicJob(updatedJob);
@@ -602,6 +913,7 @@ const getInternalJob = async ({
 
 export {
   assertJobInternallyVisible,
+  assertJobReadyForApprovalLifecycle,
   assertNoOutstandingPrimaryResponsibility,
   buildInternalJobVisibilityFilter,
   createDraftJob,
@@ -609,6 +921,7 @@ export {
   getInternalJob,
   isJobInternallyVisible,
   listInternalJobs,
+  submitDraftJob,
   toPublicJob,
   updateDraftJob,
 };
