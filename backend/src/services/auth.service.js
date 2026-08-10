@@ -19,6 +19,7 @@ import {
 } from "./company.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
+import buildAuthActionUrl from "../utils/auth-action-url.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
 import { hashPassword, verifyPassword } from "../utils/hash-password.js";
 import { generateAccessToken } from "../utils/jwt.js";
@@ -52,8 +53,7 @@ const assertPasswordPolicy = (password) => {
 };
 
 const buildVerificationEmail = ({ fullName, rawToken }) => {
-  const verificationUrl =
-    `${config.appBaseUrl}/verify-email?token=${encodeURIComponent(rawToken)}`;
+  const verificationUrl = buildAuthActionUrl("verify-email", rawToken);
 
   const subject = "Verify your JOBHUB email address";
   const text =
@@ -72,8 +72,7 @@ const buildVerificationEmail = ({ fullName, rawToken }) => {
 };
 
 const buildPasswordResetEmail = ({ fullName, rawToken }) => {
-  const resetUrl =
-    `${config.appBaseUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
+  const resetUrl = buildAuthActionUrl("reset-password", rawToken);
 
   const subject = "Reset your JOBHUB password";
   const text =

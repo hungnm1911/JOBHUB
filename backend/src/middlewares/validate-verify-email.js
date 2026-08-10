@@ -12,8 +12,18 @@ const verifyEmailSchema = z
   })
   .strict();
 
+const resolveVerifyEmailPayload = (request) => {
+  if (request.method === "GET") {
+    return { token: request.query?.token };
+  }
+
+  return request.body;
+};
+
 const validateVerifyEmail = (request, _response, next) => {
-  const parsed = verifyEmailSchema.safeParse(request.body);
+  const parsed = verifyEmailSchema.safeParse(
+    resolveVerifyEmailPayload(request),
+  );
 
   if (!parsed.success) {
     const [firstIssue] = parsed.error.issues;
