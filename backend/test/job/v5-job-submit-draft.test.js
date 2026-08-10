@@ -6,6 +6,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
@@ -20,6 +21,10 @@ import {
   createFieldCategory,
   createPositionCategory,
 } from "../../src/services/category.service.js";
+import {
+  submitDraftJob,
+  updateDraftJob,
+} from "../../src/services/job.service.js";
 import {
   createActiveCompanyManagerContext,
   createActiveRecruiterContext,
@@ -39,6 +44,7 @@ describe("V5 Slice 04 — Submit Job for approval (F04)", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await clearDatabase();
   });
 
@@ -443,5 +449,184 @@ describe("V5 Slice 04 — Submit Job for approval (F04)", () => {
 
     expect(response.status).toBe(403);
     expect((await Job.findById(job.id).lean()).status).toBe(JOB_STATUS.DRAFT);
+  });
+
+  it("rejects stale submit when edit changes validated DRAFT content before transition (F04/BR-10/BR-19/TX-02)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.submit.stale@example.com",
+      businessRegistrationNumber: "BRN-V5-SUB-STALE",
+    });
+    const recruiter = await createActiveRecruiterContext({
+      email: "recruiter.job.submit.stale@example.com",
+      company: manager.company,
+      employeeCode: "NV-SUB-STALE",
+    });
+    const catalog = await seedCatalog();
+    const content = buildCompleteContent(catalog);
+    const { job } = await createCompleteDraftViaApi(agent, recruiter, content);
+
+    const beforeRace = await Job.findById(job.id).lean();
+    const completeTitle = beforeRace.title;
+
+    const originalFindOneAndUpdate = Job.findOneAndUpdate.bind(Job);
+    let releaseSubmitTransition;
+    const holdSubmitTransition = new Promise((resolve) => {
+      releaseSubmitTransition = resolve;
+    });
+    let resolveSubmitTransitionReached;
+    const submitTransitionReached = new Promise((resolve) => {
+      resolveSubmitTransitionReached = resolve;
+    });
+
+    // Hold only the DRAFT → PENDING_APPROVAL write so an edit can land after
+    // submit validation has already succeeded against the complete snapshot.
+    vi.spyOn(Job, "findOneAndUpdate").mockImplementation(
+      (filter, update, options) => {
+        if (update?.$set?.status === JOB_STATUS.PENDING_APPROVAL) {
+          resolveSubmitTransitionReached();
+          return holdSubmitTransition.then(() =>
+            originalFindOneAndUpdate(filter, update, options),
+          );
+        }
+
+        return originalFindOneAndUpdate(filter, update, options);
+      },
+    );
+
+    const submitPromise = submitDraftJob({
+      recruiterUser: recruiter.user,
+      jobId: job.id,
+    });
+
+    await submitTransitionReached;
+
+    const edited = await updateDraftJob({
+      recruiterUser: recruiter.user,
+      jobId: job.id,
+      content: {
+        title: null,
+      },
+    });
+
+    expect(edited.status).toBe(JOB_STATUS.DRAFT);
+    expect(edited.title).toBeNull();
+
+    releaseSubmitTransition();
+
+    await expect(submitPromise).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringMatching(/content changed before submit/i),
+    });
+
+    const persisted = await Job.findById(job.id).lean();
+
+    expect(persisted.status).toBe(JOB_STATUS.DRAFT);
+    expect(persisted.title).toBeNull();
+    expect(persisted.title).not.toBe(completeTitle);
+    expect(persisted.publishedAt).toBeNull();
+    expect(persisted.companyId.toString()).toBe(
+      manager.company._id.toString(),
+    );
+    expect(persisted.createdByCompanyMemberId.toString()).toBe(
+      recruiter.membership._id.toString(),
+    );
+    expect(persisted.primaryRecruiterCompanyMemberId.toString()).toBe(
+      recruiter.membership._id.toString(),
+    );
+    expect(persisted.jobDescription).toBe(content.jobDescription);
+  });
+
+  it("rejects stale submit when intervening edit shares the validated updatedAt (F04/BR-10/BR-19/TX-02)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.submit.stale.same-ts@example.com",
+      businessRegistrationNumber: "BRN-V5-SUB-STALE-TS",
+    });
+    const recruiter = await createActiveRecruiterContext({
+      email: "recruiter.job.submit.stale.same-ts@example.com",
+      company: manager.company,
+      employeeCode: "NV-SUB-STALE-TS",
+    });
+    const catalog = await seedCatalog();
+    const content = buildCompleteContent(catalog);
+    const { job } = await createCompleteDraftViaApi(agent, recruiter, content);
+
+    const beforeRace = await Job.findById(job.id).lean();
+    const validatedUpdatedAt = beforeRace.updatedAt;
+
+    const originalFindOneAndUpdate = Job.findOneAndUpdate.bind(Job);
+    let releaseSubmitTransition;
+    const holdSubmitTransition = new Promise((resolve) => {
+      releaseSubmitTransition = resolve;
+    });
+    let resolveSubmitTransitionReached;
+    const submitTransitionReached = new Promise((resolve) => {
+      resolveSubmitTransitionReached = resolve;
+    });
+
+    vi.spyOn(Job, "findOneAndUpdate").mockImplementation(
+      (filter, update, options) => {
+        if (update?.$set?.status === JOB_STATUS.PENDING_APPROVAL) {
+          resolveSubmitTransitionReached();
+          return holdSubmitTransition.then(() =>
+            originalFindOneAndUpdate(filter, update, options),
+          );
+        }
+
+        return originalFindOneAndUpdate(filter, update, options);
+      },
+    );
+
+    const submitPromise = submitDraftJob({
+      recruiterUser: recruiter.user,
+      jobId: job.id,
+    });
+
+    await submitTransitionReached;
+
+    // Simulate finite timestamp resolution: content changes while updatedAt
+    // remains the exact value observed by submit validation.
+    await Job.collection.updateOne(
+      {
+        _id: new mongoose.Types.ObjectId(job.id),
+      },
+      {
+        $set: {
+          title: null,
+          updatedAt: validatedUpdatedAt,
+        },
+      },
+    );
+
+    const midRace = await Job.findById(job.id).lean();
+
+    expect(midRace.status).toBe(JOB_STATUS.DRAFT);
+    expect(midRace.title).toBeNull();
+    expect(midRace.updatedAt.getTime()).toBe(validatedUpdatedAt.getTime());
+
+    releaseSubmitTransition();
+
+    await expect(submitPromise).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringMatching(/content changed before submit/i),
+    });
+
+    const persisted = await Job.findById(job.id).lean();
+
+    expect(persisted.status).toBe(JOB_STATUS.DRAFT);
+    expect(persisted.title).toBeNull();
+    expect(persisted.publishedAt).toBeNull();
+    expect(persisted.companyId.toString()).toBe(
+      manager.company._id.toString(),
+    );
+    expect(persisted.createdByCompanyMemberId.toString()).toBe(
+      recruiter.membership._id.toString(),
+    );
+    expect(persisted.primaryRecruiterCompanyMemberId.toString()).toBe(
+      recruiter.membership._id.toString(),
+    );
+    expect(persisted.jobDescription).toBe(content.jobDescription);
+    expect(persisted.updatedAt.getTime()).toBe(validatedUpdatedAt.getTime());
   });
 });

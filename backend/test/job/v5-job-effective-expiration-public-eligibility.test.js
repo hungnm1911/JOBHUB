@@ -341,6 +341,93 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
     ).toBe(false);
   });
 
+  it("rejects public eligibility when Company argument is not the Job owner (F11/BR-35/BR-38)", async () => {
+    const owner = await createActiveCompanyManagerContext({
+      email: "cm.job.public.owner@example.com",
+      businessRegistrationNumber: "BRN-V5-F11-OWN-A",
+    });
+    const foreign = await createActiveCompanyManagerContext({
+      email: "cm.job.public.foreign@example.com",
+      businessRegistrationNumber: "BRN-V5-F11-OWN-B",
+    });
+    const recruiter = await createActiveRecruiterContext({
+      email: "recruiter.job.public.owner@example.com",
+      company: owner.company,
+      employeeCode: "NV-F11-OWN-A",
+    });
+    const catalog = await seedCatalog();
+    const now = new Date("2026-06-01T12:00:00.000Z");
+    const futureDeadline = new Date("2026-06-10T00:00:00.000Z");
+
+    const jobOwnedByA = await Job.create({
+      companyId: owner.company._id,
+      createdByCompanyMemberId: recruiter.membership._id,
+      primaryRecruiterCompanyMemberId: recruiter.membership._id,
+      status: JOB_STATUS.PUBLISHED,
+      publishedAt: new Date("2026-01-01T00:00:00.000Z"),
+      title: "Owner A Job",
+      jobDescription: "Must not become eligible via foreign Company B",
+      requiredSkills: ["Node.js"],
+      salaryText: "Negotiate",
+      fieldCategoryIds: [catalog.field.id],
+      positionCategoryIds: [catalog.position.id],
+      location: LOCATION.HA_NOI,
+      employmentType: EMPLOYMENT_TYPE.FULL_TIME,
+      workModes: [WORK_MODE.HYBRID],
+      experienceLevelId: catalog.experienceLevelId,
+      applicationDeadline: futureDeadline,
+    });
+
+    expect(owner.company._id.toString()).not.toBe(foreign.company._id.toString());
+    expect(owner.company.approvalStatus).toBe(COMPANY_APPROVAL_STATUS.APPROVED);
+    expect(owner.company.operationalStatus).toBe(
+      COMPANY_OPERATIONAL_STATUS.ACTIVE,
+    );
+    expect(foreign.company.approvalStatus).toBe(COMPANY_APPROVAL_STATUS.APPROVED);
+    expect(foreign.company.operationalStatus).toBe(
+      COMPANY_OPERATIONAL_STATUS.ACTIVE,
+    );
+
+    // Ownership mismatch is the direct cause: both Companies are publicly
+    // operational, but Company B is not Job A's owner.
+    expect(
+      isJobPubliclyEligible({
+        job: jobOwnedByA,
+        company: foreign.company,
+        now,
+      }),
+    ).toBe(false);
+
+    expect(
+      isJobPubliclyEligible({
+        job: jobOwnedByA,
+        company: owner.company,
+        now,
+      }),
+    ).toBe(true);
+
+    // Foreign ACTIVE Company must not rescue eligibility when the owner is not
+    // in the canonical public-operational state.
+    owner.company.operationalStatus = COMPANY_OPERATIONAL_STATUS.LOCKED;
+    await owner.company.save();
+
+    expect(
+      isJobPubliclyEligible({
+        job: jobOwnedByA,
+        company: owner.company,
+        now,
+      }),
+    ).toBe(false);
+
+    expect(
+      isJobPubliclyEligible({
+        job: jobOwnedByA,
+        company: foreign.company,
+        now,
+      }),
+    ).toBe(false);
+  });
+
   it("persists PUBLISHED → EXPIRED atomically without mutating ownership/content (F10/TX-02/BR-32)", async () => {
     const agent = createTestAgent();
     const manager = await createActiveCompanyManagerContext({

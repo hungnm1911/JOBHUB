@@ -1025,7 +1025,7 @@ Loại bỏ hoàn toàn một Job nội bộ chưa từng trở thành Job công
 
 ### Tiền điều kiện
 
-* Job thuộc Company của Company Manager;
+* Job thuộc Company của actor;
 * Job chưa từng được publish;
 * actor thuộc đúng Company của Job;
 * nếu Job đang `DRAFT`, actor phải là current Primary Recruiter;
@@ -1048,6 +1048,7 @@ Loại bỏ hoàn toàn một Job nội bộ chưa từng trở thành Job công
 * Recruiter cố hard-delete `PENDING_APPROVAL`;
 * actor thuộc Company khác;
 * Job đang `PUBLISHED`, `CLOSED` hoặc `EXPIRED`;
+* Job đã từng được publish;
 * historical creator/former Primary không còn current authority.
 
 ### Kết quả
@@ -1060,12 +1061,6 @@ Trong V5, quyền hard-delete chủ động chỉ áp dụng cho Job chưa từn
 * `PENDING_APPROVAL`.
 
 Reject trong F07 là một business outcome riêng của `PENDING_APPROVAL` nhưng cũng dẫn đến hard-delete.
-
-### Trường hợp từ chối
-
-* Job đã từng được publish;
-* actor thuộc Company khác;
-* actor là Recruiter.
 
 ### Business Rules liên quan
 
@@ -1354,14 +1349,16 @@ Không chỉnh sửa Job đã publish để thay đổi điều kiện tuyển d
 
 ## BR-26 — Chỉ PUBLISHED được thay Primary Recruiter
 
-Company Manager chỉ được thay Primary Recruiter khi Job đang `PUBLISHED`.
+Company Manager chỉ được thay Primary Recruiter khi Job còn effectively
+`PUBLISHED` theo `BR-30` / `BR-31`.
 
 Không thay Primary trong:
 
 * `DRAFT`;
 * `PENDING_APPROVAL`;
 * `CLOSED`;
-* `EXPIRED`.
+* `EXPIRED`;
+* persisted `PUBLISHED` với `applicationDeadline <= now`.
 
 ---
 
@@ -1380,12 +1377,15 @@ Primary mới phải là Recruiter hợp lệ thuộc cùng Company.
 
 ## BR-28 — Quyền đóng Job
 
-Job `PUBLISHED` chỉ được đóng bởi:
+Job còn effectively `PUBLISHED` theo `BR-30` / `BR-31` chỉ được đóng bởi:
 
 * current Primary Recruiter;
 * Company Manager thuộc Company sở hữu Job.
 
 Recruiter khác trong Company không mặc nhiên có quyền đóng Job.
+
+Persisted `PUBLISHED` với `applicationDeadline <= now` không được đóng thành
+`CLOSED`.
 
 ---
 
@@ -1560,11 +1560,33 @@ Job đã bị xóa cũng không còn khả năng tham gia nghiệp vụ public.
 
 Không được hoàn tất việc khóa hoặc chấm dứt một Recruiter khi Recruiter đó vẫn đang là Primary của Job chưa kết thúc.
 
-Việc chuyển Primary chỉ được thực hiện khi Job `PUBLISHED`.
+Outstanding Primary responsibility trong V5 gồm:
+
+```text
+DRAFT
+→ blocking
+
+PENDING_APPROVAL
+→ blocking
+
+PUBLISHED AND applicationDeadline > now
+→ blocking
+
+PUBLISHED AND applicationDeadline <= now
+→ NOT blocking
+
+CLOSED
+→ NOT blocking
+
+EXPIRED
+→ NOT blocking
+```
+
+Persisted `PUBLISHED` với `now >= applicationDeadline` là effectively `EXPIRED` theo `BR-30` / `BR-31` và không còn tạo trách nhiệm vận hành cần bàn giao, kể cả khi status chưa được materialize thành `EXPIRED`.
+
+Việc chuyển Primary chỉ được thực hiện khi Job còn effectively `PUBLISHED`.
 
 Do đó, nếu Recruiter còn Job `DRAFT` hoặc `PENDING_APPROVAL`, các Job đó phải đi đến một kết quả lifecycle hợp lệ trước khi việc khóa/chấm dứt Recruiter có thể hoàn tất.
-
-Job `CLOSED` hoặc `EXPIRED` không còn tạo ra trách nhiệm vận hành cần bàn giao.
 
 ---
 
@@ -1629,9 +1651,9 @@ Chỉ các transition được định nghĩa trong tài liệu này thuộc bus
 | Submit                          | Primary Recruiter        | Job mình phụ trách          | `DRAFT` và đủ điều kiện         |
 | Approve                         | Company Manager          | Job Company mình            | `PENDING_APPROVAL`              |
 | Reject                          | Company Manager          | Job Company mình            | `PENDING_APPROVAL`              |
-| Thay Primary                    | Company Manager          | Job Company mình            | `PUBLISHED`                     |
-| Close                           | Primary Recruiter        | Job mình phụ trách          | `PUBLISHED`                     |
-| Close                           | Company Manager          | Job Company mình            | `PUBLISHED`                     |
+| Thay Primary                    | Company Manager          | Job Company mình            | effectively `PUBLISHED`         |
+| Close                           | Primary Recruiter        | Job mình phụ trách          | effectively `PUBLISHED`         |
+| Close                           | Company Manager          | Job Company mình            | effectively `PUBLISHED`         |
 | Hard-delete DRAFT | Primary Recruiter | Job mình phụ trách | `DRAFT` |
 | Hard-delete pending Job | Company Manager | Job Company mình | `PENDING_APPROVAL` |
 | Hard-delete Job đã publish | Không actor nào trong V5 | — | Bị cấm |
@@ -1714,24 +1736,29 @@ Các invariant sau phải luôn đúng trong V5:
 25. Reject kết thúc Job bằng hard-delete.
 26. Job bị reject không được resubmit.
 27. Nội dung Job không được chỉnh sửa sau publish.
-28. Chỉ `PUBLISHED` được thay Primary Recruiter.
+28. Chỉ effectively `PUBLISHED` được thay Primary Recruiter.
 29. Chỉ Company Manager được thay Primary.
 30. Thay Primary không thay người tạo Job.
 31. Primary mới phải là Recruiter hợp lệ cùng Company.
-32. Primary Recruiter hoặc Company Manager mới được đóng Job `PUBLISHED`.
+32. Primary Recruiter hoặc Company Manager mới được đóng Job còn effectively
+    `PUBLISHED`.
 33. `CLOSED` không được mở lại trong V5.
 34. Deadline là nguồn sự thật của expiration.
 35. Job đạt deadline không còn được coi là `PUBLISHED` hiệu lực.
 36. `EXPIRED` không được mở lại trong V5.
 37. Job đã từng publish không được hard-delete.
 38. `CLOSED` và `EXPIRED` được giữ lại.
-39. Recruiter không hard-delete Job.
+39. Hard-delete chỉ theo lifecycle authority: current Primary được hard-delete
+    own `DRAFT`; Company Manager được hard-delete/reject `PENDING_APPROVAL`;
+    không actor nào trong V5 hard-delete `PUBLISHED`, `CLOSED` hoặc `EXPIRED`.
 40. Candidate chỉ có thể được tiếp cận Job đáp ứng public eligibility.
 41. Company phải đang hoạt động để Job được coi là cơ hội công khai.
 42. Job thuộc Company, không thuộc cá nhân Recruiter.
 43. Cross-tenant Job access bị cấm.
 44. Supporting Recruiter chưa tồn tại trong V5.
-45. Recruiter còn trách nhiệm Primary trên Job chưa kết thúc không được bị khóa/chấm dứt trước khi trách nhiệm đó được giải quyết hợp lệ.
+45. Recruiter còn outstanding Primary responsibility (`DRAFT`,
+    `PENDING_APPROVAL`, hoặc effectively `PUBLISHED`) không được bị khóa/chấm
+    dứt trước khi trách nhiệm đó được giải quyết hợp lệ.
 
 ---
 

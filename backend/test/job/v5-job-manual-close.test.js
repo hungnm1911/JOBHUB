@@ -6,6 +6,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
@@ -22,6 +23,7 @@ import {
   createFieldCategory,
   createPositionCategory,
 } from "../../src/services/category.service.js";
+import { closePublishedJob } from "../../src/services/job.service.js";
 import {
   createActiveCompanyManagerContext,
   createActiveRecruiterContext,
@@ -41,6 +43,7 @@ describe("V5 Slice 10 — Manual close Job (F09 / TX-02)", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await clearDatabase();
   });
 
@@ -541,5 +544,292 @@ describe("V5 Slice 10 — Manual close Job (F09 / TX-02)", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     expect(missing.status).toBe(404);
+  });
+
+  it("rejects Primary and CM close of persisted PUBLISHED Job past deadline without materializing EXPIRED (BR-28/BR-30/BR-31)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.close.effective-expired@example.com",
+      businessRegistrationNumber: "BRN-V5-F09-EFF-1",
+    });
+    const primary = await createActiveRecruiterContext({
+      email: "recruiter.job.close.effective-expired@example.com",
+      company: manager.company,
+      employeeCode: "NV-F09-EFF-1",
+    });
+
+    const pastDeadline = new Date(Date.now() - 60 * 1000);
+    const published = await Job.create({
+      companyId: manager.company._id,
+      createdByCompanyMemberId: primary.membership._id,
+      primaryRecruiterCompanyMemberId: primary.membership._id,
+      status: JOB_STATUS.PUBLISHED,
+      title: "Past Deadline Published Job",
+      jobDescription: "Should not close after deadline.",
+      requiredSkills: ["Node.js"],
+      salaryText: "Negotiate",
+      applicationDeadline: pastDeadline,
+      publishedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    });
+
+    const before = await Job.findById(published._id).lean();
+    const recruiterToken = await loginAndGetAccessToken(agent, {
+      email: primary.user.email,
+      password: DEFAULT_PASSWORD,
+    });
+    const managerToken = await loginAndGetAccessToken(agent, {
+      email: manager.user.email,
+      password: DEFAULT_PASSWORD,
+    });
+
+    const primaryClose = await agent
+      .post(`/api/jobs/${published._id}/close`)
+      .set("Authorization", `Bearer ${recruiterToken}`);
+
+    expect(primaryClose.status).toBe(409);
+    expect(primaryClose.body.error.message).toMatch(/PUBLISHED/i);
+
+    const afterPrimaryAttempt = await Job.findById(published._id).lean();
+
+    expect(afterPrimaryAttempt.status).toBe(JOB_STATUS.PUBLISHED);
+    expect(afterPrimaryAttempt.primaryRecruiterCompanyMemberId.toString()).toBe(
+      before.primaryRecruiterCompanyMemberId.toString(),
+    );
+    expect(afterPrimaryAttempt.createdByCompanyMemberId.toString()).toBe(
+      before.createdByCompanyMemberId.toString(),
+    );
+    expect(afterPrimaryAttempt.companyId.toString()).toBe(
+      before.companyId.toString(),
+    );
+    expect(afterPrimaryAttempt.publishedAt.toISOString()).toBe(
+      before.publishedAt.toISOString(),
+    );
+    expect(afterPrimaryAttempt.title).toBe(before.title);
+    expect(afterPrimaryAttempt.jobDescription).toBe(before.jobDescription);
+
+    const managerClose = await agent
+      .post(`/api/jobs/${published._id}/close`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    expect(managerClose.status).toBe(409);
+    expect(managerClose.body.error.message).toMatch(/PUBLISHED/i);
+
+    const afterManagerAttempt = await Job.findById(published._id).lean();
+
+    expect(afterManagerAttempt.status).toBe(JOB_STATUS.PUBLISHED);
+    expect(afterManagerAttempt.primaryRecruiterCompanyMemberId.toString()).toBe(
+      before.primaryRecruiterCompanyMemberId.toString(),
+    );
+    expect(afterManagerAttempt.createdByCompanyMemberId.toString()).toBe(
+      before.createdByCompanyMemberId.toString(),
+    );
+    expect(afterManagerAttempt.companyId.toString()).toBe(
+      before.companyId.toString(),
+    );
+    expect(afterManagerAttempt.publishedAt.toISOString()).toBe(
+      before.publishedAt.toISOString(),
+    );
+    expect(afterManagerAttempt.title).toBe(before.title);
+    expect(afterManagerAttempt.applicationDeadline.toISOString()).toBe(
+      pastDeadline.toISOString(),
+    );
+  });
+
+  it("rejects Primary close when clock crosses fixed deadline before conditional write (BR-28/BR-30/BR-31/TX-02)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.close.deadline-race.primary@example.com",
+      businessRegistrationNumber: "BRN-V5-F09-EFF-2",
+    });
+    const primary = await createActiveRecruiterContext({
+      email: "recruiter.job.close.deadline-race.primary@example.com",
+      company: manager.company,
+      employeeCode: "NV-F09-EFF-2",
+    });
+    const catalog = await seedCatalog();
+    const { job: published } = await createPublishedJob({
+      agent,
+      manager,
+      recruiter: primary,
+      content: buildCompleteContent(catalog),
+    });
+
+    // Fixed deadline T. Operation starts before T; clock alone crosses T while
+    // the Job document deadline stays unchanged (no post-start deadline mutation).
+    const deadline = new Date(Date.now() + 300);
+    await Job.collection.updateOne(
+      {
+        _id: new mongoose.Types.ObjectId(published.id),
+      },
+      {
+        $set: {
+          applicationDeadline: deadline,
+        },
+      },
+    );
+
+    const operationNow = new Date();
+    expect(operationNow.getTime()).toBeLessThan(deadline.getTime());
+
+    const before = await Job.findById(published.id).lean();
+    const originalFindOneAndUpdate = Job.findOneAndUpdate.bind(Job);
+    let releaseWrite;
+    const holdWrite = new Promise((resolve) => {
+      releaseWrite = resolve;
+    });
+    let resolveWriteReached;
+    const writeReached = new Promise((resolve) => {
+      resolveWriteReached = resolve;
+    });
+
+    vi.spyOn(Job, "findOneAndUpdate").mockImplementation(
+      (filter, update, options) => {
+        if (update?.$set?.status === JOB_STATUS.CLOSED) {
+          resolveWriteReached();
+          return holdWrite.then(() =>
+            originalFindOneAndUpdate(filter, update, options),
+          );
+        }
+
+        return originalFindOneAndUpdate(filter, update, options);
+      },
+    );
+
+    const closePromise = closePublishedJob({
+      actorUser: primary.user,
+      jobId: published.id,
+      now: operationNow,
+    });
+
+    await writeReached;
+
+    const remainingMs = deadline.getTime() - Date.now() + 40;
+    if (remainingMs > 0) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, remainingMs);
+      });
+    }
+
+    expect(Date.now()).toBeGreaterThanOrEqual(deadline.getTime());
+
+    const duringHold = await Job.findById(published.id).lean();
+    expect(duringHold.applicationDeadline.toISOString()).toBe(
+      deadline.toISOString(),
+    );
+    expect(duringHold.status).toBe(JOB_STATUS.PUBLISHED);
+
+    releaseWrite();
+
+    await expect(closePromise).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringMatching(/PUBLISHED/i),
+    });
+
+    const after = await Job.findById(published.id).lean();
+
+    expect(after.status).toBe(JOB_STATUS.PUBLISHED);
+    assertHistoricalFieldsPreserved(before, after);
+    expect(after.applicationDeadline.toISOString()).toBe(
+      deadline.toISOString(),
+    );
+  });
+
+  it("rejects Company Manager close when clock crosses fixed deadline before conditional write (BR-28/BR-30/BR-31/TX-02)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.close.deadline-race.manager@example.com",
+      businessRegistrationNumber: "BRN-V5-F09-EFF-3",
+    });
+    const primary = await createActiveRecruiterContext({
+      email: "recruiter.job.close.deadline-race.manager@example.com",
+      company: manager.company,
+      employeeCode: "NV-F09-EFF-3",
+    });
+    const catalog = await seedCatalog();
+    const { job: published } = await createPublishedJob({
+      agent,
+      manager,
+      recruiter: primary,
+      content: buildCompleteContent(catalog),
+    });
+
+    // Fixed deadline T. Operation starts before T; clock alone crosses T while
+    // the Job document deadline stays unchanged (no post-start deadline mutation).
+    const deadline = new Date(Date.now() + 300);
+    await Job.collection.updateOne(
+      {
+        _id: new mongoose.Types.ObjectId(published.id),
+      },
+      {
+        $set: {
+          applicationDeadline: deadline,
+        },
+      },
+    );
+
+    const operationNow = new Date();
+    expect(operationNow.getTime()).toBeLessThan(deadline.getTime());
+
+    const before = await Job.findById(published.id).lean();
+    const originalFindOneAndUpdate = Job.findOneAndUpdate.bind(Job);
+    let releaseWrite;
+    const holdWrite = new Promise((resolve) => {
+      releaseWrite = resolve;
+    });
+    let resolveWriteReached;
+    const writeReached = new Promise((resolve) => {
+      resolveWriteReached = resolve;
+    });
+
+    vi.spyOn(Job, "findOneAndUpdate").mockImplementation(
+      (filter, update, options) => {
+        if (update?.$set?.status === JOB_STATUS.CLOSED) {
+          resolveWriteReached();
+          return holdWrite.then(() =>
+            originalFindOneAndUpdate(filter, update, options),
+          );
+        }
+
+        return originalFindOneAndUpdate(filter, update, options);
+      },
+    );
+
+    const closePromise = closePublishedJob({
+      actorUser: manager.user,
+      jobId: published.id,
+      now: operationNow,
+    });
+
+    await writeReached;
+
+    const remainingMs = deadline.getTime() - Date.now() + 40;
+    if (remainingMs > 0) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, remainingMs);
+      });
+    }
+
+    expect(Date.now()).toBeGreaterThanOrEqual(deadline.getTime());
+
+    const duringHold = await Job.findById(published.id).lean();
+    expect(duringHold.applicationDeadline.toISOString()).toBe(
+      deadline.toISOString(),
+    );
+    expect(duringHold.status).toBe(JOB_STATUS.PUBLISHED);
+
+    releaseWrite();
+
+    await expect(closePromise).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringMatching(/PUBLISHED/i),
+    });
+
+    const after = await Job.findById(published.id).lean();
+
+    expect(after.status).toBe(JOB_STATUS.PUBLISHED);
+    assertHistoricalFieldsPreserved(before, after);
+    expect(after.applicationDeadline.toISOString()).toBe(
+      deadline.toISOString(),
+    );
   });
 });
