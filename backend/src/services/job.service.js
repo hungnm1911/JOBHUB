@@ -45,6 +45,24 @@ const DRAFT_CONTENT_FIELDS = Object.freeze([
   "applicationDeadline",
 ]);
 
+// Minimal plain values for conditional Job writes. Array fields are copied so
+// Mongoose array subtypes do not affect MongoDB equality matching.
+const buildValidatedDraftContentMatch = (job) => {
+  return {
+    title: job.title,
+    jobDescription: job.jobDescription,
+    requiredSkills: [...job.requiredSkills],
+    salaryText: job.salaryText,
+    fieldCategoryIds: [...job.fieldCategoryIds],
+    positionCategoryIds: [...job.positionCategoryIds],
+    location: job.location,
+    employmentType: job.employmentType,
+    workModes: [...job.workModes],
+    experienceLevelId: job.experienceLevelId,
+    applicationDeadline: job.applicationDeadline,
+  };
+};
+
 const toPublicJob = (job) => {
   return {
     id: job._id.toString(),
@@ -716,6 +734,15 @@ const isJobEffectivelyPublished = (job, now = new Date()) => {
   return resolveEffectiveJobStatus(job, now) === JOB_STATUS.PUBLISHED;
 };
 
+// BR-30 / BR-31: same deadline rule as isJobEffectivelyPublished, evaluated by
+// MongoDB at the conditional-write decision via $$NOW — not an application
+// timestamp captured before async validation.
+const APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION = Object.freeze({
+  $expr: Object.freeze({
+    $gt: Object.freeze(["$applicationDeadline", "$$NOW"]),
+  }),
+});
+
 // BR-35: owning Company must still be operationally active.
 const isOwningCompanyActiveForPublicEligibility = (company) => {
   if (company == null) {
@@ -736,6 +763,23 @@ const isJobPubliclyEligible = ({
   now = new Date(),
 } = {}) => {
   if (job == null) {
+    return false;
+  }
+
+  if (company == null) {
+    return false;
+  }
+
+  // BR-35 / BR-38: only the Job's owning Company may establish eligibility.
+  // A foreign APPROVED+ACTIVE Company must never make another tenant's Job
+  // publicly eligible.
+  const providedCompanyId = company._id ?? company.id;
+
+  if (
+    job.companyId == null ||
+    providedCompanyId == null ||
+    job.companyId.toString() !== providedCompanyId.toString()
+  ) {
     return false;
   }
 
@@ -932,13 +976,17 @@ const submitDraftJob = async ({
   });
 
   // Persist only the lifecycle transition; content/ownership/creator/Primary
-  // remain unchanged. Source-state guard prevents partial concurrent submits.
+  // remain unchanged. Bind the write to the validated submit-relevant content
+  // snapshot (plus updatedAt as a cheap revision hint). Content equality is
+  // required because timestamp resolution alone cannot prove content identity.
   const updatedJob = await Job.findOneAndUpdate(
     {
       _id: job._id,
       companyId: context.companyId,
       primaryRecruiterCompanyMemberId: context.membership._id,
       status: JOB_STATUS.DRAFT,
+      updatedAt: job.updatedAt,
+      ...buildValidatedDraftContentMatch(job),
     },
     {
       $set: {
@@ -952,6 +1000,18 @@ const submitDraftJob = async ({
   );
 
   if (!updatedJob) {
+    const currentJob = await Job.findById(job._id).select("status").lean();
+
+    if (currentJob?.status === JOB_STATUS.DRAFT) {
+      throw new AppError(
+        409,
+        "Job content changed before submit could complete",
+        {
+          field: "content",
+        },
+      );
+    }
+
     throw new AppError(409, "Job can only be submitted while DRAFT", {
       field: "status",
     });
@@ -1411,11 +1471,13 @@ const deletePrePublicationJob = async ({
   };
 };
 
-// BR-26 / F08: CM may reassign Primary only while the Job is PUBLISHED.
+// BR-26 / F08: CM may reassign Primary only while the Job is effectively
+// PUBLISHED (BR-30/BR-31: persisted PUBLISHED past deadline is EXPIRED).
 const assertCompanyManagerPrimaryReassignmentAuthority = ({
   job,
   companyRole,
   tenantCompanyId,
+  now = new Date(),
 } = {}) => {
   if (companyRole !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
     throw new AppError(
@@ -1434,13 +1496,13 @@ const assertCompanyManagerPrimaryReassignmentAuthority = ({
     tenantCompanyId,
   });
 
-  if (job.status !== JOB_STATUS.PUBLISHED) {
+  if (!isJobEffectivelyPublished(job, now)) {
     throw new AppError(
       409,
       "Job Primary Recruiter can only be reassigned while PUBLISHED",
       {
         field: "status",
-        status: job.status,
+        status: resolveEffectiveJobStatus(job, now),
       },
     );
   }
@@ -1451,6 +1513,7 @@ const reassignPrimaryRecruiter = async ({
   jobId,
   clientCompanyId,
   primaryRecruiterCompanyMemberId,
+  now = new Date(),
 } = {}) => {
   // BR-38: trusted CM membership; client companyId / Job id do not authorize.
   const context = await resolveCompanyManagerRecruiterManagementContext({
@@ -1478,10 +1541,12 @@ const reassignPrimaryRecruiter = async ({
     });
   }
 
+  // Early rejection only; mutation-boundary $$NOW is the final deadline guard.
   assertCompanyManagerPrimaryReassignmentAuthority({
     job,
     companyRole: context.companyRole,
     tenantCompanyId: context.companyId,
+    now,
   });
 
   // BR-06 / BR-07 / BR-27: new Primary must be one valid same-Company Recruiter.
@@ -1491,14 +1556,17 @@ const reassignPrimaryRecruiter = async ({
     jobCompanyId: job.companyId,
   });
 
-  // TX-03 / BR-05 / BR-26: atomic single-field update only while still
-  // PUBLISHED. Creator, company ownership, content, status, and publishedAt
+  // TX-03 / BR-05 / BR-26 / BR-30 / BR-31: atomic single-field update only while
+  // still effectively PUBLISHED. $$NOW is evaluated when MongoDB decides the
+  // write so a deadline-crossing race after this operation started cannot
+  // reassign. Creator, company ownership, content, status, and publishedAt
   // remain unchanged. No CompanyMember mutation or Primary history document.
   const updatedJob = await Job.findOneAndUpdate(
     {
       _id: job._id,
       companyId: context.companyId,
       status: JOB_STATUS.PUBLISHED,
+      ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
     },
     {
       $set: {
@@ -1526,11 +1594,13 @@ const reassignPrimaryRecruiter = async ({
 
 // BR-28 / F09: close authority is current Primary Recruiter or owning Company
 // Manager. Peer Recruiters, creators, and former Primaries do not authorize.
+// BR-30 / BR-31: effectively expired PUBLISHED Jobs are not closeable.
 const assertManualCloseJobAuthority = ({
   job,
   companyRole,
   membershipId,
   tenantCompanyId,
+  now = new Date(),
 } = {}) => {
   // BR-38: Job id / client companyId alone do not authorize.
   assertSameCompanyTenant({
@@ -1538,10 +1608,10 @@ const assertManualCloseJobAuthority = ({
     tenantCompanyId,
   });
 
-  if (job.status !== JOB_STATUS.PUBLISHED) {
+  if (!isJobEffectivelyPublished(job, now)) {
     throw new AppError(409, "Job can only be closed while PUBLISHED", {
       field: "status",
-      status: job.status,
+      status: resolveEffectiveJobStatus(job, now),
     });
   }
 
@@ -1569,6 +1639,7 @@ const closePublishedJob = async ({
   actorUser,
   jobId,
   clientCompanyId,
+  now = new Date(),
 } = {}) => {
   // BR-38: membership-derived tenant; client companyId cannot expand authority.
   const context = await resolveCompanyStaffBusinessContext({
@@ -1590,21 +1661,27 @@ const closePublishedJob = async ({
     });
   }
 
+  // Early rejection only; mutation-boundary $$NOW is the final deadline guard.
   assertManualCloseJobAuthority({
     job,
     companyRole: context.companyRole,
     membershipId: context.membership._id,
     tenantCompanyId: context.companyId,
+    now,
   });
 
-  // TX-02 / BR-29 / BR-32: atomic PUBLISHED → CLOSED on the Job document only.
-  // Ownership, creator, current Primary, publishedAt, and content stay unchanged.
-  // CLOSED is retained (no hard-delete) and is terminal in V5 (no reopen).
+  // TX-02 / BR-29 / BR-30 / BR-31 / BR-32: atomic effectively-PUBLISHED → CLOSED.
+  // $$NOW is evaluated when MongoDB decides the write so a deadline-crossing
+  // race after this operation started cannot turn an expired Job into CLOSED.
+  // Ownership, creator, current Primary, publishedAt, and content stay
+  // unchanged. CLOSED is retained (no hard-delete) and is terminal in V5
+  // (no reopen).
   const updatedJob = await Job.findOneAndUpdate(
     {
       _id: job._id,
       companyId: context.companyId,
       status: JOB_STATUS.PUBLISHED,
+      ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
     },
     {
       $set: {

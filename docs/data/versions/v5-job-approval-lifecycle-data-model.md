@@ -1185,6 +1185,7 @@ Phần không tạo `DELETED`, `isDeleted`, `deletedAt` giữ nguyên.
 
 ```text
 status = PUBLISHED
+applicationDeadline > now
 primaryRecruiterCompanyMemberId = A
 ```
 
@@ -1218,6 +1219,13 @@ Không persist history của Primary cũ trong V5.
 PUBLISHED → CLOSED
 ```
 
+### Trước
+
+```text
+status = PUBLISHED
+applicationDeadline > now
+```
+
 ### Sau
 
 ```text
@@ -1227,7 +1235,8 @@ content giữ nguyên
 primaryRecruiterCompanyMemberId giữ nguyên
 ```
 
-Không hard-delete Job.
+Không hard-delete Job. Persisted `PUBLISHED` quá deadline không được đóng thành
+`CLOSED`.
 
 ---
 
@@ -1391,10 +1400,12 @@ Blocking Job:
 ```text
 primaryRecruiterCompanyMemberId = Recruiter
 
-AND status IN (
-  DRAFT,
-  PENDING_APPROVAL,
-  PUBLISHED
+AND (
+  status IN (DRAFT, PENDING_APPROVAL)
+  OR (
+    status = PUBLISHED
+    AND applicationDeadline > now
+  )
 )
 ```
 
@@ -1403,6 +1414,8 @@ Không blocking:
 ```text
 CLOSED
 EXPIRED
+persisted PUBLISHED với applicationDeadline <= now
+  (effectively EXPIRED theo BR-30 / BR-31; không phụ thuộc materialize EXPIRED)
 ```
 
 V5 không yêu cầu một multi-document transaction mới giữa:
@@ -1471,9 +1484,9 @@ Schema **không** được yêu cầu tất cả content field luôn non-null v�
 | PENDING content immutable                         | Service | Lifecycle rule                    |
 | post-submit content immutable                     | Service | Lifecycle rule                    |
 | chỉ CM approve/reject                             | Service | Authorization                     |
-| chỉ `PUBLISHED` được reassign Primary             | Service | Lifecycle                         |
+| chỉ effectively `PUBLISHED` được reassign Primary | Service | Lifecycle + effective expiration  |
 | Primary mới cùng Company và hợp lệ                | Service | Cross-document                    |
-| close chỉ bởi Primary/CM                          | Service | Authorization                     |
+| close chỉ bởi Primary/CM trên effectively `PUBLISHED` | Service | Authorization + effective expiration |
 | hard-delete chỉ pre-publication | Service | Historical boundary |
 | `DRAFT` hard-delete chỉ bởi current Primary | Service | Responsibility + lifecycle authorization |
 | `PENDING_APPROVAL` hard-delete chỉ bởi CM | Service | Role + lifecycle authorization |
@@ -1481,7 +1494,7 @@ Schema **không** được yêu cầu tất cả content field luôn non-null v�
 | expiration dùng deadline                          | Service | Effective-state rule              |
 | public eligibility xét Company + deadline         | Service | Cross-document/business rule      |
 | cross-tenant Job access bị cấm                    | Service | Tenant authorization              |
-| Recruiter lock/terminate phải xét outstanding Job | Service | Cross-collection business guard   |
+| Recruiter lock/terminate phải xét outstanding Job theo effective expiration | Service | Cross-collection business guard |
 | Company Manager chỉ đọc Job từ `PENDING_APPROVAL` trở đi | Service | Authorization phụ thuộc role + Job lifecycle state |
 
 ---
@@ -1932,7 +1945,11 @@ Các invariant sau phải luôn được giữ ở canonical persisted state ho�
 43. Fixed vocabulary không có Company ownership.
 44. Supporting Recruiter không được persist trong V5.
 45. Không tạo reverse `jobIds` chỉ để hỗ trợ lookup.
-46. Recruiter có blocking Job `DRAFT`, `PENDING_APPROVAL` hoặc `PUBLISHED` phải được xử lý theo Product lifecycle trước khi lock/terminate hoàn tất.
+46. Recruiter có outstanding Primary responsibility trên Job `DRAFT`,
+    `PENDING_APPROVAL`, hoặc effectively `PUBLISHED`
+    (`status = PUBLISHED` và `applicationDeadline > now`) phải được xử lý theo
+    Product lifecycle trước khi lock/terminate hoàn tất. Persisted `PUBLISHED`
+    với `applicationDeadline <= now` không blocking.
 
 ### Enforcement owner
 

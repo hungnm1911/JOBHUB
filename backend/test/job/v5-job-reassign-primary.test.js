@@ -6,6 +6,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
@@ -24,6 +25,7 @@ import {
   createFieldCategory,
   createPositionCategory,
 } from "../../src/services/category.service.js";
+import { reassignPrimaryRecruiter } from "../../src/services/job.service.js";
 import {
   createActiveCompanyManagerContext,
   createActiveRecruiterContext,
@@ -43,6 +45,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await clearDatabase();
   });
 
@@ -629,6 +632,187 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
     );
     expect(missingPrimary.body.error.details.field).toBe(
       "primaryRecruiterCompanyMemberId",
+    );
+  });
+
+  it("rejects reassignment of persisted PUBLISHED Job past deadline without materializing EXPIRED (BR-26/BR-30/BR-31)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.reassign.effective-expired@example.com",
+      businessRegistrationNumber: "BRN-V5-F08-EFF-1",
+    });
+    const creator = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.effective-expired.a@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-EFF-1A",
+    });
+    const successor = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.effective-expired.b@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-EFF-1B",
+    });
+
+    const pastDeadline = new Date(Date.now() - 60 * 1000);
+    const published = await Job.create({
+      companyId: manager.company._id,
+      createdByCompanyMemberId: creator.membership._id,
+      primaryRecruiterCompanyMemberId: creator.membership._id,
+      status: JOB_STATUS.PUBLISHED,
+      title: "Past Deadline Published Job",
+      applicationDeadline: pastDeadline,
+      publishedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    });
+
+    const before = await Job.findById(published._id).lean();
+    const managerToken = await loginAndGetAccessToken(agent, {
+      email: manager.user.email,
+      password: DEFAULT_PASSWORD,
+    });
+
+    const response = await agent
+      .post(`/api/jobs/${published._id}/reassign-primary`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({
+        primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.message).toMatch(/PUBLISHED/i);
+
+    const after = await Job.findById(published._id).lean();
+
+    expect(after.status).toBe(JOB_STATUS.PUBLISHED);
+    expect(after.primaryRecruiterCompanyMemberId.toString()).toBe(
+      creator.membership._id.toString(),
+    );
+    expect(after.createdByCompanyMemberId.toString()).toBe(
+      before.createdByCompanyMemberId.toString(),
+    );
+    expect(after.companyId.toString()).toBe(before.companyId.toString());
+    expect(after.publishedAt.toISOString()).toBe(
+      before.publishedAt.toISOString(),
+    );
+    expect(after.title).toBe(before.title);
+    expect(after.applicationDeadline.toISOString()).toBe(
+      pastDeadline.toISOString(),
+    );
+  });
+
+  it("rejects stale reassignment when clock crosses fixed deadline before conditional write (BR-26/BR-30/BR-31/TX-03)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.reassign.deadline-race@example.com",
+      businessRegistrationNumber: "BRN-V5-F08-EFF-2",
+    });
+    const creator = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.deadline-race.a@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-EFF-2A",
+    });
+    const successor = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.deadline-race.b@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-EFF-2B",
+    });
+    const catalog = await seedCatalog();
+    const { job: published } = await createPublishedJob({
+      agent,
+      manager,
+      recruiter: creator,
+      content: buildCompleteContent(catalog),
+    });
+
+    // Fixed deadline T. Operation starts before T; clock alone crosses T while
+    // the Job document deadline stays unchanged (no post-start deadline mutation).
+    const deadline = new Date(Date.now() + 300);
+    await Job.collection.updateOne(
+      {
+        _id: new mongoose.Types.ObjectId(published.id),
+      },
+      {
+        $set: {
+          applicationDeadline: deadline,
+        },
+      },
+    );
+
+    const operationNow = new Date();
+    expect(operationNow.getTime()).toBeLessThan(deadline.getTime());
+
+    const before = await Job.findById(published.id).lean();
+    const originalFindOneAndUpdate = Job.findOneAndUpdate.bind(Job);
+    let releaseWrite;
+    const holdWrite = new Promise((resolve) => {
+      releaseWrite = resolve;
+    });
+    let resolveWriteReached;
+    const writeReached = new Promise((resolve) => {
+      resolveWriteReached = resolve;
+    });
+
+    vi.spyOn(Job, "findOneAndUpdate").mockImplementation(
+      (filter, update, options) => {
+        if (update?.$set?.primaryRecruiterCompanyMemberId != null) {
+          resolveWriteReached();
+          return holdWrite.then(() =>
+            originalFindOneAndUpdate(filter, update, options),
+          );
+        }
+
+        return originalFindOneAndUpdate(filter, update, options);
+      },
+    );
+
+    const reassignPromise = reassignPrimaryRecruiter({
+      managerUser: manager.user,
+      jobId: published.id,
+      primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+      now: operationNow,
+    });
+
+    await writeReached;
+
+    const remainingMs = deadline.getTime() - Date.now() + 40;
+    if (remainingMs > 0) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, remainingMs);
+      });
+    }
+
+    expect(Date.now()).toBeGreaterThanOrEqual(deadline.getTime());
+
+    const duringHold = await Job.findById(published.id).lean();
+    expect(duringHold.applicationDeadline.toISOString()).toBe(
+      deadline.toISOString(),
+    );
+    expect(duringHold.status).toBe(JOB_STATUS.PUBLISHED);
+    expect(duringHold.primaryRecruiterCompanyMemberId.toString()).toBe(
+      creator.membership._id.toString(),
+    );
+
+    releaseWrite();
+
+    await expect(reassignPromise).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringMatching(/PUBLISHED/i),
+    });
+
+    const after = await Job.findById(published.id).lean();
+
+    expect(after.status).toBe(JOB_STATUS.PUBLISHED);
+    expect(after.primaryRecruiterCompanyMemberId.toString()).toBe(
+      creator.membership._id.toString(),
+    );
+    expect(after.createdByCompanyMemberId.toString()).toBe(
+      before.createdByCompanyMemberId.toString(),
+    );
+    expect(after.companyId.toString()).toBe(before.companyId.toString());
+    expect(after.publishedAt.toISOString()).toBe(
+      before.publishedAt.toISOString(),
+    );
+    expect(after.title).toBe(before.title);
+    expect(after.applicationDeadline.toISOString()).toBe(
+      deadline.toISOString(),
     );
   });
 });
