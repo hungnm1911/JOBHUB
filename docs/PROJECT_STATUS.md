@@ -12,6 +12,10 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 are implemented and automated verification passes; discovered acceptance blockers have been fixed and verified under the backend gate, but Final Acceptance / regression closure has not been rerun and passed, so V5 is not `COMPLETED AND VERIFIED`. V6 through V17 remain `PLANNED`.
 
+## Operational provisioning
+
+- **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
+
 ## Completed and verified
 
 - **Canonicalized; Product/Data/Engineering authority verified:** V5 acceptance finding — residual F12 DRAFT hard-delete and BR-41 effective-expiration documentation contradictions aligned without changing verified runtime behavior: Product F12 no longer blanket-rejects Recruiter delete and no longer has a duplicate rejection block; lifecycle invariants state lifecycle-specific hard-delete authority and outstanding responsibility via effective `PUBLISHED`; Product BR-26/BR-28/BR-41 plus authorization table conditions require effective `PUBLISHED` / deadline semantics; Data Contract lock/terminate blocking, close/reassign preconditions, constraint ownership, and persistence invariant #46 exclude past-deadline persisted `PUBLISHED` from outstanding responsibility; Engineering `source-of-truth.md` F12 owner row is lifecycle-specific (Primary `DRAFT`, CM `PENDING_APPROVAL`) and BR-41 anti-patterns forbid treating past-deadline `PUBLISHED` as blocking. Slice 12 / F10–F11 / reassign-close acceptance implementations remain the behavior source already verified.
