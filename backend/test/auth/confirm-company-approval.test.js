@@ -117,7 +117,7 @@ const registerSubmitAndApproveCompany = async (
   };
 };
 
-describe("POST /api/auth/confirm-company-approval", () => {
+describe("confirm-company-approval email link and HTTP consume", () => {
   beforeAll(async () => {
     await connectTestDatabase();
   });
@@ -129,6 +129,60 @@ describe("POST /api/auth/confirm-company-approval", () => {
 
   afterAll(async () => {
     await disconnectTestDatabase();
+  });
+
+  it("emails a browser-clickable /api/auth/confirm-company-approval link", async () => {
+    const agent = createTestAgent();
+
+    await registerSubmitAndApproveCompany(agent, {
+      managerEmail: "manager.mail-link@example.com",
+      adminEmail: "admin.mail-link@example.com",
+      companyName: "Mail Link Co",
+      businessRegistrationNumber: "BRN-MAIL-LINK-1",
+    });
+
+    const mailCall = sendMail.mock.calls.at(-1)[0];
+    expect(mailCall.text).toContain(
+      "/api/auth/confirm-company-approval?token=",
+    );
+    expect(mailCall.html).toContain(
+      "/api/auth/confirm-company-approval?token=",
+    );
+    expect(mailCall.html).not.toMatch(
+      /https?:\/\/[^/]+\/confirm-company-approval\?token=/,
+    );
+  });
+
+  it("activates via GET query token the same way a Gmail link click would", async () => {
+    const agent = createTestAgent();
+
+    const { companyId, managerId, rawToken } =
+      await registerSubmitAndApproveCompany(agent, {
+        managerEmail: "manager.get-activate@example.com",
+        adminEmail: "admin.get-activate@example.com",
+        companyName: "Get Activate Co",
+        businessRegistrationNumber: "BRN-GET-ACTIVATE-1",
+      });
+
+    const response = await agent.get(
+      `/api/auth/confirm-company-approval?token=${encodeURIComponent(rawToken)}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.user).toMatchObject({
+      id: managerId,
+      status: USER_STATUS.ACTIVE,
+    });
+    expect(response.body.company).toMatchObject({
+      id: companyId,
+      approvalStatus: COMPANY_APPROVAL_STATUS.APPROVED,
+      operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
+    });
+
+    const reused = await agent.get(
+      `/api/auth/confirm-company-approval?token=${encodeURIComponent(rawToken)}`,
+    );
+    expect(reused.status).toBeGreaterThanOrEqual(400);
   });
 
   it("activates CM and Company atomically under TX-03, consumes confirmation token once, and does not issue login credentials", async () => {

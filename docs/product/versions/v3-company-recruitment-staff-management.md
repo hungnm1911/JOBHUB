@@ -588,8 +588,8 @@ Trao quyền thiết lập mật khẩu ban đầu trực tiếp cho Recruiter.
 ### Luồng chính
 
 1. Hệ thống gửi activation email đến email của Recruiter.
-2. Email cung cấp activation link dành cho Recruiter.
-3. Recruiter sử dụng link để tiếp tục luồng thiết lập mật khẩu.
+2. Email cung cấp activation link dành cho Recruiter, hoạt động khi email client/browser thực hiện `GET` với activation token trên query string.
+3. Recruiter sử dụng link để mở form và tiếp tục luồng thiết lập mật khẩu.
 
 ### Kết quả
 
@@ -632,8 +632,8 @@ Thiết lập mật khẩu của chính Recruiter và hoàn tất điều kiện
 ### Luồng chính
 
 1. Recruiter mở activation link.
-2. Recruiter đi vào luồng thiết lập mật khẩu bắt buộc.
-3. Recruiter tự chọn mật khẩu.
+2. Hệ thống trả form thiết lập mật khẩu; việc mở link không tự consume activation token.
+3. Recruiter tự chọn mật khẩu và submit form.
 4. Hệ thống ghi nhận việc thiết lập mật khẩu đã hoàn tất.
 5. Recruiter không còn bị chặn bởi điều kiện activation/password setup.
 
@@ -683,8 +683,8 @@ Cho phép Recruiter tự thiết lập mật khẩu mới khi không còn sử d
 ### Luồng chính
 
 1. Recruiter yêu cầu reset mật khẩu.
-2. Recruiter hoàn tất flow xác nhận hợp lệ.
-3. Recruiter tự chọn mật khẩu mới.
+2. Recruiter mở reset link từ email để vào form đặt lại mật khẩu.
+3. Recruiter hoàn tất flow xác nhận hợp lệ và tự chọn mật khẩu mới.
 4. Các phiên đăng nhập cũ của Recruiter bị thu hồi.
 5. Mật khẩu mới trở thành mật khẩu hiện tại.
 

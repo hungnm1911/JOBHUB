@@ -1,12 +1,14 @@
-import config from "../config/index.js";
+import buildAuthActionUrl from "./auth-action-url.js";
 
 const buildCompanyApprovalConfirmationEmail = ({
   fullName,
   companyName,
   rawToken,
 }) => {
-  const confirmationUrl =
-    `${config.appBaseUrl}/confirm-company-approval?token=${encodeURIComponent(rawToken)}`;
+  const confirmationUrl = buildAuthActionUrl(
+    "confirm-company-approval",
+    rawToken,
+  );
 
   const subject = "Confirm your JOBHUB company approval";
   const text =

@@ -200,8 +200,12 @@ describe("POST /api/platform-admin/company-registrations/:companyId/approve", ()
       expect.objectContaining({
         to: "manager.approve@example.com",
         subject: expect.stringMatching(/confirm/i),
-        text: expect.stringContaining("confirm-company-approval?token="),
-        html: expect.stringContaining("confirm-company-approval?token="),
+        text: expect.stringContaining(
+          "/api/auth/confirm-company-approval?token=",
+        ),
+        html: expect.stringContaining(
+          "/api/auth/confirm-company-approval?token=",
+        ),
       }),
     );
 

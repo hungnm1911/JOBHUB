@@ -126,7 +126,10 @@ describe("V3 Slice 03 Recruiter creation and activation issuance", () => {
     expect(sendMail).toHaveBeenCalledTimes(1);
     const mailCall = sendMail.mock.calls[0][0];
     expect(mailCall.to).toBe("riley.recruiter@example.com");
-    expect(mailCall.html).toMatch(/activate-recruiter\?token=/);
+    expect(mailCall.html).toMatch(/\/api\/auth\/activate-recruiter\?token=/);
+    expect(mailCall.html).not.toMatch(
+      /https?:\/\/[^/]+\/activate-recruiter\?token=/,
+    );
     expect(mailCall.text.toLowerCase()).not.toMatch(/passwordHash|password\s*=/i);
     expect(mailCall.html).not.toMatch(persistedUser.passwordHash);
 

@@ -12,8 +12,18 @@ const confirmCompanyApprovalSchema = z
   })
   .strict();
 
+const resolveConfirmCompanyApprovalPayload = (request) => {
+  if (request.method === "GET") {
+    return { token: request.query?.token };
+  }
+
+  return request.body;
+};
+
 const validateConfirmCompanyApproval = (request, _response, next) => {
-  const parsed = confirmCompanyApprovalSchema.safeParse(request.body);
+  const parsed = confirmCompanyApprovalSchema.safeParse(
+    resolveConfirmCompanyApprovalPayload(request),
+  );
 
   if (!parsed.success) {
     const [firstIssue] = parsed.error.issues;

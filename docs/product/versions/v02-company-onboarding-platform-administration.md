@@ -757,13 +757,14 @@ Hoàn tất onboarding bằng việc xác nhận chấp thuận và kích hoạt
 ### Luồng chính
 
 1. Company Manager nhận yêu cầu xác nhận chấp thuận qua email.
-2. Company Manager thực hiện xác nhận.
-3. Hệ thống kiểm tra Company vẫn đã được Platform Admin chấp thuận và chưa active.
-4. Hệ thống xác nhận hành động thuộc đúng Company Manager.
-5. Hệ thống ghi nhận Company Manager là `ACTIVE`.
-6. Hệ thống ghi nhận Company là `APPROVED + ACTIVE`.
-7. Bước xác nhận email cần thiết cho Company Manager trong onboarding được hoàn tất cùng hành động này.
-8. Onboarding kết thúc thành công.
+2. Company Manager mở link xác nhận trong email; link phải hoạt động khi email client/browser thực hiện `GET` với confirmation token trên query string.
+3. Company Manager thực hiện xác nhận.
+4. Hệ thống kiểm tra Company vẫn đã được Platform Admin chấp thuận và chưa active.
+5. Hệ thống xác nhận hành động thuộc đúng Company Manager.
+6. Hệ thống ghi nhận Company Manager là `ACTIVE`.
+7. Hệ thống ghi nhận Company là `APPROVED + ACTIVE`.
+8. Bước xác nhận email cần thiết cho Company Manager trong onboarding được hoàn tất cùng hành động này.
+9. Onboarding kết thúc thành công.
 
 
 

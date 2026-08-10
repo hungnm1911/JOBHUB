@@ -1591,6 +1591,21 @@ Không gửi raw token trước khi persistence cần thiết tồn tại.
 
 ---
 
+## 14.4. Browser email-action URL contract
+
+Activation và password-reset email phải dùng browser-clickable URL theo dạng:
+
+```text
+{APP_BASE_URL}/api/auth/activate-recruiter?token={raw token đã URL-encode}
+{APP_BASE_URL}/api/auth/reset-password?token={raw token đã URL-encode}
+```
+
+Email client/browser mở các link này bằng `GET` với token trên query string. `GET /activate-recruiter` và `GET /reset-password` chỉ trả HTML form password; token chỉ được consume khi form `POST` tới endpoint completion tương ứng. Completion `POST` tiếp tục nhận token/password và hiện có thể trả JSON cho tới khi có frontend riêng.
+
+`APP_BASE_URL` phải là API origin mà browser truy cập được; không được cấu hình chỉ là bare frontend host khi frontend không proxy route này. Contract delivery không persist raw token, không đổi token type/TTL/single-use semantics, và không liên quan tới access JWT.
+
+---
+
 # 15. Multi-tenant Data Boundary
 
 ## 15.1. Canonical tenant key
