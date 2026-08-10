@@ -1533,6 +1533,18 @@ TTL index được phép cleanup token hết hạn.
 
 TTL deletion không phải business validity check vì cleanup có thể không xảy ra đúng thời điểm `expiresAt`.
 
+### Email action delivery contract
+
+Confirmation email phải dùng browser-clickable URL theo dạng:
+
+```text
+{APP_BASE_URL}/api/auth/confirm-company-approval?token={raw token đã URL-encode}
+```
+
+`APP_BASE_URL` phải là API origin mà browser truy cập được; không được cấu hình chỉ là bare frontend host khi frontend không proxy route này. Browser/email client thực hiện `GET` với token trên query string, và endpoint đó consume confirmation token theo PT-06. `POST` body-token endpoint vẫn được giữ cho API client tương thích.
+
+Contract delivery này không tạo token type hoặc persisted field mới, không thay đổi single-use/TTL/transaction invariant của `COMPANY_APPROVAL_CONFIRMATION`, và không liên quan tới access JWT.
+
 ### TTL value
 
 Product Specification không chốt số phút/giờ/ngày cụ thể.

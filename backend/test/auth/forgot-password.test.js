@@ -78,8 +78,8 @@ describe("POST /api/auth/forgot-password", () => {
       expect.objectContaining({
         to: "forgot@example.com",
         subject: expect.stringMatching(/reset/i),
-        text: expect.stringContaining("reset-password?token="),
-        html: expect.stringContaining("reset-password?token="),
+        text: expect.stringContaining("/api/auth/reset-password?token="),
+        html: expect.stringContaining("/api/auth/reset-password?token="),
       }),
     );
 

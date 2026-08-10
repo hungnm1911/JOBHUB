@@ -45,6 +45,52 @@ describe("V3 Slice 04 Recruiter activation completion (F05/TX-02)", () => {
     await disconnectTestDatabase();
   });
 
+  it("GET email link opens password setup form without consuming the token", async () => {
+    const agent = createTestAgent();
+    const { rawToken } = await createPendingRecruiterWithActivationToken({
+      email: "activate.link@example.com",
+      employeeCode: "NV-ACT-LINK",
+    });
+
+    const response = await agent.get(
+      `/api/auth/activate-recruiter?token=${encodeURIComponent(rawToken)}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toMatch(/html/);
+    expect(response.text).toContain('method="POST"');
+    expect(response.text).toContain('action="/api/auth/activate-recruiter"');
+    expect(response.text).toContain(`value="${rawToken}"`);
+    expect(response.text).toContain('name="password"');
+
+    const tokenStillUsable = await AuthToken.findOne({
+      type: AUTH_TOKEN_TYPE.RECRUITER_ACTIVATION,
+    });
+    expect(tokenStillUsable).not.toBeNull();
+  });
+
+  it("completes activation when the email form posts urlencoded token + password", async () => {
+    const agent = createTestAgent();
+    const { user, rawToken } = await createPendingRecruiterWithActivationToken({
+      email: "activate.form@example.com",
+      employeeCode: "NV-ACT-FORM",
+    });
+
+    const response = await agent
+      .post("/api/auth/activate-recruiter")
+      .type("form")
+      .send({
+        token: rawToken,
+        password: NEW_PASSWORD,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.user).toMatchObject({
+      id: user._id.toString(),
+      mustChangePassword: false,
+    });
+  });
+
   it("atomically sets password, clears mustChangePassword, verifies email, and consumes token (BR-11/TX-02)", async () => {
     const agent = createTestAgent();
     const { user, company, membership, rawToken } =

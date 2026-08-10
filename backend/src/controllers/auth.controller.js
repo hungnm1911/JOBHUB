@@ -10,6 +10,7 @@ import {
   resetPassword,
   verifyEmail,
 } from "../services/auth.service.js";
+import buildAuthPasswordSetupHtml from "../utils/auth-password-setup-html.js";
 
 const registerCandidateHandler = async (request, response, next) => {
   try {
@@ -145,6 +146,22 @@ const forgotPasswordHandler = async (request, response, next) => {
   }
 };
 
+const resetPasswordLinkHandler = (request, response) => {
+  const { token } = request.query;
+
+  return response
+    .status(200)
+    .type("html")
+    .send(
+      buildAuthPasswordSetupHtml({
+        title: "Reset your JOBHUB password",
+        actionPath: "reset-password",
+        rawToken: token,
+        submitLabel: "Reset password",
+      }),
+    );
+};
+
 const resetPasswordHandler = async (request, response, next) => {
   try {
     const { token, password } = request.body;
@@ -157,6 +174,22 @@ const resetPasswordHandler = async (request, response, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+const activateRecruiterLinkHandler = (request, response) => {
+  const { token } = request.query;
+
+  return response
+    .status(200)
+    .type("html")
+    .send(
+      buildAuthPasswordSetupHtml({
+        title: "Activate your JOBHUB recruiter account",
+        actionPath: "activate-recruiter",
+        rawToken: token,
+        submitLabel: "Activate account",
+      }),
+    );
 };
 
 const activateRecruiterHandler = async (request, response, next) => {
@@ -176,6 +209,7 @@ const activateRecruiterHandler = async (request, response, next) => {
 
 export {
   activateRecruiterHandler,
+  activateRecruiterLinkHandler,
   confirmCompanyApprovalHandler,
   forgotPasswordHandler,
   loginHandler,
@@ -184,5 +218,6 @@ export {
   registerCandidateHandler,
   registerCompanyManagerHandler,
   resetPasswordHandler,
+  resetPasswordLinkHandler,
   verifyEmailHandler,
 };

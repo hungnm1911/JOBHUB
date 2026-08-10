@@ -82,8 +82,8 @@ describe("POST /api/auth/register/candidate", () => {
       expect.objectContaining({
         to: "jane@example.com",
         subject: expect.stringMatching(/verify/i),
-        text: expect.stringContaining("verify-email?token="),
-        html: expect.stringContaining("verify-email?token="),
+        text: expect.stringContaining("/api/auth/verify-email?token="),
+        html: expect.stringContaining("/api/auth/verify-email?token="),
       }),
     );
   });

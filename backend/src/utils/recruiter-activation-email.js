@@ -1,8 +1,7 @@
-import config from "../config/index.js";
+import buildAuthActionUrl from "./auth-action-url.js";
 
 const buildRecruiterActivationEmail = ({ fullName, companyName, rawToken }) => {
-  const activationUrl =
-    `${config.appBaseUrl}/activate-recruiter?token=${encodeURIComponent(rawToken)}`;
+  const activationUrl = buildAuthActionUrl("activate-recruiter", rawToken);
 
   const subject = "Activate your JOBHUB recruiter account";
   const text =
