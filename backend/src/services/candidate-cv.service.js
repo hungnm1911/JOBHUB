@@ -1346,6 +1346,220 @@ const updateOwnCandidateCvMetadata = async ({
   return toPublicCandidateCvDetail(updatedCv);
 };
 
+const isMongoDuplicateKeyError = (error) => {
+  return error?.code === 11000;
+};
+
+/**
+ * F09 / BR-35–BR-37 / TX-01: set or switch Default to an eligible own
+ * CandidateCV. Mutates only `isDefault`. Generated DRAFT and archived CVs are
+ * rejected. Switch clears the prior Default and sets the target atomically.
+ */
+const setOwnCandidateCvAsDefault = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+}) => {
+  assertCandidateCvActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only manage Default on their own CVs");
+  }
+
+  if (!mongoose.isValidObjectId(candidateCvId)) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  const session = await mongoose.startSession();
+  let resultCv = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const targetCv = await CandidateCV.findOne({
+        _id: candidateCvId,
+        candidateUserId,
+      }).session(session);
+
+      if (!targetCv) {
+        throw new AppError(404, "Candidate CV not found");
+      }
+
+      if (targetCv.archivedAt != null) {
+        throw new AppError(409, "Archived Candidate CV cannot be Default", {
+          field: "archivedAt",
+        });
+      }
+
+      if (targetCv.status !== CANDIDATE_CV_STATUS.ACTIVE) {
+        throw new AppError(
+          409,
+          "Only ACTIVE Candidate CVs can be Default",
+          {
+            field: "status",
+          },
+        );
+      }
+
+      // Idempotent when the target is already the sole Default.
+      if (targetCv.isDefault) {
+        resultCv = targetCv;
+        return;
+      }
+
+      const currentDefault = await CandidateCV.findOne({
+        candidateUserId,
+        isDefault: true,
+        archivedAt: null,
+        _id: { $ne: targetCv._id },
+      }).session(session);
+
+      // TX-01: clear prior Default before setting the target so uniqueness and
+      // rollback stay consistent across the cross-document switch.
+      if (currentDefault) {
+        const cleared = await CandidateCV.findOneAndUpdate(
+          {
+            _id: currentDefault._id,
+            candidateUserId,
+            isDefault: true,
+            archivedAt: null,
+          },
+          {
+            $set: {
+              isDefault: false,
+            },
+          },
+          {
+            session,
+            returnDocument: "after",
+            runValidators: true,
+          },
+        );
+
+        if (!cleared) {
+          throw new AppError(
+            409,
+            "Default CV changed before switch could complete",
+            {
+              field: "isDefault",
+            },
+          );
+        }
+      }
+
+      let updatedTarget;
+      try {
+        updatedTarget = await CandidateCV.findOneAndUpdate(
+          {
+            _id: targetCv._id,
+            candidateUserId,
+            status: CANDIDATE_CV_STATUS.ACTIVE,
+            archivedAt: null,
+            isDefault: false,
+          },
+          {
+            $set: {
+              isDefault: true,
+            },
+          },
+          {
+            session,
+            returnDocument: "after",
+            runValidators: true,
+          },
+        );
+      } catch (error) {
+        if (isMongoDuplicateKeyError(error)) {
+          throw new AppError(
+            409,
+            "Candidate already has a Default CV",
+            {
+              field: "isDefault",
+            },
+          );
+        }
+
+        throw error;
+      }
+
+      if (!updatedTarget) {
+        throw new AppError(
+          409,
+          "Candidate CV is no longer eligible to be Default",
+          {
+            field: "isDefault",
+          },
+        );
+      }
+
+      resultCv = updatedTarget;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return toPublicCandidateCvDetail(resultCv);
+};
+
+/**
+ * F09 / BR-35, BR-37: explicit Unset of the current Default on the given CV.
+ * Does not auto-select a replacement Default.
+ */
+const unsetOwnCandidateCvDefault = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+}) => {
+  assertCandidateCvActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only manage Default on their own CVs");
+  }
+
+  if (!mongoose.isValidObjectId(candidateCvId)) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  const candidateCv = await CandidateCV.findOne({
+    _id: candidateCvId,
+    candidateUserId,
+  });
+
+  if (!candidateCv) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  if (!candidateCv.isDefault) {
+    throw new AppError(409, "Candidate CV is not the Default", {
+      field: "isDefault",
+    });
+  }
+
+  const updatedCv = await CandidateCV.findOneAndUpdate(
+    {
+      _id: candidateCv._id,
+      candidateUserId,
+      isDefault: true,
+    },
+    {
+      $set: {
+        isDefault: false,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedCv) {
+    throw new AppError(409, "Default CV changed before unset could complete", {
+      field: "isDefault",
+    });
+  }
+
+  return toPublicCandidateCvDetail(updatedCv);
+};
+
 export {
   activateOwnGeneratedCandidateCv,
   createGeneratedDraftCandidateCv,
@@ -1358,7 +1572,9 @@ export {
   replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
   saveOwnGeneratedDraftContent,
+  setOwnCandidateCvAsDefault,
   toPublicCandidateCvDetail,
   toPublicCandidateCvSummary,
+  unsetOwnCandidateCvDefault,
   updateOwnCandidateCvMetadata,
 };

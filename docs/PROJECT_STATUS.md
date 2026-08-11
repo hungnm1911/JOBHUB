@@ -2,14 +2,15 @@
 
 ## Current milestone
 
-**V7 — Candidate Profile và thư viện CV** is the current milestone. Slices 01–09
+**V7 — Candidate Profile và thư viện CV** is the current milestone. Slices 01–10
 are implemented and verified (Candidate Profile / F01; CandidateCV foundation +
 My CVs read / F02; Generated CV Draft create / F03; Generated Builder save +
 completeness feedback / F04 Builder; Generated activation + ACTIVE edit
 lifecycle / F04 activation; Uploaded CV create / F05; Uploaded PDF replace /
 F06; rename / common metadata / visibility update / F07; Preview / Download /
-F08). V7 is not `COMPLETED AND VERIFIED`; Slices 10–11 remain not started. The
-next valid implementation task is V7 Slice 10 (Default CV management / F09).
+F08; Default CV management / F09). V7 is not `COMPLETED AND VERIFIED`; Slice 11
+remains not started. The next valid implementation task is V7 Slice 11
+(Archive CV / F10).
 
 V7's approved business specification is at `docs/product/versions/v7-candidate-profile-cv-library.md`, and its approved persistence contract is at `docs/data/versions/v7-candidate-profile-cv-library-data-model.md`.
 
@@ -19,17 +20,19 @@ readiness transition; no known V6 business-blocking finding remains.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Slices 01–09 are complete; Slice 10 is next.
+V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Slices 01–10 are complete; Slice 11 is next.
 
 ## Ready for implementation
 
-- **V7 Slice 10+:** Default CV management (F09) and later V7 slices remain not started. Preview/Download is established for owner-scoped Generated and Uploaded CVs; later slices must not invent archive workflows or Candidate Search ahead of their approved Fxx scope.
+- **V7 Slice 11:** Archive CV (F10) remains not started. Default CV set/switch/unset is established on `CandidateCV.isDefault` with TX-01 atomicity and partial-unique maximum-one protection; later slices must not invent Restore/Hard Delete, Apply-with-Default, or Candidate Search ahead of their approved Fxx scope.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V7 Slice 10 — Default CV management (F09; BR-35–BR-37; TX-01): authenticated Candidate sets/switches/unsets Default on own CandidateCV via `PUT/DELETE /api/candidate/cvs/:cvId/default`; Default remains optional (`NONE` allowed); eligibility requires own non-archived `status=ACTIVE` (Generated DRAFT, archived, foreign, and missing targets rejected); set when none exists flips `target.isDefault=true`; switch A→B clears A and sets B in one MongoDB multi-document transaction so partial `A=false,B=false` cannot commit; explicit Unset clears only the current Default without auto-selecting a replacement; mutations touch only `isDefault` (no `sourceType`/`status`/`visibility`/metadata/`generatedContent`/`uploadedFile`/ownership changes); reuses Slice 02 partial-unique active-Default index for concurrent maximum-one protection and leaves Slice 05 ACTIVE→DRAFT Default-clear semantics unchanged; no `User.defaultCandidateCvId`, Default history, Archive, Apply, or Search. Engineering SoT owners `setOwnCandidateCvAsDefault` / `unsetOwnCandidateCvDefault`. Focused coverage in `test/candidate/v7-candidate-cv-default.test.js` (13 tests).
 
 - **Implemented; verified:** V7 Slice 09 — Preview + Download Candidate CV (F08; BR-32–BR-34, BR-43): authenticated Candidate previews own non-archived CandidateCV via `GET /api/candidate/cvs/:cvId/preview` and downloads via `GET /api/candidate/cvs/:cvId/download`; Generated Preview renders current `generatedContent` through the fixed Harvard PDF owner for both `DRAFT` and `ACTIVE` (including incomplete Draft) without mutating status/completeness/metadata/visibility/Default/archive; Generated official PDF download is allowed only for `ACTIVE` and denied for `DRAFT`; Uploaded Preview/Download stream the current `uploadedFile` bytes via owner-scoped authenticated delivery using `file.service` `downloadFileBuffer` (signed storage fetch is implementation detail only); no persisted Generated PDF, PDF history, `publicUrl`/`publicDownloadUrl`/`isPubliclyAccessible`, or public sharing; `PUBLIC` remains intent-only without anonymous/Recruiter/Company Manager/Platform Admin access. Engineering SoT owners `renderHarvardCandidateCvPdf` / `previewOwnCandidateCv` / `downloadOwnCandidateCv`. Focused coverage in `test/candidate/v7-candidate-cv-preview-download.test.js` (6 tests).
 
@@ -188,7 +191,7 @@ V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the record
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
 - V5 Slices 01–12 cover F01–F12 including the F03/F12 DRAFT privacy and delete-authority correction, plus verified acceptance corrections for submit/edit stale validation, reassign/close effective-`PUBLISHED` and mutation-boundary deadline (`$$NOW`), public-eligibility owning-Company binding, and Product/Data/Engineering documentation alignment. Final Acceptance / regression closure passed; no V5 business slice remains.
 - V6 Final Acceptance / regression closure is complete: F01–F05, BR-01–BR-33, and TX-01–TX-03 were rerun with the Slices 01–06 suites, S07 acceptance suite, and the five remediation suites. The focused baseline passed 12 files / 155 tests and the official backend gate passed. No known V6 business-blocking finding remains.
-- **Next roadmap milestone:** V7 — Candidate Profile và thư viện CV — Slices 01–09 are complete; Slice 10 (Default CV management / F09) is the next valid task. Slices 10–11 remain not started.
+- **Next roadmap milestone:** V7 — Candidate Profile và thư viện CV — Slices 01–10 are complete; Slice 11 (Archive CV / F10) is the next valid task.
 - **Resolved in S09:** Fixed Harvard PDF renderer and owner-scoped Uploaded PDF delivery are established; Preview/Download do not persist public URLs or Generated PDF state.
 - **Resolved in S08:** Generated and Uploaded CVs share one owner-scoped common metadata mutation path; `PUBLIC` remains intent-only in V7 without search/access expansion.
 - **Resolved in S07:** Uploaded PDF replacement validates before mutating current file; persistence failure keeps the prior current file; concurrent/stale replace cannot delete a newer current external artifact; reuses the S06 inspection owner.

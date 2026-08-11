@@ -10,6 +10,8 @@ import {
   previewOwnCandidateCvHandler,
   replaceOwnUploadedCandidateCvPdfHandler,
   saveOwnGeneratedContentHandler,
+  setOwnCandidateCvAsDefaultHandler,
+  unsetOwnCandidateCvDefaultHandler,
   updateOwnCandidateCvMetadataHandler,
 } from "../controllers/candidate-cv.controller.js";
 import {
@@ -116,6 +118,20 @@ router.post(
   authenticateAccess,
   authorizeCandidate,
   activateOwnGeneratedCandidateCvHandler,
+);
+
+router.put(
+  "/cvs/:cvId/default",
+  authenticateAccess,
+  authorizeCandidate,
+  setOwnCandidateCvAsDefaultHandler,
+);
+
+router.delete(
+  "/cvs/:cvId/default",
+  authenticateAccess,
+  authorizeCandidate,
+  unsetOwnCandidateCvDefaultHandler,
 );
 
 export default router;

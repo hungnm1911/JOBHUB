@@ -8,6 +8,8 @@ import {
   previewOwnCandidateCv,
   replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
+  setOwnCandidateCvAsDefault,
+  unsetOwnCandidateCvDefault,
   updateOwnCandidateCvMetadata,
 } from "../services/candidate-cv.service.js";
 
@@ -205,6 +207,38 @@ const downloadOwnCandidateCvHandler = async (request, response, next) => {
   }
 };
 
+const setOwnCandidateCvAsDefaultHandler = async (request, response, next) => {
+  try {
+    const cv = await setOwnCandidateCvAsDefault({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      candidateCvId: request.params.cvId,
+    });
+
+    return response.status(200).json({
+      cv,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const unsetOwnCandidateCvDefaultHandler = async (request, response, next) => {
+  try {
+    const cv = await unsetOwnCandidateCvDefault({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      candidateCvId: request.params.cvId,
+    });
+
+    return response.status(200).json({
+      cv,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   activateOwnGeneratedCandidateCvHandler,
   createGeneratedDraftCandidateCvHandler,
@@ -215,5 +249,7 @@ export {
   previewOwnCandidateCvHandler,
   replaceOwnUploadedCandidateCvPdfHandler,
   saveOwnGeneratedContentHandler,
+  setOwnCandidateCvAsDefaultHandler,
+  unsetOwnCandidateCvDefaultHandler,
   updateOwnCandidateCvMetadataHandler,
 };
