@@ -2,6 +2,7 @@ import express from "express";
 
 import {
   activateOwnGeneratedCandidateCvHandler,
+  archiveOwnCandidateCvHandler,
   createGeneratedDraftCandidateCvHandler,
   createUploadedCandidateCvHandler,
   downloadOwnCandidateCvHandler,
@@ -132,6 +133,13 @@ router.delete(
   authenticateAccess,
   authorizeCandidate,
   unsetOwnCandidateCvDefaultHandler,
+);
+
+router.delete(
+  "/cvs/:cvId",
+  authenticateAccess,
+  authorizeCandidate,
+  archiveOwnCandidateCvHandler,
 );
 
 export default router;

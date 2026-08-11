@@ -1560,8 +1560,79 @@ const unsetOwnCandidateCvDefault = async ({
   return toPublicCandidateCvDetail(updatedCv);
 };
 
+/**
+ * F10 / BR-08, BR-38–BR-45: soft-archive own CandidateCV out of the active
+ * library. Atomically sets archivedAt and clears isDefault. Does not hard
+ * delete the document, mutate content/file metadata, delete external storage,
+ * restore, or auto-select a Default replacement.
+ */
+const archiveOwnCandidateCv = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+}) => {
+  assertCandidateCvActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only archive their own CVs");
+  }
+
+  if (!mongoose.isValidObjectId(candidateCvId)) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  const candidateCv = await CandidateCV.findOne({
+    _id: candidateCvId,
+    candidateUserId,
+  });
+
+  if (!candidateCv) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  if (candidateCv.archivedAt != null) {
+    throw new AppError(409, "Candidate CV is already archived", {
+      field: "archivedAt",
+    });
+  }
+
+  // Data 9.12 / 10.2: archivedAt + isDefault=false must commit together so
+  // archivedAt != null && isDefault=true cannot persist.
+  const archivedAt = new Date();
+  const updatedCv = await CandidateCV.findOneAndUpdate(
+    {
+      _id: candidateCv._id,
+      candidateUserId,
+      archivedAt: null,
+    },
+    {
+      $set: {
+        archivedAt,
+        isDefault: false,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedCv) {
+    throw new AppError(
+      409,
+      "Candidate CV changed before archive could complete",
+      {
+        field: "archivedAt",
+      },
+    );
+  }
+
+  return toPublicCandidateCvDetail(updatedCv);
+};
+
 export {
   activateOwnGeneratedCandidateCv,
+  archiveOwnCandidateCv,
   createGeneratedDraftCandidateCv,
   createUploadedCandidateCv,
   downloadOwnCandidateCv,

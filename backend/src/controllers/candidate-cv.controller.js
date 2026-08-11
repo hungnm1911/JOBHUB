@@ -1,5 +1,6 @@
 import {
   activateOwnGeneratedCandidateCv,
+  archiveOwnCandidateCv,
   createGeneratedDraftCandidateCv,
   createUploadedCandidateCv,
   downloadOwnCandidateCv,
@@ -239,8 +240,25 @@ const unsetOwnCandidateCvDefaultHandler = async (request, response, next) => {
   }
 };
 
+const archiveOwnCandidateCvHandler = async (request, response, next) => {
+  try {
+    const cv = await archiveOwnCandidateCv({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      candidateCvId: request.params.cvId,
+    });
+
+    return response.status(200).json({
+      cv,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   activateOwnGeneratedCandidateCvHandler,
+  archiveOwnCandidateCvHandler,
   createGeneratedDraftCandidateCvHandler,
   createUploadedCandidateCvHandler,
   downloadOwnCandidateCvHandler,
