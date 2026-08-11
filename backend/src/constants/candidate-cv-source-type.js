@@ -1,0 +1,6 @@
+const CANDIDATE_CV_SOURCE_TYPE = Object.freeze({
+  GENERATED: "GENERATED",
+  UPLOADED: "UPLOADED",
+});
+
+export default CANDIDATE_CV_SOURCE_TYPE;

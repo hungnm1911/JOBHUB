@@ -16,6 +16,7 @@ import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import AuthSession from "../../src/models/auth-session.model.js";
 import AuthToken from "../../src/models/auth-token.model.js";
+import CandidateCV from "../../src/models/candidate-cv.model.js";
 import User from "../../src/models/user.model.js";
 import {
   PROFILE_READABLE_FIELDS,
@@ -334,6 +335,7 @@ describe("V7 Slice 01 — Candidate Profile (F01; BR-01–BR-03)", () => {
       email: "independence@example.com",
     });
 
+    const candidateCvCountBefore = await CandidateCV.countDocuments();
     const collectionsBefore = new Set(
       Object.keys(mongoose.connection.collections),
     );
@@ -357,6 +359,8 @@ describe("V7 Slice 01 — Candidate Profile (F01; BR-01–BR-03)", () => {
       email: "independence@example.com",
     });
 
+    expect(await CandidateCV.countDocuments()).toBe(candidateCvCountBefore);
+
     const collectionsAfter = Object.keys(mongoose.connection.collections);
     const newCollections = collectionsAfter.filter(
       (name) => !collectionsBefore.has(name),
@@ -364,7 +368,7 @@ describe("V7 Slice 01 — Candidate Profile (F01; BR-01–BR-03)", () => {
 
     expect(newCollections).toEqual([]);
     expect(
-      collectionsAfter.some((name) => /candidate.?cv|candidate.?profile/i.test(name)),
+      collectionsAfter.some((name) => /candidate.?profile/i.test(name)),
     ).toBe(false);
   });
 
