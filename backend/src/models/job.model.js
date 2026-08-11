@@ -65,6 +65,44 @@ const jobSchema = new Schema(
       required: true,
     },
 
+    supportingRecruiterCompanyMemberIds: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: "CompanyMember",
+        },
+      ],
+      default: [],
+      validate: [
+        {
+          validator: hasDistinctObjectIds,
+          message:
+            "supportingRecruiterCompanyMemberIds must not contain duplicates",
+        },
+        {
+          validator(values) {
+            if (!Array.isArray(values) || values.length === 0) {
+              return true;
+            }
+
+            const primaryId = this.primaryRecruiterCompanyMemberId;
+
+            if (primaryId == null) {
+              return true;
+            }
+
+            const primaryKey = primaryId.toString();
+
+            return values.every(
+              (value) => value?.toString() !== primaryKey,
+            );
+          },
+          message:
+            "Primary Recruiter must not appear in supportingRecruiterCompanyMemberIds",
+        },
+      ],
+    },
+
     title: {
       type: String,
       default: null,
@@ -216,6 +254,16 @@ jobSchema.index({
   companyId: 1,
   primaryRecruiterCompanyMemberId: 1,
   status: 1,
+});
+jobSchema.index({
+  primaryRecruiterCompanyMemberId: 1,
+  status: 1,
+  applicationDeadline: 1,
+});
+jobSchema.index({
+  supportingRecruiterCompanyMemberIds: 1,
+  status: 1,
+  applicationDeadline: 1,
 });
 
 const Job = model("Job", jobSchema);

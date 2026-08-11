@@ -6,6 +6,7 @@ import {
   createDraftJobHandler,
   deletePrePublicationJobHandler,
   getInternalJobHandler,
+  getJobRecruitmentTeamHandler,
   listInternalJobsHandler,
   reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
@@ -42,6 +43,13 @@ router.post(
   authorizeRecruiterBusinessAccess,
   validateCreateDraftJob,
   createDraftJobHandler,
+);
+
+router.get(
+  "/:jobId/team",
+  authenticateAccess,
+  authorizeCompanyStaffBusinessAccess,
+  getJobRecruitmentTeamHandler,
 );
 
 router.post(

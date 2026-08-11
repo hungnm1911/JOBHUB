@@ -331,12 +331,13 @@ const createDraftJob = async ({
 
   const draftContent = buildDraftContent(content);
 
-  // BR-04 / BR-05 / BR-06 / BR-08 / BR-42: DRAFT with creator = Primary; no
-  // Supporting Recruiter representation.
+  // BR-04 / BR-05 / BR-06 / BR-07 / BR-08 / BR-42: DRAFT with creator =
+  // Primary; Supporting empty at creation (V6 BR-03).
   const job = await Job.create({
     companyId: context.companyId,
     createdByCompanyMemberId: context.membership._id,
     primaryRecruiterCompanyMemberId: context.membership._id,
+    supportingRecruiterCompanyMemberIds: [],
     status: JOB_STATUS.DRAFT,
     publishedAt: null,
     ...draftContent,
@@ -1703,6 +1704,81 @@ const closePublishedJob = async ({
   return toPublicJob(updatedJob);
 };
 
+// V6 F01: Recruitment Team read — dedicated authorization separate from
+// generic V5 internal Job visibility. Does not grant Supporting broader
+// Job-content access.
+const getJobRecruitmentTeam = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+} = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", { field: "jobId" });
+  }
+
+  const context = await resolveCompanyStaffBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  // BR-09 / BR-32: tenant boundary — Job must belong to actor's Company.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId: context.companyId,
+  });
+
+  // F01 authorization: Company Manager, current Primary, or current Supporting.
+  const membershipIdStr = context.membership._id.toString();
+  const isCompanyManager =
+    context.companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER;
+  const isPrimary =
+    job.primaryRecruiterCompanyMemberId.toString() === membershipIdStr;
+  const isSupporting = (job.supportingRecruiterCompanyMemberIds ?? []).some(
+    (id) => id.toString() === membershipIdStr,
+  );
+
+  if (!isCompanyManager && !isPrimary && !isSupporting) {
+    throw new AppError(
+      403,
+      "Only the Company Manager, Primary Recruiter, or Supporting Recruiter can view the Recruitment Team",
+      { field: "role" },
+    );
+  }
+
+  // Recruiter team-read requires active responsibility: historical references
+  // on ended Jobs (CLOSED, EXPIRED, or effectively expired PUBLISHED) do not
+  // self-grant F01 authorization. Company Manager retains read access regardless.
+  if (!isCompanyManager) {
+    const effectiveStatus = resolveEffectiveJobStatus(job);
+
+    if (
+      effectiveStatus === JOB_STATUS.CLOSED ||
+      effectiveStatus === JOB_STATUS.EXPIRED
+    ) {
+      throw new AppError(
+        403,
+        "Recruitment Team is not accessible on ended Jobs",
+        { field: "status", status: effectiveStatus },
+      );
+    }
+  }
+
+  return {
+    jobId: job._id.toString(),
+    primaryRecruiterCompanyMemberId:
+      job.primaryRecruiterCompanyMemberId.toString(),
+    supportingRecruiterCompanyMemberIds: (
+      job.supportingRecruiterCompanyMemberIds ?? []
+    ).map((id) => id.toString()),
+  };
+};
+
 const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
@@ -1764,6 +1840,7 @@ const getInternalJob = async ({
 
 export {
   approveAndPublishJob,
+  getJobRecruitmentTeam,
   assertCompanyManagerJobApprovalAuthority,
   assertCompanyManagerPrimaryReassignmentAuthority,
   assertJobInternallyVisible,

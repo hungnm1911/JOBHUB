@@ -4,6 +4,7 @@ import {
   createDraftJob,
   deletePrePublicationJob,
   getInternalJob,
+  getJobRecruitmentTeam,
   listInternalJobs,
   reassignPrimaryRecruiter,
   rejectPendingJob,
@@ -192,12 +193,30 @@ const closePublishedJobHandler = async (request, response, next) => {
   }
 };
 
+const getJobRecruitmentTeamHandler = async (request, response, next) => {
+  try {
+    const team = await getJobRecruitmentTeam({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Recruitment Team retrieved.",
+      team,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   approveAndPublishJobHandler,
   closePublishedJobHandler,
   createDraftJobHandler,
   deletePrePublicationJobHandler,
   getInternalJobHandler,
+  getJobRecruitmentTeamHandler,
   listInternalJobsHandler,
   reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
