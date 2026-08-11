@@ -358,13 +358,6 @@ describe("V7 Slice 04 — Generated CV Builder save + completeness (F04)", () =>
         candidateUserId: owner._id,
         categoryId: category._id,
       });
-      const activeGenerated = await createGeneratedDraft({
-        candidateUserId: owner._id,
-        categoryId: category._id,
-        name: "Already Active",
-        status: CANDIDATE_CV_STATUS.ACTIVE,
-        generatedContent: completeGeneratedContent(),
-      });
 
       const agent = createTestAgent();
       const ownerToken = await loginAndGetAccessToken(agent, {
@@ -391,10 +384,6 @@ describe("V7 Slice 04 — Generated CV Builder save + completeness (F04)", () =>
         .put(`/api/candidate/cvs/${uploaded._id}/generated-content`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send(body);
-      const activeAttempt = await agent
-        .put(`/api/candidate/cvs/${activeGenerated._id}/generated-content`)
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send(body);
       const unknownAttempt = await agent
         .put(
           `/api/candidate/cvs/${new mongoose.Types.ObjectId()}/generated-content`,
@@ -409,7 +398,6 @@ describe("V7 Slice 04 — Generated CV Builder save + completeness (F04)", () =>
       expect(peerAttempt.status).toBe(404);
       expect(archivedAttempt.status).toBe(409);
       expect(uploadedAttempt.status).toBe(409);
-      expect(activeAttempt.status).toBe(409);
       expect(unknownAttempt.status).toBe(404);
       expect(peerOwnReadIsolation.status).toBe(404);
 

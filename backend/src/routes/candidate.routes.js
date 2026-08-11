@@ -1,10 +1,11 @@
 import express from "express";
 
 import {
+  activateOwnGeneratedCandidateCvHandler,
   createGeneratedDraftCandidateCvHandler,
   getOwnActiveCandidateCvHandler,
   listOwnActiveCandidateCvsHandler,
-  saveOwnGeneratedDraftContentHandler,
+  saveOwnGeneratedContentHandler,
 } from "../controllers/candidate-cv.controller.js";
 import {
   getOwnCandidateProfileHandler,
@@ -60,7 +61,14 @@ router.put(
   authenticateAccess,
   authorizeCandidate,
   validateSaveGeneratedDraftContent,
-  saveOwnGeneratedDraftContentHandler,
+  saveOwnGeneratedContentHandler,
+);
+
+router.post(
+  "/cvs/:cvId/activate",
+  authenticateAccess,
+  authorizeCandidate,
+  activateOwnGeneratedCandidateCvHandler,
 );
 
 export default router;

@@ -1,8 +1,9 @@
 import {
+  activateOwnGeneratedCandidateCv,
   createGeneratedDraftCandidateCv,
   getOwnActiveCandidateCv,
   listOwnActiveCandidateCvs,
-  saveOwnGeneratedDraftContent,
+  saveOwnGeneratedContent,
 } from "../services/candidate-cv.service.js";
 
 const listOwnActiveCandidateCvsHandler = async (request, response, next) => {
@@ -56,9 +57,9 @@ const createGeneratedDraftCandidateCvHandler = async (
   }
 };
 
-const saveOwnGeneratedDraftContentHandler = async (request, response, next) => {
+const saveOwnGeneratedContentHandler = async (request, response, next) => {
   try {
-    const result = await saveOwnGeneratedDraftContent({
+    const result = await saveOwnGeneratedContent({
       candidateUserId: request.auth.user._id,
       actorUser: request.auth.user,
       candidateCvId: request.params.cvId,
@@ -71,9 +72,28 @@ const saveOwnGeneratedDraftContentHandler = async (request, response, next) => {
   }
 };
 
+const activateOwnGeneratedCandidateCvHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const result = await activateOwnGeneratedCandidateCv({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      candidateCvId: request.params.cvId,
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
+  activateOwnGeneratedCandidateCvHandler,
   createGeneratedDraftCandidateCvHandler,
   getOwnActiveCandidateCvHandler,
   listOwnActiveCandidateCvsHandler,
-  saveOwnGeneratedDraftContentHandler,
+  saveOwnGeneratedContentHandler,
 };

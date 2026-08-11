@@ -475,11 +475,42 @@ const normalizeGeneratedContentForPersistence = (content = {}) => {
   };
 };
 
-const saveOwnGeneratedDraftContent = async ({
+const assertOwnEditableGeneratedCandidateCv = ({
+  candidateUserId,
+  actorUser,
+  candidateCv,
+}) => {
+  assertCandidateCvActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only edit their own CVs");
+  }
+
+  if (!candidateCv) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  if (candidateCv.archivedAt != null) {
+    throw new AppError(409, "Archived Candidate CV cannot be edited", {
+      field: "archivedAt",
+    });
+  }
+
+  if (candidateCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
+    throw new AppError(
+      409,
+      "Only Generated Candidate CVs support this operation",
+      {
+        field: "sourceType",
+      },
+    );
+  }
+};
+
+const loadOwnGeneratedCandidateCvForMutation = async ({
   candidateUserId,
   actorUser,
   candidateCvId,
-  generatedContent,
 }) => {
   assertCandidateCvActor(actorUser);
 
@@ -496,31 +527,36 @@ const saveOwnGeneratedDraftContent = async ({
     candidateUserId,
   });
 
-  if (!candidateCv) {
-    throw new AppError(404, "Candidate CV not found");
-  }
+  assertOwnEditableGeneratedCandidateCv({
+    candidateUserId,
+    actorUser,
+    candidateCv,
+  });
 
-  if (candidateCv.archivedAt != null) {
-    throw new AppError(409, "Archived Candidate CV cannot be edited", {
-      field: "archivedAt",
-    });
-  }
+  return candidateCv;
+};
 
-  if (candidateCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
+const saveOwnGeneratedContent = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+  generatedContent,
+}) => {
+  const candidateCv = await loadOwnGeneratedCandidateCvForMutation({
+    candidateUserId,
+    actorUser,
+    candidateCvId,
+  });
+
+  // F04 / BR-12 / BR-21: Generated DRAFT and ACTIVE may both receive Harvard
+  // content saves. Uploaded and archived remain rejected above.
+  if (
+    candidateCv.status !== CANDIDATE_CV_STATUS.DRAFT &&
+    candidateCv.status !== CANDIDATE_CV_STATUS.ACTIVE
+  ) {
     throw new AppError(
       409,
-      "Harvard Builder content can only be saved on Generated CVs",
-      {
-        field: "sourceType",
-      },
-    );
-  }
-
-  // Slice 04: Builder save is DRAFT-only; ACTIVE edit/activation is Slice 05.
-  if (candidateCv.status !== CANDIDATE_CV_STATUS.DRAFT) {
-    throw new AppError(
-      409,
-      "Generated content can only be saved while the CV is DRAFT",
+      "Generated content can only be saved while the CV is DRAFT or ACTIVE",
       {
         field: "status",
       },
@@ -529,22 +565,46 @@ const saveOwnGeneratedDraftContent = async ({
 
   const normalizedContent =
     normalizeGeneratedContentForPersistence(generatedContent);
+  const completeness = evaluateGeneratedCvCompleteness(normalizedContent);
 
-  // BR-13 / BR-31: content save mutates only generatedContent; Profile and
-  // CandidateCV metadata remain independent and unchanged.
+  // BR-13 / BR-31: content save mutates only generatedContent (+ ACTIVE
+  // lifecycle fields below); Profile and CandidateCV metadata stay unchanged.
+  // BR-20: DRAFT completeness never auto-activates.
+  // BR-21 / Data 9.5 / 10.2: incomplete ACTIVE save atomically demotes and
+  // clears Default so DRAFT + isDefault=true cannot persist.
+  let update;
+  if (candidateCv.status === CANDIDATE_CV_STATUS.DRAFT) {
+    update = {
+      $set: {
+        generatedContent: normalizedContent,
+      },
+    };
+  } else if (completeness.isComplete) {
+    update = {
+      $set: {
+        generatedContent: normalizedContent,
+        status: CANDIDATE_CV_STATUS.ACTIVE,
+      },
+    };
+  } else {
+    update = {
+      $set: {
+        generatedContent: normalizedContent,
+        status: CANDIDATE_CV_STATUS.DRAFT,
+        isDefault: false,
+      },
+    };
+  }
+
   const updatedCv = await CandidateCV.findOneAndUpdate(
     {
       _id: candidateCv._id,
       candidateUserId,
       sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
-      status: CANDIDATE_CV_STATUS.DRAFT,
+      status: candidateCv.status,
       archivedAt: null,
     },
-    {
-      $set: {
-        generatedContent: normalizedContent,
-      },
-    },
+    update,
     {
       returnDocument: "after",
       runValidators: true,
@@ -554,20 +614,110 @@ const saveOwnGeneratedDraftContent = async ({
   if (!updatedCv) {
     throw new AppError(
       409,
-      "Generated content can only be saved while the CV is DRAFT",
+      "Generated CV changed before content save could complete",
       {
         field: "status",
       },
     );
   }
 
+  return {
+    cv: toPublicCandidateCvDetail(updatedCv),
+    completeness: evaluateGeneratedCvCompleteness(updatedCv.generatedContent),
+  };
+};
+
+// Slice 04 name retained as a stable alias for DRAFT/ACTIVE Harvard content save.
+const saveOwnGeneratedDraftContent = saveOwnGeneratedContent;
+
+const activateOwnGeneratedCandidateCv = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+}) => {
+  const candidateCv = await loadOwnGeneratedCandidateCvForMutation({
+    candidateUserId,
+    actorUser,
+    candidateCvId,
+  });
+
+  if (candidateCv.status !== CANDIDATE_CV_STATUS.DRAFT) {
+    throw new AppError(
+      409,
+      "Only Generated DRAFT CVs can be activated",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  // BR-14–BR-20 / Data 9.3: revalidate current persisted content at decision time.
   const completeness = evaluateGeneratedCvCompleteness(
-    updatedCv.generatedContent,
+    candidateCv.generatedContent,
   );
+
+  if (!completeness.isComplete) {
+    throw new AppError(
+      409,
+      "Generated CV must satisfy completeness before activation",
+      {
+        field: "completeness",
+      },
+    );
+  }
+
+  // Bind status + updatedAt so a concurrent content edit that changes
+  // completeness cannot commit ACTIVE from a stale complete snapshot.
+  // Activation mutates only status; ownership/visibility/metadata stay intact.
+  const updatedCv = await CandidateCV.findOneAndUpdate(
+    {
+      _id: candidateCv._id,
+      candidateUserId,
+      sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+      status: CANDIDATE_CV_STATUS.DRAFT,
+      archivedAt: null,
+      updatedAt: candidateCv.updatedAt,
+    },
+    {
+      $set: {
+        status: CANDIDATE_CV_STATUS.ACTIVE,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedCv) {
+    const currentCv = await CandidateCV.findOne({
+      _id: candidateCv._id,
+      candidateUserId,
+    });
+
+    if (
+      currentCv &&
+      currentCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED &&
+      currentCv.status === CANDIDATE_CV_STATUS.DRAFT &&
+      currentCv.archivedAt == null
+    ) {
+      throw new AppError(
+        409,
+        "Generated CV changed before activation could complete",
+        {
+          field: "content",
+        },
+      );
+    }
+
+    throw new AppError(409, "Only Generated DRAFT CVs can be activated", {
+      field: "status",
+    });
+  }
 
   return {
     cv: toPublicCandidateCvDetail(updatedCv),
-    completeness,
+    completeness: evaluateGeneratedCvCompleteness(updatedCv.generatedContent),
   };
 };
 
@@ -615,10 +765,12 @@ const getOwnActiveCandidateCv = async ({
 };
 
 export {
+  activateOwnGeneratedCandidateCv,
   createGeneratedDraftCandidateCv,
   evaluateGeneratedCvCompleteness,
   getOwnActiveCandidateCv,
   listOwnActiveCandidateCvs,
+  saveOwnGeneratedContent,
   saveOwnGeneratedDraftContent,
   toPublicCandidateCvDetail,
   toPublicCandidateCvSummary,
