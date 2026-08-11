@@ -549,28 +549,13 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
 
     expect(reassignResponse.status).toBe(200);
 
-    // After V6 reassign, old Primary (creator) is now Supporting, so still
-    // has outstanding Supporting responsibility — lock is still blocked.
+    // After V6 F05, lock auto-removes Supporting responsibility on
+    // unfinished Jobs before completion, so lock now succeeds directly.
     const lockOldAfterReassign = await agent
       .post(`/api/company/recruiters/${creator.user._id.toString()}/lock`)
       .set("Authorization", `Bearer ${managerToken}`);
 
-    expect(lockOldAfterReassign.status).toBe(409);
-
-    // Remove old Primary from Supporting first, then lock should succeed.
-    const removeResponse = await agent
-      .delete(
-        `/api/jobs/${published.id}/team/supporting/${creator.membership._id}`,
-      )
-      .set("Authorization", `Bearer ${managerToken}`);
-
-    expect(removeResponse.status).toBe(200);
-
-    const lockOld = await agent
-      .post(`/api/company/recruiters/${creator.user._id.toString()}/lock`)
-      .set("Authorization", `Bearer ${managerToken}`);
-
-    expect(lockOld.status).toBe(200);
+    expect(lockOldAfterReassign.status).toBe(200);
     expect(
       (await CompanyMember.findById(creator.membership._id).lean()).status,
     ).toBe(COMPANY_MEMBER_STATUS.LOCKED);

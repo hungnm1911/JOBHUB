@@ -2382,9 +2382,340 @@ const getInternalJob = async ({
   return toPublicJob(job);
 };
 
+const buildUnfinishedJobFilter = (extraFilter, now = new Date()) => {
+  return {
+    ...extraFilter,
+    status: { $in: OUTSTANDING_PRIMARY_JOB_STATUSES },
+    $nor: [
+      {
+        status: JOB_STATUS.PUBLISHED,
+        applicationDeadline: { $ne: null, $lte: now },
+      },
+    ],
+  };
+};
+
+const findAllUnfinishedJobsAsPrimary = async ({
+  companyId,
+  primaryRecruiterCompanyMemberId,
+  now = new Date(),
+}) => {
+  return Job.find(
+    buildUnfinishedJobFilter(
+      { companyId, primaryRecruiterCompanyMemberId },
+      now,
+    ),
+  )
+    .select("_id status applicationDeadline primaryRecruiterCompanyMemberId supportingRecruiterCompanyMemberIds companyId")
+    .lean();
+};
+
+const findAllUnfinishedJobsAsSupporting = async ({
+  companyId,
+  supportingRecruiterCompanyMemberId,
+  now = new Date(),
+}) => {
+  return Job.find(
+    buildUnfinishedJobFilter(
+      { companyId, supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId },
+      now,
+    ),
+  )
+    .select("_id status applicationDeadline primaryRecruiterCompanyMemberId supportingRecruiterCompanyMemberIds companyId")
+    .lean();
+};
+
+const assertReplacementOperationalEligibility = async ({
+  replacementCompanyMemberId,
+  companyId,
+  session,
+}) => {
+  const membership = await CompanyMember.findOne({
+    _id: replacementCompanyMemberId,
+    companyId,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+    status: COMPANY_MEMBER_STATUS.ACTIVE,
+  }).session(session);
+
+  if (!membership) {
+    throw new AppError(
+      409,
+      "Replacement Recruiter must be an active Recruiter of the Job Company",
+      { field: "replacementCompanyMemberId" },
+    );
+  }
+
+  const user = await User.findById(membership.userId)
+    .session(session)
+    .select("status mustChangePassword");
+
+  if (!user) {
+    throw new AppError(409, "Replacement Recruiter user is missing", {
+      field: "replacementCompanyMemberId",
+    });
+  }
+
+  if (user.status !== USER_STATUS.ACTIVE || user.mustChangePassword !== false) {
+    throw new AppError(
+      409,
+      "Replacement Recruiter is not eligible for active responsibility",
+      { field: "replacementCompanyMemberId" },
+    );
+  }
+
+  const owningCompany = await Company.findById(companyId)
+    .session(session)
+    .select("approvalStatus operationalStatus");
+
+  if (
+    !owningCompany ||
+    owningCompany.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
+    owningCompany.operationalStatus !== COMPANY_OPERATIONAL_STATUS.ACTIVE
+  ) {
+    throw new AppError(
+      409,
+      "Job Company is not available for active responsibility",
+      { field: "companyId" },
+    );
+  }
+
+  return { membership, user };
+};
+
+const executeForcedPrimaryTransfer = async ({
+  jobId,
+  companyId,
+  oldPrimaryCompanyMemberId,
+  replacementCompanyMemberId,
+}) => {
+  if (!mongoose.Types.ObjectId.isValid(replacementCompanyMemberId)) {
+    throw new AppError(400, "Invalid replacement CompanyMember id", {
+      field: "replacementCompanyMemberId",
+    });
+  }
+
+  const oldPrimaryIdStr = oldPrimaryCompanyMemberId.toString();
+  const replacementIdStr = replacementCompanyMemberId.toString();
+
+  if (oldPrimaryIdStr === replacementIdStr) {
+    throw new AppError(
+      409,
+      "Replacement cannot be the Recruiter being locked",
+      { field: "replacementCompanyMemberId" },
+    );
+  }
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  if (job.companyId.toString() !== companyId.toString()) {
+    throw new AppError(403, "Job does not belong to the expected Company", {
+      field: "companyId",
+    });
+  }
+
+  if (
+    job.primaryRecruiterCompanyMemberId.toString() !== oldPrimaryIdStr
+  ) {
+    throw new AppError(
+      409,
+      "Recruiter is no longer Primary of this Job",
+      { field: "primaryRecruiterCompanyMemberId" },
+    );
+  }
+
+  const isReplacementCurrentSupporting = (
+    job.supportingRecruiterCompanyMemberIds ?? []
+  ).some((id) => id.toString() === replacementIdStr);
+
+  const session = await mongoose.startSession();
+  let updatedJob;
+
+  try {
+    await session.withTransaction(async () => {
+      await assertReplacementOperationalEligibility({
+        replacementCompanyMemberId,
+        companyId,
+        session,
+      });
+
+      // TX-02: concurrency guard — lock replacement membership to prevent
+      // concurrent LOCKED/TERMINATED from committing.
+      const stillActive = await CompanyMember.findOneAndUpdate(
+        {
+          _id: replacementCompanyMemberId,
+          companyId,
+          role: COMPANY_MEMBER_ROLE.RECRUITER,
+          status: COMPANY_MEMBER_STATUS.ACTIVE,
+        },
+        { $set: { status: COMPANY_MEMBER_STATUS.ACTIVE } },
+        { returnDocument: "after", session },
+      );
+
+      if (!stillActive) {
+        throw new AppError(
+          409,
+          "Replacement Recruiter is no longer active during the operation",
+          { field: "replacementCompanyMemberId" },
+        );
+      }
+
+      if (isReplacementCurrentSupporting) {
+        // Replacement already Supporting → promote: SUPPORTING → PRIMARY.
+        // Old Primary → NONE (not kept as Supporting per BR-26).
+        // Step 1: set new Primary + pull replacement from Supporting.
+        updatedJob = await Job.findOneAndUpdate(
+          {
+            _id: job._id,
+            companyId,
+            primaryRecruiterCompanyMemberId: oldPrimaryCompanyMemberId,
+            supportingRecruiterCompanyMemberIds: replacementCompanyMemberId,
+          },
+          {
+            $set: {
+              primaryRecruiterCompanyMemberId: replacementCompanyMemberId,
+            },
+            $pull: {
+              supportingRecruiterCompanyMemberIds: replacementCompanyMemberId,
+            },
+          },
+          { returnDocument: "after", runValidators: true, session },
+        );
+
+        if (!updatedJob) {
+          throw new AppError(
+            409,
+            "Forced Primary transfer failed — Job state changed concurrently",
+            { field: "jobId" },
+          );
+        }
+
+        // Step 2: pull old Primary from Supporting (if somehow present).
+        updatedJob = await Job.findOneAndUpdate(
+          {
+            _id: job._id,
+            primaryRecruiterCompanyMemberId: replacementCompanyMemberId,
+          },
+          {
+            $pull: {
+              supportingRecruiterCompanyMemberIds: oldPrimaryCompanyMemberId,
+            },
+          },
+          { returnDocument: "after", runValidators: true, session },
+        );
+      } else {
+        // Forced exception: NONE → SUPPORTING → PRIMARY (BR-25).
+        // Persistence can commit directly as Primary (Data Contract 8.7).
+        // Old Primary is not in Supporting (they were Primary), so no pull
+        // for old Primary is needed.
+        updatedJob = await Job.findOneAndUpdate(
+          {
+            _id: job._id,
+            companyId,
+            primaryRecruiterCompanyMemberId: oldPrimaryCompanyMemberId,
+          },
+          {
+            $set: {
+              primaryRecruiterCompanyMemberId: replacementCompanyMemberId,
+            },
+          },
+          { returnDocument: "after", runValidators: true, session },
+        );
+      }
+
+      if (!updatedJob) {
+        throw new AppError(
+          409,
+          "Forced Primary transfer failed — Job state changed concurrently",
+          { field: "jobId" },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    jobId: updatedJob._id.toString(),
+    primaryRecruiterCompanyMemberId:
+      updatedJob.primaryRecruiterCompanyMemberId.toString(),
+    supportingRecruiterCompanyMemberIds: (
+      updatedJob.supportingRecruiterCompanyMemberIds ?? []
+    ).map((id) => id.toString()),
+  };
+};
+
+const executeForcedSupportingRemoval = async ({
+  jobId,
+  companyId,
+  supportingCompanyMemberId,
+}) => {
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  if (job.companyId.toString() !== companyId.toString()) {
+    throw new AppError(403, "Job does not belong to the expected Company", {
+      field: "companyId",
+    });
+  }
+
+  const idStr = supportingCompanyMemberId.toString();
+
+  if (
+    !(job.supportingRecruiterCompanyMemberIds ?? []).some(
+      (id) => id.toString() === idStr,
+    )
+  ) {
+    return {
+      jobId: job._id.toString(),
+      alreadyRemoved: true,
+    };
+  }
+
+  const updatedJob = await Job.findOneAndUpdate(
+    {
+      _id: job._id,
+      companyId,
+      supportingRecruiterCompanyMemberIds: supportingCompanyMemberId,
+    },
+    {
+      $pull: {
+        supportingRecruiterCompanyMemberIds: supportingCompanyMemberId,
+      },
+    },
+    { returnDocument: "after", runValidators: true },
+  );
+
+  if (!updatedJob) {
+    return {
+      jobId: job._id.toString(),
+      alreadyRemoved: true,
+    };
+  }
+
+  return {
+    jobId: updatedJob._id.toString(),
+    primaryRecruiterCompanyMemberId:
+      updatedJob.primaryRecruiterCompanyMemberId.toString(),
+    supportingRecruiterCompanyMemberIds: (
+      updatedJob.supportingRecruiterCompanyMemberIds ?? []
+    ).map((id) => id.toString()),
+  };
+};
+
 export {
   approveAndPublishJob,
   addSupportingRecruiter,
+  executeForcedPrimaryTransfer,
+  executeForcedSupportingRemoval,
+  findAllUnfinishedJobsAsPrimary,
+  findAllUnfinishedJobsAsSupporting,
   getJobRecruitmentTeam,
   assertCompanyManagerJobApprovalAuthority,
   assertCompanyManagerPrimaryReassignmentAuthority,

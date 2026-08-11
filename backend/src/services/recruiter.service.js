@@ -14,6 +14,10 @@ import { resolveCompanyManagerRecruiterManagementContext } from "./company.servi
 import { issuePasswordReset } from "./auth.service.js";
 import {
   assertNoOutstandingRecruiterTeamResponsibility,
+  executeForcedPrimaryTransfer,
+  executeForcedSupportingRemoval,
+  findAllUnfinishedJobsAsPrimary,
+  findAllUnfinishedJobsAsSupporting,
 } from "./job.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
@@ -407,6 +411,7 @@ const lockRecruiter = async ({
   managerUser,
   recruiterId,
   clientCompanyId,
+  transfers = [],
 }) => {
   const context = await resolveCompanyManagerRecruiterManagementContext({
     user: managerUser,
@@ -430,8 +435,86 @@ const lockRecruiter = async ({
     });
   }
 
-  // BR-41: outstanding Primary responsibility blocks lock completion.
-  // Guard stays outside TX-04; no jobs↔company_members multi-document TX.
+  // V6 F05: forced transfer before lock completion.
+  // Build a map of jobId → replacementCompanyMemberId from caller-provided transfers.
+  const transferMap = new Map();
+
+  for (const transfer of transfers) {
+    if (
+      !transfer.jobId ||
+      !mongoose.Types.ObjectId.isValid(transfer.jobId)
+    ) {
+      throw new AppError(400, "Each transfer must specify a valid jobId", {
+        field: "transfers",
+      });
+    }
+
+    if (
+      !transfer.replacementCompanyMemberId ||
+      !mongoose.Types.ObjectId.isValid(transfer.replacementCompanyMemberId)
+    ) {
+      throw new AppError(
+        400,
+        "Each transfer must specify a valid replacementCompanyMemberId",
+        { field: "transfers" },
+      );
+    }
+
+    transferMap.set(transfer.jobId.toString(), transfer.replacementCompanyMemberId.toString());
+  }
+
+  // Find all unfinished Jobs where Recruiter is Primary.
+  const primaryJobs = await findAllUnfinishedJobsAsPrimary({
+    companyId: context.companyId,
+    primaryRecruiterCompanyMemberId: membership._id,
+  });
+
+  // Find all unfinished Jobs where Recruiter is Supporting.
+  const supportingJobs = await findAllUnfinishedJobsAsSupporting({
+    companyId: context.companyId,
+    supportingRecruiterCompanyMemberId: membership._id,
+  });
+
+  // BR-27: if any Primary Job has no replacement specified, block lock.
+  for (const job of primaryJobs) {
+    const jobIdStr = job._id.toString();
+
+    if (!transferMap.has(jobIdStr)) {
+      throw new AppError(
+        409,
+        "Recruiter has outstanding Primary Job responsibility and no replacement was specified",
+        {
+          field: "primaryRecruiterCompanyMemberId",
+          jobId: jobIdStr,
+          jobStatus: job.status,
+        },
+      );
+    }
+  }
+
+  // Execute forced Primary transfers (TX-03: per-Job, not global all-or-nothing).
+  for (const job of primaryJobs) {
+    const jobIdStr = job._id.toString();
+    const replacementId = transferMap.get(jobIdStr);
+
+    await executeForcedPrimaryTransfer({
+      jobId: job._id,
+      companyId: context.companyId,
+      oldPrimaryCompanyMemberId: membership._id,
+      replacementCompanyMemberId: replacementId,
+    });
+  }
+
+  // Execute forced Supporting removals (BR-28).
+  for (const job of supportingJobs) {
+    await executeForcedSupportingRemoval({
+      jobId: job._id,
+      companyId: context.companyId,
+      supportingCompanyMemberId: membership._id,
+    });
+  }
+
+  // Final guard: confirm zero outstanding responsibility before lock.
   await assertNoOutstandingRecruiterTeamResponsibility({
     companyId: context.companyId,
     recruiterCompanyMemberId: membership._id,
@@ -573,6 +656,7 @@ const terminateRecruiter = async ({
   managerUser,
   recruiterId,
   clientCompanyId,
+  transfers = [],
 }) => {
   const context = await resolveCompanyManagerRecruiterManagementContext({
     user: managerUser,
@@ -600,8 +684,85 @@ const terminateRecruiter = async ({
     );
   }
 
-  // BR-41: outstanding Primary responsibility blocks terminate completion.
-  // Guard stays outside TX-05; no jobs↔company_members multi-document TX.
+  // V6 F05: forced transfer before terminate completion — reuses the same
+  // canonical foundation as lock (Slice 05). Build transfer map, find
+  // unfinished Jobs, execute per-Job transfers, then assert zero responsibility.
+  const transferMap = new Map();
+
+  for (const transfer of transfers) {
+    if (
+      !transfer.jobId ||
+      !mongoose.Types.ObjectId.isValid(transfer.jobId)
+    ) {
+      throw new AppError(400, "Each transfer must specify a valid jobId", {
+        field: "transfers",
+      });
+    }
+
+    if (
+      !transfer.replacementCompanyMemberId ||
+      !mongoose.Types.ObjectId.isValid(transfer.replacementCompanyMemberId)
+    ) {
+      throw new AppError(
+        400,
+        "Each transfer must specify a valid replacementCompanyMemberId",
+        { field: "transfers" },
+      );
+    }
+
+    transferMap.set(transfer.jobId.toString(), transfer.replacementCompanyMemberId.toString());
+  }
+
+  const primaryJobs = await findAllUnfinishedJobsAsPrimary({
+    companyId: context.companyId,
+    primaryRecruiterCompanyMemberId: membership._id,
+  });
+
+  const supportingJobs = await findAllUnfinishedJobsAsSupporting({
+    companyId: context.companyId,
+    supportingRecruiterCompanyMemberId: membership._id,
+  });
+
+  // BR-27: block terminate when any Primary Job has no replacement specified.
+  for (const job of primaryJobs) {
+    const jobIdStr = job._id.toString();
+
+    if (!transferMap.has(jobIdStr)) {
+      throw new AppError(
+        409,
+        "Recruiter has outstanding Primary Job responsibility and no replacement was specified",
+        {
+          field: "primaryRecruiterCompanyMemberId",
+          jobId: jobIdStr,
+          jobStatus: job.status,
+        },
+      );
+    }
+  }
+
+  // TX-03: per-Job forced Primary transfers (not global all-or-nothing).
+  for (const job of primaryJobs) {
+    const jobIdStr = job._id.toString();
+    const replacementId = transferMap.get(jobIdStr);
+
+    await executeForcedPrimaryTransfer({
+      jobId: job._id,
+      companyId: context.companyId,
+      oldPrimaryCompanyMemberId: membership._id,
+      replacementCompanyMemberId: replacementId,
+    });
+  }
+
+  // BR-28: forced Supporting removals.
+  for (const job of supportingJobs) {
+    await executeForcedSupportingRemoval({
+      jobId: job._id,
+      companyId: context.companyId,
+      supportingCompanyMemberId: membership._id,
+    });
+  }
+
+  // Final guard: zero active responsibility before terminate completion.
   await assertNoOutstandingRecruiterTeamResponsibility({
     companyId: context.companyId,
     recruiterCompanyMemberId: membership._id,

@@ -97,6 +97,7 @@ const lockRecruiterHandler = async (request, response, next) => {
       managerUser: request.auth.user,
       recruiterId: request.params.recruiterId,
       clientCompanyId: readClientCompanyId(request),
+      transfers: request.body?.transfers,
     });
 
     return response.status(200).json({
@@ -131,6 +132,7 @@ const terminateRecruiterHandler = async (request, response, next) => {
       managerUser: request.auth.user,
       recruiterId: request.params.recruiterId,
       clientCompanyId: readClientCompanyId(request),
+      transfers: request.body?.transfers,
     });
 
     return response.status(200).json({
