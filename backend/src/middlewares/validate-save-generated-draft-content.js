@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 import CV_LANGUAGE_PROFICIENCY from "../constants/cv-language-proficiency.js";
+import HARVARD_CV_SECTION from "../constants/harvard-cv-section.js";
 import AppError from "../utils/app-error.js";
+
+const HARVARD_CV_SECTION_VALUES = Object.values(HARVARD_CV_SECTION);
 
 const optionalNullableTrimmedString = z
   .union([z.null(), z.string()])
@@ -115,7 +118,16 @@ const saveGeneratedDraftContentSchema = z
     projects: z.array(projectSchema).optional(),
     certifications: z.array(certificationSchema).optional(),
     languages: z.array(languageSchema).optional(),
-    hiddenSections: stringArray,
+    hiddenSections: z
+      .array(
+        z.enum(HARVARD_CV_SECTION_VALUES, {
+          errorMap: () => ({
+            message:
+              "hiddenSections members must use the canonical Harvard section vocabulary",
+          }),
+        }),
+      )
+      .optional(),
   })
   .strict();
 

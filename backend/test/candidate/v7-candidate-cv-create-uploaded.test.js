@@ -237,15 +237,21 @@ describe("V7 Slice 06 — Uploaded CV creation (F05)", () => {
         archivedAt: null,
         generatedContent: null,
         uploadedFile: {
-          storageKey: "jobhub/candidate-cvs/uploaded/demo-cv",
           originalFileName: "resume.pdf",
           mimeType: CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
           sizeBytes: pdfBuffer.length,
           pageCount: 2,
         },
       });
+      expect(response.body.cv.uploadedFile).not.toHaveProperty("storageKey");
       expect(response.body.cv.uploadedFile.uploadedAt).toBeTruthy();
       expect(uploadSpy).toHaveBeenCalledTimes(1);
+      expect(uploadSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceType: "raw",
+          deliveryType: "authenticated",
+        }),
+      );
       expect(deleteSpy).not.toHaveBeenCalled();
 
       const persisted = await CandidateCV.findById(response.body.cv.id);
@@ -379,6 +385,7 @@ describe("V7 Slice 06 — Uploaded CV creation (F05)", () => {
       expect(deleteSpy).toHaveBeenCalledWith({
         publicId: "jobhub/candidate-cvs/uploaded/orphan",
         resourceType: "raw",
+        deliveryType: "authenticated",
       });
       expect(await CandidateCV.countDocuments()).toBe(0);
     });

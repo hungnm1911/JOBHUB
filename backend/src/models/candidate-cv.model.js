@@ -5,6 +5,7 @@ import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
 import CANDIDATE_CV_VISIBILITY from "../constants/candidate-cv-visibility.js";
 import CV_LANGUAGE_PROFICIENCY from "../constants/cv-language-proficiency.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
+import HARVARD_CV_SECTION from "../constants/harvard-cv-section.js";
 import LOCATION from "../constants/location.js";
 import WORK_MODE from "../constants/work-mode.js";
 
@@ -14,6 +15,7 @@ const LOCATION_VALUES = Object.values(LOCATION);
 const EMPLOYMENT_TYPE_VALUES = Object.values(EMPLOYMENT_TYPE);
 const WORK_MODE_VALUES = Object.values(WORK_MODE);
 const LANGUAGE_PROFICIENCY_VALUES = Object.values(CV_LANGUAGE_PROFICIENCY);
+const HARVARD_CV_SECTION_VALUES = Object.values(HARVARD_CV_SECTION);
 
 const isNonEmptyTrimmedString = (value) => {
   return typeof value === "string" && value.trim() !== "";
@@ -290,6 +292,11 @@ const generatedCvContentSchema = new Schema(
         {
           type: String,
           trim: true,
+          enum: {
+            values: HARVARD_CV_SECTION_VALUES,
+            message:
+              "hiddenSections members must use the canonical Harvard section vocabulary",
+          },
         },
       ],
       default: [],

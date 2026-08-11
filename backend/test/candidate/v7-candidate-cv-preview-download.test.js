@@ -393,6 +393,7 @@ describe("V7 Slice 09 — Preview + Download Candidate CV (F08)", () => {
     expect(downloadSpy).toHaveBeenCalledWith({
       publicId: "jobhub/candidate-cvs/uploaded/new-current",
       resourceType: "raw",
+      deliveryType: "authenticated",
     });
 
     const downloadResponse = await agent

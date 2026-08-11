@@ -26,7 +26,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
-| V7 | Candidate Profile và thư viện CV | READY FOR IMPLEMENTATION |
+| V7 | Candidate Profile và thư viện CV | IN PROGRESS |
 | V8 | Job Discovery | PLANNED |
 | V9 | Candidate chủ động Apply và tạo Application | PLANNED |
 | V10 | Phân công Application và Recruitment Pipeline | PLANNED |
@@ -69,11 +69,12 @@ V1 through V6 are `COMPLETED AND VERIFIED`.
 V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression
 closure passed across F01–F05, BR-01–BR-33, and TX-01–TX-03 after its recorded
-remediations and the required backend verification gate. V7 is the next
-roadmap milestone and is `READY FOR IMPLEMENTATION`; its approved Product/Data
-contracts authorize decomposition and implementation beginning with Slice 01.
-No V7 business behavior is implemented by this readiness transition. V8
-through V17 must not be implemented merely from their roadmap titles.
+remediations and the required backend verification gate. V7 is the current
+roadmap milestone and is `IN PROGRESS`: Slices 01–11 implement approved F01–F10
+scope, recorded Final Acceptance blockers have been remediated, and Final
+Acceptance / regression closure across F01–F10, BR-01–BR-46, and TX-01 remains
+the next required verification before `COMPLETED AND VERIFIED`. V8 through V17
+must not be implemented merely from their roadmap titles.
 
 V7 canonical specification:
 

@@ -174,18 +174,25 @@ describe("V7 Slice 07 — Replace Uploaded PDF (F06)", () => {
       isDefault: true,
       archivedAt: null,
       uploadedFile: {
-        storageKey: "jobhub/candidate-cvs/uploaded/new-file",
         originalFileName: "new-resume.pdf",
         mimeType: CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
         sizeBytes: pdfBuffer.length,
         pageCount: 3,
       },
     });
+    expect(response.body.cv.uploadedFile).not.toHaveProperty("storageKey");
     expect(response.body.cv.uploadedFile.uploadedAt).toBeTruthy();
     expect(uploadSpy).toHaveBeenCalledTimes(1);
+    expect(uploadSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceType: "raw",
+        deliveryType: "authenticated",
+      }),
+    );
     expect(deleteSpy).toHaveBeenCalledWith({
       publicId: "jobhub/candidate-cvs/uploaded/old-file",
       resourceType: "raw",
+      deliveryType: "authenticated",
     });
 
     const persisted = await CandidateCV.findById(existing._id);
@@ -282,10 +289,12 @@ describe("V7 Slice 07 — Replace Uploaded PDF (F06)", () => {
     expect(deleteSpy).toHaveBeenCalledWith({
       publicId: "jobhub/candidate-cvs/uploaded/orphan-new",
       resourceType: "raw",
+      deliveryType: "authenticated",
     });
     expect(deleteSpy).not.toHaveBeenCalledWith({
       publicId: "jobhub/candidate-cvs/uploaded/old-file",
       resourceType: "raw",
+      deliveryType: "authenticated",
     });
 
     const persisted = await CandidateCV.findById(existing._id);
@@ -323,12 +332,12 @@ describe("V7 Slice 07 — Replace Uploaded PDF (F06)", () => {
       .attach("file", pdfBuffer, "kept-new.pdf");
 
     expect(response.status).toBe(200);
-    expect(response.body.cv.uploadedFile.storageKey).toBe(
-      "jobhub/candidate-cvs/uploaded/committed-new",
-    );
+    expect(response.body.cv.uploadedFile).not.toHaveProperty("storageKey");
+    expect(response.body.cv.uploadedFile.originalFileName).toBe("kept-new.pdf");
     expect(deleteSpy).toHaveBeenCalledWith({
       publicId: "jobhub/candidate-cvs/uploaded/old-file",
       resourceType: "raw",
+      deliveryType: "authenticated",
     });
 
     const persisted = await CandidateCV.findById(existing._id);
@@ -423,14 +432,17 @@ describe("V7 Slice 07 — Replace Uploaded PDF (F06)", () => {
     expect(deleteSpy).toHaveBeenCalledWith({
       publicId: "jobhub/candidate-cvs/uploaded/stale-attempt",
       resourceType: "raw",
+      deliveryType: "authenticated",
     });
     expect(deleteSpy).not.toHaveBeenCalledWith({
       publicId: "jobhub/candidate-cvs/uploaded/concurrent-winner",
       resourceType: "raw",
+      deliveryType: "authenticated",
     });
     expect(deleteSpy).not.toHaveBeenCalledWith({
       publicId: "jobhub/candidate-cvs/uploaded/baseline",
       resourceType: "raw",
+      deliveryType: "authenticated",
     });
 
     findOneSpy.mockRestore();

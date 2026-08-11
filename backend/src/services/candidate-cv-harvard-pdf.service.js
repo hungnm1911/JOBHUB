@@ -1,4 +1,9 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, rgb } from "pdf-lib";
 
 import HARVARD_CV_SECTION from "../constants/harvard-cv-section.js";
 
@@ -8,6 +13,17 @@ const MARGIN_X = 54;
 const MARGIN_TOP = 54;
 const MARGIN_BOTTOM = 54;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_X * 2;
+
+const FONT_DIRECTORY = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../assets/fonts/noto-serif",
+);
+
+const HARVARD_FONT_FILES = Object.freeze({
+  regular: join(FONT_DIRECTORY, "NotoSerif-Regular.ttf"),
+  bold: join(FONT_DIRECTORY, "NotoSerif-Bold.ttf"),
+  italic: join(FONT_DIRECTORY, "NotoSerif-Italic.ttf"),
+});
 
 const SECTION_ORDER = Object.freeze([
   {
@@ -44,29 +60,24 @@ const hasPresentString = (value) => {
   return typeof value === "string" && value.trim() !== "";
 };
 
-// pdf-lib StandardFonts use WinAnsi; replace unsupported glyphs so incomplete
-// Draft content still renders without failing the Preview path.
-const toRenderableText = (value) => {
+// Preserve valid Unicode from generatedContent; only normalize whitespace for layout.
+const toDisplayText = (value) => {
   if (value == null) {
     return "";
   }
 
-  return String(value)
-    .normalize("NFKD")
-    .replace(/[^\x20-\x7E]/g, "?")
-    .replace(/\s+/g, " ")
-    .trim();
+  return String(value).replace(/\s+/g, " ").trim();
 };
 
 const joinPresent = (parts, separator = " | ") => {
   return parts
-    .map((part) => toRenderableText(part))
+    .map((part) => toDisplayText(part))
     .filter((part) => part !== "")
     .join(separator);
 };
 
 const wrapText = (text, font, fontSize, maxWidth) => {
-  const normalized = toRenderableText(text);
+  const normalized = toDisplayText(text);
 
   if (normalized === "") {
     return [];
@@ -119,6 +130,28 @@ const wrapText = (text, font, fontSize, maxWidth) => {
   return lines;
 };
 
+const loadHarvardFonts = async (pdfDocument) => {
+  pdfDocument.registerFontkit(fontkit);
+
+  const [regularFont, boldFont, italicFont] = await Promise.all([
+    pdfDocument.embedFont(readFileSync(HARVARD_FONT_FILES.regular), {
+      subset: true,
+    }),
+    pdfDocument.embedFont(readFileSync(HARVARD_FONT_FILES.bold), {
+      subset: true,
+    }),
+    pdfDocument.embedFont(readFileSync(HARVARD_FONT_FILES.italic), {
+      subset: true,
+    }),
+  ]);
+
+  return {
+    regularFont,
+    boldFont,
+    italicFont,
+  };
+};
+
 /**
  * Fixed Harvard Template PDF renderer for Generated CandidateCV content.
  * Canonical source remains generatedContent; this never persists PDF bytes.
@@ -133,9 +166,8 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
   );
 
   const pdfDocument = await PDFDocument.create();
-  const regularFont = await pdfDocument.embedFont(StandardFonts.TimesRoman);
-  const boldFont = await pdfDocument.embedFont(StandardFonts.TimesRomanBold);
-  const italicFont = await pdfDocument.embedFont(StandardFonts.TimesRomanItalic);
+  const { regularFont, boldFont, italicFont } =
+    await loadHarvardFonts(pdfDocument);
 
   let page = pdfDocument.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   let cursorY = PAGE_HEIGHT - MARGIN_TOP;
@@ -173,7 +205,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
   };
 
   const drawCentered = ({ text, font, fontSize, lineHeight, gapAfter = 0 }) => {
-    const line = toRenderableText(text);
+    const line = toDisplayText(text);
 
     if (line === "") {
       return;
@@ -211,7 +243,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
     cursorY -= 10;
   };
 
-  const fullName = toRenderableText(personalInfo.fullName) || "Candidate CV";
+  const fullName = toDisplayText(personalInfo.fullName) || "Candidate CV";
   drawCentered({
     text: fullName,
     font: boldFont,
@@ -237,7 +269,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
   }
 
   const links = (personalInfo.links ?? [])
-    .map((link) => toRenderableText(link))
+    .map((link) => toDisplayText(link))
     .filter((link) => link !== "");
 
   if (links.length > 0) {
@@ -258,7 +290,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
     }
 
     if (section.id === HARVARD_CV_SECTION.PROFESSIONAL_SUMMARY) {
-      const summary = toRenderableText(content.professionalSummary);
+      const summary = toDisplayText(content.professionalSummary);
 
       if (summary === "") {
         continue;
@@ -277,7 +309,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
 
     if (section.id === HARVARD_CV_SECTION.SKILLS) {
       const skills = (content.skills ?? [])
-        .map((skill) => toRenderableText(skill))
+        .map((skill) => toDisplayText(skill))
         .filter((skill) => skill !== "");
 
       if (skills.length === 0) {
@@ -383,7 +415,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
         }
 
         for (const achievement of experience.achievements ?? []) {
-          const text = toRenderableText(achievement);
+          const text = toDisplayText(achievement);
 
           if (text === "") {
             continue;
@@ -425,7 +457,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
         }
 
         const technologies = (project.technologies ?? [])
-          .map((item) => toRenderableText(item))
+          .map((item) => toDisplayText(item))
           .filter((item) => item !== "");
 
         if (technologies.length > 0) {

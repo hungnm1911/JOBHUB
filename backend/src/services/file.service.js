@@ -24,6 +24,9 @@ const uploadFileBuffer = ({
   buffer,
   assetFolder,
   resourceType = "auto",
+  // Default remains public Cloudinary delivery; callers that need restricted
+  // storage (e.g. Candidate Uploaded CV) must pass an explicit deliveryType.
+  deliveryType = "upload",
 }) => {
   if (!Buffer.isBuffer(buffer)) {
     throw new TypeError("File buffer is required");
@@ -36,7 +39,15 @@ const uploadFileBuffer = ({
     throw new TypeError("Cloudinary asset folder is required");
   }
 
+  if (
+    typeof deliveryType !== "string" ||
+    !deliveryType.trim()
+  ) {
+    throw new TypeError("Cloudinary delivery type is required");
+  }
+
   const normalizedAssetFolder = assetFolder.trim();
+  const normalizedDeliveryType = deliveryType.trim();
 
   return new Promise((resolve, reject) => {
     const uploadStream =
@@ -44,6 +55,7 @@ const uploadFileBuffer = ({
         {
           asset_folder: normalizedAssetFolder,
           resource_type: resourceType,
+          type: normalizedDeliveryType,
         },
         (error, uploadResult) => {
           if (error) {

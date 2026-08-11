@@ -2,15 +2,16 @@ import mongoose from "mongoose";
 
 import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
+import CANDIDATE_CV_UPLOADED_STORAGE from "../constants/candidate-cv-uploaded-storage.js";
 import CANDIDATE_CV_VISIBILITY from "../constants/candidate-cv-visibility.js";
 import CATEGORY_LEVEL from "../constants/category-level.js";
+import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import CV_LANGUAGE_PROFICIENCY from "../constants/cv-language-proficiency.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import LOCATION from "../constants/location.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
-import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import CandidateCV from "../models/candidate-cv.model.js";
 import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
@@ -18,6 +19,31 @@ import AppError from "../utils/app-error.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
+
+const uploadOwnUploadedCandidateCvFile = (buffer) => {
+  return uploadFileBuffer({
+    buffer,
+    assetFolder: CLOUDINARY_FOLDER.CANDIDATE_UPLOADED_CVS,
+    resourceType: CANDIDATE_CV_UPLOADED_STORAGE.RESOURCE_TYPE,
+    deliveryType: CANDIDATE_CV_UPLOADED_STORAGE.DELIVERY_TYPE,
+  });
+};
+
+const deleteOwnUploadedCandidateCvFile = (publicId) => {
+  return deleteFile({
+    publicId,
+    resourceType: CANDIDATE_CV_UPLOADED_STORAGE.RESOURCE_TYPE,
+    deliveryType: CANDIDATE_CV_UPLOADED_STORAGE.DELIVERY_TYPE,
+  });
+};
+
+const downloadOwnUploadedCandidateCvFile = (publicId) => {
+  return downloadFileBuffer({
+    publicId,
+    resourceType: CANDIDATE_CV_UPLOADED_STORAGE.RESOURCE_TYPE,
+    deliveryType: CANDIDATE_CV_UPLOADED_STORAGE.DELIVERY_TYPE,
+  });
+};
 
 const LOCATION_VALUES = new Set(Object.values(LOCATION));
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
@@ -118,8 +144,8 @@ const toPublicUploadedFile = (uploadedFile) => {
     return null;
   }
 
+  // Data V7 §7.2: storageKey is an internal locator — persist only, do not expose.
   return {
-    storageKey: uploadedFile.storageKey,
     originalFileName: uploadedFile.originalFileName,
     mimeType: uploadedFile.mimeType,
     sizeBytes: uploadedFile.sizeBytes,
@@ -382,11 +408,7 @@ const createUploadedCandidateCv = async ({
   let storedFile = null;
 
   try {
-    storedFile = await uploadFileBuffer({
-      buffer: file.buffer,
-      assetFolder: CLOUDINARY_FOLDER.CANDIDATE_UPLOADED_CVS,
-      resourceType: "raw",
-    });
+    storedFile = await uploadOwnUploadedCandidateCvFile(file.buffer);
 
     // F05 / BR-23: exact UPLOADED/ACTIVE initialization — no DRAFT path.
     const candidateCv = await CandidateCV.create({
@@ -419,10 +441,7 @@ const createUploadedCandidateCv = async ({
     // orphan file cleanup is best-effort engineering concern.
     if (storedFile?.publicId) {
       try {
-        await deleteFile({
-          publicId: storedFile.publicId,
-          resourceType: "raw",
-        });
+        await deleteOwnUploadedCandidateCvFile(storedFile.publicId);
       } catch {
         // Swallow cleanup failure — business state has no CandidateCV.
       }
@@ -491,10 +510,7 @@ const cleanupExternalUploadedCvFileBestEffort = async (publicId) => {
   }
 
   try {
-    await deleteFile({
-      publicId,
-      resourceType: "raw",
-    });
+    await deleteOwnUploadedCandidateCvFile(publicId);
   } catch {
     // Best-effort external cleanup — never roll back business persistence.
   }
@@ -534,11 +550,7 @@ const replaceOwnUploadedCandidateCvPdf = async ({
   let replacementCommitted = false;
 
   try {
-    storedFile = await uploadFileBuffer({
-      buffer: file.buffer,
-      assetFolder: CLOUDINARY_FOLDER.CANDIDATE_UPLOADED_CVS,
-      resourceType: "raw",
-    });
+    storedFile = await uploadOwnUploadedCandidateCvFile(file.buffer);
 
     const nextUploadedFile = {
       storageKey: storedFile.publicId,
@@ -1109,10 +1121,9 @@ const buildUploadedCvPdfDelivery = async (candidateCv) => {
   let pdfBuffer;
 
   try {
-    pdfBuffer = await downloadFileBuffer({
-      publicId: candidateCv.uploadedFile.storageKey,
-      resourceType: "raw",
-    });
+    pdfBuffer = await downloadOwnUploadedCandidateCvFile(
+      candidateCv.uploadedFile.storageKey,
+    );
   } catch {
     throw new AppError(502, "Failed to retrieve current Uploaded CV PDF", {
       field: "uploadedFile",

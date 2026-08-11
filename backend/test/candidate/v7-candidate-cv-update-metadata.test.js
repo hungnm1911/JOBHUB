@@ -240,11 +240,13 @@ describe("V7 Slice 08 — Rename + metadata + visibility (F07)", () => {
       archivedAt: null,
       generatedContent: null,
       uploadedFile: {
-        storageKey: "jobhub/candidate-cvs/uploaded/current",
         originalFileName: "current.pdf",
         pageCount: 2,
       },
     });
+    expect(uploadedResponse.body.cv.uploadedFile).not.toHaveProperty(
+      "storageKey",
+    );
 
     const persistedGenerated = await CandidateCV.findById(generated._id);
     expect(persistedGenerated.generatedContent.skills).toEqual([

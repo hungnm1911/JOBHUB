@@ -13,10 +13,12 @@ import CANDIDATE_CV_STATUS from "../../src/constants/candidate-cv-status.js";
 import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility.js";
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import CV_LANGUAGE_PROFICIENCY from "../../src/constants/cv-language-proficiency.js";
+import HARVARD_CV_SECTION from "../../src/constants/harvard-cv-section.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
 import Category from "../../src/models/category.model.js";
 import User from "../../src/models/user.model.js";
+import { evaluateGeneratedCvCompleteness } from "../../src/services/candidate-cv.service.js";
 import {
   createVerifiedUser,
   loginAndGetAccessToken,
@@ -27,6 +29,8 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+
+const HARVARD_SECTION_VALUES = Object.values(HARVARD_CV_SECTION);
 
 const createFieldCategory = async (name = "Software Engineering") => {
   return Category.create({
@@ -419,6 +423,148 @@ describe("V7 Slice 04 — Generated CV Builder save + completeness (F04)", () =>
 
       expect(adminAttempt.status).toBe(403);
       expect(anonymousAttempt.status).toBe(401);
+    });
+  });
+
+  describe("hiddenSections Harvard vocabulary (Data V7 §6.11 / BR-12)", () => {
+    it("accepts exact supported Harvard section values", async () => {
+      const { user } = await createVerifiedUser({
+        email: "cv.builder.hidden.valid@example.com",
+      });
+      const category = await createFieldCategory("Hidden Valid");
+      const draft = await createGeneratedDraft({
+        candidateUserId: user._id,
+        categoryId: category._id,
+      });
+      const agent = createTestAgent();
+      const accessToken = await loginAndGetAccessToken(agent, {
+        email: user.email,
+      });
+
+      const response = await agent
+        .put(`/api/candidate/cvs/${draft._id}/generated-content`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          ...completeGeneratedContent(),
+          hiddenSections: HARVARD_SECTION_VALUES,
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.cv.generatedContent.hiddenSections).toEqual(
+        HARVARD_SECTION_VALUES,
+      );
+
+      const persisted = await CandidateCV.findById(draft._id).lean();
+      expect(persisted.generatedContent.hiddenSections).toEqual(
+        HARVARD_SECTION_VALUES,
+      );
+    });
+
+    it("rejects unknown section names and mixed valid+unknown arrays", async () => {
+      const { user } = await createVerifiedUser({
+        email: "cv.builder.hidden.unknown@example.com",
+      });
+      const category = await createFieldCategory("Hidden Unknown");
+      const draft = await createGeneratedDraft({
+        candidateUserId: user._id,
+        categoryId: category._id,
+        generatedContent: {
+          hiddenSections: [HARVARD_CV_SECTION.PROJECTS],
+        },
+      });
+      const agent = createTestAgent();
+      const accessToken = await loginAndGetAccessToken(agent, {
+        email: user.email,
+      });
+
+      const unknownOnly = await agent
+        .put(`/api/candidate/cvs/${draft._id}/generated-content`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          hiddenSections: ["UNKNOWN_SECTION"],
+        });
+      const mixed = await agent
+        .put(`/api/candidate/cvs/${draft._id}/generated-content`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          hiddenSections: [HARVARD_CV_SECTION.EDUCATIONS, "UNKNOWN_SECTION"],
+        });
+      const arbitraryLabel = await agent
+        .put(`/api/candidate/cvs/${draft._id}/generated-content`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          hiddenSections: ["EDUCATION"],
+        });
+
+      expect(unknownOnly.status).toBe(400);
+      expect(mixed.status).toBe(400);
+      expect(arbitraryLabel.status).toBe(400);
+
+      const persisted = await CandidateCV.findById(draft._id).lean();
+      expect(persisted.generatedContent.hiddenSections).toEqual([
+        HARVARD_CV_SECTION.PROJECTS,
+      ]);
+    });
+
+    it("rejects invalid hiddenSections at the CandidateCV schema boundary", async () => {
+      const { user } = await createVerifiedUser({
+        email: "cv.builder.hidden.schema@example.com",
+      });
+      const category = await createFieldCategory("Hidden Schema");
+
+      await expect(
+        CandidateCV.create({
+          candidateUserId: user._id,
+          name: "Invalid Hidden Sections",
+          sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+          status: CANDIDATE_CV_STATUS.DRAFT,
+          visibility: CANDIDATE_CV_VISIBILITY.PRIVATE,
+          categoryId: category._id,
+          isDefault: false,
+          archivedAt: null,
+          generatedContent: {
+            hiddenSections: [
+              HARVARD_CV_SECTION.EDUCATIONS,
+              "UNKNOWN_SECTION",
+            ],
+          },
+        }),
+      ).rejects.toThrow(/hiddenSections|Harvard|enum|validation/i);
+    });
+
+    it("does not change completeness when hiding sections including required ones", async () => {
+      const complete = completeGeneratedContent();
+      const incomplete = {
+        ...complete,
+        professionalSummary: null,
+        skills: [],
+      };
+
+      expect(evaluateGeneratedCvCompleteness(complete).isComplete).toBe(true);
+      expect(
+        evaluateGeneratedCvCompleteness({
+          ...complete,
+          hiddenSections: [
+            HARVARD_CV_SECTION.PROFESSIONAL_SUMMARY,
+            HARVARD_CV_SECTION.EDUCATIONS,
+            HARVARD_CV_SECTION.SKILLS,
+            HARVARD_CV_SECTION.PROJECTS,
+          ],
+        }).isComplete,
+      ).toBe(true);
+
+      expect(evaluateGeneratedCvCompleteness(incomplete).isComplete).toBe(
+        false,
+      );
+      expect(
+        evaluateGeneratedCvCompleteness({
+          ...incomplete,
+          hiddenSections: [
+            HARVARD_CV_SECTION.PROFESSIONAL_SUMMARY,
+            HARVARD_CV_SECTION.SKILLS,
+          ],
+        }).isComplete,
+      ).toBe(false);
     });
   });
 });
