@@ -4,20 +4,20 @@ import AppError from "../utils/app-error.js";
 
 const objectIdString = z
   .string({
-    error: "Primary Recruiter CompanyMember id is required",
+    error: "New Primary Recruiter CompanyMember id is required",
   })
-  .regex(/^[a-fA-F0-9]{24}$/, "Invalid Primary Recruiter CompanyMember id");
+  .regex(/^[a-fA-F0-9]{24}$/, "Invalid new Primary Recruiter CompanyMember id");
 
-const reassignPrimaryRecruiterSchema = z.object({
-  primaryRecruiterCompanyMemberId: objectIdString,
+const replacePrimaryRecruiterSchema = z.object({
+  newPrimaryCompanyMemberId: objectIdString,
   keepOldPrimaryAsSupporting: z.boolean({
     error:
       "keepOldPrimaryAsSupporting is required — Company Manager must choose the outcome of the current Primary Recruiter",
   }),
 });
 
-const validateReassignPrimaryRecruiter = (request, _response, next) => {
-  const parsed = reassignPrimaryRecruiterSchema.safeParse(request.body);
+const validateReplacePrimaryRecruiter = (request, _response, next) => {
+  const parsed = replacePrimaryRecruiterSchema.safeParse(request.body ?? {});
 
   if (!parsed.success) {
     const [firstIssue] = parsed.error.issues;
@@ -29,8 +29,6 @@ const validateReassignPrimaryRecruiter = (request, _response, next) => {
     );
   }
 
-  // Preserve non-contract body fields such as client companyId so the service
-  // can reject authorization-expansion attempts under BR-38.
   request.body = {
     ...request.body,
     ...parsed.data,
@@ -39,4 +37,4 @@ const validateReassignPrimaryRecruiter = (request, _response, next) => {
   return next();
 };
 
-export default validateReassignPrimaryRecruiter;
+export default validateReplacePrimaryRecruiter;

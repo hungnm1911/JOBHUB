@@ -10,6 +10,7 @@ import {
   reassignPrimaryRecruiter,
   rejectPendingJob,
   removeSupportingRecruiter,
+  replacePrimaryRecruiter,
   submitDraftJob,
   updateDraftJob,
 } from "../services/job.service.js";
@@ -167,6 +168,7 @@ const reassignPrimaryRecruiterHandler = async (request, response, next) => {
       clientCompanyId: readClientCompanyId(request),
       primaryRecruiterCompanyMemberId:
         request.body.primaryRecruiterCompanyMemberId,
+      keepOldPrimaryAsSupporting: request.body.keepOldPrimaryAsSupporting,
     });
 
     return response.status(200).json({
@@ -249,6 +251,25 @@ const removeSupportingRecruiterHandler = async (request, response, next) => {
   }
 };
 
+const replacePrimaryRecruiterHandler = async (request, response, next) => {
+  try {
+    const team = await replacePrimaryRecruiter({
+      managerUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+      newPrimaryCompanyMemberId: request.body.newPrimaryCompanyMemberId,
+      keepOldPrimaryAsSupporting: request.body.keepOldPrimaryAsSupporting,
+    });
+
+    return response.status(200).json({
+      message: "Primary Recruiter replaced.",
+      team,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   approveAndPublishJobHandler,
   closePublishedJobHandler,
@@ -261,6 +282,7 @@ export {
   reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
   removeSupportingRecruiterHandler,
+  replacePrimaryRecruiterHandler,
   submitDraftJobHandler,
   updateDraftJobHandler,
 };

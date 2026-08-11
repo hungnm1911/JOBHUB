@@ -288,11 +288,18 @@ describe("V5 Slice 10 — Manual close Job (F09 / TX-02)", () => {
 
     expect(peerDenied.status).toBe(403);
 
+    await Job.findByIdAndUpdate(published.id, {
+      $addToSet: {
+        supportingRecruiterCompanyMemberIds: successor.membership._id,
+      },
+    });
+
     const reassign = await agent
       .post(`/api/jobs/${published.id}/reassign-primary`)
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(reassign.status).toBe(200);

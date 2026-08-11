@@ -12,6 +12,7 @@ import {
   reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
   removeSupportingRecruiterHandler,
+  replacePrimaryRecruiterHandler,
   submitDraftJobHandler,
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
@@ -22,6 +23,7 @@ import authorizeRecruiterBusinessAccess from "../middlewares/authorize-recruiter
 import validateCreateDraftJob from "../middlewares/validate-create-draft-job.js";
 import validateAddSupportingRecruiter from "../middlewares/validate-add-supporting-recruiter.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
+import validateReplacePrimaryRecruiter from "../middlewares/validate-replace-primary-recruiter.js";
 import validateUpdateDraftJob from "../middlewares/validate-update-draft-job.js";
 
 const router = express.Router();
@@ -97,6 +99,14 @@ router.post(
   authorizeCompanyManagerBusinessAccess,
   validateReassignPrimaryRecruiter,
   reassignPrimaryRecruiterHandler,
+);
+
+router.post(
+  "/:jobId/team/replace-primary",
+  authenticateAccess,
+  authorizeCompanyManagerBusinessAccess,
+  validateReplacePrimaryRecruiter,
+  replacePrimaryRecruiterHandler,
 );
 
 router.post(

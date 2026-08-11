@@ -1585,88 +1585,36 @@ const assertCompanyManagerPrimaryReassignmentAuthority = ({
   }
 };
 
+// V5 legacy reassign path — from V6 onward delegates to the canonical
+// replacePrimaryRecruiter so that BR-20 (must be Supporting) and full F04
+// invariants are enforced. The old body field `primaryRecruiterCompanyMemberId`
+// maps to `newPrimaryCompanyMemberId`; old Primary is kept as Supporting by
+// default since the legacy transport cannot express the F04 outcome choice.
+// Return shape stays `toPublicJob` for backward compatibility with existing
+// V5 consumers (response.body.job).
 const reassignPrimaryRecruiter = async ({
   managerUser,
   jobId,
   clientCompanyId,
   primaryRecruiterCompanyMemberId,
-  now = new Date(),
+  keepOldPrimaryAsSupporting,
 } = {}) => {
-  // BR-38: trusted CM membership; client companyId / Job id do not authorize.
-  const context = await resolveCompanyManagerRecruiterManagementContext({
-    user: managerUser,
+  if (keepOldPrimaryAsSupporting === undefined || keepOldPrimaryAsSupporting === null) {
+    throw new AppError(400, "keepOldPrimaryAsSupporting is required — Company Manager must choose the outcome of the current Primary Recruiter", {
+      field: "keepOldPrimaryAsSupporting",
+    });
+  }
+
+  const team = await replacePrimaryRecruiter({
+    managerUser,
+    jobId,
     clientCompanyId,
+    newPrimaryCompanyMemberId: primaryRecruiterCompanyMemberId,
+    keepOldPrimaryAsSupporting,
   });
 
-  if (!mongoose.Types.ObjectId.isValid(jobId)) {
-    throw new AppError(400, "Invalid Job id", {
-      field: "jobId",
-    });
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(primaryRecruiterCompanyMemberId)) {
-    throw new AppError(400, "Invalid Primary Recruiter CompanyMember id", {
-      field: "primaryRecruiterCompanyMemberId",
-    });
-  }
-
-  const job = await Job.findById(jobId);
-
-  if (!job) {
-    throw new AppError(404, "Job not found", {
-      field: "jobId",
-    });
-  }
-
-  // Early rejection only; mutation-boundary $$NOW is the final deadline guard.
-  assertCompanyManagerPrimaryReassignmentAuthority({
-    job,
-    companyRole: context.companyRole,
-    tenantCompanyId: context.companyId,
-    now,
-  });
-
-  // BR-06 / BR-07 / BR-27: new Primary must be one valid same-Company Recruiter.
-  // Cross-tenant membership ids are rejected here; they do not authorize.
-  await assertRecruiterMembershipValidForJobPrimary({
-    membershipId: primaryRecruiterCompanyMemberId,
-    jobCompanyId: job.companyId,
-  });
-
-  // TX-03 / BR-05 / BR-26 / BR-30 / BR-31: atomic single-field update only while
-  // still effectively PUBLISHED. $$NOW is evaluated when MongoDB decides the
-  // write so a deadline-crossing race after this operation started cannot
-  // reassign. Creator, company ownership, content, status, and publishedAt
-  // remain unchanged. No CompanyMember mutation or Primary history document.
-  const updatedJob = await Job.findOneAndUpdate(
-    {
-      _id: job._id,
-      companyId: context.companyId,
-      status: JOB_STATUS.PUBLISHED,
-      ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
-    },
-    {
-      $set: {
-        primaryRecruiterCompanyMemberId,
-      },
-    },
-    {
-      returnDocument: "after",
-      runValidators: true,
-    },
-  );
-
-  if (!updatedJob) {
-    throw new AppError(
-      409,
-      "Job Primary Recruiter can only be reassigned while PUBLISHED",
-      {
-        field: "status",
-      },
-    );
-  }
-
-  return toPublicJob(updatedJob);
+  const job = await Job.findById(team.jobId);
+  return toPublicJob(job);
 };
 
 // BR-28 / F09: close authority is current Primary Recruiter or owning Company
@@ -2156,6 +2104,225 @@ const removeSupportingRecruiter = async ({
   };
 };
 
+// V6 F04: Replace Primary Recruiter. Only Company Manager may promote a
+// current Supporting to Primary. Old Primary either stays as Supporting or
+// leaves team. TX-01 atomic single-document mutation; TX-02 concurrency
+// boundary with lock/terminate via in-transaction membership lock.
+const replacePrimaryRecruiter = async ({
+  managerUser,
+  jobId,
+  clientCompanyId,
+  newPrimaryCompanyMemberId,
+  keepOldPrimaryAsSupporting,
+} = {}) => {
+  if (keepOldPrimaryAsSupporting === undefined || keepOldPrimaryAsSupporting === null) {
+    throw new AppError(400, "keepOldPrimaryAsSupporting is required — Company Manager must choose the outcome of the current Primary Recruiter", {
+      field: "keepOldPrimaryAsSupporting",
+    });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", { field: "jobId" });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(newPrimaryCompanyMemberId)) {
+    throw new AppError(400, "Invalid new Primary Recruiter CompanyMember id", {
+      field: "newPrimaryCompanyMemberId",
+    });
+  }
+
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser,
+    clientCompanyId,
+  });
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  // BR-19 / BR-12 / BR-13: early checks before transaction.
+  assertCompanyManagerPrimaryReassignmentAuthority({
+    job,
+    companyRole: context.companyRole,
+    tenantCompanyId: context.companyId,
+  });
+
+  // BR-20: new Primary must currently be Supporting of this Job.
+  const newPrimaryIdStr = newPrimaryCompanyMemberId.toString();
+  const isCurrentSupporting = (
+    job.supportingRecruiterCompanyMemberIds ?? []
+  ).some((id) => id.toString() === newPrimaryIdStr);
+
+  if (!isCurrentSupporting) {
+    throw new AppError(
+      409,
+      "New Primary must be a current Supporting Recruiter of this Job",
+      { field: "newPrimaryCompanyMemberId" },
+    );
+  }
+
+  // BR-04: cannot promote current Primary to Primary again.
+  if (job.primaryRecruiterCompanyMemberId.toString() === newPrimaryIdStr) {
+    throw new AppError(409, "Recruiter is already the Primary of this Job", {
+      field: "newPrimaryCompanyMemberId",
+    });
+  }
+
+  const session = await mongoose.startSession();
+  let updatedJob;
+
+  try {
+    await session.withTransaction(async () => {
+      // BR-08/BR-10: operational eligibility of new Primary within transaction.
+      const targetMembership = await CompanyMember.findOne({
+        _id: newPrimaryCompanyMemberId,
+        companyId: context.companyId,
+        role: COMPANY_MEMBER_ROLE.RECRUITER,
+        status: COMPANY_MEMBER_STATUS.ACTIVE,
+      }).session(session);
+
+      if (!targetMembership) {
+        throw new AppError(
+          409,
+          "New Primary Recruiter must be an active Recruiter of the Job Company",
+          { field: "newPrimaryCompanyMemberId" },
+        );
+      }
+
+      const targetUser = await User.findById(targetMembership.userId)
+        .session(session)
+        .select("status mustChangePassword");
+
+      if (!targetUser) {
+        throw new AppError(409, "New Primary Recruiter user is missing", {
+          field: "newPrimaryCompanyMemberId",
+        });
+      }
+
+      if (
+        targetUser.status !== USER_STATUS.ACTIVE ||
+        targetUser.mustChangePassword !== false
+      ) {
+        throw new AppError(
+          409,
+          "New Primary Recruiter is not eligible for active responsibility",
+          { field: "newPrimaryCompanyMemberId" },
+        );
+      }
+
+      const owningCompany = await Company.findById(context.companyId)
+        .session(session)
+        .select("approvalStatus operationalStatus");
+
+      if (
+        !owningCompany ||
+        owningCompany.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
+        owningCompany.operationalStatus !== COMPANY_OPERATIONAL_STATUS.ACTIVE
+      ) {
+        throw new AppError(
+          409,
+          "Job Company is not available for active responsibility",
+          { field: "companyId" },
+        );
+      }
+
+      // TX-02: concurrency guard — lock membership row to prevent concurrent
+      // LOCKED/TERMINATED from committing while we promote.
+      const stillActiveMembership = await CompanyMember.findOneAndUpdate(
+        {
+          _id: newPrimaryCompanyMemberId,
+          companyId: context.companyId,
+          role: COMPANY_MEMBER_ROLE.RECRUITER,
+          status: COMPANY_MEMBER_STATUS.ACTIVE,
+        },
+        { $set: { status: COMPANY_MEMBER_STATUS.ACTIVE } },
+        { returnDocument: "after", session },
+      );
+
+      if (!stillActiveMembership) {
+        throw new AppError(
+          409,
+          "New Primary Recruiter is no longer active during the operation",
+          { field: "newPrimaryCompanyMemberId" },
+        );
+      }
+
+      // TX-01 / BR-22: atomic replacement — set new Primary, remove new from
+      // Supporting, and conditionally add old Primary to Supporting.
+      // MongoDB does not allow $pull and $addToSet on the same field in one
+      // update. When keeping old Primary as Supporting we use a two-step
+      // approach within the same transaction: first swap Primary + pull new
+      // from Supporting, then addToSet old Primary.
+      const oldPrimaryId = job.primaryRecruiterCompanyMemberId;
+
+      updatedJob = await Job.findOneAndUpdate(
+        {
+          _id: job._id,
+          companyId: context.companyId,
+          status: JOB_STATUS.PUBLISHED,
+          ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
+          primaryRecruiterCompanyMemberId: oldPrimaryId,
+          supportingRecruiterCompanyMemberIds: newPrimaryCompanyMemberId,
+        },
+        {
+          $set: {
+            primaryRecruiterCompanyMemberId: newPrimaryCompanyMemberId,
+          },
+          $pull: {
+            supportingRecruiterCompanyMemberIds: newPrimaryCompanyMemberId,
+          },
+        },
+        {
+          returnDocument: "after",
+          runValidators: true,
+          session,
+        },
+      );
+
+      if (!updatedJob) {
+        throw new AppError(
+          409,
+          "Primary can only be replaced while the Job is effectively PUBLISHED and the new Primary is still Supporting",
+          { field: "status" },
+        );
+      }
+
+      if (keepOldPrimaryAsSupporting) {
+        updatedJob = await Job.findOneAndUpdate(
+          {
+            _id: job._id,
+            primaryRecruiterCompanyMemberId: newPrimaryCompanyMemberId,
+            supportingRecruiterCompanyMemberIds: { $ne: oldPrimaryId },
+          },
+          {
+            $addToSet: {
+              supportingRecruiterCompanyMemberIds: oldPrimaryId,
+            },
+          },
+          {
+            returnDocument: "after",
+            runValidators: true,
+            session,
+          },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    jobId: updatedJob._id.toString(),
+    primaryRecruiterCompanyMemberId:
+      updatedJob.primaryRecruiterCompanyMemberId.toString(),
+    supportingRecruiterCompanyMemberIds: (
+      updatedJob.supportingRecruiterCompanyMemberIds ?? []
+    ).map((id) => id.toString()),
+  };
+};
+
 const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
@@ -2247,6 +2414,7 @@ export {
   reassignPrimaryRecruiter,
   rejectPendingJob,
   removeSupportingRecruiter,
+  replacePrimaryRecruiter,
   resolveEffectiveJobStatus,
   submitDraftJob,
   toPublicJob,
