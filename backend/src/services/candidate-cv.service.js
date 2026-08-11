@@ -10,10 +10,13 @@ import LOCATION from "../constants/location.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
+import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import CandidateCV from "../models/candidate-cv.model.js";
 import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import AppError from "../utils/app-error.js";
+import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
+import { deleteFile, uploadFileBuffer } from "./file.service.js";
 
 const LOCATION_VALUES = new Set(Object.values(LOCATION));
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
@@ -281,6 +284,31 @@ const createGeneratedDraftCandidateCv = async ({
     throw new AppError(403, "Candidates may only create their own CVs");
   }
 
+  const metadata = await normalizeCandidateCvCreateMetadata(draft);
+
+  // F03 / BR-09–BR-11: exact Generated Draft initialization.
+  // BR-31: metadata create does not synthesize Harvard content beyond empty shell.
+  const candidateCv = await CandidateCV.create({
+    candidateUserId,
+    name: metadata.name,
+    sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+    status: CANDIDATE_CV_STATUS.DRAFT,
+    visibility: metadata.visibility,
+    categoryId: metadata.categoryId,
+    experienceLevelId: metadata.experienceLevelId,
+    preferredLocations: metadata.preferredLocations,
+    skillTags: metadata.skillTags,
+    employmentTypes: metadata.employmentTypes,
+    workModes: metadata.workModes,
+    isDefault: false,
+    generatedContent: {},
+    archivedAt: null,
+  });
+
+  return toPublicCandidateCvDetail(candidateCv);
+};
+
+const normalizeCandidateCvCreateMetadata = async (draft) => {
   const name = normalizeRequiredName(draft?.name);
   const visibility = normalizeVisibility(draft?.visibility);
   const category = await assertGeneratedDraftCategory(draft?.categoryId);
@@ -313,13 +341,8 @@ const createGeneratedDraftCandidateCv = async ({
     label: "WorkMode",
   });
 
-  // F03 / BR-09–BR-11: exact Generated Draft initialization.
-  // BR-31: metadata create does not synthesize Harvard content beyond empty shell.
-  const candidateCv = await CandidateCV.create({
-    candidateUserId,
+  return {
     name,
-    sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
-    status: CANDIDATE_CV_STATUS.DRAFT,
     visibility,
     categoryId: category._id,
     experienceLevelId,
@@ -327,12 +350,85 @@ const createGeneratedDraftCandidateCv = async ({
     skillTags,
     employmentTypes,
     workModes,
-    isDefault: false,
-    generatedContent: {},
-    archivedAt: null,
-  });
+  };
+};
 
-  return toPublicCandidateCvDetail(candidateCv);
+const createUploadedCandidateCv = async ({
+  candidateUserId,
+  actorUser,
+  draft,
+  file,
+}) => {
+  assertCandidateCvActor(actorUser);
+
+  // BR-04 / BR-42: ownership is always the authenticated Candidate.
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only create their own CVs");
+  }
+
+  const metadata = await normalizeCandidateCvCreateMetadata(draft);
+
+  // BR-22 / Data 7.3: inspect before any CandidateCV persistence.
+  // Candidate CV domain owns PDF rules; file.service only stores bytes.
+  const inspectedPdf = await inspectUploadedCandidateCvPdf(file?.buffer);
+
+  const originalFileName =
+    typeof file?.originalFileName === "string" &&
+    file.originalFileName.trim() !== ""
+      ? file.originalFileName.trim()
+      : "candidate-cv.pdf";
+
+  let storedFile = null;
+
+  try {
+    storedFile = await uploadFileBuffer({
+      buffer: file.buffer,
+      assetFolder: CLOUDINARY_FOLDER.CANDIDATE_UPLOADED_CVS,
+      resourceType: "raw",
+    });
+
+    // F05 / BR-23: exact UPLOADED/ACTIVE initialization — no DRAFT path.
+    const candidateCv = await CandidateCV.create({
+      candidateUserId,
+      name: metadata.name,
+      sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
+      status: CANDIDATE_CV_STATUS.ACTIVE,
+      visibility: metadata.visibility,
+      categoryId: metadata.categoryId,
+      experienceLevelId: metadata.experienceLevelId,
+      preferredLocations: metadata.preferredLocations,
+      skillTags: metadata.skillTags,
+      employmentTypes: metadata.employmentTypes,
+      workModes: metadata.workModes,
+      isDefault: false,
+      archivedAt: null,
+      uploadedFile: {
+        storageKey: storedFile.publicId,
+        originalFileName,
+        mimeType: inspectedPdf.mimeType,
+        sizeBytes: inspectedPdf.sizeBytes,
+        pageCount: inspectedPdf.pageCount,
+        uploadedAt: new Date(),
+      },
+    });
+
+    return toPublicCandidateCvDetail(candidateCv);
+  } catch (error) {
+    // Data 10.3: DB failure after external upload must not leave a CandidateCV;
+    // orphan file cleanup is best-effort engineering concern.
+    if (storedFile?.publicId) {
+      try {
+        await deleteFile({
+          publicId: storedFile.publicId,
+          resourceType: "raw",
+        });
+      } catch {
+        // Swallow cleanup failure — business state has no CandidateCV.
+      }
+    }
+
+    throw error;
+  }
 };
 
 const isValidGeneratedEducation = (education) => {
@@ -767,6 +863,7 @@ const getOwnActiveCandidateCv = async ({
 export {
   activateOwnGeneratedCandidateCv,
   createGeneratedDraftCandidateCv,
+  createUploadedCandidateCv,
   evaluateGeneratedCvCompleteness,
   getOwnActiveCandidateCv,
   listOwnActiveCandidateCvs,

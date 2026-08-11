@@ -3,6 +3,7 @@ import express from "express";
 import {
   activateOwnGeneratedCandidateCvHandler,
   createGeneratedDraftCandidateCvHandler,
+  createUploadedCandidateCvHandler,
   getOwnActiveCandidateCvHandler,
   listOwnActiveCandidateCvsHandler,
   saveOwnGeneratedContentHandler,
@@ -13,8 +14,10 @@ import {
 } from "../controllers/candidate-profile.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCandidate from "../middlewares/authorize-candidate.js";
+import uploadCandidateCvPdf from "../middlewares/upload-candidate-cv-pdf.js";
 import validateCandidateProfileUpdate from "../middlewares/validate-candidate-profile-update.js";
 import validateCreateGeneratedDraftCv from "../middlewares/validate-create-generated-draft-cv.js";
+import validateCreateUploadedCv from "../middlewares/validate-create-uploaded-cv.js";
 import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
 
 const router = express.Router();
@@ -47,6 +50,15 @@ router.post(
   authorizeCandidate,
   validateCreateGeneratedDraftCv,
   createGeneratedDraftCandidateCvHandler,
+);
+
+router.post(
+  "/cvs/uploaded",
+  authenticateAccess,
+  authorizeCandidate,
+  uploadCandidateCvPdf,
+  validateCreateUploadedCv,
+  createUploadedCandidateCvHandler,
 );
 
 router.get(
