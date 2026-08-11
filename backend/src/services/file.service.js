@@ -24,6 +24,9 @@ const uploadFileBuffer = ({
   buffer,
   assetFolder,
   resourceType = "auto",
+  // Default remains public Cloudinary delivery; callers that need restricted
+  // storage (e.g. Candidate Uploaded CV) must pass an explicit deliveryType.
+  deliveryType = "upload",
 }) => {
   if (!Buffer.isBuffer(buffer)) {
     throw new TypeError("File buffer is required");
@@ -36,7 +39,15 @@ const uploadFileBuffer = ({
     throw new TypeError("Cloudinary asset folder is required");
   }
 
+  if (
+    typeof deliveryType !== "string" ||
+    !deliveryType.trim()
+  ) {
+    throw new TypeError("Cloudinary delivery type is required");
+  }
+
   const normalizedAssetFolder = assetFolder.trim();
+  const normalizedDeliveryType = deliveryType.trim();
 
   return new Promise((resolve, reject) => {
     const uploadStream =
@@ -44,6 +55,7 @@ const uploadFileBuffer = ({
         {
           asset_folder: normalizedAssetFolder,
           resource_type: resourceType,
+          type: normalizedDeliveryType,
         },
         (error, uploadResult) => {
           if (error) {
@@ -95,7 +107,46 @@ const deleteFile = async ({
   };
 };
 
+/**
+ * Storage-only byte fetch by Cloudinary public id.
+ * Temporary signed delivery URLs are an implementation detail and must not be
+ * exposed or persisted as CandidateCV public-access state.
+ */
+const downloadFileBuffer = async ({
+  publicId,
+  resourceType = "raw",
+  deliveryType = "upload",
+}) => {
+  if (
+    typeof publicId !== "string" ||
+    !publicId.trim()
+  ) {
+    throw new TypeError("File public ID is required");
+  }
+
+  const normalizedPublicId = publicId.trim();
+  const signedUrl = cloudinary.url(normalizedPublicId, {
+    resource_type: resourceType,
+    type: deliveryType,
+    secure: true,
+    sign_url: true,
+  });
+
+  const response = await fetch(signedUrl);
+
+  if (!response.ok) {
+    const error = new Error(
+      `Failed to download stored file (${response.status})`,
+    );
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return Buffer.from(await response.arrayBuffer());
+};
+
 export {
   deleteFile,
+  downloadFileBuffer,
   uploadFileBuffer,
 };

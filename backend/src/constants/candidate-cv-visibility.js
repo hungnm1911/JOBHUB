@@ -1,0 +1,6 @@
+const CANDIDATE_CV_VISIBILITY = Object.freeze({
+  PRIVATE: "PRIVATE",
+  PUBLIC: "PUBLIC",
+});
+
+export default CANDIDATE_CV_VISIBILITY;
