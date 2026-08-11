@@ -2,21 +2,23 @@
 
 ## Current milestone
 
-**V5 — Job và vòng đời phê duyệt Job** is `IN PROGRESS`.
+**V6 — Recruitment Team và chuyển giao trách nhiệm** is `READY FOR IMPLEMENTATION`.
 
-V5's approved business specification is at `docs/product/versions/v5-job-approval-lifecycle.md`, and its approved persistence contract is at `docs/data/versions/v5-job-approval-lifecycle-data-model.md`.
+V6's approved business specification is at `docs/product/versions/v6-recruitment-team-responsibility-transfer.md`, and its approved persistence contract is at `docs/data/versions/v6-recruitment-team-responsibility-transfer-data-model.md`.
 
-V1, V2, V3, and V4 remain `COMPLETED AND VERIFIED`.
+V1 through V5 are `COMPLETED AND VERIFIED`.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 are implemented and automated verification passes; discovered acceptance blockers have been fixed and verified under the backend gate, but Final Acceptance / regression closure has not been rerun and passed, so V5 is not `COMPLETED AND VERIFIED`. V6 through V17 remain `PLANNED`.
+V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 is ready to begin Slice 01; V7 through V17 remain `PLANNED`.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Prepared; verified:** V6 implementation readiness — V5 Final Acceptance closed without blocking findings after canonical Product/Data/Engineering review and the 13-file, 94-test V5 Job regression suite passed; approved V6 Product/Data contracts are established as repository sources of truth; roadmap/project status now mark V6 `READY FOR IMPLEMENTATION`; Engineering SoT assigns V6 F01 embedded team persistence and team-read ownership to the existing Job model/service boundary; and Data V6's invalid `F07` reference is corrected to BR-07 plus the inherited V5 Job-create transition. The existing MongoDB replica-set harness, transaction rollback test, canonical migration runner, and focused migration-test pattern are sufficient for Slice 01 persistence/backfill/index invariants. The architecture gate does not reject a valid canonical Job-model extension or versioned migration, so no test infrastructure or verification rule was changed. No V6 Fxx behavior was implemented.
 
 - **Implemented; verified:** Browser-clickable auth email actions now use the shared `/api/auth/<action>?token=…` URL contract, fixing Gmail/browser `GET` clicks that previously reached non-existent bare-host paths while only body-token `POST` endpoints existed. V2 company-approval confirmation and V1 email verification consume their valid query token on `GET`; V3 Recruiter activation and V1/V3 password reset return a minimal password form on `GET` and consume only on its existing completion `POST`. The change adds no persistence fields or token types and leaves `jwt.js` access-JWT behavior unchanged. `APP_BASE_URL` must resolve to the reachable API origin. Focused auth suites passed; ESLint and architecture checks passed; the full suite passed `323/323` with `--fileParallelism=false`. The default parallel `verify:agent` run flaked twice on unrelated MongoMemoryServer startup timeouts.
 
@@ -151,20 +153,22 @@ V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 are implemente
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
-- V5 Slices 01–12 cover F01–F12 including the F03/F12 DRAFT privacy and delete-authority correction, plus verified acceptance corrections for submit/edit stale validation, reassign/close effective-`PUBLISHED` and mutation-boundary deadline (`$$NOW`), public-eligibility owning-Company binding, and Product/Data/Engineering documentation alignment. Final Acceptance / regression closure has not been rerun and passed, so V5 remains `IN PROGRESS` and is not `COMPLETED AND VERIFIED`; no additional V5 business feature slice is recommended before that closure.
+- V5 Slices 01–12 cover F01–F12 including the F03/F12 DRAFT privacy and delete-authority correction, plus verified acceptance corrections for submit/edit stale validation, reassign/close effective-`PUBLISHED` and mutation-boundary deadline (`$$NOW`), public-eligibility owning-Company binding, and Product/Data/Engineering documentation alignment. Final Acceptance / regression closure passed; no V5 business slice remains.
+- V6 prerequisites that only affect later slices remain deferred to their canonical dependency point: S02 owns assignment-vs-lock/terminate TX-02 for add Supporting; S04 reuses that TX-02 boundary and replaces V5 direct Primary reassignment semantics; S05/S06 extend the same boundary to forced-transfer replacements and account lifecycle completion. They do not block S01 and were not implemented during readiness.
 
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
 - `npm run verify:agent` consists of ESLint, deterministic architecture verification, and Vitest. The latest auth-email-action change passed its focused suites, ESLint, architecture verification, and the full suite with `--fileParallelism=false`; the default parallel run flaked twice on unrelated MongoMemoryServer startup timeouts.
-- The current baseline is 53 passing test files and 323 passing tests with `--fileParallelism=false`: prior V1/V2/V3/V4/V5 Slice 01–12 coverage, auth-email-action regressions, and V5 acceptance regressions for submit/edit stale-submit, reassign/close effective expiration and mutation-boundary deadline (`$$NOW`), and public-eligibility owning-Company binding.
+- The current baseline is 54 passing test files and 323 passing tests: prior V1/V2/V3/V4/V5 Slice 01–12 coverage, auth-email-action regressions, and V5 acceptance regressions for submit/edit stale-submit, reassign/close effective expiration and mutation-boundary deadline (`$$NOW`), and public-eligibility owning-Company binding.
 - Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, `test/auth/v3-acceptance.test.js`, `test/catalog/v4-fixed-vocabularies.test.js`, `test/catalog/v4-category-field-creation.test.js`, `test/catalog/v4-category-position-creation.test.js`, `test/catalog/v4-experience-level-dataset.test.js`, `test/catalog/v4-acceptance.test.js`, `test/job/v5-job-create-draft.test.js`, `test/job/v5-recruiter-responsibility-guard.test.js`, `test/job/v5-job-edit-draft.test.js`, `test/job/v5-job-internal-visibility.test.js`, `test/job/v5-job-submit-draft.test.js`, `test/job/v5-job-manager-pending-review.test.js`, `test/job/v5-job-approve-publish.test.js`, `test/job/v5-job-reject-pending.test.js`, `test/job/v5-job-manual-delete.test.js`, `test/job/v5-job-reassign-primary.test.js`, `test/job/v5-job-manual-close.test.js`, `test/job/v5-job-effective-expiration-public-eligibility.test.js`, `test/job/v5-job-draft-privacy-delete-authority.test.js`, and existing V2 registration/onboarding/platform-admin suites.
 - No automated test script is defined outside the backend package; frontend verification is outside `verify:agent` and was not run.
 - Backend startup, Cloudinary connectivity/operations, live SMTP delivery, endpoint smoke tests outside automated registration coverage, and frontend verification are outside `verify:agent` and were not run, so their behavior is not verified by this snapshot.
-- V5 Final Acceptance / regression closure has not been rerun after the acceptance fixes above; passing `verify:agent` is not a substitute for that closure.
+- V5 Final Acceptance / regression closure passed after the acceptance fixes above: canonical F01–F12 review found no remaining blocker and the focused V5 Job regression suite passed 13 files / 94 tests.
 
 ## Next recommended task
 
-Rerun V5 Final Acceptance / regression closure across F01–F12 and Slices 01–12.
-Do not start a new V5 business feature before that closure. V5 must not be marked
-`COMPLETED AND VERIFIED` until that acceptance review is rerun and passes.
+Begin V6 Slice 01 — Team persistence + read (`F01`; foundation BR-01–07,
+BR-09, BR-11, read scope of BR-14–16, and BR-32) from the approved canonical
+Product/Data contracts. Do not pull S02+ concurrency or forced-transfer behavior
+into Slice 01.
