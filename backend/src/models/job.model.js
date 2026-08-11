@@ -43,6 +43,86 @@ const hasDistinctStrings = (values) => {
   return new Set(values).size === values.length;
 };
 
+const assertJobRecruitmentTeamInvariants = (job) => {
+  const errors = [];
+  const supporting = job?.supportingRecruiterCompanyMemberIds;
+
+  if (supporting == null) {
+    errors.push("supportingRecruiterCompanyMemberIds is required");
+  } else if (!Array.isArray(supporting)) {
+    errors.push("supportingRecruiterCompanyMemberIds must be an array");
+  } else {
+    if (!hasDistinctObjectIds(supporting)) {
+      errors.push(
+        "supportingRecruiterCompanyMemberIds must not contain duplicates",
+      );
+    }
+
+    const primaryId = job.primaryRecruiterCompanyMemberId;
+
+    if (primaryId != null && supporting.length > 0) {
+      const primaryKey = primaryId.toString();
+
+      if (supporting.some((value) => value?.toString() === primaryKey)) {
+        errors.push(
+          "Primary Recruiter must not appear in supportingRecruiterCompanyMemberIds",
+        );
+      }
+    }
+  }
+
+  return errors;
+};
+
+// Database-level guard for query-write paths where document-context validators
+// do not see the merged final team state (Data Contract 10.1).
+const JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR = Object.freeze({
+  $and: [
+    {
+      $jsonSchema: {
+        bsonType: "object",
+        required: [
+          "primaryRecruiterCompanyMemberId",
+          "supportingRecruiterCompanyMemberIds",
+        ],
+        properties: {
+          primaryRecruiterCompanyMemberId: {
+            bsonType: "objectId",
+          },
+          supportingRecruiterCompanyMemberIds: {
+            bsonType: "array",
+            items: {
+              bsonType: "objectId",
+            },
+          },
+        },
+      },
+    },
+    {
+      $expr: {
+        $eq: [
+          { $size: "$supportingRecruiterCompanyMemberIds" },
+          {
+            $size: {
+              $setUnion: ["$supportingRecruiterCompanyMemberIds"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      $expr: {
+        $not: {
+          $in: [
+            "$primaryRecruiterCompanyMemberId",
+            "$supportingRecruiterCompanyMemberIds",
+          ],
+        },
+      },
+    },
+  ],
+});
+
 const jobSchema = new Schema(
   {
     companyId: {
@@ -63,6 +143,45 @@ const jobSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "CompanyMember",
       required: true,
+    },
+
+    supportingRecruiterCompanyMemberIds: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: "CompanyMember",
+        },
+      ],
+      default: [],
+      required: true,
+      validate: [
+        {
+          validator: hasDistinctObjectIds,
+          message:
+            "supportingRecruiterCompanyMemberIds must not contain duplicates",
+        },
+        {
+          validator(values) {
+            if (!Array.isArray(values) || values.length === 0) {
+              return true;
+            }
+
+            const primaryId = this.primaryRecruiterCompanyMemberId;
+
+            if (primaryId == null) {
+              return true;
+            }
+
+            const primaryKey = primaryId.toString();
+
+            return values.every(
+              (value) => value?.toString() !== primaryKey,
+            );
+          },
+          message:
+            "Primary Recruiter must not appear in supportingRecruiterCompanyMemberIds",
+        },
+      ],
     },
 
     title: {
@@ -217,7 +336,82 @@ jobSchema.index({
   primaryRecruiterCompanyMemberId: 1,
   status: 1,
 });
+jobSchema.index({
+  primaryRecruiterCompanyMemberId: 1,
+  status: 1,
+  applicationDeadline: 1,
+});
+jobSchema.index({
+  supportingRecruiterCompanyMemberIds: 1,
+  status: 1,
+  applicationDeadline: 1,
+});
+
+jobSchema.pre("validate", function validateJobRecruitmentTeam() {
+  const errors = assertJobRecruitmentTeamInvariants(this);
+
+  if (errors.length > 0) {
+    throw new Error(errors.join("; "));
+  }
+});
 
 const Job = model("Job", jobSchema);
 
+const ensureJobCollectionInvariants = async (
+  connection = mongoose.connection,
+) => {
+  if (connection.readyState !== 1) {
+    throw new Error(
+      "MongoDB connection must be ready before ensuring Job collection invariants",
+    );
+  }
+
+  await Job.init();
+
+  const collectionName = Job.collection.collectionName;
+  const applyValidator = () =>
+    connection.db.command({
+      collMod: collectionName,
+      validator: JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+
+  try {
+    await applyValidator();
+    return;
+  } catch (error) {
+    const isMissingNamespace =
+      error?.code === 26 ||
+      error?.codeName === "NamespaceNotFound" ||
+      /ns does not exist/i.test(error?.message ?? "");
+
+    if (!isMissingNamespace) {
+      throw error;
+    }
+  }
+
+  try {
+    await connection.db.createCollection(collectionName, {
+      validator: JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+  } catch (error) {
+    const collectionAlreadyExists =
+      error?.codeName === "NamespaceExists" ||
+      /already exists/i.test(error?.message ?? "");
+
+    if (!collectionAlreadyExists) {
+      throw error;
+    }
+
+    await applyValidator();
+  }
+};
+
+export {
+  assertJobRecruitmentTeamInvariants,
+  ensureJobCollectionInvariants,
+};
 export default Job;

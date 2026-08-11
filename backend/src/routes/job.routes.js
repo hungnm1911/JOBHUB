@@ -6,9 +6,13 @@ import {
   createDraftJobHandler,
   deletePrePublicationJobHandler,
   getInternalJobHandler,
+  getJobRecruitmentTeamHandler,
+  addSupportingRecruiterHandler,
   listInternalJobsHandler,
   reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
+  removeSupportingRecruiterHandler,
+  replacePrimaryRecruiterHandler,
   submitDraftJobHandler,
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
@@ -17,7 +21,9 @@ import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-comp
 import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-company-staff-business-access.js";
 import authorizeRecruiterBusinessAccess from "../middlewares/authorize-recruiter-business-access.js";
 import validateCreateDraftJob from "../middlewares/validate-create-draft-job.js";
+import validateAddSupportingRecruiter from "../middlewares/validate-add-supporting-recruiter.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
+import validateReplacePrimaryRecruiter from "../middlewares/validate-replace-primary-recruiter.js";
 import validateUpdateDraftJob from "../middlewares/validate-update-draft-job.js";
 
 const router = express.Router();
@@ -42,6 +48,28 @@ router.post(
   authorizeRecruiterBusinessAccess,
   validateCreateDraftJob,
   createDraftJobHandler,
+);
+
+router.get(
+  "/:jobId/team",
+  authenticateAccess,
+  authorizeCompanyStaffBusinessAccess,
+  getJobRecruitmentTeamHandler,
+);
+
+router.post(
+  "/:jobId/team/supporting",
+  authenticateAccess,
+  authorizeCompanyStaffBusinessAccess,
+  validateAddSupportingRecruiter,
+  addSupportingRecruiterHandler,
+);
+
+router.delete(
+  "/:jobId/team/supporting/:companyMemberId",
+  authenticateAccess,
+  authorizeCompanyStaffBusinessAccess,
+  removeSupportingRecruiterHandler,
 );
 
 router.post(
@@ -71,6 +99,14 @@ router.post(
   authorizeCompanyManagerBusinessAccess,
   validateReassignPrimaryRecruiter,
   reassignPrimaryRecruiterHandler,
+);
+
+router.post(
+  "/:jobId/team/replace-primary",
+  authenticateAccess,
+  authorizeCompanyManagerBusinessAccess,
+  validateReplacePrimaryRecruiter,
+  replacePrimaryRecruiterHandler,
 );
 
 router.post(

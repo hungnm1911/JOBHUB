@@ -24,8 +24,8 @@ When a detailed version specification exists and has been reviewed and approved,
 | V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
 | V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
-| V5 | Job và vòng đời phê duyệt Job | IN PROGRESS |
-| V6 | Recruitment Team và chuyển giao trách nhiệm | PLANNED |
+| V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
+| V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
 | V7 | Candidate Profile và thư viện CV | PLANNED |
 | V8 | Job Discovery | PLANNED |
 | V9 | Candidate chủ động Apply và tạo Application | PLANNED |
@@ -64,12 +64,22 @@ The approved business scope of the version has been implemented and the required
 
 ## Current milestone
 
-V1, V2, V3, and V4 are `COMPLETED AND VERIFIED`.
+V1 through V6 are `COMPLETED AND VERIFIED`.
 
-V5 is `IN PROGRESS`: Slices 01–12 are implemented and automated verification
-passes, but Final Acceptance / regression closure has not been rerun and
-passed, so V5 is not `COMPLETED AND VERIFIED`. V6 through V17 remain `PLANNED`
-and must not be implemented merely from their roadmap titles.
+V5 Final Acceptance / regression closure passed across F01–F12 after Slices
+01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression
+closure passed across F01–F05, BR-01–BR-33, and TX-01–TX-03 after its recorded
+remediations and the required backend verification gate. V7 is the next
+roadmap milestone and remains `PLANNED`; V7 through V17 must not be implemented
+merely from their roadmap titles.
+
+V6 canonical specification:
+
+`docs/product/versions/v6-recruitment-team-responsibility-transfer.md`
+
+V6 canonical persistence contract:
+
+`docs/data/versions/v6-recruitment-team-responsibility-transfer-data-model.md`
 
 V5 canonical specification:
 

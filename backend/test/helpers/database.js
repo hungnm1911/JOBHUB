@@ -4,6 +4,7 @@ import request from "supertest";
 
 import app from "../../src/app.js";
 import { ensureCompanyCollectionInvariants } from "../../src/models/company.model.js";
+import { ensureJobCollectionInvariants } from "../../src/models/job.model.js";
 
 let mongoMemoryReplicaSet = null;
 
@@ -25,6 +26,7 @@ const connectTestDatabase = async () => {
   });
 
   await ensureCompanyCollectionInvariants(mongoose.connection);
+  await ensureJobCollectionInvariants(mongoose.connection);
 };
 
 const disconnectTestDatabase = async () => {

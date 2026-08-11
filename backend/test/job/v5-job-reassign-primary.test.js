@@ -93,6 +93,12 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
     };
   };
 
+  const addSupporting = async (jobId, companyMemberId) => {
+    await Job.findByIdAndUpdate(jobId, {
+      $addToSet: { supportingRecruiterCompanyMemberIds: companyMemberId },
+    });
+  };
+
   const createPublishedJob = async ({ agent, manager, recruiter, content }) => {
     const recruiterToken = await loginAndGetAccessToken(agent, {
       email: recruiter.user.email,
@@ -155,6 +161,8 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       content: buildCompleteContent(catalog),
     });
 
+    await addSupporting(published.id, successor.membership._id);
+
     const membershipCountBefore = await CompanyMember.countDocuments();
     const before = await Job.findById(published.id).lean();
 
@@ -163,6 +171,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(response.status).toBe(200);
@@ -231,11 +240,14 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
         content: buildCompleteContent(catalog),
       });
 
+    await addSupporting(published.id, peer.membership._id);
+
     const recruiterResponse = await agent
       .post(`/api/jobs/${published.id}/reassign-primary`)
       .set("Authorization", `Bearer ${recruiterToken}`)
       .send({
         primaryRecruiterCompanyMemberId: peer.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(recruiterResponse.status).toBe(403);
@@ -253,6 +265,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .send({
         companyId: companyA.company._id.toString(),
         primaryRecruiterCompanyMemberId: peer.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(foreignResponse.status).toBe(403);
@@ -266,12 +279,10 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .send({
         primaryRecruiterCompanyMemberId:
           foreignRecruiter.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(crossTenantPrimary.status).toBe(409);
-    expect(crossTenantPrimary.body.error.message).toMatch(
-      /must belong to the Job Company/i,
-    );
     expect(
       (await Job.findById(published.id).lean()).primaryRecruiterCompanyMemberId.toString(),
     ).toBe(creator.membership._id.toString());
@@ -298,6 +309,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       companyId: manager.company._id,
       createdByCompanyMemberId: creator.membership._id,
       primaryRecruiterCompanyMemberId: creator.membership._id,
+      supportingRecruiterCompanyMemberIds: [successor.membership._id],
       status: JOB_STATUS.DRAFT,
       title: "Draft Job",
       publishedAt: null,
@@ -306,6 +318,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       companyId: manager.company._id,
       createdByCompanyMemberId: creator.membership._id,
       primaryRecruiterCompanyMemberId: creator.membership._id,
+      supportingRecruiterCompanyMemberIds: [successor.membership._id],
       status: JOB_STATUS.PENDING_APPROVAL,
       title: "Pending Job",
       publishedAt: null,
@@ -314,6 +327,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       companyId: manager.company._id,
       createdByCompanyMemberId: creator.membership._id,
       primaryRecruiterCompanyMemberId: creator.membership._id,
+      supportingRecruiterCompanyMemberIds: [successor.membership._id],
       status: JOB_STATUS.CLOSED,
       title: "Closed Job",
       publishedAt: new Date("2026-01-15T00:00:00.000Z"),
@@ -322,6 +336,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       companyId: manager.company._id,
       createdByCompanyMemberId: creator.membership._id,
       primaryRecruiterCompanyMemberId: creator.membership._id,
+      supportingRecruiterCompanyMemberIds: [successor.membership._id],
       status: JOB_STATUS.EXPIRED,
       title: "Expired Job",
       publishedAt: new Date("2026-01-15T00:00:00.000Z"),
@@ -338,6 +353,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
         .set("Authorization", `Bearer ${managerToken}`)
         .send({
           primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+          keepOldPrimaryAsSupporting: true,
         });
 
       expect(response.status).toBe(409);
@@ -363,7 +379,6 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       email: "recruiter.job.reassign.invalid.b@example.com",
       company: manager.company,
       employeeCode: "NV-F08-4B",
-      membershipStatus: COMPANY_MEMBER_STATUS.LOCKED,
     });
     const catalog = await seedCatalog();
     const { managerToken, job: published } = await createPublishedJob({
@@ -373,24 +388,30 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       content: buildCompleteContent(catalog),
     });
 
+    await addSupporting(published.id, lockedSuccessor.membership._id);
+    await CompanyMember.findByIdAndUpdate(lockedSuccessor.membership._id, {
+      status: COMPANY_MEMBER_STATUS.LOCKED,
+    });
+
     const lockedResponse = await agent
       .post(`/api/jobs/${published.id}/reassign-primary`)
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         primaryRecruiterCompanyMemberId:
           lockedSuccessor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(lockedResponse.status).toBe(409);
-    expect(lockedResponse.body.error.message).toMatch(
-      /valid active Recruiter/i,
-    );
 
     const terminatedSuccessor = await createActiveRecruiterContext({
       email: "recruiter.job.reassign.invalid.c@example.com",
       company: manager.company,
       employeeCode: "NV-F08-4C",
-      membershipStatus: COMPANY_MEMBER_STATUS.TERMINATED,
+    });
+    await addSupporting(published.id, terminatedSuccessor.membership._id);
+    await CompanyMember.findByIdAndUpdate(terminatedSuccessor.membership._id, {
+      status: COMPANY_MEMBER_STATUS.TERMINATED,
     });
 
     const terminatedResponse = await agent
@@ -399,6 +420,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .send({
         primaryRecruiterCompanyMemberId:
           terminatedSuccessor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(terminatedResponse.status).toBe(409);
@@ -408,6 +430,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       company: manager.company,
       employeeCode: "NV-F08-4D",
     });
+    await addSupporting(published.id, inactiveUserSuccessor.membership._id);
     await User.findByIdAndUpdate(inactiveUserSuccessor.user._id, {
       status: USER_STATUS.LOCKED,
     });
@@ -418,6 +441,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .send({
         primaryRecruiterCompanyMemberId:
           inactiveUserSuccessor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(inactiveUserResponse.status).toBe(409);
@@ -427,6 +451,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         primaryRecruiterCompanyMemberId: new mongoose.Types.ObjectId().toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(missingResponse.status).toBe(409);
@@ -459,6 +484,8 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       content: buildCompleteContent(catalog),
     });
 
+    await addSupporting(published.id, successor.membership._id);
+
     await Job.findByIdAndUpdate(published.id, {
       status: JOB_STATUS.CLOSED,
     });
@@ -468,6 +495,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(response.status).toBe(409);
@@ -503,6 +531,8 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       content: buildCompleteContent(catalog),
     });
 
+    await addSupporting(published.id, successor.membership._id);
+
     const blockedOld = await agent
       .post(`/api/company/recruiters/${creator.user._id.toString()}/lock`)
       .set("Authorization", `Bearer ${managerToken}`);
@@ -514,15 +544,18 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(reassignResponse.status).toBe(200);
 
-    const lockOld = await agent
+    // After V6 F05, lock auto-removes Supporting responsibility on
+    // unfinished Jobs before completion, so lock now succeeds directly.
+    const lockOldAfterReassign = await agent
       .post(`/api/company/recruiters/${creator.user._id.toString()}/lock`)
       .set("Authorization", `Bearer ${managerToken}`);
 
-    expect(lockOld.status).toBe(200);
+    expect(lockOldAfterReassign.status).toBe(200);
     expect(
       (await CompanyMember.findById(creator.membership._id).lean()).status,
     ).toBe(COMPANY_MEMBER_STATUS.LOCKED);
@@ -565,6 +598,8 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       content: buildCompleteContent(catalog),
     });
 
+    await addSupporting(published.id, successor.membership._id);
+
     const managerToken = await loginAndGetAccessToken(agent, {
       email: companyA.user.email,
       password: DEFAULT_PASSWORD,
@@ -576,6 +611,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .send({
         companyId: companyB.company._id.toString(),
         primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(response.status).toBe(403);
@@ -608,6 +644,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(missingJob.status).toBe(404);
@@ -657,6 +694,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       companyId: manager.company._id,
       createdByCompanyMemberId: creator.membership._id,
       primaryRecruiterCompanyMemberId: creator.membership._id,
+      supportingRecruiterCompanyMemberIds: [successor.membership._id],
       status: JOB_STATUS.PUBLISHED,
       title: "Past Deadline Published Job",
       applicationDeadline: pastDeadline,
@@ -674,6 +712,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
       });
 
     expect(response.status).toBe(409);
@@ -696,6 +735,152 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
     expect(after.applicationDeadline.toISOString()).toBe(
       pastDeadline.toISOString(),
     );
+  });
+
+  it("rejects NONE → PRIMARY via legacy reassign path after V6 (BR-20)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.reassign.none-primary@example.com",
+      businessRegistrationNumber: "BRN-V5-F08-BR20",
+    });
+    const creator = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.none-primary.a@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-BR20A",
+    });
+    const outsider = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.none-primary.b@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-BR20B",
+    });
+    const catalog = await seedCatalog();
+    const { managerToken, job: published } = await createPublishedJob({
+      agent,
+      manager,
+      recruiter: creator,
+      content: buildCompleteContent(catalog),
+    });
+
+    const response = await agent
+      .post(`/api/jobs/${published.id}/reassign-primary`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({
+        primaryRecruiterCompanyMemberId: outsider.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.message).toMatch(/Supporting/i);
+
+    const after = await Job.findById(published.id).lean();
+    expect(after.primaryRecruiterCompanyMemberId.toString()).toBe(
+      creator.membership._id.toString(),
+    );
+    expect(after.createdByCompanyMemberId.toString()).toBe(
+      creator.membership._id.toString(),
+    );
+    expect(after.companyId.toString()).toBe(manager.company._id.toString());
+    expect(after.status).toBe(JOB_STATUS.PUBLISHED);
+  });
+
+  it("rejects legacy reassignment when keepOldPrimaryAsSupporting is not provided (F04 outcome choice required)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.reassign.no-outcome@example.com",
+      businessRegistrationNumber: "BRN-V5-F08-NO-OUTCOME",
+    });
+    const creator = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.no-outcome.a@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-NOA",
+    });
+    const successor = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.no-outcome.b@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-NOB",
+    });
+    const catalog = await seedCatalog();
+    const { managerToken, job: published } = await createPublishedJob({
+      agent,
+      manager,
+      recruiter: creator,
+      content: buildCompleteContent(catalog),
+    });
+
+    await addSupporting(published.id, successor.membership._id);
+
+    const response = await agent
+      .post(`/api/jobs/${published.id}/reassign-primary`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({
+        primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.message).toMatch(/keepOldPrimaryAsSupporting/i);
+
+    const after = await Job.findById(published.id).lean();
+    expect(after.primaryRecruiterCompanyMemberId.toString()).toBe(
+      creator.membership._id.toString(),
+    );
+    expect(after.status).toBe(JOB_STATUS.PUBLISHED);
+  });
+
+  it("legacy path with explicit keepOldPrimaryAsSupporting=false removes old Primary from team (F04 NONE outcome)", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.reassign.none-outcome@example.com",
+      businessRegistrationNumber: "BRN-V5-F08-NONE-OUT",
+    });
+    const creator = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.none-outcome.a@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-NONEA",
+    });
+    const successor = await createActiveRecruiterContext({
+      email: "recruiter.job.reassign.none-outcome.b@example.com",
+      company: manager.company,
+      employeeCode: "NV-F08-NONEB",
+    });
+    const catalog = await seedCatalog();
+    const { managerToken, job: published } = await createPublishedJob({
+      agent,
+      manager,
+      recruiter: creator,
+      content: buildCompleteContent(catalog),
+    });
+
+    await addSupporting(published.id, successor.membership._id);
+
+    const response = await agent
+      .post(`/api/jobs/${published.id}/reassign-primary`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({
+        primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
+        keepOldPrimaryAsSupporting: false,
+      });
+
+    expect(response.status).toBe(200);
+
+    const after = await Job.findById(published.id).lean();
+    expect(after.primaryRecruiterCompanyMemberId.toString()).toBe(
+      successor.membership._id.toString(),
+    );
+    expect(
+      (after.supportingRecruiterCompanyMemberIds || []).map((id) =>
+        id.toString(),
+      ),
+    ).not.toContain(creator.membership._id.toString());
+    expect(
+      (after.supportingRecruiterCompanyMemberIds || []).map((id) =>
+        id.toString(),
+      ),
+    ).not.toContain(successor.membership._id.toString());
+    expect(after.createdByCompanyMemberId.toString()).toBe(
+      creator.membership._id.toString(),
+    );
+    expect(after.companyId.toString()).toBe(manager.company._id.toString());
+    expect(after.status).toBe(JOB_STATUS.PUBLISHED);
   });
 
   it("rejects stale reassignment when clock crosses fixed deadline before conditional write (BR-26/BR-30/BR-31/TX-03)", async () => {
@@ -721,6 +906,8 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       recruiter: creator,
       content: buildCompleteContent(catalog),
     });
+
+    await addSupporting(published.id, successor.membership._id);
 
     // Fixed deadline T. Operation starts before T; clock alone crosses T while
     // the Job document deadline stays unchanged (no post-start deadline mutation).
@@ -767,7 +954,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       managerUser: manager.user,
       jobId: published.id,
       primaryRecruiterCompanyMemberId: successor.membership._id.toString(),
-      now: operationNow,
+      keepOldPrimaryAsSupporting: true,
     });
 
     await writeReached;

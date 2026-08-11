@@ -1,12 +1,16 @@
 import {
   approveAndPublishJob,
+  addSupportingRecruiter,
   closePublishedJob,
   createDraftJob,
   deletePrePublicationJob,
   getInternalJob,
+  getJobRecruitmentTeam,
   listInternalJobs,
   reassignPrimaryRecruiter,
   rejectPendingJob,
+  removeSupportingRecruiter,
+  replacePrimaryRecruiter,
   submitDraftJob,
   updateDraftJob,
 } from "../services/job.service.js";
@@ -164,6 +168,7 @@ const reassignPrimaryRecruiterHandler = async (request, response, next) => {
       clientCompanyId: readClientCompanyId(request),
       primaryRecruiterCompanyMemberId:
         request.body.primaryRecruiterCompanyMemberId,
+      keepOldPrimaryAsSupporting: request.body.keepOldPrimaryAsSupporting,
     });
 
     return response.status(200).json({
@@ -192,15 +197,92 @@ const closePublishedJobHandler = async (request, response, next) => {
   }
 };
 
+const getJobRecruitmentTeamHandler = async (request, response, next) => {
+  try {
+    const team = await getJobRecruitmentTeam({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({
+      message: "Recruitment Team retrieved.",
+      team,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const addSupportingRecruiterHandler = async (request, response, next) => {
+  try {
+    const team = await addSupportingRecruiter({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+      supportingRecruiterCompanyMemberId:
+        request.body.supportingRecruiterCompanyMemberId,
+    });
+
+    return response.status(200).json({
+      message: "Supporting recruiter added.",
+      team,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const removeSupportingRecruiterHandler = async (request, response, next) => {
+  try {
+    const team = await removeSupportingRecruiter({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+      supportingRecruiterCompanyMemberId: request.params.companyMemberId,
+    });
+
+    return response.status(200).json({
+      message: "Supporting recruiter removed.",
+      team,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const replacePrimaryRecruiterHandler = async (request, response, next) => {
+  try {
+    const team = await replacePrimaryRecruiter({
+      managerUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+      newPrimaryCompanyMemberId: request.body.newPrimaryCompanyMemberId,
+      keepOldPrimaryAsSupporting: request.body.keepOldPrimaryAsSupporting,
+    });
+
+    return response.status(200).json({
+      message: "Primary Recruiter replaced.",
+      team,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   approveAndPublishJobHandler,
   closePublishedJobHandler,
   createDraftJobHandler,
   deletePrePublicationJobHandler,
   getInternalJobHandler,
+  getJobRecruitmentTeamHandler,
+  addSupportingRecruiterHandler,
   listInternalJobsHandler,
   reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
+  removeSupportingRecruiterHandler,
+  replacePrimaryRecruiterHandler,
   submitDraftJobHandler,
   updateDraftJobHandler,
 };
