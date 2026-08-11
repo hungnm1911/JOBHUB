@@ -4,6 +4,7 @@ import {
   createGeneratedDraftCandidateCvHandler,
   getOwnActiveCandidateCvHandler,
   listOwnActiveCandidateCvsHandler,
+  saveOwnGeneratedDraftContentHandler,
 } from "../controllers/candidate-cv.controller.js";
 import {
   getOwnCandidateProfileHandler,
@@ -13,6 +14,7 @@ import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCandidate from "../middlewares/authorize-candidate.js";
 import validateCandidateProfileUpdate from "../middlewares/validate-candidate-profile-update.js";
 import validateCreateGeneratedDraftCv from "../middlewares/validate-create-generated-draft-cv.js";
+import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
 
 const router = express.Router();
 
@@ -51,6 +53,14 @@ router.get(
   authenticateAccess,
   authorizeCandidate,
   getOwnActiveCandidateCvHandler,
+);
+
+router.put(
+  "/cvs/:cvId/generated-content",
+  authenticateAccess,
+  authorizeCandidate,
+  validateSaveGeneratedDraftContent,
+  saveOwnGeneratedDraftContentHandler,
 );
 
 export default router;

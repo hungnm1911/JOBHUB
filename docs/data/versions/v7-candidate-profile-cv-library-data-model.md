@@ -1386,7 +1386,7 @@ status = DRAFT
 archivedAt = null
 ```
 
-Current content phải đồng thời thỏa:
+Current content phải đồng thời thỏa exact Generated completeness của Product V7:
 
 ```text
 personalInfo.fullName present
@@ -1397,7 +1397,26 @@ professionalSummary present
 >= 1 Skill
 ```
 
-và mọi structured record đang tồn tại phải thỏa required item-level invariant tương ứng.
+Với Education item dùng để satisfy minimum:
+
+```text
+institutionName present
+AND
+degree present
+```
+
+Incomplete Education / WorkExperience / Project items được phép tồn tại trong content
+và **không** tự làm fail completeness chỉ vì chúng đang nhập dở, miễn là exact
+minimum ở trên vẫn đạt.
+
+Nếu Certification item tồn tại, record đó phải có `name` để current content được
+coi là activation-ready.
+
+Nếu Language item tồn tại, record đó phải có `name` và `proficiency` thuộc
+canonical enum để current content được coi là activation-ready.
+
+Không diễn giải completeness thành yêu cầu mọi structured record đang tồn tại
+(Education/WorkExperience/Project/…) đều phải complete.
 
 ### Sau
 

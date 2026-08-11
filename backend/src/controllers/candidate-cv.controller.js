@@ -2,6 +2,7 @@ import {
   createGeneratedDraftCandidateCv,
   getOwnActiveCandidateCv,
   listOwnActiveCandidateCvs,
+  saveOwnGeneratedDraftContent,
 } from "../services/candidate-cv.service.js";
 
 const listOwnActiveCandidateCvsHandler = async (request, response, next) => {
@@ -55,8 +56,24 @@ const createGeneratedDraftCandidateCvHandler = async (
   }
 };
 
+const saveOwnGeneratedDraftContentHandler = async (request, response, next) => {
+  try {
+    const result = await saveOwnGeneratedDraftContent({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      candidateCvId: request.params.cvId,
+      generatedContent: request.body,
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   createGeneratedDraftCandidateCvHandler,
   getOwnActiveCandidateCvHandler,
   listOwnActiveCandidateCvsHandler,
+  saveOwnGeneratedDraftContentHandler,
 };

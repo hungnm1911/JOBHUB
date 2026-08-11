@@ -2,11 +2,12 @@
 
 ## Current milestone
 
-**V7 — Candidate Profile và thư viện CV** is the current milestone. Slices 01–03
+**V7 — Candidate Profile và thư viện CV** is the current milestone. Slices 01–04
 are implemented and verified (Candidate Profile / F01; CandidateCV foundation +
-My CVs read / F02; Generated CV Draft create / F03). V7 is not
-`COMPLETED AND VERIFIED`; Slices 04–11 remain not started. The next valid
-implementation task is V7 Slice 04 (Harvard Builder / Generated activation / F04).
+My CVs read / F02; Generated CV Draft create / F03; Generated Builder save +
+completeness feedback / F04 Builder). V7 is not `COMPLETED AND VERIFIED`;
+Slices 05–11 remain not started. The next valid implementation task is V7
+Slice 05 (Generated activation / ACTIVE edit lifecycle / F04 activation).
 
 V7's approved business specification is at `docs/product/versions/v7-candidate-profile-cv-library.md`, and its approved persistence contract is at `docs/data/versions/v7-candidate-profile-cv-library-data-model.md`.
 
@@ -16,17 +17,19 @@ readiness transition; no known V6 business-blocking finding remains.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Slices 01–03 are complete; Slice 04 is next.
+V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Slices 01–04 are complete; Slice 05 is next.
 
 ## Ready for implementation
 
-- **V7 Slice 04+:** Harvard Builder / Generated activation (F04) and later V7 slices remain not started. Generated Draft create is established; later slices must not invent activation/upload/default/archive workflows ahead of their approved Fxx scope.
+- **V7 Slice 05+:** Generated activation / ACTIVE edit lifecycle (remaining F04 lifecycle) and later V7 slices remain not started. Builder save + completeness feedback are established; later slices must not invent upload/default/archive workflows ahead of their approved Fxx scope.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V7 Slice 04 — Generated CV Builder save + completeness feedback (F04 Builder; BR-12–BR-19): authenticated Candidate saves Harvard structured content on own non-archived Generated `DRAFT` via `PUT /api/candidate/cvs/:cvId/generated-content`; partial DRAFT persistence allowed without requiring completeness; exact Product completeness evaluation returns `completeness.isComplete` after save; incomplete Education/WorkExperience/Project drafts do not by themselves fail completeness; existing Certification/Language records must satisfy Product item-level required fields to be activation-ready; Profile and CandidateCV metadata remain independent of Generated content; complete content still stays `DRAFT` (no `DRAFT → ACTIVE`, ACTIVE edit, or Default clearing). Data V7 §9.3 wording was narrowed to mirror Product exact completeness (deferred S04 prerequisite). Engineering SoT owner `saveOwnGeneratedDraftContent` / `evaluateGeneratedCvCompleteness`. Focused coverage in `test/candidate/v7-candidate-cv-builder-completeness.test.js` (5 tests).
 
 - **Implemented; verified:** V7 Slice 03 — Create Generated CV Draft (F03; BR-04, BR-05, BR-09–BR-11, BR-28–BR-31): authenticated Candidate creates own Generated CV via `POST /api/candidate/cvs` with required `name`/`visibility`/`categoryId` and optional `experienceLevelId`/`preferredLocations`/`skillTags`/`employmentTypes`/`workModes`; persists exact `sourceType=GENERATED`, `status=DRAFT`, `isDefault=false`, `archivedAt=null`, empty `generatedContent`, and absent `uploadedFile`; Category accepts FIELD or POSITION; ExperienceLevel and V4 fixed vocabularies are validated before create (`REMOTE` rejected as Preferred Location, accepted as WorkMode); client ownership/Company/lifecycle/content override fields are rejected; metadata create does not synthesize Harvard content; created Draft appears in Slice 02 My CVs. No F04–F10 mutation workflows. Engineering SoT owner `createGeneratedDraftCandidateCv`. Focused coverage in `test/candidate/v7-candidate-cv-create-generated-draft.test.js` (7 tests).
 
@@ -173,8 +176,8 @@ V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the record
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
 - V5 Slices 01–12 cover F01–F12 including the F03/F12 DRAFT privacy and delete-authority correction, plus verified acceptance corrections for submit/edit stale validation, reassign/close effective-`PUBLISHED` and mutation-boundary deadline (`$$NOW`), public-eligibility owning-Company binding, and Product/Data/Engineering documentation alignment. Final Acceptance / regression closure passed; no V5 business slice remains.
 - V6 Final Acceptance / regression closure is complete: F01–F05, BR-01–BR-33, and TX-01–TX-03 were rerun with the Slices 01–06 suites, S07 acceptance suite, and the five remediation suites. The focused baseline passed 12 files / 155 tests and the official backend gate passed. No known V6 business-blocking finding remains.
-- **Next roadmap milestone:** V7 — Candidate Profile và thư viện CV — Slices 01–03 are complete; Slice 04 (Harvard Builder / Generated activation / F04) is the next valid task. Slices 04–11 remain not started.
-- **Deferred to S04/S05 readiness:** reconcile the Data 9.3 structured-record wording with Product V7 exact Generated completeness before implementing Generated activation; this does not affect F01/F02.
+- **Next roadmap milestone:** V7 — Candidate Profile và thư viện CV — Slices 01–04 are complete; Slice 05 (Generated activation / ACTIVE edit lifecycle / remaining F04) is the next valid task. Slices 05–11 remain not started.
+- **Resolved in S04:** Data §9.3 structured-record wording narrowed to Product V7 exact Generated completeness (incomplete Education/WorkExperience/Project drafts do not fail completeness by themselves; Certification/Language keep item-level validity for activation-readiness).
 - **Deferred to S06/S07 readiness:** exact Candidate CV PDF inspection, CV-specific 10 MB enforcement, page/password validation, and file-validation ownership; none is needed by F02.
 - **Deferred to S09 readiness:** select the Harvard preview/official-PDF rendering and protected delivery capability; none is needed by F02.
 

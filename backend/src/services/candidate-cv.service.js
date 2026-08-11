@@ -4,6 +4,7 @@ import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
 import CANDIDATE_CV_VISIBILITY from "../constants/candidate-cv-visibility.js";
 import CATEGORY_LEVEL from "../constants/category-level.js";
+import CV_LANGUAGE_PROFICIENCY from "../constants/cv-language-proficiency.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import LOCATION from "../constants/location.js";
 import USER_ROLE from "../constants/user-role.js";
@@ -19,6 +20,13 @@ const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
 const CATEGORY_LEVEL_VALUES = new Set(Object.values(CATEGORY_LEVEL));
 const VISIBILITY_VALUES = new Set(Object.values(CANDIDATE_CV_VISIBILITY));
+const LANGUAGE_PROFICIENCY_VALUES = new Set(
+  Object.values(CV_LANGUAGE_PROFICIENCY),
+);
+
+const hasPresentString = (value) => {
+  return typeof value === "string" && value.trim() !== "";
+};
 
 const toPublicCandidateCvSummary = (candidateCv) => {
   return {
@@ -327,6 +335,242 @@ const createGeneratedDraftCandidateCv = async ({
   return toPublicCandidateCvDetail(candidateCv);
 };
 
+const isValidGeneratedEducation = (education) => {
+  return (
+    hasPresentString(education?.institutionName) &&
+    hasPresentString(education?.degree)
+  );
+};
+
+const isValidGeneratedCertification = (certification) => {
+  return hasPresentString(certification?.name);
+};
+
+const isValidGeneratedLanguage = (language) => {
+  return (
+    hasPresentString(language?.name) &&
+    LANGUAGE_PROFICIENCY_VALUES.has(language?.proficiency)
+  );
+};
+
+const evaluateGeneratedCvCompleteness = (generatedContent) => {
+  const content = generatedContent ?? {};
+  const personalInfo = content.personalInfo ?? {};
+  const educations = content.educations ?? [];
+  const skills = content.skills ?? [];
+  const certifications = content.certifications ?? [];
+  const languages = content.languages ?? [];
+
+  // BR-14 / BR-15 / BR-16: exact Product completeness.
+  // Incomplete Education/WorkExperience/Project drafts do not by themselves fail
+  // completeness when the exact minimum is otherwise met.
+  const hasRequiredPersonalInfo =
+    hasPresentString(personalInfo.fullName) &&
+    hasPresentString(personalInfo.email) &&
+    hasPresentString(personalInfo.phone);
+  const hasProfessionalSummary = hasPresentString(content.professionalSummary);
+  const hasValidEducation = educations.some(isValidGeneratedEducation);
+  const hasSkill = skills.some((skill) => hasPresentString(skill));
+
+  // BR-17 / BR-18 + Data 11.3: existing Certification/Language records must be
+  // well-formed for the CV to be activation-ready.
+  const hasValidCertifications = certifications.every(
+    isValidGeneratedCertification,
+  );
+  const hasValidLanguages = languages.every(isValidGeneratedLanguage);
+
+  const isComplete =
+    hasRequiredPersonalInfo &&
+    hasProfessionalSummary &&
+    hasValidEducation &&
+    hasSkill &&
+    hasValidCertifications &&
+    hasValidLanguages;
+
+  return {
+    isComplete,
+  };
+};
+
+const normalizeOptionalContentString = (value) => {
+  if (value === undefined) {
+    return null;
+  }
+
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+};
+
+const normalizeStringArray = (values) => {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value) => normalizeOptionalContentString(value))
+    .filter((value) => value != null);
+};
+
+const normalizeGeneratedContentForPersistence = (content = {}) => {
+  const personalInfo = content.personalInfo ?? {};
+
+  return {
+    personalInfo: {
+      fullName: normalizeOptionalContentString(personalInfo.fullName),
+      email: normalizeOptionalContentString(personalInfo.email),
+      phone: normalizeOptionalContentString(personalInfo.phone),
+      displayLocation: normalizeOptionalContentString(
+        personalInfo.displayLocation,
+      ),
+      links: normalizeStringArray(personalInfo.links),
+      avatarUrl: normalizeOptionalContentString(personalInfo.avatarUrl),
+    },
+    professionalSummary: normalizeOptionalContentString(
+      content.professionalSummary,
+    ),
+    educations: (content.educations ?? []).map((education) => ({
+      institutionName: normalizeOptionalContentString(education.institutionName),
+      degree: normalizeOptionalContentString(education.degree),
+      fieldOfStudy: normalizeOptionalContentString(education.fieldOfStudy),
+      startDate: education.startDate ?? null,
+      endDate: education.endDate ?? null,
+    })),
+    skills: normalizeStringArray(content.skills),
+    workExperiences: (content.workExperiences ?? []).map((experience) => ({
+      companyName: normalizeOptionalContentString(experience.companyName),
+      position: normalizeOptionalContentString(experience.position),
+      startDate: experience.startDate ?? null,
+      endDate: experience.endDate ?? null,
+      description: normalizeOptionalContentString(experience.description),
+      achievements: normalizeStringArray(experience.achievements),
+    })),
+    projects: (content.projects ?? []).map((project) => ({
+      name: normalizeOptionalContentString(project.name),
+      role: normalizeOptionalContentString(project.role),
+      technologies: normalizeStringArray(project.technologies),
+      description: normalizeOptionalContentString(project.description),
+      projectUrl: normalizeOptionalContentString(project.projectUrl),
+    })),
+    certifications: (content.certifications ?? []).map((certification) => ({
+      name: normalizeOptionalContentString(certification.name),
+      issuer: normalizeOptionalContentString(certification.issuer),
+      issueDate: certification.issueDate ?? null,
+      expirationDate: certification.expirationDate ?? null,
+      credentialId: normalizeOptionalContentString(certification.credentialId),
+      credentialUrl: normalizeOptionalContentString(certification.credentialUrl),
+    })),
+    languages: (content.languages ?? []).map((language) => ({
+      name: normalizeOptionalContentString(language.name),
+      proficiency: language.proficiency ?? null,
+    })),
+    hiddenSections: normalizeStringArray(content.hiddenSections),
+  };
+};
+
+const saveOwnGeneratedDraftContent = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+  generatedContent,
+}) => {
+  assertCandidateCvActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only edit their own CVs");
+  }
+
+  if (!mongoose.isValidObjectId(candidateCvId)) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  const candidateCv = await CandidateCV.findOne({
+    _id: candidateCvId,
+    candidateUserId,
+  });
+
+  if (!candidateCv) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  if (candidateCv.archivedAt != null) {
+    throw new AppError(409, "Archived Candidate CV cannot be edited", {
+      field: "archivedAt",
+    });
+  }
+
+  if (candidateCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
+    throw new AppError(
+      409,
+      "Harvard Builder content can only be saved on Generated CVs",
+      {
+        field: "sourceType",
+      },
+    );
+  }
+
+  // Slice 04: Builder save is DRAFT-only; ACTIVE edit/activation is Slice 05.
+  if (candidateCv.status !== CANDIDATE_CV_STATUS.DRAFT) {
+    throw new AppError(
+      409,
+      "Generated content can only be saved while the CV is DRAFT",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  const normalizedContent =
+    normalizeGeneratedContentForPersistence(generatedContent);
+
+  // BR-13 / BR-31: content save mutates only generatedContent; Profile and
+  // CandidateCV metadata remain independent and unchanged.
+  const updatedCv = await CandidateCV.findOneAndUpdate(
+    {
+      _id: candidateCv._id,
+      candidateUserId,
+      sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+      status: CANDIDATE_CV_STATUS.DRAFT,
+      archivedAt: null,
+    },
+    {
+      $set: {
+        generatedContent: normalizedContent,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedCv) {
+    throw new AppError(
+      409,
+      "Generated content can only be saved while the CV is DRAFT",
+      {
+        field: "status",
+      },
+    );
+  }
+
+  const completeness = evaluateGeneratedCvCompleteness(
+    updatedCv.generatedContent,
+  );
+
+  return {
+    cv: toPublicCandidateCvDetail(updatedCv),
+    completeness,
+  };
+};
+
 const listOwnActiveCandidateCvs = async ({ candidateUserId, actorUser }) => {
   assertCandidateCvActor(actorUser);
 
@@ -372,8 +616,10 @@ const getOwnActiveCandidateCv = async ({
 
 export {
   createGeneratedDraftCandidateCv,
+  evaluateGeneratedCvCompleteness,
   getOwnActiveCandidateCv,
   listOwnActiveCandidateCvs,
+  saveOwnGeneratedDraftContent,
   toPublicCandidateCvDetail,
   toPublicCandidateCvSummary,
 };
