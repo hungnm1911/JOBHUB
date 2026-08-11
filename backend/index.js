@@ -10,6 +10,7 @@ import {
   disconnectDatabase,
 } from "./src/config/mongodb.js";
 import { ensureCompanyCollectionInvariants } from "./src/models/company.model.js";
+import { ensureJobCollectionInvariants } from "./src/models/job.model.js";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -119,6 +120,7 @@ const shutdown = async ({
 const startServer = async () => {
   await connectDatabase();
   await ensureCompanyCollectionInvariants();
+  await ensureJobCollectionInvariants();
 
   await verifyCloudinaryConnection();
 

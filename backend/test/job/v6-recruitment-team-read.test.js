@@ -195,16 +195,19 @@ describe("V6 Slice 01 — Recruitment Team persistence + read (F01)", () => {
         employeeCode: "NV-V6-M1",
       });
 
-      await mongoose.connection.db.collection("jobs").insertOne({
-        companyId: manager.company._id,
-        createdByCompanyMemberId: recruiter.membership._id,
-        primaryRecruiterCompanyMemberId: recruiter.membership._id,
-        status: JOB_STATUS.DRAFT,
-        title: "Legacy V5 Job",
-        publishedAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      await mongoose.connection.db.collection("jobs").insertOne(
+        {
+          companyId: manager.company._id,
+          createdByCompanyMemberId: recruiter.membership._id,
+          primaryRecruiterCompanyMemberId: recruiter.membership._id,
+          status: JOB_STATUS.DRAFT,
+          title: "Legacy V5 Job",
+          publishedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { bypassDocumentValidation: true },
+      );
 
       const result = await migrate(mongoose.connection);
 

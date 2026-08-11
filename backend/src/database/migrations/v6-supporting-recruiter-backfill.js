@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-import Job from "../../models/job.model.js";
+import Job, { ensureJobCollectionInvariants } from "../../models/job.model.js";
 
 const name = "v6-supporting-recruiter-backfill";
 
@@ -19,6 +19,8 @@ const migrate = async (connection = mongoose.connection) => {
   );
 
   await Job.syncIndexes();
+
+  await ensureJobCollectionInvariants(connection);
 
   await assertMigrationInvariants(connection);
 

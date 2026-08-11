@@ -13,6 +13,7 @@ import User from "../models/user.model.js";
 import { resolveCompanyManagerRecruiterManagementContext } from "./company.service.js";
 import { issuePasswordReset } from "./auth.service.js";
 import {
+  acquireActiveRecruiterMembershipForTeamResponsibilityTx,
   assertNoOutstandingRecruiterTeamResponsibility,
   executeForcedPrimaryTransfer,
   executeForcedSupportingRemoval,
@@ -525,6 +526,28 @@ const lockRecruiter = async ({
 
   try {
     await session.withTransaction(async () => {
+      const stillActive =
+        await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+          recruiterCompanyMemberId: membership._id,
+          companyId: context.companyId,
+          session,
+        });
+
+      if (!stillActive) {
+        throw new AppError(409, "Only ACTIVE Recruiters can be locked", {
+          field: "membershipStatus",
+        });
+      }
+
+      // TX-02: re-evaluate zero active responsibility inside the terminal
+      // serialization boundary so concurrent assignment cannot commit between
+      // a stale pre-check and lifecycle completion.
+      await assertNoOutstandingRecruiterTeamResponsibility({
+        companyId: context.companyId,
+        recruiterCompanyMemberId: membership._id,
+        session,
+      });
+
       // TX-04: ACTIVE → LOCKED + revoke all AuthSession atomically.
       // Does not change User.status or Company lifecycle.
       lockedMembership = await CompanyMember.findOneAndUpdate(
@@ -770,9 +793,55 @@ const terminateRecruiter = async ({
 
   const session = await mongoose.startSession();
   let terminatedMembership;
+  const membershipStatusAtStart = membership.status;
 
   try {
     await session.withTransaction(async () => {
+      if (membershipStatusAtStart === COMPANY_MEMBER_STATUS.ACTIVE) {
+        const stillActive =
+          await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+            recruiterCompanyMemberId: membership._id,
+            companyId: context.companyId,
+            session,
+          });
+
+        if (!stillActive) {
+          throw new AppError(
+            409,
+            "Only ACTIVE or LOCKED Recruiters can be terminated",
+            {
+              field: "membershipStatus",
+            },
+          );
+        }
+      } else {
+        const stillLocked = await CompanyMember.findOne({
+          _id: membership._id,
+          companyId: context.companyId,
+          role: COMPANY_MEMBER_ROLE.RECRUITER,
+          status: COMPANY_MEMBER_STATUS.LOCKED,
+        }).session(session);
+
+        if (!stillLocked) {
+          throw new AppError(
+            409,
+            "Only ACTIVE or LOCKED Recruiters can be terminated",
+            {
+              field: "membershipStatus",
+            },
+          );
+        }
+      }
+
+      // TX-02: re-evaluate zero active responsibility inside the terminal
+      // serialization boundary so concurrent assignment cannot commit between
+      // a stale pre-check and lifecycle completion.
+      await assertNoOutstandingRecruiterTeamResponsibility({
+        companyId: context.companyId,
+        recruiterCompanyMemberId: membership._id,
+        session,
+      });
+
       // TX-05: ACTIVE|LOCKED → TERMINATED + revoke AuthSession atomically.
       // Retains User/CompanyMember identity, email, employeeCode, jobTitle.
       // Does not change User.status or Company lifecycle.
@@ -781,12 +850,7 @@ const terminateRecruiter = async ({
           _id: membership._id,
           companyId: context.companyId,
           role: COMPANY_MEMBER_ROLE.RECRUITER,
-          status: {
-            $in: [
-              COMPANY_MEMBER_STATUS.ACTIVE,
-              COMPANY_MEMBER_STATUS.LOCKED,
-            ],
-          },
+          status: membershipStatusAtStart,
         },
         {
           $set: {
