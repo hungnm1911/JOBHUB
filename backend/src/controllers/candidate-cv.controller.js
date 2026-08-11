@@ -6,6 +6,7 @@ import {
   listOwnActiveCandidateCvs,
   replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
+  updateOwnCandidateCvMetadata,
 } from "../services/candidate-cv.service.js";
 
 const listOwnActiveCandidateCvsHandler = async (request, response, next) => {
@@ -107,6 +108,27 @@ const replaceOwnUploadedCandidateCvPdfHandler = async (
   }
 };
 
+const updateOwnCandidateCvMetadataHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const cv = await updateOwnCandidateCvMetadata({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      candidateCvId: request.params.cvId,
+      patch: request.body,
+    });
+
+    return response.status(200).json({
+      cv,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const saveOwnGeneratedContentHandler = async (request, response, next) => {
   try {
     const result = await saveOwnGeneratedContent({
@@ -148,4 +170,5 @@ export {
   listOwnActiveCandidateCvsHandler,
   replaceOwnUploadedCandidateCvPdfHandler,
   saveOwnGeneratedContentHandler,
+  updateOwnCandidateCvMetadataHandler,
 };

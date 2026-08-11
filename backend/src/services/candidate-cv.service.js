@@ -1028,6 +1028,153 @@ const getOwnActiveCandidateCv = async ({
   return toPublicCandidateCvDetail(candidateCv);
 };
 
+const loadOwnActiveCandidateCvForMetadataUpdate = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+}) => {
+  assertCandidateCvActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only update their own CVs");
+  }
+
+  if (!mongoose.isValidObjectId(candidateCvId)) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  const candidateCv = await CandidateCV.findOne({
+    _id: candidateCvId,
+    candidateUserId,
+  });
+
+  if (!candidateCv) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  if (candidateCv.archivedAt != null) {
+    throw new AppError(409, "Archived Candidate CV cannot be updated", {
+      field: "archivedAt",
+    });
+  }
+
+  return candidateCv;
+};
+
+/**
+ * F07 / BR-05, BR-27–BR-31, BR-43, BR-45, BR-46: patch common CandidateCV
+ * metadata for Generated and Uploaded CVs without mutating content, source,
+ * lifecycle, Default, or archive state.
+ */
+const normalizeCandidateCvMetadataPatch = async (patch = {}) => {
+  const updates = {};
+
+  if (Object.prototype.hasOwnProperty.call(patch, "name")) {
+    updates.name = normalizeRequiredName(patch.name);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "visibility")) {
+    updates.visibility = normalizeVisibility(patch.visibility);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "categoryId")) {
+    const category = await assertGeneratedDraftCategory(patch.categoryId);
+    updates.categoryId = category._id;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "experienceLevelId")) {
+    updates.experienceLevelId = await assertOptionalExperienceLevel(
+      patch.experienceLevelId,
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "preferredLocations")) {
+    const preferredLocations = patch.preferredLocations ?? [];
+    assertDistinctCanonicalValues({
+      values: preferredLocations,
+      allowedValues: LOCATION_VALUES,
+      field: "preferredLocations",
+      label: "Location",
+    });
+    updates.preferredLocations = preferredLocations;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "skillTags")) {
+    updates.skillTags = normalizeSkillTags(patch.skillTags);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "employmentTypes")) {
+    const employmentTypes = patch.employmentTypes ?? [];
+    assertDistinctCanonicalValues({
+      values: employmentTypes,
+      allowedValues: EMPLOYMENT_TYPE_VALUES,
+      field: "employmentTypes",
+      label: "EmploymentType",
+    });
+    updates.employmentTypes = employmentTypes;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "workModes")) {
+    const workModes = patch.workModes ?? [];
+    assertDistinctCanonicalValues({
+      values: workModes,
+      allowedValues: WORK_MODE_VALUES,
+      field: "workModes",
+      label: "WorkMode",
+    });
+    updates.workModes = workModes;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new AppError(400, "CandidateCV metadata update requires at least one field");
+  }
+
+  return updates;
+};
+
+const updateOwnCandidateCvMetadata = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+  patch,
+}) => {
+  const candidateCv = await loadOwnActiveCandidateCvForMetadataUpdate({
+    candidateUserId,
+    actorUser,
+    candidateCvId,
+  });
+
+  // Validate Category/ExperienceLevel/vocabularies before any persistence write.
+  const updates = await normalizeCandidateCvMetadataPatch(patch);
+
+  const updatedCv = await CandidateCV.findOneAndUpdate(
+    {
+      _id: candidateCv._id,
+      candidateUserId,
+      archivedAt: null,
+    },
+    {
+      $set: updates,
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedCv) {
+    throw new AppError(
+      409,
+      "Candidate CV changed before metadata update could complete",
+      {
+        field: "archivedAt",
+      },
+    );
+  }
+
+  return toPublicCandidateCvDetail(updatedCv);
+};
+
 export {
   activateOwnGeneratedCandidateCv,
   createGeneratedDraftCandidateCv,
@@ -1040,4 +1187,5 @@ export {
   saveOwnGeneratedDraftContent,
   toPublicCandidateCvDetail,
   toPublicCandidateCvSummary,
+  updateOwnCandidateCvMetadata,
 };

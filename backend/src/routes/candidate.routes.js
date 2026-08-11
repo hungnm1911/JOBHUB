@@ -8,6 +8,7 @@ import {
   listOwnActiveCandidateCvsHandler,
   replaceOwnUploadedCandidateCvPdfHandler,
   saveOwnGeneratedContentHandler,
+  updateOwnCandidateCvMetadataHandler,
 } from "../controllers/candidate-cv.controller.js";
 import {
   getOwnCandidateProfileHandler,
@@ -20,6 +21,7 @@ import validateCandidateProfileUpdate from "../middlewares/validate-candidate-pr
 import validateCreateGeneratedDraftCv from "../middlewares/validate-create-generated-draft-cv.js";
 import validateCreateUploadedCv from "../middlewares/validate-create-uploaded-cv.js";
 import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
+import validateUpdateCandidateCvMetadata from "../middlewares/validate-update-candidate-cv-metadata.js";
 
 const router = express.Router();
 
@@ -67,6 +69,14 @@ router.get(
   authenticateAccess,
   authorizeCandidate,
   getOwnActiveCandidateCvHandler,
+);
+
+router.patch(
+  "/cvs/:cvId",
+  authenticateAccess,
+  authorizeCandidate,
+  validateUpdateCandidateCvMetadata,
+  updateOwnCandidateCvMetadataHandler,
 );
 
 router.put(
