@@ -431,6 +431,174 @@ const createUploadedCandidateCv = async ({
   }
 };
 
+const loadOwnUploadedCandidateCvForReplace = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+}) => {
+  assertCandidateCvActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only replace their own CVs");
+  }
+
+  if (!mongoose.isValidObjectId(candidateCvId)) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  const candidateCv = await CandidateCV.findOne({
+    _id: candidateCvId,
+    candidateUserId,
+  });
+
+  if (!candidateCv) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  if (candidateCv.archivedAt != null) {
+    throw new AppError(409, "Archived Candidate CV cannot be replaced", {
+      field: "archivedAt",
+    });
+  }
+
+  if (candidateCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.UPLOADED) {
+    throw new AppError(
+      409,
+      "Only Uploaded Candidate CVs support PDF replacement",
+      {
+        field: "sourceType",
+      },
+    );
+  }
+
+  if (
+    candidateCv.uploadedFile == null ||
+    typeof candidateCv.uploadedFile.storageKey !== "string" ||
+    candidateCv.uploadedFile.storageKey.trim() === ""
+  ) {
+    throw new AppError(409, "Uploaded Candidate CV is missing current file", {
+      field: "uploadedFile",
+    });
+  }
+
+  return candidateCv;
+};
+
+const cleanupExternalUploadedCvFileBestEffort = async (publicId) => {
+  if (typeof publicId !== "string" || publicId.trim() === "") {
+    return;
+  }
+
+  try {
+    await deleteFile({
+      publicId,
+      resourceType: "raw",
+    });
+  } catch {
+    // Best-effort external cleanup — never roll back business persistence.
+  }
+};
+
+/**
+ * F06 / BR-22, BR-25, BR-26: replace current Uploaded PDF only.
+ * Validates the new PDF fully before any current-file mutation; atomically swaps
+ * the entire uploadedFile value; cleans up the previous external artifact only
+ * after persistence succeeds; concurrent/stale writes are rejected via the prior
+ * storageKey predicate so one request cannot delete another request's current file.
+ */
+const replaceOwnUploadedCandidateCvPdf = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+  file,
+}) => {
+  const candidateCv = await loadOwnUploadedCandidateCvForReplace({
+    candidateUserId,
+    actorUser,
+    candidateCvId,
+  });
+
+  const previousStorageKey = candidateCv.uploadedFile.storageKey;
+
+  // BR-25: full PDF validation before the new file can become current.
+  const inspectedPdf = await inspectUploadedCandidateCvPdf(file?.buffer);
+
+  const originalFileName =
+    typeof file?.originalFileName === "string" &&
+    file.originalFileName.trim() !== ""
+      ? file.originalFileName.trim()
+      : "candidate-cv.pdf";
+
+  let storedFile = null;
+  let replacementCommitted = false;
+
+  try {
+    storedFile = await uploadFileBuffer({
+      buffer: file.buffer,
+      assetFolder: CLOUDINARY_FOLDER.CANDIDATE_UPLOADED_CVS,
+      resourceType: "raw",
+    });
+
+    const nextUploadedFile = {
+      storageKey: storedFile.publicId,
+      originalFileName,
+      mimeType: inspectedPdf.mimeType,
+      sizeBytes: inspectedPdf.sizeBytes,
+      pageCount: inspectedPdf.pageCount,
+      uploadedAt: new Date(),
+    };
+
+    // Atomic whole-value swap of uploadedFile only (Data 9.7 / 10.2).
+    // Prior storageKey binds the write so a concurrent/stale request cannot
+    // commit over a newer current file or clean up that newer artifact.
+    const updatedCv = await CandidateCV.findOneAndUpdate(
+      {
+        _id: candidateCv._id,
+        candidateUserId,
+        sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
+        status: CANDIDATE_CV_STATUS.ACTIVE,
+        archivedAt: null,
+        "uploadedFile.storageKey": previousStorageKey,
+      },
+      {
+        $set: {
+          uploadedFile: nextUploadedFile,
+        },
+      },
+      {
+        returnDocument: "after",
+        runValidators: true,
+      },
+    );
+
+    if (!updatedCv) {
+      throw new AppError(
+        409,
+        "Uploaded CV changed before PDF replacement could complete",
+        {
+          field: "uploadedFile",
+        },
+      );
+    }
+
+    replacementCommitted = true;
+
+    // Data 10.3: cleanup the previous external file only after persistence.
+    // Cleanup failure must not roll back the committed current-file swap.
+    await cleanupExternalUploadedCvFileBestEffort(previousStorageKey);
+
+    return toPublicCandidateCvDetail(updatedCv);
+  } catch (error) {
+    // BR-26 / Data 10.3: if the new file never became canonical current,
+    // keep the old uploadedFile and best-effort cleanup the orphan upload.
+    if (storedFile?.publicId && !replacementCommitted) {
+      await cleanupExternalUploadedCvFileBestEffort(storedFile.publicId);
+    }
+
+    throw error;
+  }
+};
+
 const isValidGeneratedEducation = (education) => {
   return (
     hasPresentString(education?.institutionName) &&
@@ -867,6 +1035,7 @@ export {
   evaluateGeneratedCvCompleteness,
   getOwnActiveCandidateCv,
   listOwnActiveCandidateCvs,
+  replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
   saveOwnGeneratedDraftContent,
   toPublicCandidateCvDetail,

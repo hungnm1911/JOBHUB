@@ -2,13 +2,14 @@
 
 ## Current milestone
 
-**V7 — Candidate Profile và thư viện CV** is the current milestone. Slices 01–06
+**V7 — Candidate Profile và thư viện CV** is the current milestone. Slices 01–07
 are implemented and verified (Candidate Profile / F01; CandidateCV foundation +
 My CVs read / F02; Generated CV Draft create / F03; Generated Builder save +
 completeness feedback / F04 Builder; Generated activation + ACTIVE edit
-lifecycle / F04 activation; Uploaded CV create / F05). V7 is not
-`COMPLETED AND VERIFIED`; Slices 07–11 remain not started. The next valid
-implementation task is V7 Slice 07 (Uploaded PDF replace / F06).
+lifecycle / F04 activation; Uploaded CV create / F05; Uploaded PDF replace /
+F06). V7 is not `COMPLETED AND VERIFIED`; Slices 08–11 remain not started. The
+next valid implementation task is V7 Slice 08 (rename / common metadata /
+visibility update / F07).
 
 V7's approved business specification is at `docs/product/versions/v7-candidate-profile-cv-library.md`, and its approved persistence contract is at `docs/data/versions/v7-candidate-profile-cv-library-data-model.md`.
 
@@ -18,17 +19,19 @@ readiness transition; no known V6 business-blocking finding remains.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Slices 01–06 are complete; Slice 07 is next.
+V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Slices 01–07 are complete; Slice 08 is next.
 
 ## Ready for implementation
 
-- **V7 Slice 07+:** Uploaded PDF replace (F06) and later V7 slices remain not started. Uploaded CV create + Candidate-CV-owned PDF inspection (actual PDF, password, exact 10 MB, ≤20 pages) are established; later slices must not invent Default/archive/Preview/rename workflows ahead of their approved Fxx scope.
+- **V7 Slice 08+:** Rename / common metadata / visibility update (F07) and later V7 slices remain not started. Uploaded CV create + replace and Candidate-CV-owned PDF inspection (actual PDF, password, exact 10 MB, ≤20 pages) are established; later slices must not invent Default/archive/Preview workflows ahead of their approved Fxx scope.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V7 Slice 07 — Replace Uploaded PDF (F06; BR-22, BR-25, BR-26): authenticated Candidate replaces the current PDF of own non-archived `UPLOADED` CandidateCV via multipart `PUT /api/candidate/cvs/:cvId/uploaded-file` after reusing Slice 06 `inspectUploadedCandidateCvPdf` (actual PDF, password, exact 10 MB, ≤20 pages) before any current-file mutation; valid replacement uploads the new artifact then atomically `$set`s the entire `uploadedFile` value under a prior-`storageKey` predicate so concurrent/stale requests cannot commit over a newer current file or clean up that newer artifact; invalid validation leaves `uploadedFile` and common metadata/lifecycle unchanged with no external upload; persistence failure after upload keeps the old current file and best-effort cleans the orphan new storage; old external cleanup runs only after committed persistence and cleanup failure does not roll back the swap; ownership/`sourceType=UPLOADED`/`status=ACTIVE`/`name`/`visibility`/Category/ExperienceLevel/preferredLocations/skillTags/employmentTypes/workModes/`isDefault`/`archivedAt` are preserved with no file history/`previousFiles`/versioning. No F07–F10 rename/Default/archive/Preview or Generated replace. Engineering SoT owner `replaceOwnUploadedCandidateCvPdf`. Focused coverage in `test/candidate/v7-candidate-cv-replace-uploaded.test.js` (6 tests).
 
 - **Implemented; verified:** V7 Slice 06 — Uploaded CV creation (F05; BR-05, BR-10, BR-22–BR-24, BR-28–BR-30): authenticated Candidate creates own Uploaded CV via multipart `POST /api/candidate/cvs/uploaded` after Candidate-CV-domain PDF inspection (magic-byte PDF detection via `file-type`, password/page inspection via `pdf-lib`, exact 10 MB limit independent of global upload config, ≤20 pages); persists `sourceType=UPLOADED`, `status=ACTIVE`, `isDefault=false`, `archivedAt=null`, validated `uploadedFile` metadata (`storageKey`/`originalFileName`/`mimeType`/`sizeBytes`/`pageCount`/`uploadedAt`), and absent `generatedContent` with no `UPLOADED/DRAFT` path; reuses V4 Category FIELD/POSITION, ExperienceLevel, and fixed Location/EmploymentType/WorkMode vocabularies (`REMOTE` WorkMode-only); ownership from authenticated Candidate only; invalid file/metadata creates no CandidateCV; external upload then DB failure cleans up orphan storage best-effort without distributed transactions. Generic `file.service` remains storage-only. Engineering SoT owners `inspectUploadedCandidateCvPdf` / `createUploadedCandidateCv`. Focused coverage in `test/candidate/v7-candidate-cv-create-uploaded.test.js` (10 tests).
 
@@ -181,14 +184,15 @@ V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the record
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
 - V5 Slices 01–12 cover F01–F12 including the F03/F12 DRAFT privacy and delete-authority correction, plus verified acceptance corrections for submit/edit stale validation, reassign/close effective-`PUBLISHED` and mutation-boundary deadline (`$$NOW`), public-eligibility owning-Company binding, and Product/Data/Engineering documentation alignment. Final Acceptance / regression closure passed; no V5 business slice remains.
 - V6 Final Acceptance / regression closure is complete: F01–F05, BR-01–BR-33, and TX-01–TX-03 were rerun with the Slices 01–06 suites, S07 acceptance suite, and the five remediation suites. The focused baseline passed 12 files / 155 tests and the official backend gate passed. No known V6 business-blocking finding remains.
-- **Next roadmap milestone:** V7 — Candidate Profile và thư viện CV — Slices 01–06 are complete; Slice 07 (Uploaded PDF replace / F06) is the next valid task. Slices 07–11 remain not started.
+- **Next roadmap milestone:** V7 — Candidate Profile và thư viện CV — Slices 01–07 are complete; Slice 08 (rename / common metadata / visibility update / F07) is the next valid task. Slices 08–11 remain not started.
+- **Resolved in S07:** Uploaded PDF replacement validates before mutating current file; persistence failure keeps the prior current file; concurrent/stale replace cannot delete a newer current external artifact; reuses the S06 inspection owner.
 - **Resolved in S06:** Candidate CV domain owns Uploaded-PDF business validation (actual PDF, password, exact 10 MB, ≤20 pages) via `inspectUploadedCandidateCvPdf`; generic file storage remains infrastructure-only.
 - **Resolved in S04:** Data §9.3 structured-record wording narrowed to Product V7 exact Generated completeness (incomplete Education/WorkExperience/Project drafts do not fail completeness by themselves; Certification/Language keep item-level validity for activation-readiness).
-- **Deferred to S07 readiness:** Uploaded PDF replacement failure must keep the prior current file; reuse the S06 inspection owner.
 - **Deferred to S09 readiness:** select the Harvard preview/official-PDF rendering and protected delivery capability; none is needed by F02.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V7 Slice 07 baseline: ESLint (0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`) and architecture verification (ARCH-001 through ARCH-016) passed via `npm run verify:agent`; the default parallel Vitest run flaked twice on unrelated MongoMemoryServer port conflicts in two auth suites; the full suite then passed with `npx vitest run --fileParallelism=false` (**73 files / 531 tests**, including `test/candidate/v7-candidate-cv-replace-uploaded.test.js` with 6 focused tests).
 - V7 Slice 06 baseline: the official `cd backend && npm run verify:agent` gate passed after Uploaded CV create (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture verification: ARCH-001 through ARCH-016; Vitest: 72 files / 525 tests passed, including `test/candidate/v7-candidate-cv-create-uploaded.test.js` with 10 focused tests).
 - V7 Slice 05 baseline: the official `cd backend && npm run verify:agent` gate passed after Generated activation + ACTIVE lifecycle (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture verification: ARCH-001 through ARCH-016; Vitest: 71 files / 515 tests passed, including `test/candidate/v7-candidate-cv-activation-active-lifecycle.test.js` with 8 focused tests).
 - V7 Slice 02 baseline: the official `cd backend && npm run verify:agent` gate passed after CandidateCV foundation + My CVs read (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture verification: ARCH-001 through ARCH-016; Vitest: 68 files / 495 tests passed, including `test/candidate/v7-candidate-cv-foundation.test.js` with 7 focused tests).

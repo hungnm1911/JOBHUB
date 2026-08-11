@@ -6,6 +6,7 @@ import {
   createUploadedCandidateCvHandler,
   getOwnActiveCandidateCvHandler,
   listOwnActiveCandidateCvsHandler,
+  replaceOwnUploadedCandidateCvPdfHandler,
   saveOwnGeneratedContentHandler,
 } from "../controllers/candidate-cv.controller.js";
 import {
@@ -66,6 +67,14 @@ router.get(
   authenticateAccess,
   authorizeCandidate,
   getOwnActiveCandidateCvHandler,
+);
+
+router.put(
+  "/cvs/:cvId/uploaded-file",
+  authenticateAccess,
+  authorizeCandidate,
+  uploadCandidateCvPdf,
+  replaceOwnUploadedCandidateCvPdfHandler,
 );
 
 router.put(
