@@ -15,6 +15,7 @@ import LOCATION from "../constants/location.js";
 import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
 import Category from "../models/category.model.js";
+import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import Job from "../models/job.model.js";
@@ -1074,6 +1075,81 @@ const assertNoOutstandingPrimaryResponsibility = async ({
   }
 };
 
+const findOutstandingSupportingResponsibility = async ({
+  companyId,
+  supportingRecruiterCompanyMemberId,
+  now = new Date(),
+} = {}) => {
+  // BR-41 with BR-30/BR-31: DRAFT/PENDING always block; PUBLISHED blocks
+  // only while still effectively published (deadline not yet reached).
+  // Persisted PUBLISHED past deadline is treated as finished even before
+  // EXPIRED write.
+  return Job.findOne({
+    companyId,
+    supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
+    status: {
+      $in: OUTSTANDING_PRIMARY_JOB_STATUSES,
+    },
+    $nor: [
+      {
+        status: JOB_STATUS.PUBLISHED,
+        applicationDeadline: {
+          $ne: null,
+          $lte: now,
+        },
+      },
+    ],
+  })
+    .select("_id status applicationDeadline")
+    .lean();
+};
+
+// Used by lock/terminate completion to preserve TX-02: a recruiter cannot be
+// LOCKED/TERMINATED while still having any active Primary/Supporting
+// responsibility on a job that hasn't ended (effective PUBLISHED or DRAFT or
+// PENDING_APPROVAL).
+const assertNoOutstandingRecruiterTeamResponsibility = async ({
+  companyId,
+  recruiterCompanyMemberId,
+  now = new Date(),
+} = {}) => {
+  const primaryOutstanding = await findOutstandingPrimaryResponsibility({
+    companyId,
+    primaryRecruiterCompanyMemberId: recruiterCompanyMemberId,
+    now,
+  });
+
+  if (primaryOutstanding) {
+    throw new AppError(
+      409,
+      "Recruiter has outstanding Primary Job responsibility",
+      {
+        field: "primaryRecruiterCompanyMemberId",
+        jobId: primaryOutstanding._id.toString(),
+        jobStatus: primaryOutstanding.status,
+      },
+    );
+  }
+
+  const supportingOutstanding = await findOutstandingSupportingResponsibility({
+    companyId,
+    supportingRecruiterCompanyMemberId: recruiterCompanyMemberId,
+    now,
+  });
+
+  if (supportingOutstanding) {
+    throw new AppError(
+      409,
+      "Recruiter has outstanding Supporting Job responsibility",
+      {
+        field: "supportingRecruiterCompanyMemberIds",
+        jobId: supportingOutstanding._id.toString(),
+        jobStatus: supportingOutstanding.status,
+      },
+    );
+  }
+};
+
 // BR-36 / BR-37: canonical Company-scoped internal visibility filter. Creator
 // / historical Primary are intentionally absent (BR-43). Not for public
 // discovery. DRAFT remains private to the current Primary Recruiter.
@@ -1779,6 +1855,205 @@ const getJobRecruitmentTeam = async ({
   };
 };
 
+// V6 F02: Add Supporting recruiter.
+const addSupportingRecruiter = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+  supportingRecruiterCompanyMemberId,
+} = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", { field: "jobId" });
+  }
+
+  if (
+    !mongoose.Types.ObjectId.isValid(supportingRecruiterCompanyMemberId)
+  ) {
+    throw new AppError(400, "Invalid Supporting Recruiter CompanyMember id", {
+      field: "supportingRecruiterCompanyMemberId",
+    });
+  }
+
+  const context = await resolveCompanyStaffBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId: context.companyId,
+  });
+
+  const actorMembershipIdStr = context.membership._id.toString();
+  const targetMemberIdStr = supportingRecruiterCompanyMemberId.toString();
+
+  const isCompanyManager =
+    context.companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER;
+  const isCurrentPrimary =
+    job.primaryRecruiterCompanyMemberId.toString() === actorMembershipIdStr;
+
+  // BR-14/BR-15 authorization.
+  if (!isCompanyManager && !isCurrentPrimary) {
+    throw new AppError(
+      403,
+      "Only Company Manager or current Primary Recruiter can add Supporting",
+      { field: "role" },
+    );
+  }
+
+  // Supporting position restrictions (BR-04, BR-17).
+  if (job.primaryRecruiterCompanyMemberId.toString() === targetMemberIdStr) {
+    throw new AppError(409, "Primary Recruiter cannot be added as Supporting", {
+      field: "supportingRecruiterCompanyMemberId",
+    });
+  }
+
+  if (
+    (job.supportingRecruiterCompanyMemberIds ?? []).some(
+      (id) => id.toString() === targetMemberIdStr,
+    )
+  ) {
+    throw new AppError(
+      409,
+      "Recruiter is already a Supporting Recruiter of this Job",
+      { field: "supportingRecruiterCompanyMemberId" },
+    );
+  }
+
+  const session = await mongoose.startSession();
+  let updatedJob;
+
+  try {
+    await session.withTransaction(async () => {
+      // Target operational eligibility (BR-08/BR-10).
+      const targetMembership = await CompanyMember.findOne({
+        _id: supportingRecruiterCompanyMemberId,
+        companyId: context.companyId,
+        role: COMPANY_MEMBER_ROLE.RECRUITER,
+        status: COMPANY_MEMBER_STATUS.ACTIVE,
+      }).session(session);
+
+      if (!targetMembership) {
+        throw new AppError(
+          409,
+          "Target Supporting Recruiter must be an active Recruiter of the Job Company",
+          { field: "supportingRecruiterCompanyMemberId" },
+        );
+      }
+
+      const targetUser = await User.findById(targetMembership.userId)
+        .session(session)
+        .select("status mustChangePassword");
+
+      if (!targetUser) {
+        throw new AppError(409, "Target Recruiter user is missing", {
+          field: "supportingRecruiterCompanyMemberId",
+        });
+      }
+
+      if (
+        targetUser.status !== USER_STATUS.ACTIVE ||
+        targetUser.mustChangePassword !== false
+      ) {
+        throw new AppError(
+          409,
+          "Target Recruiter is not eligible for active responsibility",
+          { field: "supportingRecruiterCompanyMemberId" },
+        );
+      }
+
+      const owningCompany = await Company.findById(context.companyId)
+        .session(session)
+        .select("approvalStatus operationalStatus");
+
+      if (
+        !owningCompany ||
+        owningCompany.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
+        owningCompany.operationalStatus !== COMPANY_OPERATIONAL_STATUS.ACTIVE
+      ) {
+        throw new AppError(
+          409,
+          "Job Company is not available for active responsibility",
+          { field: "companyId" },
+        );
+      }
+
+      // Concurrency guard for TX-02: if the recruiter is concurrently being
+      // LOCKED/TERMINATED, the conditional write below will fail so we must
+      // not commit job supporting assignment.
+      const stillActiveMembership = await CompanyMember.findOneAndUpdate(
+        {
+          _id: supportingRecruiterCompanyMemberId,
+          companyId: context.companyId,
+          role: COMPANY_MEMBER_ROLE.RECRUITER,
+          status: COMPANY_MEMBER_STATUS.ACTIVE,
+        },
+        { $set: { status: COMPANY_MEMBER_STATUS.ACTIVE } },
+        { returnDocument: "after", session },
+      );
+
+      if (!stillActiveMembership) {
+        throw new AppError(
+          409,
+          "Target Supporting Recruiter is no longer active during the operation",
+          { field: "supportingRecruiterCompanyMemberId" },
+        );
+      }
+
+      updatedJob = await Job.findOneAndUpdate(
+        {
+          _id: job._id,
+          companyId: context.companyId,
+          status: JOB_STATUS.PUBLISHED,
+          ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
+          primaryRecruiterCompanyMemberId: {
+            $ne: supportingRecruiterCompanyMemberId,
+          },
+          supportingRecruiterCompanyMemberIds: {
+            $ne: supportingRecruiterCompanyMemberId,
+          },
+        },
+        {
+          $addToSet: {
+            supportingRecruiterCompanyMemberIds:
+              supportingRecruiterCompanyMemberId,
+          },
+        },
+        {
+          returnDocument: "after",
+          runValidators: true,
+          session,
+        },
+      );
+
+      if (!updatedJob) {
+        throw new AppError(
+          409,
+          "Supporting can only be added while the Job is effectively PUBLISHED and the target is eligible",
+          { field: "status" },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    jobId: updatedJob._id.toString(),
+    primaryRecruiterCompanyMemberId:
+      updatedJob.primaryRecruiterCompanyMemberId.toString(),
+    supportingRecruiterCompanyMemberIds: (
+      updatedJob.supportingRecruiterCompanyMemberIds ?? []
+    ).map((id) => id.toString()),
+  };
+};
+
 const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
@@ -1840,6 +2115,7 @@ const getInternalJob = async ({
 
 export {
   approveAndPublishJob,
+  addSupportingRecruiter,
   getJobRecruitmentTeam,
   assertCompanyManagerJobApprovalAuthority,
   assertCompanyManagerPrimaryReassignmentAuthority,
@@ -1848,6 +2124,7 @@ export {
   assertJobReadyForApprovalLifecycle,
   assertManualCloseJobAuthority,
   assertNoOutstandingPrimaryResponsibility,
+  assertNoOutstandingRecruiterTeamResponsibility,
   assertPrePublicationDeleteAuthority,
   assertRecruiterMembershipValidForJobPrimary,
   buildInternalJobVisibilityFilter,
@@ -1856,6 +2133,7 @@ export {
   deletePrePublicationJob,
   expirePublishedJobIfDue,
   findOutstandingPrimaryResponsibility,
+  findOutstandingSupportingResponsibility,
   getInternalJob,
   getJobApplicationDeadline,
   hasJobApplicationDeadlinePassed,

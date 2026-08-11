@@ -7,6 +7,7 @@ import {
   deletePrePublicationJobHandler,
   getInternalJobHandler,
   getJobRecruitmentTeamHandler,
+  addSupportingRecruiterHandler,
   listInternalJobsHandler,
   reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
@@ -18,6 +19,7 @@ import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-comp
 import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-company-staff-business-access.js";
 import authorizeRecruiterBusinessAccess from "../middlewares/authorize-recruiter-business-access.js";
 import validateCreateDraftJob from "../middlewares/validate-create-draft-job.js";
+import validateAddSupportingRecruiter from "../middlewares/validate-add-supporting-recruiter.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
 import validateUpdateDraftJob from "../middlewares/validate-update-draft-job.js";
 
@@ -50,6 +52,14 @@ router.get(
   authenticateAccess,
   authorizeCompanyStaffBusinessAccess,
   getJobRecruitmentTeamHandler,
+);
+
+router.post(
+  "/:jobId/team/supporting",
+  authenticateAccess,
+  authorizeCompanyStaffBusinessAccess,
+  validateAddSupportingRecruiter,
+  addSupportingRecruiterHandler,
 );
 
 router.post(

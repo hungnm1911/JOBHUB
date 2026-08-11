@@ -12,7 +12,9 @@ import CompanyMember from "../models/company-member.model.js";
 import User from "../models/user.model.js";
 import { resolveCompanyManagerRecruiterManagementContext } from "./company.service.js";
 import { issuePasswordReset } from "./auth.service.js";
-import { assertNoOutstandingPrimaryResponsibility } from "./job.service.js";
+import {
+  assertNoOutstandingRecruiterTeamResponsibility,
+} from "./job.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
@@ -430,9 +432,9 @@ const lockRecruiter = async ({
 
   // BR-41: outstanding Primary responsibility blocks lock completion.
   // Guard stays outside TX-04; no jobs↔company_members multi-document TX.
-  await assertNoOutstandingPrimaryResponsibility({
+  await assertNoOutstandingRecruiterTeamResponsibility({
     companyId: context.companyId,
-    primaryRecruiterCompanyMemberId: membership._id,
+    recruiterCompanyMemberId: membership._id,
   });
 
   const session = await mongoose.startSession();
@@ -600,9 +602,9 @@ const terminateRecruiter = async ({
 
   // BR-41: outstanding Primary responsibility blocks terminate completion.
   // Guard stays outside TX-05; no jobs↔company_members multi-document TX.
-  await assertNoOutstandingPrimaryResponsibility({
+  await assertNoOutstandingRecruiterTeamResponsibility({
     companyId: context.companyId,
-    primaryRecruiterCompanyMemberId: membership._id,
+    recruiterCompanyMemberId: membership._id,
   });
 
   const session = await mongoose.startSession();
