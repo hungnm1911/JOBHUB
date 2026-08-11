@@ -2,15 +2,26 @@
 
 ## Current milestone
 
-**V6 — Recruitment Team và chuyển giao trách nhiệm** is `COMPLETED AND VERIFIED`. Slices 01–06, the S07 Final Acceptance suite, and all five Final Acceptance remediations have been rerun together: the focused V6 regression baseline passed 12 files / 155 tests, and the official backend gate (`cd backend && npm run verify:agent`) passed (ESLint: 0 errors, 2 existing warnings; architecture verification; Vitest). No known V6 business-blocking finding remains.
+**V7 — Candidate Profile và thư viện CV** is `READY FOR IMPLEMENTATION`.
+Implementation Readiness is complete for Slice 01 only: the approved Product/Data
+contracts are established, the F01 Candidate Profile field matrix is explicit,
+and Engineering SoT assigns F01 to the existing User persistence owner plus the
+future Candidate Profile service owner. No V7 Fxx business behavior has been
+implemented.
 
-V6's approved business specification is at `docs/product/versions/v6-recruitment-team-responsibility-transfer.md`, and its approved persistence contract is at `docs/data/versions/v6-recruitment-team-responsibility-transfer-data-model.md`.
+V7's approved business specification is at `docs/product/versions/v7-candidate-profile-cv-library.md`, and its approved persistence contract is at `docs/data/versions/v7-candidate-profile-cv-library-data-model.md`.
 
-V1 through V5 are `COMPLETED AND VERIFIED`.
+V1 through V6 are `COMPLETED AND VERIFIED`. The V6 focused closure baseline
+passed 12 files / 155 tests and its official backend gate passed before this
+readiness transition; no known V6 business-blocking finding remains.
 
 V3 Slices 01–09 are implemented and verified under the backend gate below. Product F10 Recruiter update is intentionally out of V3 scope (reserved numbering; not deferred as a remaining slice).
 
-V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 now has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 is the next roadmap milestone and remains `PLANNED`; it must not be started until its approved detailed specification exists.
+V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Slice 01 is the next valid implementation task.
+
+## Ready for implementation
+
+- **V7 Slice 01 — Candidate Profile (F01; BR-01–BR-03):** READY. It reuses the existing Candidate User identity and `users` persistence. Candidate may read and update `fullName`, `avatarUrl`, `dateOfBirth`, and `phoneNumber`; `email` is read-only in F01. No new collection, schema migration, index, multi-document transaction, dependency, verification rule, or V7 business implementation was introduced by readiness work. The existing MongoMemoryServer test harness supports the single-document User persistence needed by Slice 01, and the architecture gate permits the canonical route/controller/service/User-model dependency direction.
 
 ## Operational provisioning
 
@@ -157,11 +168,16 @@ V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the record
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
 - V5 Slices 01–12 cover F01–F12 including the F03/F12 DRAFT privacy and delete-authority correction, plus verified acceptance corrections for submit/edit stale validation, reassign/close effective-`PUBLISHED` and mutation-boundary deadline (`$$NOW`), public-eligibility owning-Company binding, and Product/Data/Engineering documentation alignment. Final Acceptance / regression closure passed; no V5 business slice remains.
 - V6 Final Acceptance / regression closure is complete: F01–F05, BR-01–BR-33, and TX-01–TX-03 were rerun with the Slices 01–06 suites, S07 acceptance suite, and the five remediation suites. The focused baseline passed 12 files / 155 tests and the official backend gate passed. No known V6 business-blocking finding remains.
-- **Next roadmap milestone:** V7 — Candidate Profile và thư viện CV — remains `PLANNED`. No V7 task is valid until its approved detailed product specification is added.
+- **Next roadmap milestone:** V7 — Candidate Profile và thư viện CV — is `READY FOR IMPLEMENTATION`; Slice 01 is the next valid task. Slices 02–11 remain not started.
+- **Deferred to S04/S05 readiness:** reconcile the Data 9.3 structured-record wording with Product V7 exact Generated completeness before implementing Generated activation; this does not affect F01.
+- **Deferred to S02+ readiness:** establish CandidateCV-specific engineering owners only when the first CandidateCV slice begins; F01 does not create CandidateCV persistence.
+- **Deferred to S06/S07 readiness:** exact Candidate CV PDF inspection, CV-specific 10 MB enforcement, page/password validation, and file-validation ownership; none is needed by F01.
+- **Deferred to S09 readiness:** select the Harvard preview/official-PDF rendering and protected delivery capability; none is needed by F01.
 
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V7 Slice 01 Implementation Readiness baseline: the official `cd backend && npm run verify:agent` gate passed after the readiness-only documentation changes (ESLint: 0 errors / 2 existing warnings; architecture verification: ARCH-001 through ARCH-016; Vitest: 66 files / 481 tests passed). No verification rule was changed or relaxed.
 - `npm run verify:agent` consists of ESLint, deterministic architecture verification, and Vitest. The latest auth-email-action change passed its focused suites, ESLint, architecture verification, and the full suite with `--fileParallelism=false`; the default parallel run flaked twice on unrelated MongoMemoryServer startup timeouts.
 - Current V6 closure baseline: the combined focused V6 suite passed **12 files / 155 tests**, including Slices 01–06, the 29-test S07 acceptance suite, and all five Final Acceptance remediation suites. The official `cd backend && npm run verify:agent` gate also passed after that rerun (ESLint 0 errors / 2 existing warnings, architecture verification, and full Vitest).
 - Focused automated tests cover V1 Slices 1–10 (`test/auth/*.test.js`), V2 flows (adapted), `test/auth/company-member-foundation.test.js`, `test/auth/v3-tx07-company-staff-cutover.test.js`, `test/auth/v3-company-staff-authorization.test.js`, `test/auth/v3-recruiter-creation.test.js`, `test/auth/v3-recruiter-activation.test.js`, `test/auth/v3-recruiter-list-detail.test.js`, `test/auth/v3-recruiter-password-reset.test.js`, `test/auth/v3-recruiter-lock-unlock.test.js`, `test/auth/v3-recruiter-termination.test.js`, `test/auth/v3-acceptance.test.js`, `test/catalog/v4-fixed-vocabularies.test.js`, `test/catalog/v4-category-field-creation.test.js`, `test/catalog/v4-category-position-creation.test.js`, `test/catalog/v4-experience-level-dataset.test.js`, `test/catalog/v4-acceptance.test.js`, `test/job/v5-job-create-draft.test.js`, `test/job/v5-recruiter-responsibility-guard.test.js`, `test/job/v5-job-edit-draft.test.js`, `test/job/v5-job-internal-visibility.test.js`, `test/job/v5-job-submit-draft.test.js`, `test/job/v5-job-manager-pending-review.test.js`, `test/job/v5-job-approve-publish.test.js`, `test/job/v5-job-reject-pending.test.js`, `test/job/v5-job-manual-delete.test.js`, `test/job/v5-job-reassign-primary.test.js`, `test/job/v5-job-manual-close.test.js`, `test/job/v5-job-effective-expiration-public-eligibility.test.js`, `test/job/v5-job-draft-privacy-delete-authority.test.js`, `test/job/v6-recruitment-team-read.test.js`, `test/job/v6-recruitment-team-add-supporting.test.js`, `test/job/v6-recruitment-team-remove-supporting.test.js`, `test/job/v6-recruitment-team-replace-primary.test.js`, `test/job/v6-forced-transfer-lock.test.js`, `test/job/v6-forced-transfer-terminate.test.js`, `test/job/v6-acceptance.test.js`, `test/job/v6-tx02-lifecycle-assignment-concurrency.test.js`, `test/job/v6-forced-transfer-atomicity.test.js`, `test/job/v6-forced-transfer-unfinished-mutation-boundary.test.js`, `test/job/v6-stale-primary-mutation-authority.test.js`, `test/job/v6-recruitment-team-query-update-invariants.test.js`, and existing V2 registration/onboarding/platform-admin suites.
