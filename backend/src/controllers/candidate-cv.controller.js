@@ -1,4 +1,5 @@
 import {
+  createGeneratedDraftCandidateCv,
   getOwnActiveCandidateCv,
   listOwnActiveCandidateCvs,
 } from "../services/candidate-cv.service.js";
@@ -34,7 +35,28 @@ const getOwnActiveCandidateCvHandler = async (request, response, next) => {
   }
 };
 
+const createGeneratedDraftCandidateCvHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const cv = await createGeneratedDraftCandidateCv({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      draft: request.body,
+    });
+
+    return response.status(201).json({
+      cv,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
+  createGeneratedDraftCandidateCvHandler,
   getOwnActiveCandidateCvHandler,
   listOwnActiveCandidateCvsHandler,
 };
