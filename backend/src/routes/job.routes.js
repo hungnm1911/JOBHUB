@@ -11,6 +11,7 @@ import {
   listInternalJobsHandler,
   reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
+  removeSupportingRecruiterHandler,
   submitDraftJobHandler,
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
@@ -60,6 +61,13 @@ router.post(
   authorizeCompanyStaffBusinessAccess,
   validateAddSupportingRecruiter,
   addSupportingRecruiterHandler,
+);
+
+router.delete(
+  "/:jobId/team/supporting/:companyMemberId",
+  authenticateAccess,
+  authorizeCompanyStaffBusinessAccess,
+  removeSupportingRecruiterHandler,
 );
 
 router.post(

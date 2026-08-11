@@ -2054,6 +2054,108 @@ const addSupportingRecruiter = async ({
   };
 };
 
+// V6 F03: Remove Supporting recruiter.
+const removeSupportingRecruiter = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+  supportingRecruiterCompanyMemberId,
+} = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new AppError(400, "Invalid Job id", { field: "jobId" });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(supportingRecruiterCompanyMemberId)) {
+    throw new AppError(400, "Invalid Supporting Recruiter CompanyMember id", {
+      field: "supportingRecruiterCompanyMemberId",
+    });
+  }
+
+  const context = await resolveCompanyStaffBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId: context.companyId,
+  });
+
+  const actorMembershipIdStr = context.membership._id.toString();
+  const targetMemberIdStr = supportingRecruiterCompanyMemberId.toString();
+
+  const isCompanyManager =
+    context.companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER;
+  const isCurrentPrimary =
+    job.primaryRecruiterCompanyMemberId.toString() === actorMembershipIdStr;
+
+  // BR-14/BR-15 authorization.
+  if (!isCompanyManager && !isCurrentPrimary) {
+    throw new AppError(
+      403,
+      "Only Company Manager or current Primary Recruiter can remove Supporting",
+      { field: "role" },
+    );
+  }
+
+  // Target must be current Supporting (not Primary, not absent).
+  if (
+    !(job.supportingRecruiterCompanyMemberIds ?? []).some(
+      (id) => id.toString() === targetMemberIdStr,
+    )
+  ) {
+    throw new AppError(
+      409,
+      "Recruiter is not a Supporting Recruiter of this Job",
+      { field: "supportingRecruiterCompanyMemberId" },
+    );
+  }
+
+  // BR-12/BR-13/BR-30: effectively PUBLISHED only. Atomic conditional write
+  // with $$NOW deadline guard ensures mutation-boundary consistency.
+  const updatedJob = await Job.findOneAndUpdate(
+    {
+      _id: job._id,
+      companyId: context.companyId,
+      status: JOB_STATUS.PUBLISHED,
+      ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
+      supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
+    },
+    {
+      $pull: {
+        supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedJob) {
+    throw new AppError(
+      409,
+      "Supporting can only be removed while the Job is effectively PUBLISHED",
+      { field: "status" },
+    );
+  }
+
+  return {
+    jobId: updatedJob._id.toString(),
+    primaryRecruiterCompanyMemberId:
+      updatedJob.primaryRecruiterCompanyMemberId.toString(),
+    supportingRecruiterCompanyMemberIds: (
+      updatedJob.supportingRecruiterCompanyMemberIds ?? []
+    ).map((id) => id.toString()),
+  };
+};
+
 const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
@@ -2144,6 +2246,7 @@ export {
   listInternalJobs,
   reassignPrimaryRecruiter,
   rejectPendingJob,
+  removeSupportingRecruiter,
   resolveEffectiveJobStatus,
   submitDraftJob,
   toPublicJob,

@@ -9,6 +9,7 @@ import {
   listInternalJobs,
   reassignPrimaryRecruiter,
   rejectPendingJob,
+  removeSupportingRecruiter,
   submitDraftJob,
   updateDraftJob,
 } from "../services/job.service.js";
@@ -230,6 +231,24 @@ const addSupportingRecruiterHandler = async (request, response, next) => {
   }
 };
 
+const removeSupportingRecruiterHandler = async (request, response, next) => {
+  try {
+    const team = await removeSupportingRecruiter({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+      supportingRecruiterCompanyMemberId: request.params.companyMemberId,
+    });
+
+    return response.status(200).json({
+      message: "Supporting recruiter removed.",
+      team,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   approveAndPublishJobHandler,
   closePublishedJobHandler,
@@ -241,6 +260,7 @@ export {
   listInternalJobsHandler,
   reassignPrimaryRecruiterHandler,
   rejectPendingJobHandler,
+  removeSupportingRecruiterHandler,
   submitDraftJobHandler,
   updateDraftJobHandler,
 };
