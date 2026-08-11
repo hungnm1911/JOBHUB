@@ -4,8 +4,10 @@ import {
   activateOwnGeneratedCandidateCvHandler,
   createGeneratedDraftCandidateCvHandler,
   createUploadedCandidateCvHandler,
+  downloadOwnCandidateCvHandler,
   getOwnActiveCandidateCvHandler,
   listOwnActiveCandidateCvsHandler,
+  previewOwnCandidateCvHandler,
   replaceOwnUploadedCandidateCvPdfHandler,
   saveOwnGeneratedContentHandler,
   updateOwnCandidateCvMetadataHandler,
@@ -77,6 +79,20 @@ router.patch(
   authorizeCandidate,
   validateUpdateCandidateCvMetadata,
   updateOwnCandidateCvMetadataHandler,
+);
+
+router.get(
+  "/cvs/:cvId/preview",
+  authenticateAccess,
+  authorizeCandidate,
+  previewOwnCandidateCvHandler,
+);
+
+router.get(
+  "/cvs/:cvId/download",
+  authenticateAccess,
+  authorizeCandidate,
+  downloadOwnCandidateCvHandler,
 );
 
 router.put(

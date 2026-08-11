@@ -2,12 +2,27 @@ import {
   activateOwnGeneratedCandidateCv,
   createGeneratedDraftCandidateCv,
   createUploadedCandidateCv,
+  downloadOwnCandidateCv,
   getOwnActiveCandidateCv,
   listOwnActiveCandidateCvs,
+  previewOwnCandidateCv,
   replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
   updateOwnCandidateCvMetadata,
 } from "../services/candidate-cv.service.js";
+
+const sendCandidateCvPdf = (response, delivery, disposition) => {
+  response.setHeader("Content-Type", delivery.mimeType);
+  response.setHeader(
+    "Content-Disposition",
+    `${disposition}; filename="${delivery.fileName}"`,
+  );
+  response.setHeader("Content-Length", delivery.buffer.length);
+  // F08 must not leak storage URLs or invent public-access semantics.
+  response.setHeader("Cache-Control", "private, no-store");
+
+  return response.status(200).send(delivery.buffer);
+};
 
 const listOwnActiveCandidateCvsHandler = async (request, response, next) => {
   try {
@@ -162,12 +177,42 @@ const activateOwnGeneratedCandidateCvHandler = async (
   }
 };
 
+const previewOwnCandidateCvHandler = async (request, response, next) => {
+  try {
+    const delivery = await previewOwnCandidateCv({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      candidateCvId: request.params.cvId,
+    });
+
+    return sendCandidateCvPdf(response, delivery, "inline");
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const downloadOwnCandidateCvHandler = async (request, response, next) => {
+  try {
+    const delivery = await downloadOwnCandidateCv({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      candidateCvId: request.params.cvId,
+    });
+
+    return sendCandidateCvPdf(response, delivery, "attachment");
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   activateOwnGeneratedCandidateCvHandler,
   createGeneratedDraftCandidateCvHandler,
   createUploadedCandidateCvHandler,
+  downloadOwnCandidateCvHandler,
   getOwnActiveCandidateCvHandler,
   listOwnActiveCandidateCvsHandler,
+  previewOwnCandidateCvHandler,
   replaceOwnUploadedCandidateCvPdfHandler,
   saveOwnGeneratedContentHandler,
   updateOwnCandidateCvMetadataHandler,

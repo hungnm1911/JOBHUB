@@ -16,7 +16,8 @@ import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import AppError from "../utils/app-error.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
-import { deleteFile, uploadFileBuffer } from "./file.service.js";
+import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
+import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
 
 const LOCATION_VALUES = new Set(Object.values(LOCATION));
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
@@ -1028,6 +1029,176 @@ const getOwnActiveCandidateCv = async ({
   return toPublicCandidateCvDetail(candidateCv);
 };
 
+const sanitizeDownloadFileName = (name, fallback = "candidate-cv.pdf") => {
+  const base =
+    typeof name === "string" && name.trim() !== ""
+      ? name.trim()
+      : fallback.replace(/\.pdf$/i, "");
+  const sanitized = base
+    .replace(/[^\w.\- ]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+
+  if (sanitized === "") {
+    return "candidate-cv.pdf";
+  }
+
+  return sanitized.toLowerCase().endsWith(".pdf")
+    ? sanitized
+    : `${sanitized}.pdf`;
+};
+
+/**
+ * Load own non-archived CandidateCV for F08 Preview/Download.
+ * Ownership + active-library filter only — PUBLIC does not expand access.
+ */
+const loadOwnActiveCandidateCvForDelivery = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+}) => {
+  assertCandidateCvActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only access their own CVs");
+  }
+
+  if (!mongoose.isValidObjectId(candidateCvId)) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  const candidateCv = await CandidateCV.findOne({
+    _id: candidateCvId,
+    candidateUserId,
+    archivedAt: null,
+  });
+
+  if (!candidateCv) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  return candidateCv;
+};
+
+const buildGeneratedCvPdfDelivery = async (candidateCv) => {
+  const pdfBuffer = await renderHarvardCandidateCvPdf(
+    candidateCv.generatedContent,
+  );
+
+  return {
+    buffer: pdfBuffer,
+    mimeType: "application/pdf",
+    fileName: sanitizeDownloadFileName(candidateCv.name),
+    sourceType: candidateCv.sourceType,
+    status: candidateCv.status,
+  };
+};
+
+const buildUploadedCvPdfDelivery = async (candidateCv) => {
+  if (
+    candidateCv.uploadedFile == null ||
+    typeof candidateCv.uploadedFile.storageKey !== "string" ||
+    candidateCv.uploadedFile.storageKey.trim() === ""
+  ) {
+    throw new AppError(409, "Uploaded Candidate CV is missing current file", {
+      field: "uploadedFile",
+    });
+  }
+
+  let pdfBuffer;
+
+  try {
+    pdfBuffer = await downloadFileBuffer({
+      publicId: candidateCv.uploadedFile.storageKey,
+      resourceType: "raw",
+    });
+  } catch {
+    throw new AppError(502, "Failed to retrieve current Uploaded CV PDF", {
+      field: "uploadedFile",
+    });
+  }
+
+  return {
+    buffer: pdfBuffer,
+    mimeType: candidateCv.uploadedFile.mimeType || "application/pdf",
+    fileName: sanitizeDownloadFileName(
+      candidateCv.uploadedFile.originalFileName,
+      sanitizeDownloadFileName(candidateCv.name),
+    ),
+    sourceType: candidateCv.sourceType,
+    status: candidateCv.status,
+  };
+};
+
+/**
+ * F08 / BR-32, BR-33, BR-43: owner-scoped Preview.
+ * Generated DRAFT and ACTIVE both render from current generatedContent.
+ * Uploaded Preview uses current uploadedFile only. Read-only — no lifecycle writes.
+ */
+const previewOwnCandidateCv = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+}) => {
+  const candidateCv = await loadOwnActiveCandidateCvForDelivery({
+    candidateUserId,
+    actorUser,
+    candidateCvId,
+  });
+
+  if (candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
+    return buildGeneratedCvPdfDelivery(candidateCv);
+  }
+
+  if (candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.UPLOADED) {
+    return buildUploadedCvPdfDelivery(candidateCv);
+  }
+
+  throw new AppError(409, "Unsupported Candidate CV source type", {
+    field: "sourceType",
+  });
+};
+
+/**
+ * F08 / BR-34, BR-43: owner-scoped Download.
+ * Generated official PDF only when ACTIVE; Generated DRAFT is denied.
+ * Uploaded Download uses current uploadedFile. No public URL / PDF persistence.
+ */
+const downloadOwnCandidateCv = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+}) => {
+  const candidateCv = await loadOwnActiveCandidateCvForDelivery({
+    candidateUserId,
+    actorUser,
+    candidateCvId,
+  });
+
+  if (candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
+    if (candidateCv.status !== CANDIDATE_CV_STATUS.ACTIVE) {
+      throw new AppError(
+        409,
+        "Generated DRAFT CVs cannot be downloaded as official PDF",
+        {
+          field: "status",
+        },
+      );
+    }
+
+    return buildGeneratedCvPdfDelivery(candidateCv);
+  }
+
+  if (candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.UPLOADED) {
+    return buildUploadedCvPdfDelivery(candidateCv);
+  }
+
+  throw new AppError(409, "Unsupported Candidate CV source type", {
+    field: "sourceType",
+  });
+};
+
 const loadOwnActiveCandidateCvForMetadataUpdate = async ({
   candidateUserId,
   actorUser,
@@ -1179,9 +1350,11 @@ export {
   activateOwnGeneratedCandidateCv,
   createGeneratedDraftCandidateCv,
   createUploadedCandidateCv,
+  downloadOwnCandidateCv,
   evaluateGeneratedCvCompleteness,
   getOwnActiveCandidateCv,
   listOwnActiveCandidateCvs,
+  previewOwnCandidateCv,
   replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
   saveOwnGeneratedDraftContent,
