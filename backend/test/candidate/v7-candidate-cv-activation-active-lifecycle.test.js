@@ -423,6 +423,88 @@ describe("V7 Slice 05 — Generated CV activation + ACTIVE lifecycle (F04)", () 
       expect(persisted.generatedContent.personalInfo.email).toBeNull();
     });
 
+    it("rejects activation when intervening content edit shares the validated updatedAt", async () => {
+      const { user } = await createVerifiedUser({
+        email: "cv.activate.same-ms@example.com",
+      });
+      const category = await createFieldCategory("SameMs");
+      const draft = await createGeneratedCv({
+        candidateUserId: user._id,
+        categoryId: category._id,
+        generatedContent: completeGeneratedContent(),
+      });
+
+      const beforeRace = await CandidateCV.findById(draft._id).lean();
+      const validatedUpdatedAt = beforeRace.updatedAt;
+      const incompleteContent = incompleteGeneratedContent();
+
+      const originalFindOneAndUpdate = CandidateCV.findOneAndUpdate.bind(
+        CandidateCV,
+      );
+      let releaseActivation;
+      const holdActivation = new Promise((resolve) => {
+        releaseActivation = resolve;
+      });
+      let resolveActivationReached;
+      const activationReached = new Promise((resolve) => {
+        resolveActivationReached = resolve;
+      });
+
+      vi.spyOn(CandidateCV, "findOneAndUpdate").mockImplementation(
+        (filter, update, options) => {
+          if (update?.$set?.status === CANDIDATE_CV_STATUS.ACTIVE) {
+            resolveActivationReached();
+            return holdActivation.then(() =>
+              originalFindOneAndUpdate(filter, update, options),
+            );
+          }
+
+          return originalFindOneAndUpdate(filter, update, options);
+        },
+      );
+
+      const activatePromise = activateOwnGeneratedCandidateCv({
+        candidateUserId: user._id,
+        actorUser: user,
+        candidateCvId: draft._id.toString(),
+      });
+
+      await activationReached;
+
+      // Finite timestamp resolution: content becomes incomplete while updatedAt
+      // remains the exact value observed by activation validation.
+      await CandidateCV.collection.updateOne(
+        {
+          _id: draft._id,
+        },
+        {
+          $set: {
+            generatedContent: incompleteContent,
+            updatedAt: validatedUpdatedAt,
+          },
+        },
+      );
+
+      const midRace = await CandidateCV.findById(draft._id).lean();
+
+      expect(midRace.status).toBe(CANDIDATE_CV_STATUS.DRAFT);
+      expect(midRace.generatedContent.personalInfo.email).toBeNull();
+      expect(midRace.updatedAt.getTime()).toBe(validatedUpdatedAt.getTime());
+
+      releaseActivation();
+
+      await expect(activatePromise).rejects.toMatchObject({
+        statusCode: 409,
+        message: expect.stringMatching(/changed before activation/i),
+      });
+
+      const persisted = await CandidateCV.findById(draft._id);
+      expect(persisted.status).toBe(CANDIDATE_CV_STATUS.DRAFT);
+      expect(persisted.isDefault).toBe(false);
+      expect(persisted.generatedContent.personalInfo.email).toBeNull();
+      expect(persisted.updatedAt.getTime()).toBe(validatedUpdatedAt.getTime());
+    });
+
     it("does not leave ACTIVE content incomplete under concurrent demoting save", async () => {
       const { user } = await createVerifiedUser({
         email: "cv.active.race@example.com",

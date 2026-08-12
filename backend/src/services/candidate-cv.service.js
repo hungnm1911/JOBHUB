@@ -669,6 +669,26 @@ const evaluateGeneratedCvCompleteness = (generatedContent) => {
   };
 };
 
+// Data 9.3 / 10.2: activation commit must bind the exact validated
+// generatedContent snapshot. updatedAt alone is insufficient under same-
+// millisecond content mutation.
+const buildValidatedGeneratedContentMatch = (candidateCv) => {
+  const generatedContent = candidateCv.generatedContent;
+
+  if (generatedContent == null) {
+    return {
+      generatedContent: null,
+    };
+  }
+
+  return {
+    generatedContent:
+      typeof generatedContent.toObject === "function"
+        ? generatedContent.toObject()
+        : generatedContent,
+  };
+};
+
 const normalizeOptionalContentString = (value) => {
   if (value === undefined) {
     return null;
@@ -943,8 +963,9 @@ const activateOwnGeneratedCandidateCv = async ({
     );
   }
 
-  // Bind status + updatedAt so a concurrent content edit that changes
-  // completeness cannot commit ACTIVE from a stale complete snapshot.
+  // Bind status + validated generatedContent (+ updatedAt as a cheap revision
+  // hint) so a concurrent content edit cannot commit ACTIVE from a stale
+  // complete snapshot, including same-millisecond updates that keep updatedAt.
   // Activation mutates only status; ownership/visibility/metadata stay intact.
   const updatedCv = await CandidateCV.findOneAndUpdate(
     {
@@ -954,6 +975,7 @@ const activateOwnGeneratedCandidateCv = async ({
       status: CANDIDATE_CV_STATUS.DRAFT,
       archivedAt: null,
       updatedAt: candidateCv.updatedAt,
+      ...buildValidatedGeneratedContentMatch(candidateCv),
     },
     {
       $set: {

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import request from "supertest";
 
 import app from "../../src/app.js";
+import { ensureCandidateCvCollectionInvariants } from "../../src/models/candidate-cv.model.js";
 import { ensureCompanyCollectionInvariants } from "../../src/models/company.model.js";
 import { ensureJobCollectionInvariants } from "../../src/models/job.model.js";
 
@@ -27,6 +28,7 @@ const connectTestDatabase = async () => {
 
   await ensureCompanyCollectionInvariants(mongoose.connection);
   await ensureJobCollectionInvariants(mongoose.connection);
+  await ensureCandidateCvCollectionInvariants(mongoose.connection);
 };
 
 const disconnectTestDatabase = async () => {
