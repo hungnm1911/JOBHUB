@@ -397,6 +397,119 @@ const assertCandidateCvLocalInvariants = (candidateCv) => {
   return errors;
 };
 
+// Database-level guard for query-write paths where document `pre("validate")`
+// does not run (Data V7 §11.1 schema/local validation ownership).
+const CANDIDATE_CV_COLLECTION_VALIDATOR = Object.freeze({
+  $expr: {
+    $and: [
+      {
+        $or: [
+          {
+            $ne: ["$sourceType", CANDIDATE_CV_SOURCE_TYPE.UPLOADED],
+          },
+          {
+            $ne: ["$status", CANDIDATE_CV_STATUS.DRAFT],
+          },
+        ],
+      },
+      {
+        $or: [
+          {
+            $ne: ["$sourceType", CANDIDATE_CV_SOURCE_TYPE.GENERATED],
+          },
+          {
+            $and: [
+              {
+                $ne: [{ $ifNull: ["$generatedContent", null] }, null],
+              },
+              {
+                $eq: [{ $type: "$generatedContent" }, "object"],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        $or: [
+          {
+            $ne: ["$sourceType", CANDIDATE_CV_SOURCE_TYPE.GENERATED],
+          },
+          {
+            $eq: [{ $ifNull: ["$uploadedFile", null] }, null],
+          },
+        ],
+      },
+      {
+        $or: [
+          {
+            $ne: ["$sourceType", CANDIDATE_CV_SOURCE_TYPE.UPLOADED],
+          },
+          {
+            $and: [
+              {
+                $ne: [{ $ifNull: ["$uploadedFile", null] }, null],
+              },
+              {
+                $eq: [{ $type: "$uploadedFile" }, "object"],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        $or: [
+          {
+            $ne: ["$sourceType", CANDIDATE_CV_SOURCE_TYPE.UPLOADED],
+          },
+          {
+            $eq: [{ $ifNull: ["$generatedContent", null] }, null],
+          },
+        ],
+      },
+      {
+        $or: [
+          {
+            $ne: ["$status", CANDIDATE_CV_STATUS.DRAFT],
+          },
+          {
+            $ne: ["$isDefault", true],
+          },
+        ],
+      },
+      {
+        $or: [
+          {
+            $eq: [{ $ifNull: ["$archivedAt", null] }, null],
+          },
+          {
+            $ne: ["$isDefault", true],
+          },
+        ],
+      },
+      {
+        $or: [
+          {
+            $ne: ["$isDefault", true],
+          },
+          {
+            $eq: ["$status", CANDIDATE_CV_STATUS.ACTIVE],
+          },
+        ],
+      },
+      {
+        $or: [
+          {
+            $ne: ["$isDefault", true],
+          },
+          {
+            $eq: [{ $ifNull: ["$archivedAt", null] }, null],
+          },
+        ],
+      },
+    ],
+  },
+});
+
 const candidateCvSchema = new Schema(
   {
     candidateUserId: {
@@ -569,9 +682,63 @@ candidateCvSchema.index(
 
 const CandidateCV = model("CandidateCV", candidateCvSchema);
 
+const ensureCandidateCvCollectionInvariants = async (
+  connection = mongoose.connection,
+) => {
+  if (connection.readyState !== 1) {
+    throw new Error(
+      "MongoDB connection must be ready before ensuring CandidateCV collection invariants",
+    );
+  }
+
+  await CandidateCV.init();
+
+  const collectionName = CandidateCV.collection.collectionName;
+  const applyValidator = () =>
+    connection.db.command({
+      collMod: collectionName,
+      validator: CANDIDATE_CV_COLLECTION_VALIDATOR,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+
+  try {
+    await applyValidator();
+    return;
+  } catch (error) {
+    const isMissingNamespace =
+      error?.code === 26 ||
+      error?.codeName === "NamespaceNotFound" ||
+      /ns does not exist/i.test(error?.message ?? "");
+
+    if (!isMissingNamespace) {
+      throw error;
+    }
+  }
+
+  try {
+    await connection.db.createCollection(collectionName, {
+      validator: CANDIDATE_CV_COLLECTION_VALIDATOR,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+  } catch (error) {
+    const collectionAlreadyExists =
+      error?.codeName === "NamespaceExists" ||
+      /already exists/i.test(error?.message ?? "");
+
+    if (!collectionAlreadyExists) {
+      throw error;
+    }
+
+    await applyValidator();
+  }
+};
+
 export {
   assertCandidateCvLocalInvariants,
   candidateCvSchema,
+  ensureCandidateCvCollectionInvariants,
 };
 
 export default CandidateCV;

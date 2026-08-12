@@ -26,8 +26,8 @@ When a detailed version specification exists and has been reviewed and approved,
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
-| V7 | Candidate Profile và thư viện CV | IN PROGRESS |
-| V8 | Job Discovery | PLANNED |
+| V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
+| V8 | Job Discovery | PENDING |
 | V9 | Candidate chủ động Apply và tạo Application | PLANNED |
 | V10 | Phân công Application và Recruitment Pipeline | PLANNED |
 | V11 | Conversation và Chat thuộc Application | PLANNED |
@@ -48,6 +48,13 @@ The version exists in the product roadmap but its repository-level business spec
 
 Agents must not infer detailed requirements from the version name.
 
+### PENDING
+
+The version has planning material in the repository but is intentionally held
+before implementation. Its specifications and data contract are not approved
+implementation authority, and no business slice may start until the roadmap
+and project status explicitly move it forward.
+
 ### READY FOR IMPLEMENTATION
 
 The version has an approved canonical business specification under `docs/product/versions/` and may be decomposed into implementation tasks.
@@ -62,18 +69,16 @@ The approved business scope of the version has been implemented and the required
 
 ---
 
-## Current milestone
+## Current project state
 
-V1 through V6 are `COMPLETED AND VERIFIED`.
+V1 through V7 are `COMPLETED AND VERIFIED`.
 
 V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression
 closure passed across F01–F05, BR-01–BR-33, and TX-01–TX-03 after its recorded
-remediations and the required backend verification gate. V7 is the current
-roadmap milestone and is `IN PROGRESS`: Slices 01–11 implement approved F01–F10
-scope, recorded Final Acceptance blockers have been remediated, and Final
-Acceptance / regression closure across F01–F10, BR-01–BR-46, and TX-01 remains
-the next required verification before `COMPLETED AND VERIFIED`. V8 through V17
+remediations and the required backend verification gate. V7 Final Acceptance /
+regression closure passed across F01–F10, BR-01–BR-46, and TX-01 after Slices
+01–11 and the recorded acceptance remediations. V8 is `PENDING`; V8 through V17
 must not be implemented merely from their roadmap titles.
 
 V7 canonical specification:
