@@ -25,6 +25,19 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
+**V10 — Phân công Application và Recruitment Pipeline** is `READY FOR
+IMPLEMENTATION` for Slice 01 after G00 readiness alignment. Its approved
+Product/Data contracts are
+`docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
+and
+`docs/data/versions/v10-application-assignment-recruitment-pipeline-data-model.md`.
+G00 establishes the V10 authority chain, clarifies that V10 adds only
+`assignedRecruiterCompanyMemberId` (legacy absent equals Unassigned), and keeps
+Job retention on the V5 lifecycle without an Application↔Job delete
+transaction. No V10 Fxx behavior is implemented. S02 onward, including V10
+Application workflow compatibility, lifecycle handoff coordination, and read
+projections, remain deferred by the approved slice order.
+
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
 versions, have no approval or implementation authority, and Slice 01 must not
@@ -62,8 +75,13 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- None currently tracked. V9 Slice 06 acceptance/closure has completed; deferred
-  scope items beyond V9 remain out of implementation scope.
+- **V10 Slice 01 — Application persistence foundation:** G00 readiness is
+  complete. The existing MongoDB replica-set harness, Application collection
+  validator pattern, and transaction test infrastructure support the S01
+  persistence/index/state-matrix scope; the deterministic architecture gate
+  permits extensions of the canonical Application constants/model owners. No
+  test infrastructure or verification gate was changed. V10 business behavior
+  has not started.
 
 ## Operational provisioning
 
