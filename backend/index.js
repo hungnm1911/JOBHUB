@@ -9,6 +9,7 @@ import {
   connectDatabase,
   disconnectDatabase,
 } from "./src/config/mongodb.js";
+import { ensureApplicationCollectionInvariants } from "./src/models/application.model.js";
 import { ensureCandidateCvCollectionInvariants } from "./src/models/candidate-cv.model.js";
 import { ensureCompanyCollectionInvariants } from "./src/models/company.model.js";
 import { ensureJobCollectionInvariants } from "./src/models/job.model.js";
@@ -123,6 +124,7 @@ const startServer = async () => {
   await ensureCompanyCollectionInvariants();
   await ensureJobCollectionInvariants();
   await ensureCandidateCvCollectionInvariants();
+  await ensureApplicationCollectionInvariants();
 
   await verifyCloudinaryConnection();
 

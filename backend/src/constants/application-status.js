@@ -1,0 +1,6 @@
+const APPLICATION_STATUS = Object.freeze({
+  APPLIED: "APPLIED",
+  WITHDRAWN: "WITHDRAWN",
+});
+
+export default APPLICATION_STATUS;

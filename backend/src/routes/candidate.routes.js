@@ -1,6 +1,11 @@
 import express from "express";
 
 import {
+  directApplyToJobHandler,
+  replaceSubmittedCvHandler,
+  withdrawApplicationHandler,
+} from "../controllers/application.controller.js";
+import {
   activateOwnGeneratedCandidateCvHandler,
   archiveOwnCandidateCvHandler,
   createGeneratedDraftCandidateCvHandler,
@@ -24,7 +29,10 @@ import authorizeCandidate from "../middlewares/authorize-candidate.js";
 import uploadCandidateCvPdf from "../middlewares/upload-candidate-cv-pdf.js";
 import validateCandidateProfileUpdate from "../middlewares/validate-candidate-profile-update.js";
 import validateCreateGeneratedDraftCv from "../middlewares/validate-create-generated-draft-cv.js";
+import validateDirectApply from "../middlewares/validate-direct-apply.js";
 import validateCreateUploadedCv from "../middlewares/validate-create-uploaded-cv.js";
+import validateReplaceSubmittedCv from "../middlewares/validate-replace-submitted-cv.js";
+import validateWithdrawApplication from "../middlewares/validate-withdraw-application.js";
 import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
 import validateUpdateCandidateCvMetadata from "../middlewares/validate-update-candidate-cv-metadata.js";
 
@@ -140,6 +148,30 @@ router.delete(
   authenticateAccess,
   authorizeCandidate,
   archiveOwnCandidateCvHandler,
+);
+
+router.post(
+  "/applications",
+  authenticateAccess,
+  authorizeCandidate,
+  validateDirectApply,
+  directApplyToJobHandler,
+);
+
+router.put(
+  "/applications/:applicationId/submitted-cv",
+  authenticateAccess,
+  authorizeCandidate,
+  validateReplaceSubmittedCv,
+  replaceSubmittedCvHandler,
+);
+
+router.post(
+  "/applications/:applicationId/withdraw",
+  authenticateAccess,
+  authorizeCandidate,
+  validateWithdrawApplication,
+  withdrawApplicationHandler,
 );
 
 export default router;

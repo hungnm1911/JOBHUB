@@ -28,7 +28,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
 | V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
 | V8 | Job Discovery | PENDING |
-| V9 | Candidate chủ động Apply và tạo Application | PLANNED |
+| V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
 | V10 | Phân công Application và Recruitment Pipeline | PLANNED |
 | V11 | Conversation và Chat thuộc Application | PLANNED |
 | V12 | Interview Schedule | PLANNED |
@@ -78,8 +78,20 @@ V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 closure passed across F01–F05, BR-01–BR-33, and TX-01–TX-03 after its recorded
 remediations and the required backend verification gate. V7 Final Acceptance /
 regression closure passed across F01–F10, BR-01–BR-46, and TX-01 after Slices
-01–11 and the recorded acceptance remediations. V8 is `PENDING`; V8 through V17
-must not be implemented merely from their roadmap titles.
+01–11 and the recorded acceptance remediations. V8 remains `PENDING`. V9 has
+approved Product/Data contracts; Slices 01–05 and Slice 06 Final Acceptance /
+Regression Closure are complete, including the recorded Application identity
+immutability remediation and required backend verification gate. V9 is
+`COMPLETED AND VERIFIED`. V10 through V17 must not be implemented merely from
+their roadmap titles.
+
+V9 canonical specification:
+
+`docs/product/versions/v9-candidate-direct-apply-application.md`
+
+V9 canonical persistence contract:
+
+`docs/data/versions/v9-candidate-direct-apply-application-data-model.md`
 
 V7 canonical specification:
 
