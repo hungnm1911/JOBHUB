@@ -3,6 +3,7 @@ import express from "express";
 import {
   directApplyToJobHandler,
   replaceSubmittedCvHandler,
+  withdrawApplicationHandler,
 } from "../controllers/application.controller.js";
 import {
   activateOwnGeneratedCandidateCvHandler,
@@ -31,6 +32,7 @@ import validateCreateGeneratedDraftCv from "../middlewares/validate-create-gener
 import validateDirectApply from "../middlewares/validate-direct-apply.js";
 import validateCreateUploadedCv from "../middlewares/validate-create-uploaded-cv.js";
 import validateReplaceSubmittedCv from "../middlewares/validate-replace-submitted-cv.js";
+import validateWithdrawApplication from "../middlewares/validate-withdraw-application.js";
 import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
 import validateUpdateCandidateCvMetadata from "../middlewares/validate-update-candidate-cv-metadata.js";
 
@@ -162,6 +164,14 @@ router.put(
   authorizeCandidate,
   validateReplaceSubmittedCv,
   replaceSubmittedCvHandler,
+);
+
+router.post(
+  "/applications/:applicationId/withdraw",
+  authenticateAccess,
+  authorizeCandidate,
+  validateWithdrawApplication,
+  withdrawApplicationHandler,
 );
 
 export default router;

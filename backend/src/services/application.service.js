@@ -527,6 +527,78 @@ const replaceSubmittedCv = async ({
   }
 };
 
+const withdrawApplication = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  expectedVersion,
+  withdrawReason,
+}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only withdraw Applications for themselves");
+  }
+
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) {
+    throw new AppError(400, "expectedVersion must be a non-negative integer", {
+      field: "expectedVersion",
+    });
+  }
+
+  const application = await loadOwnedApplicationForReplace({
+    candidateUserId,
+    applicationId,
+  });
+
+  if (application.status !== APPLICATION_STATUS.APPLIED) {
+    throw new AppError(409, "Only APPLIED Applications can be withdrawn", {
+      field: "status",
+    });
+  }
+
+  const normalizedWithdrawReason =
+    typeof withdrawReason === "string" ? withdrawReason.trim() || null : null;
+  const withdrawnAt = new Date();
+  const withdrawnApplication = await Application.findOneAndUpdate(
+    {
+      _id: application._id,
+      candidateUserId,
+      status: APPLICATION_STATUS.APPLIED,
+      version: expectedVersion,
+    },
+    {
+      $set: {
+        status: APPLICATION_STATUS.WITHDRAWN,
+        withdrawnAt,
+        withdrawReason: normalizedWithdrawReason,
+      },
+      $inc: {
+        version: 1,
+      },
+    },
+    {
+      returnDocument: "after",
+    },
+  );
+
+  if (!withdrawnApplication) {
+    const latestApplication = await Application.findById(application._id);
+
+    if (latestApplication?.status !== APPLICATION_STATUS.APPLIED) {
+      throw new AppError(409, "Application is no longer APPLIED and cannot be withdrawn", {
+        field: "status",
+      });
+    }
+
+    throw new AppError(409, "Application has changed; refresh and retry withdraw", {
+      field: "expectedVersion",
+    });
+  }
+
+  return toPublicApplication(withdrawnApplication);
+};
+
 export {
   captureGeneratedSubmittedCvSnapshot,
   captureUploadedSubmittedCvSnapshot,
@@ -535,5 +607,6 @@ export {
   loadEligibleCandidateCvForDirectApply,
   loadJobAcceptingDirectApplications,
   replaceSubmittedCv,
+  withdrawApplication,
   toPublicApplication,
 };

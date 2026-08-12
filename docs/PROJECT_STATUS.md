@@ -34,9 +34,10 @@ the roadmap.
 
 **V9 — Candidate chủ động Apply và tạo Application** has Slice 01 — Application
 persistence foundation, Slice 02 — Direct Apply with Generated ACTIVE CV, Slice
-03 — Direct Apply with Uploaded CV and upload-first flow, and Slice 04 —
-Replace current Submitted CV `IMPLEMENTED AND VERIFIED` (F01, F02, F03 for
-Generated/Uploaded Apply plus F03/F04 Replace boundary).
+03 — Direct Apply with Uploaded CV and upload-first flow, Slice 04 — Replace
+current Submitted CV, and Slice 05 — Withdraw Application
+`IMPLEMENTED AND VERIFIED` (F01, F02, F03 for Generated/Uploaded Apply plus
+F03/F04 Replace boundary and F05 Withdraw boundary).
 Its approved Product and Data contracts are
 `docs/product/versions/v9-candidate-direct-apply-application.md` and
 `docs/data/versions/v9-candidate-direct-apply-application-data-model.md`.
@@ -50,12 +51,17 @@ snapshot PDFs before Application commit; Slice 04 adds authenticated Candidate
 `PUT /api/candidate/applications/:applicationId/submitted-cv` with APPLIED +
 owner + Job eligibility + CV eligibility guards, whole-snapshot replacement,
 version/CAS stale-write exclusion, and Generated/Uploaded cross-combination
-replacement on the same snapshot architecture. Withdraw, My Applications,
-Invitation, Notification, and Slice 05–06 behavior are not implemented yet.
+replacement on the same snapshot architecture; Slice 05 adds authenticated
+Candidate `POST /api/candidate/applications/:applicationId/withdraw` with
+owner/APPLIED/revision-CAS guard, atomic `APPLIED → WITHDRAWN` mutation
+(`status`, `withdrawnAt`, optional `withdrawReason`, `version + 1`), and stale
+exclusion for concurrent Withdraw and Replace-vs-Withdraw from the same
+revision. My Applications, Invitation, Notification, and Slice 06 behavior are
+not implemented yet.
 
 ## Ready for implementation
 
-- None currently tracked. V9 Slice 05+ remains deferred until explicitly marked
+- None currently tracked. V9 Slice 06+ remains deferred until explicitly marked
   ready.
 
 ## Operational provisioning
@@ -63,6 +69,26 @@ Invitation, Notification, and Slice 05–06 behavior are not implemented yet.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V9 Slice 05 — Withdraw Application (F05; BR-03,
+  BR-12–BR-16, BR-32–BR-39, BR-42; PT-03; TX-03; TX-04): extends canonical
+  `application.service.js` with `withdrawApplication` so authenticated Candidate
+  can withdraw only own Application while current persisted state is exactly
+  `status=APPLIED` and `version=expectedVersion`; Withdraw deliberately does not
+  require Job accepting eligibility (`PUBLISHED`/deadline/Company ACTIVE) and
+  remains allowed when Job is `CLOSED`, effectively expired, or owning Company
+  is not ACTIVE. Persisted mutation is one atomic Application update that sets
+  `status=WITHDRAWN`, sets `withdrawnAt`, stores optional `withdrawReason`
+  (otherwise `null`), and increments `version` by exactly 1 while preserving
+  `_id`, `candidateUserId`, `jobId`, `source`, `appliedAt`, and current
+  `submittedCvSnapshot`; no Application delete/create, no snapshot replacement,
+  no CandidateCV/Job/Company/Recruitment Team mutation. Candidate route contract
+  adds `POST /api/candidate/applications/:applicationId/withdraw` with
+  `{ expectedVersion, withdrawReason? }`. Focused coverage in
+  `test/application/v9-withdraw-application.test.js` (6 tests). The official
+  backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 85 files
+  / 615 tests).
 
 - **Implemented; verified:** V9 Slice 04 — Replace current Submitted CV (F03,
   F04; BR-03, BR-05–BR-08, BR-23–BR-31, BR-36, BR-37, BR-39; PT-02; TX-02;
@@ -341,8 +367,8 @@ Invitation, Notification, and Slice 05–06 behavior are not implemented yet.
 
 - **V8 remains `PENDING`:** its Product/Data planning drafts are not approved
   implementation authority.
-- **V9 Slice 05–Slice 06:** remain deferred; Slice 04 completed Replace on the
-  shared Application workflow with CAS semantics. Withdraw, downstream pipeline
+- **V9 Slice 06:** remains deferred; Slices 04–05 completed Replace + Withdraw
+  on the shared Application workflow with CAS semantics. Downstream pipeline
   states, Invitation, Assigned Recruiter, and My Applications are not
   implemented.
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
