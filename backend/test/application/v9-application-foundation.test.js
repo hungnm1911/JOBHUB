@@ -87,6 +87,8 @@ const expectWriteRejectedByPersistence = async (write) => {
   await expect(write()).rejects.toBeTruthy();
 };
 
+const normalizeForComparison = (value) => JSON.parse(JSON.stringify(value));
+
 describe("V9 Slice 01 — Application persistence foundation", () => {
   beforeAll(async () => {
     await connectTestDatabase();
@@ -165,27 +167,24 @@ describe("V9 Slice 01 — Application persistence foundation", () => {
       expect(generatedApplication.updatedAt).toBeInstanceOf(Date);
     });
 
-    it("persists WITHDRAWN Application with optional withdrawReason", async () => {
+    it("rejects Direct Application creation with status=WITHDRAWN", async () => {
       const { user } = await createVerifiedUser({
         email: "application.withdrawn@example.com",
       });
       const withdrawnAt = new Date("2026-08-12T07:00:00.000Z");
 
-      const withdrawn = await Application.create(
-        buildApplicationFields({
-          candidateUserId: user._id,
-          jobId: new mongoose.Types.ObjectId(),
-          status: APPLICATION_STATUS.WITHDRAWN,
-          withdrawnAt,
-          withdrawReason: "Accepted another offer",
-          version: 1,
-        }),
+      await expectWriteRejectedByPersistence(() =>
+        Application.create(
+          buildApplicationFields({
+            candidateUserId: user._id,
+            jobId: new mongoose.Types.ObjectId(),
+            status: APPLICATION_STATUS.WITHDRAWN,
+            withdrawnAt,
+            withdrawReason: "Accepted another offer",
+            version: 1,
+          }),
+        ),
       );
-
-      expect(withdrawn.status).toBe(APPLICATION_STATUS.WITHDRAWN);
-      expect(withdrawn.withdrawnAt?.toISOString()).toBe(withdrawnAt.toISOString());
-      expect(withdrawn.withdrawReason).toBe("Accepted another offer");
-      expect(withdrawn.version).toBe(1);
     });
 
     it("enforces Candidate–Job uniqueness regardless of status or snapshot", async () => {
@@ -337,6 +336,27 @@ describe("V9 Slice 01 — Application persistence foundation", () => {
       );
     });
 
+    it("accepts canonical Direct Application initial state (DIRECT_APPLICATION + APPLIED + version=0)", async () => {
+      const { user } = await createVerifiedUser({
+        email: "application.initial-state@example.com",
+      });
+
+      const application = await Application.create(
+        buildApplicationFields({
+          candidateUserId: user._id,
+          jobId: new mongoose.Types.ObjectId(),
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          status: APPLICATION_STATUS.APPLIED,
+          version: 0,
+          submittedCvSnapshot: buildUploadedSnapshot(),
+        }),
+      );
+
+      expect(application.source).toBe(APPLICATION_SOURCE.DIRECT_APPLICATION);
+      expect(application.status).toBe(APPLICATION_STATUS.APPLIED);
+      expect(application.version).toBe(0);
+    });
+
     it("rejects negative Application version", async () => {
       const { user } = await createVerifiedUser({
         email: "application.version@example.com",
@@ -351,6 +371,97 @@ describe("V9 Slice 01 — Application persistence foundation", () => {
           }),
         ),
       );
+    });
+
+    it("rejects Direct Application creation with version != 0", async () => {
+      const { user } = await createVerifiedUser({
+        email: "application.version-nonzero@example.com",
+      });
+
+      await expectWriteRejectedByPersistence(() =>
+        Application.create(
+          buildApplicationFields({
+            candidateUserId: user._id,
+            jobId: new mongoose.Types.ObjectId(),
+            version: 1,
+          }),
+        ),
+      );
+    });
+
+    it("rejects Direct Application creation with fractional version", async () => {
+      const { user } = await createVerifiedUser({
+        email: "application.version-fractional@example.com",
+      });
+
+      await expectWriteRejectedByPersistence(() =>
+        Application.create(
+          buildApplicationFields({
+            candidateUserId: user._id,
+            jobId: new mongoose.Types.ObjectId(),
+            version: 0.5,
+          }),
+        ),
+      );
+    });
+
+    it("rejects fractional snapshot PDF sizeBytes/pageCount", async () => {
+      const { user } = await createVerifiedUser({
+        email: "application.snapshot-pdf-fractional@example.com",
+      });
+
+      const base = {
+        candidateUserId: user._id,
+        jobId: new mongoose.Types.ObjectId(),
+      };
+
+      await expectWriteRejectedByPersistence(() =>
+        Application.create(
+          buildApplicationFields({
+            ...base,
+            submittedCvSnapshot: buildUploadedSnapshot({
+              pdfFile: buildSnapshotPdfFile({
+                sizeBytes: 2048.5,
+              }),
+            }),
+          }),
+        ),
+      );
+
+      await expectWriteRejectedByPersistence(() =>
+        Application.create(
+          buildApplicationFields({
+            ...base,
+            submittedCvSnapshot: buildUploadedSnapshot({
+              pdfFile: buildSnapshotPdfFile({
+                pageCount: 2.5,
+              }),
+            }),
+          }),
+        ),
+      );
+    });
+
+    it("persists integer positive snapshot PDF sizeBytes/pageCount", async () => {
+      const { user } = await createVerifiedUser({
+        email: "application.snapshot-pdf-integer@example.com",
+      });
+
+      const application = await Application.create(
+        buildApplicationFields({
+          candidateUserId: user._id,
+          jobId: new mongoose.Types.ObjectId(),
+          submittedCvSnapshot: buildUploadedSnapshot({
+            pdfFile: buildSnapshotPdfFile({
+              sizeBytes: 1234,
+              pageCount: 10,
+            }),
+          }),
+        }),
+      );
+
+      expect(application.submittedCvSnapshot.pdfFile.sizeBytes).toBe(1234);
+      expect(application.submittedCvSnapshot.pdfFile.pageCount).toBe(10);
     });
 
     it("rejects findOneAndUpdate that breaks Application local invariants even with runValidators", async () => {
@@ -381,6 +492,76 @@ describe("V9 Slice 01 — Application persistence foundation", () => {
       expect(persisted.withdrawnAt).toBeNull();
     });
 
+    it("rejects raw/query updates that would remove or corrupt submittedCvSnapshot invariants", async () => {
+      const { user } = await createVerifiedUser({
+        email: "application.snapshot-query-boundary@example.com",
+      });
+
+      const baseSnapshot = buildGeneratedSnapshot({
+        sourceCandidateCvId: new mongoose.Types.ObjectId(),
+      });
+
+      const invalidMutations = [
+        {
+          name: "unset submittedCvSnapshot",
+          update: { $unset: { submittedCvSnapshot: "" } },
+        },
+        {
+          name: "unset submittedCvSnapshot.name",
+          update: { $unset: { "submittedCvSnapshot.name": "" } },
+        },
+        {
+          name: "unset submittedCvSnapshot.pdfFile.storageKey",
+          update: { $unset: { "submittedCvSnapshot.pdfFile.storageKey": "" } },
+        },
+        {
+          name: "GENERATED snapshot without generatedContent",
+          update: {
+            $set: {
+              "submittedCvSnapshot.sourceType":
+                CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+            },
+            $unset: { "submittedCvSnapshot.generatedContent": "" },
+          },
+        },
+        {
+          name: "UPLOADED snapshot with generatedContent",
+          update: {
+            $set: {
+              "submittedCvSnapshot.sourceType": CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
+              "submittedCvSnapshot.generatedContent": {
+                personalInfo: {
+                  fullName: "Should fail",
+                },
+              },
+            },
+          },
+        },
+      ];
+
+      for (const mutation of invalidMutations) {
+        const application = await Application.create(
+          buildApplicationFields({
+            candidateUserId: user._id,
+            jobId: new mongoose.Types.ObjectId(),
+            submittedCvSnapshot: baseSnapshot,
+          }),
+        );
+        const persistedBefore = await Application.findById(application._id).lean();
+
+        await expectWriteRejectedByPersistence(() =>
+          Application.collection.updateOne({ _id: application._id }, mutation.update),
+        );
+
+        const persisted = await Application.findById(application._id).lean();
+        expect(persisted).toBeTruthy();
+        expect(persisted.submittedCvSnapshot).toBeTruthy();
+        expect(normalizeForComparison(persisted.submittedCvSnapshot)).toEqual(
+          normalizeForComparison(persistedBefore.submittedCvSnapshot),
+        );
+      }
+    });
+
     it("blocks mutating immutable Application identity fields on save", async () => {
       const { user } = await createVerifiedUser({
         email: "application.immutable@example.com",
@@ -395,6 +576,134 @@ describe("V9 Slice 01 — Application persistence foundation", () => {
       application.jobId = new mongoose.Types.ObjectId();
 
       await expectWriteRejectedByPersistence(() => application.save());
+    });
+
+    it("rejects updateOne mutations that attempt to change Application business identity", async () => {
+      const { user } = await createVerifiedUser({
+        email: "application.identity-query-boundary.update-one@example.com",
+      });
+
+      const jobIdA = new mongoose.Types.ObjectId();
+      const jobIdB = new mongoose.Types.ObjectId();
+      const candidateUserIdA = user._id;
+      const candidateUserIdB = new mongoose.Types.ObjectId();
+      const appliedAtA = APPLIED_AT;
+      const appliedAtB = new Date("2026-08-12T10:00:00.000Z");
+
+      const invalidUpdates = [
+        {
+          name: "updateOne must not change candidateUserId",
+          update: { $set: { candidateUserId: candidateUserIdB } },
+        },
+        { name: "updateOne must not change jobId", update: { $set: { jobId: jobIdB } } },
+        { name: "updateOne must not change source", update: { $unset: { source: "" } } },
+        { name: "updateOne must not change appliedAt", update: { $set: { appliedAt: appliedAtB } } },
+      ];
+
+      const application = await Application.create(
+        buildApplicationFields({
+          candidateUserId: candidateUserIdA,
+          jobId: jobIdA,
+          appliedAt: appliedAtA,
+        }),
+      );
+
+      const identityBefore = await Application.findById(application._id).lean();
+      const expectedIdentity = {
+        candidateUserId: identityBefore.candidateUserId,
+        jobId: identityBefore.jobId,
+        source: identityBefore.source,
+        appliedAt: identityBefore.appliedAt,
+      };
+
+      for (const { update } of invalidUpdates) {
+        await expectWriteRejectedByPersistence(() =>
+          Application.updateOne(
+            { _id: application._id },
+            update,
+            { runValidators: true },
+          ),
+        );
+
+        const persistedAfter = await Application.findById(application._id).lean();
+        expect(persistedAfter.candidateUserId.toString()).toBe(
+          expectedIdentity.candidateUserId.toString(),
+        );
+        expect(persistedAfter.jobId.toString()).toBe(
+          expectedIdentity.jobId.toString(),
+        );
+        expect(persistedAfter.source).toBe(expectedIdentity.source);
+        expect(new Date(persistedAfter.appliedAt).toISOString()).toBe(
+          new Date(expectedIdentity.appliedAt).toISOString(),
+        );
+      }
+    });
+
+    it("rejects findOneAndUpdate mutations that attempt to change Application business identity", async () => {
+      const { user } = await createVerifiedUser({
+        email: "application.identity-query-boundary.find-one-and-update@example.com",
+      });
+
+      const jobIdA = new mongoose.Types.ObjectId();
+      const jobIdB = new mongoose.Types.ObjectId();
+      const candidateUserIdA = user._id;
+      const candidateUserIdB = new mongoose.Types.ObjectId();
+      const appliedAtA = APPLIED_AT;
+      const appliedAtB = new Date("2026-08-12T11:00:00.000Z");
+
+      const application = await Application.create(
+        buildApplicationFields({
+          candidateUserId: candidateUserIdA,
+          jobId: jobIdA,
+          appliedAt: appliedAtA,
+        }),
+      );
+
+      const persistedBefore = await Application.findById(application._id).lean();
+      const identityBefore = {
+        candidateUserId: persistedBefore.candidateUserId,
+        jobId: persistedBefore.jobId,
+        source: persistedBefore.source,
+        appliedAt: persistedBefore.appliedAt,
+      };
+
+      const invalidMutations = [
+        {
+          name: "findOneAndUpdate must not change candidateUserId",
+          update: { $set: { candidateUserId: candidateUserIdB } },
+        },
+        {
+          name: "findOneAndUpdate must not change jobId",
+          update: { $set: { jobId: jobIdB } },
+        },
+        { name: "findOneAndUpdate must not change source", update: { $unset: { source: "" } } },
+        {
+          name: "findOneAndUpdate must not change appliedAt",
+          update: { $set: { appliedAt: appliedAtB } },
+        },
+      ];
+
+      for (const { update } of invalidMutations) {
+        await expectWriteRejectedByPersistence(() =>
+          Application.findOneAndUpdate(
+            { _id: application._id },
+            update,
+            { runValidators: true, returnDocument: "after" },
+          ),
+        );
+
+        const persistedAfter = await Application.findById(application._id).lean();
+        expect(persistedAfter.candidateUserId.toString()).toBe(
+          identityBefore.candidateUserId.toString(),
+        );
+        expect(persistedAfter.jobId.toString()).toBe(
+          identityBefore.jobId.toString(),
+        );
+        expect(persistedAfter.source).toBe(identityBefore.source);
+        expect(new Date(persistedAfter.appliedAt).toISOString()).toBe(
+          new Date(identityBefore.appliedAt).toISOString(),
+        );
+      }
     });
   });
 });

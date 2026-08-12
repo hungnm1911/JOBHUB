@@ -277,6 +277,61 @@ describe("V9 Slice 02 — Direct Apply with Generated ACTIVE CV (F01–F03)", ()
       expect(jobAfter).toEqual(jobBefore);
       expect(cvAfter).toEqual(cvBefore);
     });
+
+    it("rejects Direct Apply when candidate supplies foreign CandidateCV (ownership guard)", async () => {
+      mockSnapshotUpload();
+
+      const { user: candidateA } = await createVerifiedUser({
+        email: "apply.foreign-cv.candidate-a@example.com",
+      });
+      const candidateB = await createVerifiedUser({
+        email: "apply.foreign-cv.candidate-b@example.com",
+      });
+
+      const manager = await createActiveCompanyManagerContext({
+        email: "manager.apply.foreign-cv@example.com",
+        businessRegistrationNumber: "BRN-V9-APPLY-FOREIGN-CV",
+      });
+      const recruiter = await createActiveRecruiterContext({
+        email: "recruiter.apply.foreign-cv@example.com",
+        company: manager.company,
+        employeeCode: "NV-V9-APPLY-FOREIGN-CV",
+      });
+      const job = await createPublishedJob({
+        companyId: manager.company._id,
+        primaryMemberId: recruiter.membership._id,
+      });
+      const category = await createFieldCategory();
+
+      const foreignCandidateCv = await createGeneratedCv({
+        candidateUserId: candidateB.user._id,
+        categoryId: category._id,
+        name: "Foreign Candidate Generated",
+        visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+        generatedContent: completeGeneratedContent("Foreign Candidate Name"),
+      });
+
+      const agent = createTestAgent();
+      const accessToken = await loginAndGetAccessToken(agent, {
+        email: candidateA.email,
+      });
+
+      const response = await agent
+        .post("/api/candidate/applications")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          jobId: job._id.toString(),
+          candidateCvId: foreignCandidateCv._id.toString(),
+        });
+
+      expect(response.status).toBe(404);
+
+      const persisted = await Application.findOne({
+        candidateUserId: candidateA._id,
+        jobId: job._id,
+      }).lean();
+      expect(persisted).toBeNull();
+    });
   });
 
   describe("authorization and eligibility rejection", () => {

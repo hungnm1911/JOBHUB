@@ -350,6 +350,82 @@ describe("V9 Slice 04 — Replace Submitted CV (F03, F04)", () => {
     },
   );
 
+  it("rejects Replace Submitted CV when candidate supplies foreign CandidateCV (CandidateCV ownership guard)", async () => {
+    // Initial (owner) generated snapshot upload is used to create the Application.
+    vi.spyOn(fileService, "uploadFileBuffer").mockResolvedValue({
+      publicId: "jobhub/applications/submitted-cv-snapshots/initial-snapshot",
+    });
+
+    const { owner, job, category } = await setupBaseline();
+
+    // Create initial Application owned by `owner`.
+    const initialCv = await createGeneratedCv({
+      candidateUserId: owner._id,
+      categoryId: category._id,
+      name: "Owner Initial",
+      generatedContent: completeGeneratedContent("Owner Initial"),
+      visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+    });
+
+    const created = await directApplyToJob({
+      candidateUserId: owner._id,
+      actorUser: owner,
+      jobId: job._id.toString(),
+      candidateCvId: initialCv._id.toString(),
+    });
+
+    const applicationBefore = await Application.findById(created.id).lean();
+
+    // Candidate B creates a foreign uploaded CV; it is eligible but must be rejected due to ownership.
+    const foreignCandidate = await createVerifiedUser({
+      email: "replace.foreign-cv.candidate@example.com",
+    });
+    const foreignUploadedCv = await createUploadedCv({
+      candidateUserId: foreignCandidate.user._id,
+      categoryId: category._id,
+      name: "Foreign Uploaded Replacement",
+      visibility: CANDIDATE_CV_VISIBILITY.PRIVATE,
+      uploadedFile: {
+        storageKey: "jobhub/candidate-cvs/uploaded/foreign-replacement-source",
+        originalFileName: "foreign-replacement.pdf",
+        mimeType: CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
+        sizeBytes: 3072,
+        pageCount: 3,
+        uploadedAt: new Date("2026-01-02T00:00:00.000Z"),
+      },
+    });
+
+    await expect(
+      replaceSubmittedCv({
+        candidateUserId: owner._id,
+        actorUser: owner,
+        applicationId: created.id.toString(),
+        candidateCvId: foreignUploadedCv._id.toString(),
+        expectedVersion: 0,
+      }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    const applicationAfter = await Application.findById(created.id).lean();
+
+    // Must not mutate application (identity + state + snapshot + version).
+    expect(applicationAfter).toBeTruthy();
+    expect(applicationAfter.status).toBe(applicationBefore.status);
+    expect(applicationAfter.version).toBe(applicationBefore.version);
+    expect(applicationAfter.candidateUserId.toString()).toBe(
+      applicationBefore.candidateUserId.toString(),
+    );
+    expect(applicationAfter.jobId.toString()).toBe(
+      applicationBefore.jobId.toString(),
+    );
+    expect(applicationAfter.source).toBe(applicationBefore.source);
+    expect(new Date(applicationAfter.appliedAt).toISOString()).toBe(
+      new Date(applicationBefore.appliedAt).toISOString(),
+    );
+    expect(applicationAfter.submittedCvSnapshot).toEqual(
+      applicationBefore.submittedCvSnapshot,
+    );
+  });
+
   it("rejects owner/status/job/CV eligibility violations", async () => {
     vi.spyOn(fileService, "uploadFileBuffer").mockResolvedValue({
       publicId: "jobhub/applications/submitted-cv-snapshots/snapshot",

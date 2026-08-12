@@ -60,11 +60,19 @@ const cvSnapshotPdfFileSchema = new Schema(
       type: Number,
       required: true,
       min: [1, "pdfFile.sizeBytes must be greater than 0"],
+      validate: {
+        validator: Number.isInteger,
+        message: "pdfFile.sizeBytes must be an integer",
+      },
     },
     pageCount: {
       type: Number,
       required: true,
       min: [1, "pdfFile.pageCount must be greater than 0"],
+      validate: {
+        validator: Number.isInteger,
+        message: "pdfFile.pageCount must be an integer",
+      },
     },
   },
   {
@@ -160,7 +168,16 @@ const assertApplicationLocalInvariants = (application) => {
     }
   }
 
-  if (typeof application.version === "number" && application.version < 0) {
+  if (typeof application.version === "number") {
+    if (!Number.isInteger(application.version)) {
+      errors.push("Application version must be an integer");
+    }
+    if (application.version < 0) {
+      errors.push("Application version must be non-negative");
+    }
+  }
+
+  if (typeof application.version !== "number") {
     errors.push("Application version must be non-negative");
   }
 
@@ -171,7 +188,121 @@ const APPLICATION_COLLECTION_VALIDATOR = Object.freeze({
   $expr: {
     $and: [
       {
+        $eq: [{ $type: "$candidateUserId" }, "objectId"],
+      },
+      {
+        $eq: [{ $type: "$jobId" }, "objectId"],
+      },
+      {
+        $in: ["$source", APPLICATION_SOURCE_VALUES],
+      },
+      {
+        $in: ["$status", APPLICATION_STATUS_VALUES],
+      },
+      {
+        $eq: [{ $type: "$appliedAt" }, "date"],
+      },
+      {
         $gte: ["$version", 0],
+      },
+      {
+        // Prevent fractional revision persistence via collection-level raw inserts/updates.
+        $eq: [{ $mod: ["$version", 1] }, 0],
+      },
+      {
+        $and: [
+          {
+            $ne: [{ $ifNull: ["$submittedCvSnapshot", null] }, null],
+          },
+          {
+            $eq: [{ $type: "$submittedCvSnapshot" }, "object"],
+          },
+        ],
+      },
+      {
+        $eq: [{ $type: "$submittedCvSnapshot.sourceCandidateCvId" }, "objectId"],
+      },
+      {
+        $and: [
+          {
+            $eq: [{ $type: "$submittedCvSnapshot.name" }, "string"],
+          },
+          {
+            $gt: [
+              {
+                $strLenCP: {
+                  $trim: {
+                    input: "$submittedCvSnapshot.name",
+                  },
+                },
+              },
+              0,
+            ],
+          },
+        ],
+      },
+      {
+        $in: [
+          "$submittedCvSnapshot.sourceType",
+          [
+            CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+            CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
+          ],
+        ],
+      },
+      {
+        $eq: [{ $type: "$submittedCvSnapshot.capturedAt" }, "date"],
+      },
+      {
+        $and: [
+          {
+            $ne: [{ $ifNull: ["$submittedCvSnapshot.pdfFile", null] }, null],
+          },
+          {
+            $eq: [{ $type: "$submittedCvSnapshot.pdfFile" }, "object"],
+          },
+        ],
+      },
+      {
+        $and: [
+          {
+            $eq: [{ $type: "$submittedCvSnapshot.pdfFile.storageKey" }, "string"],
+          },
+          {
+            $gt: [
+              {
+                $strLenCP: {
+                  $trim: {
+                    input: "$submittedCvSnapshot.pdfFile.storageKey",
+                  },
+                },
+              },
+              0,
+            ],
+          },
+        ],
+      },
+      {
+        $and: [
+          {
+            $eq: [
+              { $type: "$submittedCvSnapshot.pdfFile.originalFileName" },
+              "string",
+            ],
+          },
+          {
+            $gt: [
+              {
+                $strLenCP: {
+                  $trim: {
+                    input: "$submittedCvSnapshot.pdfFile.originalFileName",
+                  },
+                },
+              },
+              0,
+            ],
+          },
+        ],
       },
       {
         $or: [
@@ -199,7 +330,7 @@ const APPLICATION_COLLECTION_VALIDATOR = Object.freeze({
             $ne: ["$status", APPLICATION_STATUS.WITHDRAWN],
           },
           {
-            $ne: [{ $ifNull: ["$withdrawnAt", null] }, null],
+            $eq: [{ $type: "$withdrawnAt" }, "date"],
           },
         ],
       },
@@ -292,37 +423,24 @@ const APPLICATION_COLLECTION_VALIDATOR = Object.freeze({
         ],
       },
       {
-        $or: [
-          {
-            $eq: [{ $ifNull: ["$submittedCvSnapshot.pdfFile", null] }, null],
-          },
-          {
-            $eq: [
-              "$submittedCvSnapshot.pdfFile.mimeType",
-              CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
-            ],
-          },
+        $eq: [
+          "$submittedCvSnapshot.pdfFile.mimeType",
+          CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
         ],
       },
       {
-        $or: [
-          {
-            $eq: [{ $ifNull: ["$submittedCvSnapshot.pdfFile", null] }, null],
-          },
-          {
-            $gt: ["$submittedCvSnapshot.pdfFile.sizeBytes", 0],
-          },
-        ],
+        // Prevent fractional PDF size persistence via collection-level raw inserts/updates.
+        $eq: [{ $mod: ["$submittedCvSnapshot.pdfFile.sizeBytes", 1] }, 0],
       },
       {
-        $or: [
-          {
-            $eq: [{ $ifNull: ["$submittedCvSnapshot.pdfFile", null] }, null],
-          },
-          {
-            $gt: ["$submittedCvSnapshot.pdfFile.pageCount", 0],
-          },
-        ],
+        $gt: ["$submittedCvSnapshot.pdfFile.sizeBytes", 0],
+      },
+      {
+        // Prevent fractional PDF pageCount persistence via collection-level raw inserts/updates.
+        $eq: [{ $mod: ["$submittedCvSnapshot.pdfFile.pageCount", 1] }, 0],
+      },
+      {
+        $gt: ["$submittedCvSnapshot.pdfFile.pageCount", 0],
       },
     ],
   },
@@ -334,11 +452,13 @@ const applicationSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      immutable: true,
     },
     jobId: {
       type: Schema.Types.ObjectId,
       ref: "Job",
       required: true,
+      immutable: true,
     },
     source: {
       type: String,
@@ -348,6 +468,7 @@ const applicationSchema = new Schema(
         message: "source must use canonical Application source values",
       },
       default: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      immutable: true,
     },
     status: {
       type: String,
@@ -365,6 +486,7 @@ const applicationSchema = new Schema(
     appliedAt: {
       type: Date,
       required: true,
+      immutable: true,
     },
     withdrawnAt: {
       type: Date,
@@ -380,6 +502,10 @@ const applicationSchema = new Schema(
       required: true,
       default: 0,
       min: [0, "version must be non-negative"],
+      validate: {
+        validator: Number.isInteger,
+        message: "version must be a non-negative integer",
+      },
     },
   },
   {
@@ -389,8 +515,107 @@ const applicationSchema = new Schema(
   },
 );
 
+const identityValuesEqual = (left, right) => {
+  if (left == null && right == null) {
+    return true;
+  }
+
+  if (left == null || right == null) {
+    return false;
+  }
+
+  if (left instanceof Date || right instanceof Date) {
+    return new Date(left).getTime() === new Date(right).getTime();
+  }
+
+  return String(left) === String(right);
+};
+
+// Run before Mongoose's immutable setter so a stripped assignment still
+// fail-closes on save instead of becoming a silent no-op.
+for (const field of IMMUTABLE_APPLICATION_IDENTITY_FIELDS) {
+  applicationSchema.path(field).set(function captureIdentityAssignment(value) {
+    if (this.isNew || this.$__ == null) {
+      return value;
+    }
+
+    const current = this._doc?.[field];
+    if (!identityValuesEqual(current, value)) {
+      this.$locals.identityMutationAttempted = field;
+    }
+
+    return value;
+  });
+}
+
+const isIdentityFieldPath = (key, identityFields) => {
+  const rootPath = String(key).split(".")[0];
+  return identityFields.includes(key) || identityFields.includes(rootPath);
+};
+
+const operatorPayloadTargetsIdentity = (payload, identityFields) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return false;
+  }
+
+  return Object.keys(payload).some((key) =>
+    isIdentityFieldPath(key, identityFields),
+  );
+};
+
+const assertNoIdentityFieldMutation = (update, identityFields) => {
+  if (!update || typeof update !== "object" || Array.isArray(update)) {
+    return false;
+  }
+
+  const updateKeys = Object.keys(update);
+  const operatorKeys = updateKeys.filter((key) => key.startsWith("$"));
+
+  // Any update operator whose payload keys target identity fields, including
+  // $currentDate, $set, $unset, $inc, $rename, and other MongoDB operators.
+  for (const opKey of operatorKeys) {
+    if (operatorPayloadTargetsIdentity(update[opKey], identityFields)) {
+      return true;
+    }
+
+    if (
+      opKey === "$rename" &&
+      update[opKey] &&
+      typeof update[opKey] === "object" &&
+      !Array.isArray(update[opKey])
+    ) {
+      for (const destination of Object.values(update[opKey])) {
+        if (
+          typeof destination === "string" &&
+          isIdentityFieldPath(destination, identityFields)
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  if (operatorKeys.length === 0) {
+    for (const field of identityFields) {
+      if (Object.prototype.hasOwnProperty.call(update, field)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
 applicationSchema.pre("validate", function enforceApplicationLocalInvariants() {
   if (!this.isNew) {
+    if (this.$locals.identityMutationAttempted) {
+      const field = this.$locals.identityMutationAttempted;
+      this.invalidate(
+        field,
+        `${field} is immutable after Application creation`,
+      );
+    }
+
     for (const field of IMMUTABLE_APPLICATION_IDENTITY_FIELDS) {
       if (this.isModified(field)) {
         this.invalidate(
@@ -403,9 +628,71 @@ applicationSchema.pre("validate", function enforceApplicationLocalInvariants() {
 
   const errors = assertApplicationLocalInvariants(this);
 
+  // Creation-state invariant for V9 Direct Applications:
+  // - must start at APPLIED
+  // - must start with revision version=0
+  // - WITHDRAWN must only appear through the canonical Withdraw transition (Slice 05)
+  if (this.isNew && this.source === APPLICATION_SOURCE.DIRECT_APPLICATION) {
+    if (this.status === APPLICATION_STATUS.WITHDRAWN) {
+      errors.push("Direct Application creation must start with status=APPLIED");
+    }
+
+    if (this.status === APPLICATION_STATUS.APPLIED) {
+      if (this.version !== 0) {
+        errors.push("Direct Application creation must use version=0");
+      }
+    }
+  }
+
   if (errors.length > 0) {
     this.invalidate("status", errors[0]);
   }
+});
+
+// Query-update protection: reject any update that tries to mutate Application
+// business identity fields via updateOne/findOneAndUpdate query paths.
+for (const method of ["updateOne", "updateMany", "findOneAndUpdate"]) {
+  applicationSchema.pre(method, function rejectIdentityMutation() {
+    const update = this.getUpdate();
+
+    // Aggregation pipeline updates (array form) are not used by any canonical
+    // V9 Application workflow. Reject entirely to prevent identity bypass.
+    if (Array.isArray(update)) {
+      throw new Error(
+        "Application model does not support aggregation pipeline updates",
+      );
+    }
+
+    const mutatedIdentity = assertNoIdentityFieldMutation(
+      update,
+      IMMUTABLE_APPLICATION_IDENTITY_FIELDS,
+    );
+
+    if (mutatedIdentity) {
+      throw new Error(
+        "Application business identity fields are immutable after creation",
+      );
+    }
+  });
+}
+
+// Replacement-write protection: replaceOne and findOneAndReplace are not used
+// by any canonical V9 Application workflow. Reject entirely to prevent identity
+// field mutation via full-document replacement.
+for (const method of ["replaceOne", "findOneAndReplace"]) {
+  applicationSchema.pre(method, function rejectReplacementWrite() {
+    throw new Error(
+      "Application model does not support replacement writes; use updateOne with explicit field operators",
+    );
+  });
+}
+
+// bulkWrite is not used by any canonical V9 Application workflow. Reject
+// entirely to prevent identity mutation via mixed bulk operations.
+applicationSchema.pre("bulkWrite", function rejectBulkWrite() {
+  throw new Error(
+    "Application model does not support bulkWrite; use updateOne with explicit field operators",
+  );
 });
 
 applicationSchema.index(

@@ -56,13 +56,14 @@ Candidate `POST /api/candidate/applications/:applicationId/withdraw` with
 owner/APPLIED/revision-CAS guard, atomic `APPLIED → WITHDRAWN` mutation
 (`status`, `withdrawnAt`, optional `withdrawReason`, `version + 1`), and stale
 exclusion for concurrent Withdraw and Replace-vs-Withdraw from the same
-revision. My Applications, Invitation, Notification, and Slice 06 behavior are
-not implemented yet.
+revision. My Applications, Invitation, Notification, and other deferred-scope
+modules remain not implemented by design; V9 Slice 06 Final Acceptance &
+Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- None currently tracked. V9 Slice 06+ remains deferred until explicitly marked
-  ready.
+- None currently tracked. V9 Slice 06 acceptance/closure has completed; deferred
+  scope items beyond V9 remain out of implementation scope.
 
 ## Operational provisioning
 
@@ -89,6 +90,27 @@ not implemented yet.
   backend gate passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 85 files
   / 615 tests).
+
+- **Implemented; verified:** V9 Final Acceptance finding — Application business
+  identity immutability (PI-02; PT-02; PT-03; BR-31; BR-35): canonical
+  `application.model.js` now fail-closes attempts to change `candidateUserId`,
+  `jobId`, `source`, or `appliedAt` after creation through document save and
+  query-update operators (including `$currentDate`). Replacement writes,
+  aggregation-pipeline updates, and `bulkWrite` are rejected because no
+  canonical V9 workflow owns those write paths. Focused regression coverage in
+  `test/application/v9-application-query-update-invariants.test.js` verifies the
+  previously bypassing `$currentDate` and `bulkWrite` paths plus replacement and
+  pipeline paths while asserting persisted identity remains unchanged.
+
+- **Completed and verified:** V9 Slice 06 — Final Acceptance & Regression
+  Closure: verification gate `cd backend && npm run verify:agent` passed
+  (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 87 files /
+  651 tests). The focused Application invariant regression passed 3 files / 42
+  tests. No remaining acceptance finding blocks V9 repository closure; deferred
+  scope (My Applications, downstream pipeline, Assigned Recruiter, Invitation,
+  Notification, Chat/Interview, snapshot/status history, and future
+  sources/statuses/fields) remains intentionally out of implementation scope.
 
 - **Implemented; verified:** V9 Slice 04 — Replace current Submitted CV (F03,
   F04; BR-03, BR-05–BR-08, BR-23–BR-31, BR-36, BR-37, BR-39; PT-02; TX-02;
@@ -367,10 +389,10 @@ not implemented yet.
 
 - **V8 remains `PENDING`:** its Product/Data planning drafts are not approved
   implementation authority.
-- **V9 Slice 06:** remains deferred; Slices 04–05 completed Replace + Withdraw
-  on the shared Application workflow with CAS semantics. Downstream pipeline
-  states, Invitation, Assigned Recruiter, and My Applications are not
-  implemented.
+- **V9 deferred scope:** downstream pipeline states, My Applications,
+  Invitation, Assigned Recruiter, Notification, Chat/Interview, and related
+  history/snapshots remain out of implementation scope. V9 Slice 06 itself is
+  completed and verified.
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
