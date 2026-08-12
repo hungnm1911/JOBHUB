@@ -403,6 +403,130 @@ const directApplyToJob = async ({
   }
 };
 
+const loadOwnedApplicationForReplace = async ({ candidateUserId, applicationId }) => {
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const application = await Application.findOne({
+    _id: applicationId,
+    candidateUserId,
+  });
+
+  if (!application) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  return application;
+};
+
+const replaceSubmittedCv = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  candidateCvId,
+  expectedVersion,
+}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(403, "Candidates may only replace Applications for themselves");
+  }
+
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) {
+    throw new AppError(400, "expectedVersion must be a non-negative integer", {
+      field: "expectedVersion",
+    });
+  }
+
+  const application = await loadOwnedApplicationForReplace({
+    candidateUserId,
+    applicationId,
+  });
+
+  if (application.status !== APPLICATION_STATUS.APPLIED) {
+    throw new AppError(409, "Only APPLIED Applications can replace Submitted CV", {
+      field: "status",
+    });
+  }
+
+  await loadJobAcceptingDirectApplications(application.jobId);
+  const candidateCv = await loadEligibleCandidateCvForDirectApply({
+    candidateUserId,
+    candidateCvId,
+  });
+
+  const capturedAt = new Date();
+  const captureSubmittedCvSnapshot =
+    candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED
+      ? captureGeneratedSubmittedCvSnapshot
+      : captureUploadedSubmittedCvSnapshot;
+  let uploadedSnapshotStorageKey = null;
+
+  try {
+    const { snapshot: submittedCvSnapshot, storageKey } =
+      await captureSubmittedCvSnapshot({
+        candidateCv,
+        capturedAt,
+      });
+    uploadedSnapshotStorageKey = storageKey;
+
+    const replacedApplication = await Application.findOneAndUpdate(
+      {
+        _id: application._id,
+        candidateUserId,
+        status: APPLICATION_STATUS.APPLIED,
+        version: expectedVersion,
+      },
+      {
+        $set: {
+          submittedCvSnapshot,
+        },
+        $inc: {
+          version: 1,
+        },
+      },
+      {
+        returnDocument: "after",
+      },
+    );
+
+    if (!replacedApplication) {
+      const latestApplication = await Application.findById(application._id);
+
+      if (latestApplication?.status !== APPLICATION_STATUS.APPLIED) {
+        throw new AppError(
+          409,
+          "Application is no longer APPLIED and cannot replace Submitted CV",
+          {
+            field: "status",
+          },
+        );
+      }
+
+      throw new AppError(409, "Application has changed; refresh and retry replace", {
+        field: "expectedVersion",
+      });
+    }
+
+    return toPublicApplication(replacedApplication);
+  } catch (error) {
+    if (uploadedSnapshotStorageKey) {
+      try {
+        await deleteApplicationSubmittedCvSnapshotFile(uploadedSnapshotStorageKey);
+      } catch {
+        // Best-effort orphan cleanup when DB commit fails.
+      }
+    }
+
+    throw error;
+  }
+};
+
 export {
   captureGeneratedSubmittedCvSnapshot,
   captureUploadedSubmittedCvSnapshot,
@@ -410,5 +534,6 @@ export {
   directApplyToJob,
   loadEligibleCandidateCvForDirectApply,
   loadJobAcceptingDirectApplications,
+  replaceSubmittedCv,
   toPublicApplication,
 };

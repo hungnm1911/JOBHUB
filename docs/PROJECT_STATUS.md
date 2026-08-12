@@ -33,9 +33,10 @@ contracts, and explicitly move V8 out of `PENDING` in both this document and
 the roadmap.
 
 **V9 — Candidate chủ động Apply và tạo Application** has Slice 01 — Application
-persistence foundation, Slice 02 — Direct Apply with Generated ACTIVE CV, and
-Slice 03 — Direct Apply with Uploaded CV and upload-first flow
-`IMPLEMENTED AND VERIFIED` (F01, F02, F03 for Generated and Uploaded paths).
+persistence foundation, Slice 02 — Direct Apply with Generated ACTIVE CV, Slice
+03 — Direct Apply with Uploaded CV and upload-first flow, and Slice 04 —
+Replace current Submitted CV `IMPLEMENTED AND VERIFIED` (F01, F02, F03 for
+Generated/Uploaded Apply plus F03/F04 Replace boundary).
 Its approved Product and Data contracts are
 `docs/product/versions/v9-candidate-direct-apply-application.md` and
 `docs/data/versions/v9-candidate-direct-apply-application-data-model.md`.
@@ -45,12 +46,16 @@ eligibility, Harvard snapshot capture/upload, and Candidate–Job uniqueness via
 `PT-01`/`TX-01`; Slice 03 extends the same `directApplyToJob` workflow for own
 non-archived Uploaded `ACTIVE` CVs (`PRIVATE`/`PUBLIC`), reuses canonical V7
 Uploaded CV creation for upload-first Apply, and captures independent Uploaded
-snapshot PDFs before Application commit. Replace, Withdraw, CAS mutation, My
-Applications, and Slice 04–06 behavior are not implemented yet.
+snapshot PDFs before Application commit; Slice 04 adds authenticated Candidate
+`PUT /api/candidate/applications/:applicationId/submitted-cv` with APPLIED +
+owner + Job eligibility + CV eligibility guards, whole-snapshot replacement,
+version/CAS stale-write exclusion, and Generated/Uploaded cross-combination
+replacement on the same snapshot architecture. Withdraw, My Applications,
+Invitation, Notification, and Slice 05–06 behavior are not implemented yet.
 
 ## Ready for implementation
 
-- None currently tracked. V9 Slice 04+ remains deferred until explicitly marked
+- None currently tracked. V9 Slice 05+ remains deferred until explicitly marked
   ready.
 
 ## Operational provisioning
@@ -58,6 +63,29 @@ Applications, and Slice 04–06 behavior are not implemented yet.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V9 Slice 04 — Replace current Submitted CV (F03,
+  F04; BR-03, BR-05–BR-08, BR-23–BR-31, BR-36, BR-37, BR-39; PT-02; TX-02;
+  TX-04): extends canonical `application.service.js` with
+  `replaceSubmittedCv` so authenticated Candidate can replace only own
+  Application while current persisted state is exactly `status=APPLIED` and
+  `version=expectedVersion`; replace rechecks Job accepting-application
+  eligibility through canonical `isJobPubliclyEligible` and reuses the same
+  Slice 02–03 snapshot capture owners for both Generated and Uploaded
+  CandidateCV sources (`GENERATED↔GENERATED`, `GENERATED↔UPLOADED`,
+  `UPLOADED↔GENERATED`, `UPLOADED↔UPLOADED`), preparing external snapshot
+  artifact before the DB mutation. Persisted mutation is one atomic Application
+  update that replaces the whole current `submittedCvSnapshot` and increments
+  `version` by exactly 1 without changing `_id`, `candidateUserId`, `jobId`,
+  `source`, `status`, or `appliedAt`; no snapshot history, no new Application,
+  no recruiter assignment, and no Job/Company/CandidateCV mutation. Best-effort
+  orphan snapshot cleanup runs only when DB commit fails. Candidate route
+  contract adds `PUT /api/candidate/applications/:applicationId/submitted-cv`
+  with `{ candidateCvId, expectedVersion }`. Focused coverage in
+  `test/application/v9-replace-submitted-cv.test.js` (10 tests). The official
+  backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 84 files /
+  609 tests).
 
 - **Implemented; verified:** V9 Slice 03 — Direct Apply with Uploaded CV and
   upload-first flow (F01, F02, F03 Uploaded path; BR-05–BR-09, BR-11–BR-17,
@@ -313,10 +341,10 @@ Applications, and Slice 04–06 behavior are not implemented yet.
 
 - **V8 remains `PENDING`:** its Product/Data planning drafts are not approved
   implementation authority.
-- **V9 Slice 04–Slice 06:** remain deferred; Slice 03 completed Uploaded Apply
-  and upload-first Apply on the shared `directApplyToJob` path. Replace,
-  Withdraw, downstream pipeline states, Invitation, Assigned Recruiter, and My
-  Applications are not implemented.
+- **V9 Slice 05–Slice 06:** remain deferred; Slice 04 completed Replace on the
+  shared Application workflow with CAS semantics. Withdraw, downstream pipeline
+  states, Invitation, Assigned Recruiter, and My Applications are not
+  implemented.
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
