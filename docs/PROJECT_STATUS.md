@@ -32,33 +32,53 @@ start. Before any V8 implementation, approve and track the reconciled V8
 contracts, and explicitly move V8 out of `PENDING` in both this document and
 the roadmap.
 
-**V9 — Candidate chủ động Apply và tạo Application** is `READY FOR
-IMPLEMENTATION` for Slice 01 — Application persistence foundation. Its approved
-Product and Data contracts are
+**V9 — Candidate chủ động Apply và tạo Application** has Slice 01 — Application
+persistence foundation `IMPLEMENTED AND VERIFIED`. Its approved Product and
+Data contracts are
 `docs/product/versions/v9-candidate-direct-apply-application.md` and
 `docs/data/versions/v9-candidate-direct-apply-application-data-model.md`.
-Readiness corrected BR-40/BR-41 to inherit the V5 hard-delete boundary and
-removed the unsupported Application-based Job deletion index, transition, and
-transaction. V8 remains a dependency for the Candidate-facing Direct Apply
-flow, so V9 Slice 02 and later slices must not start until their declared
-dependencies are satisfied.
+Slice 01 adds canonical Application source/status constants, `applications`
+persistence with embedded current Submitted CV/PDF snapshot shapes, local state
+matrices, revision field, Candidate–Job unique index, and collection-invariant
+wiring only. No F01–F05 business workflow (Direct Apply, snapshot
+capture/file operations, Replace, Withdraw, CAS mutation) is implemented yet.
+V8 remains a dependency for the Candidate-facing Direct Apply flow, so V9
+Slice 02 and later slices must not start until their declared dependencies are
+satisfied.
 
 ## Ready for implementation
 
-- **V9 Slice 01 — Application persistence foundation:** may add only the
-  canonical Application source/status constants, `applications` persistence,
-  embedded current Submitted CV/PDF snapshot shapes, local state matrices,
-  revision field, Candidate–Job unique index, collection-invariant wiring, and
-  focused persistence tests. It must not implement Apply, snapshot capture/file
-  operations, Replace, Withdraw, Job deletion behavior, Assigned Recruiter,
-  downstream pipeline states, Invitation, or any other Fxx behavior. V8 remains
-  `PENDING`; V9 Slice 02+ stays deferred by dependency order.
+- None currently tracked. V9 Slice 02+ remains deferred until V8 dependency
+  order is satisfied and the next slice is explicitly marked ready.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V9 Slice 01 — Application persistence foundation
+  (persistence foundation for F01–F05; no Fxx completed): adds canonical
+  Application source (`DIRECT_APPLICATION`) and status (`APPLIED`, `WITHDRAWN`)
+  constants, `applications` persistence with required current
+  `submittedCvSnapshot` (`sourceCandidateCvId`, `name`, `sourceType`,
+  conditional `generatedContent`, `pdfFile`, `capturedAt`) and embedded
+  `CvSnapshotPdfFile` metadata (`storageKey`, `originalFileName`, `mimeType`,
+  `sizeBytes`, `pageCount`); enforces local Application and snapshot state
+  matrices, immutable business identity (`candidateUserId`, `jobId`, `source`,
+  `appliedAt`), non-negative revision `version` default `0`, and compound unique
+  `{ candidateUserId, jobId }`; wires `ensureApplicationCollectionInvariants`
+  at app and test DB connect with MongoDB collection validator for query-update
+  paths; preserves multi-tenant shape via `jobId` only (no `companyId` or
+  reverse arrays) and all V9 explicit exclusions (no Assigned/Source Recruiter,
+  Invitation, snapshot history, Job snapshot, standalone `jobId` index, or Job
+  deletion guard). No Direct Apply route/service, snapshot capture/render/upload,
+  Replace, Withdraw, CAS workflow, or Slice 02–06 behavior. Focused coverage in
+  `test/application/v9-application-foundation.test.js` (8 tests). The official
+  backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 81 files /
+  589 tests). V8 remains `PENDING`; V9 Slice 02+ remains deferred by dependency
+  order.
 
 - **Prepared; verified:** V9 Slice 01 implementation readiness — approved V9
   Product/Data contracts are established as repository sources of truth;

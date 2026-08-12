@@ -739,6 +739,7 @@ export {
   assertCandidateCvLocalInvariants,
   candidateCvSchema,
   ensureCandidateCvCollectionInvariants,
+  generatedCvContentSchema,
 };
 
 export default CandidateCV;

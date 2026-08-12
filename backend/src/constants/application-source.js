@@ -1,0 +1,5 @@
+const APPLICATION_SOURCE = Object.freeze({
+  DIRECT_APPLICATION: "DIRECT_APPLICATION",
+});
+
+export default APPLICATION_SOURCE;
