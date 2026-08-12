@@ -33,27 +33,51 @@ contracts, and explicitly move V8 out of `PENDING` in both this document and
 the roadmap.
 
 **V9 — Candidate chủ động Apply và tạo Application** has Slice 01 — Application
-persistence foundation and Slice 02 — Direct Apply with Generated ACTIVE CV
-`IMPLEMENTED AND VERIFIED` (F01, F02, F03 for Generated ACTIVE path only). Its
-approved Product and Data contracts are
+persistence foundation, Slice 02 — Direct Apply with Generated ACTIVE CV, and
+Slice 03 — Direct Apply with Uploaded CV and upload-first flow
+`IMPLEMENTED AND VERIFIED` (F01, F02, F03 for Generated and Uploaded paths).
+Its approved Product and Data contracts are
 `docs/product/versions/v9-candidate-direct-apply-application.md` and
 `docs/data/versions/v9-candidate-direct-apply-application-data-model.md`.
 Slice 01 adds canonical Application persistence; Slice 02 adds authenticated
 Candidate `POST /api/candidate/applications` with Generated ACTIVE CV
 eligibility, Harvard snapshot capture/upload, and Candidate–Job uniqueness via
-`PT-01`/`TX-01`. Uploaded CV Apply, upload-first Apply, Replace, Withdraw, CAS
-mutation, My Applications, and Slice 03–06 behavior are not implemented yet.
+`PT-01`/`TX-01`; Slice 03 extends the same `directApplyToJob` workflow for own
+non-archived Uploaded `ACTIVE` CVs (`PRIVATE`/`PUBLIC`), reuses canonical V7
+Uploaded CV creation for upload-first Apply, and captures independent Uploaded
+snapshot PDFs before Application commit. Replace, Withdraw, CAS mutation, My
+Applications, and Slice 04–06 behavior are not implemented yet.
 
 ## Ready for implementation
 
-- None currently tracked. V9 Slice 02+ remains deferred until V8 dependency
-  order is satisfied and the next slice is explicitly marked ready.
+- None currently tracked. V9 Slice 04+ remains deferred until explicitly marked
+  ready.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V9 Slice 03 — Direct Apply with Uploaded CV and
+  upload-first flow (F01, F02, F03 Uploaded path; BR-05–BR-09, BR-11–BR-17,
+  BR-22–BR-27; PT-01; TX-01): extends canonical `directApplyToJob` so own
+  non-archived Uploaded `ACTIVE` CandidateCVs (`PRIVATE`/`PUBLIC`) use the same
+  `POST /api/candidate/applications` contract as Generated Apply; upload-first
+  reuses canonical V7 `POST /api/candidate/cvs/uploaded` before Apply without
+  temporary application-only CV or combined upload+apply endpoint; Uploaded
+  snapshot capture downloads the current Uploaded PDF, copies it to restricted
+  Application snapshot storage, persists `sourceType=UPLOADED` without
+  `generatedContent`, and keeps snapshot independent from later Uploaded PDF
+  replacement, rename, visibility/Default changes, and archive; Job eligibility,
+  Application creation semantics, and Candidate–Job uniqueness remain unchanged
+  from Slice 02. No Replace, Withdraw, CAS workflow, My Applications,
+  Invitation, Notification, or Slice 04–06 behavior. Engineering SoT owner
+  `directApplyToJob`. Focused coverage in
+  `test/application/v9-direct-apply-uploaded.test.js` (6 tests). The official
+  backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 83 files /
+  599 tests).
 
 - **Implemented; verified:** V9 Slice 02 — Direct Apply with Generated ACTIVE CV
   (F01, F02, F03 Generated path; BR-01–BR-08, BR-10, BR-12–BR-25, BR-43,
@@ -289,10 +313,10 @@ mutation, My Applications, and Slice 03–06 behavior are not implemented yet.
 
 - **V8 remains `PENDING`:** its Product/Data planning drafts are not approved
   implementation authority.
-- **V9 Slice 03–Slice 06:** remain deferred; Slice 02 completed only the
-  Generated ACTIVE Direct Apply path. Uploaded Apply, upload-first Apply,
-  Replace, Withdraw, downstream pipeline states, Invitation, Assigned Recruiter,
-  and My Applications are not implemented.
+- **V9 Slice 04–Slice 06:** remain deferred; Slice 03 completed Uploaded Apply
+  and upload-first Apply on the shared `directApplyToJob` path. Replace,
+  Withdraw, downstream pipeline states, Invitation, Assigned Recruiter, and My
+  Applications are not implemented.
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
