@@ -32,15 +32,51 @@ start. Before any V8 implementation, approve and track the reconciled V8
 contracts, and explicitly move V8 out of `PENDING` in both this document and
 the roadmap.
 
+**V9 — Candidate chủ động Apply và tạo Application** is `READY FOR
+IMPLEMENTATION` for Slice 01 — Application persistence foundation. Its approved
+Product and Data contracts are
+`docs/product/versions/v9-candidate-direct-apply-application.md` and
+`docs/data/versions/v9-candidate-direct-apply-application-data-model.md`.
+Readiness corrected BR-40/BR-41 to inherit the V5 hard-delete boundary and
+removed the unsupported Application-based Job deletion index, transition, and
+transaction. V8 remains a dependency for the Candidate-facing Direct Apply
+flow, so V9 Slice 02 and later slices must not start until their declared
+dependencies are satisfied.
+
 ## Ready for implementation
 
-- No version is currently ready for implementation. V8 remains `PENDING`; do not invent Candidate Search, Application snapshot, Job Invitation, Restore, or Hard Delete ahead of later approved versions.
+- **V9 Slice 01 — Application persistence foundation:** may add only the
+  canonical Application source/status constants, `applications` persistence,
+  embedded current Submitted CV/PDF snapshot shapes, local state matrices,
+  revision field, Candidate–Job unique index, collection-invariant wiring, and
+  focused persistence tests. It must not implement Apply, snapshot capture/file
+  operations, Replace, Withdraw, Job deletion behavior, Assigned Recruiter,
+  downstream pipeline states, Invitation, or any other Fxx behavior. V8 remains
+  `PENDING`; V9 Slice 02+ stays deferred by dependency order.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Prepared; verified:** V9 Slice 01 implementation readiness — approved V9
+  Product/Data contracts are established as repository sources of truth;
+  BR-40/BR-41 and Data persistence ownership now inherit the disjoint V5
+  hard-delete boundary without a standalone `jobId` deletion index, PT-04,
+  TX-05, or Application-existence Job guard; roadmap/project status mark V9
+  `READY FOR IMPLEMENTATION` for Slice 01 only; Engineering SoT assigns V9 S01
+  Application source/status constants and persistence ownership; and the V6
+  acceptance assertion that forbade all future `applications` collections was
+  narrowed while retaining every V6-owned deferred-scope assertion. The
+  existing MongoDB replica-set harness, transaction rollback regression,
+  collection-invariant patterns, and deterministic architecture gate are
+  sufficient for S01 persistence/index/state-matrix verification, so no test
+  infrastructure or verification rule was changed. The official backend gate
+  passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 80 files /
+  581 tests). No V9 Fxx behavior was implemented. V8 remains `PENDING`, so V9
+  Slice 02+ remains deferred by dependency order.
 
 - **Completed and verified:** V7 Final Acceptance / regression closure — all approved scope F01–F10, BR-01–BR-46, and TX-01 was reviewed against the canonical Product Spec and Data Contract, FINAL slice claims, Engineering Contracts, current implementation, and focused V7 tests. The official backend gate passed (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 80 files / 581 tests), and the focused V7 suite passed 14 files / 100 tests. The five previously recorded acceptance findings are closed; no acceptance blocker remains. No Candidate Search, Application, Job Invitation, Restore, Hard Delete, public/share access, generated-PDF persistence, or other V7 scope expansion was accepted.
 
@@ -210,6 +246,13 @@ the roadmap.
 
 ## Deferred / not started
 
+- **V8 remains `PENDING`:** its Product/Data planning drafts are not approved
+  implementation authority.
+- **V9 Slice 02–Slice 06:** remain deferred until their dependency order is
+  satisfied; in particular, Candidate-facing Direct Apply must not start while
+  the required V8 Job Discovery dependency remains `PENDING`. S01 readiness
+  does not authorize Apply, snapshot capture/file operations, Replace,
+  Withdraw, downstream pipeline states, Invitation, or Assigned Recruiter.
 - V2 approved business functions F01–F10 and acceptance findings #1–#8 are complete. No further V2 business slices remain in the approved specification.
 - V3 approved business functions F01–F09 and F11–F17 are complete; F10 Recruiter update is intentionally not implemented in V3. No further V3 business slices remain in the approved specification.
 - V4 approved business functions F01–F06 are complete; acceptance/regression closure is verified. No further V4 business slices remain in the approved specification. Deferred V4 items (Category list/read, Job/CV integration, dynamic catalog management) stay out of scope without a new approved specification.
@@ -224,6 +267,12 @@ the roadmap.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V9 Slice 01 Implementation Readiness baseline (pre-implementation): the
+  official `cd backend && npm run verify:agent` gate passed after the
+  readiness-only canonical/ownership/V6-regression changes (ESLint: 0 errors /
+  2 existing warnings in `test/job/v6-acceptance.test.js`; architecture:
+  ARCH-001 through ARCH-016; Vitest: 80 files / 581 tests). No verification
+  rule was changed or relaxed, and no V9 Fxx behavior was implemented.
 - V7 Final Acceptance baseline: after Slices 01–11 and all recorded acceptance remediations (Uploaded restricted delivery, Harvard Unicode fidelity, `hiddenSections` vocabulary, activation content CAS, and query-update local-invariant enforcement), the official `cd backend && npm run verify:agent` gate passed (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture verification: ARCH-001 through ARCH-016; Vitest: 80 files / 581 tests). The focused V7 suite also passed 14 files / 100 tests. Final Acceptance / regression closure is complete.
 - V7 Slice 09 baseline: the official `cd backend && npm run verify:agent` gate passed after Preview/Download (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture verification: ARCH-001 through ARCH-016; Vitest: 75 files / 543 tests passed, including `test/candidate/v7-candidate-cv-preview-download.test.js` with 6 focused tests).
 - V7 Slice 08 baseline: the official `cd backend && npm run verify:agent` gate passed after rename/metadata/visibility update (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture verification: ARCH-001 through ARCH-016; Vitest: 74 files / 537 tests passed, including `test/candidate/v7-candidate-cv-update-metadata.test.js` with 6 focused tests).
