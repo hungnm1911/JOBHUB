@@ -25,7 +25,7 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** Slices 01–06 of the
+**V10 — Phân công Application và Recruitment Pipeline** Slices 01–07 of the
 current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
 opened the persistence state matrix so every non-terminal Recruitment Status
 can persist `UNASSIGNED` or Assigned. Slice 02 extends Primary Assign of
@@ -44,14 +44,19 @@ Assignee; workload stays derived and unpersisted. Slice 06 adds the canonical
 internal automatic-Unassign primitive (`A → NONE`) so later lifecycle/team
 operations can detach non-terminal Application responsibility of an outgoing
 Recruiter without a public HTTP surface, replacement Recruiter, or synthetic
-`A → B`. The current Product/Data
+`A → B`. Slice 07 wires that primitive into CompanyMember Recruiter
+LOCK/TERMINATE: non-terminal Applications are automatic-Unassigned
+(`A → NONE`) before lifecycle completion, Job-team Primary transfer and
+Supporting removal still follow V6 (no `NONE Primary`), and the final
+zero-responsibility guard reads current persisted Job + Application state.
+The current Product/Data
 contracts remain approved implementation authority.
 The prior implementation and its 104-file / 893-test green baseline encoded
 the old state matrix and direct-handoff lifecycle semantics; that baseline
 remains regression history, not completion evidence for the current canonical
-revision. Remaining `ASSIGN / UNASSIGN` slices (CompanyMember LOCK/TERMINATE,
-Recruitment Team removal, and Platform Admin User lifecycle integration of
-automatic Unassign) are not started.
+revision. Remaining `ASSIGN / UNASSIGN` slices (Recruitment Team removal and
+Platform Admin User lifecycle integration of automatic Unassign) are not
+started.
 
 Previous V10 implementation baseline (historical, not current completion
 evidence) has Slice 01 —
@@ -327,6 +332,30 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   official backend gate passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 107
   files / 994 tests).
+
+- **Implemented; verified:** V10 Slice 07 — CompanyMember Recruiter LOCK /
+  TERMINATE automatic Unassign integration (F04, F09, F11; BR-08, BR-27–BR-28,
+  BR-36–BR-38, BR-46, BR-50–BR-53; TX-02, TX-05): Company Manager
+  `lockRecruiter` / `terminateRecruiter` reuse Slice 06
+  `automaticallyUnassignCurrentResponsibilitiesOfRecruiter` so every
+  non-terminal Application assigned to the outgoing Recruiter becomes
+  `A → NONE` before lifecycle completion. Application replacement is not
+  required and CompanyMember lifecycle no longer performs automatic
+  Application `A → B` handoff. Recruitment Status, Candidate, Job, source, and
+  `submittedCvSnapshot` are preserved; terminal Applications keep their final
+  Assignee. Job-team responsibility still follows V6 (Primary replacement via
+  `transfers[]` when needed; Supporting removal; no `NONE Primary`). Final
+  guard requires `activeJobResponsibilityCount == 0` and
+  `nonTerminalAssignedApplicationCount == 0` from current persisted state.
+  TX-05 keeps independently committed Application detaches; retry continues
+  from current responsibilities; concurrent Assign before the final boundary
+  is visible to the guard; stale automatic Unassign cannot clear a newer
+  Assignee. Generic Recruitment Team removal and Platform Admin User
+  LOCK/TERMINATE are unchanged. Focused coverage in
+  `test/application/v10-lock-terminate-application-handoff.test.js`
+  (1 file / 17 tests). The official backend gate passed (ESLint: 0 errors / 2
+  existing warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through
+  ARCH-016; Vitest: 107 files / 998 tests).
 
 ## Previously completed and verified baseline
 
@@ -1008,6 +1037,7 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V10 Slice 07 CompanyMember Recruiter LOCK/TERMINATE automatic Unassign integration (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after CompanyMember LOCK/TERMINATE switched Application resolution from trusted `A → B` handoff to Slice 06 `A → NONE` automatic Unassign while keeping V6 Job-team Primary transfer / Supporting removal and the dual current-state final zero-responsibility guard (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 998 tests). Focused LOCK/TERMINATE Unassign coverage passed 1 file / 17 tests. No generic Recruitment Team removal change, Platform Admin User lifecycle change, Application replacement heuristic, history, recovery state, queue, worker, field, collection, index, or migration was added.
 - V10 Slice 06 Canonical Automatic-Unassign Primitive (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after the internal `A → NONE` primitive reused the existing assigned-state CAS (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 994 tests). Focused automatic-Unassign coverage passed 1 file / 22 tests. No public HTTP endpoint, CompanyMember LOCK/TERMINATE change, Recruitment Team removal change, Platform Admin User lifecycle change, field, collection, index, history, recovery state, queue, worker, or migration was added.
 - V10 Slice 01 Persistence State Matrix (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after the local/collection status × assignment-state matrix update (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 104 files / 900 tests). Focused persistence coverage passed 2 files / 37 tests. No schema, index, migration, or backfill was added.
 - V9 Slice 01 Implementation Readiness baseline (pre-implementation): the

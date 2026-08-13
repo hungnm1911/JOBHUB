@@ -9,7 +9,6 @@ import config from "../config/index.js";
 import AuthSession from "../models/auth-session.model.js";
 import AuthToken from "../models/auth-token.model.js";
 import CompanyMember from "../models/company-member.model.js";
-import Job from "../models/job.model.js";
 import User from "../models/user.model.js";
 import { resolveCompanyManagerRecruiterManagementContext } from "./company.service.js";
 import { issuePasswordReset } from "./auth.service.js";
@@ -23,8 +22,7 @@ import {
 } from "./job.service.js";
 import {
   assertNoOutstandingRecruiterApplicationResponsibility,
-  executeTrustedPreLifecycleApplicationHandoff,
-  findNonTerminalApplicationsAssignedToRecruiter,
+  automaticallyUnassignCurrentResponsibilitiesOfRecruiter,
 } from "./application.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
@@ -447,43 +445,6 @@ const buildLifecycleTransferMap = (transfers = []) => {
   return transferMap;
 };
 
-// Replacement context for Application handoff during LOCK/TERMINATE:
-// 1) explicit transfers[jobId] from the existing V6 lifecycle request; or
-// 2) Supporting-only departure → current Primary (Take over context).
-// Do not invent another selector when neither context exists.
-const resolveApplicationHandoffReplacementCompanyMemberId = ({
-  job,
-  outgoingCompanyMemberId,
-  transferMap,
-}) => {
-  const jobIdStr = job._id.toString();
-  const outgoingIdStr = outgoingCompanyMemberId.toString();
-
-  if (transferMap.has(jobIdStr)) {
-    return transferMap.get(jobIdStr);
-  }
-
-  const isPrimary =
-    job.primaryRecruiterCompanyMemberId.toString() === outgoingIdStr;
-  const isSupporting = (job.supportingRecruiterCompanyMemberIds ?? []).some(
-    (id) => id.toString() === outgoingIdStr,
-  );
-
-  if (isSupporting && !isPrimary) {
-    return job.primaryRecruiterCompanyMemberId.toString();
-  }
-
-  throw new AppError(
-    409,
-    "Recruiter has outstanding Application responsibility and no replacement was specified",
-    {
-      field: "transfers",
-      jobId: jobIdStr,
-      jobStatus: job.status,
-    },
-  );
-};
-
 const assertZeroActiveRecruiterResponsibility = async ({
   companyId,
   recruiterCompanyMemberId,
@@ -501,10 +462,11 @@ const assertZeroActiveRecruiterResponsibility = async ({
   });
 };
 
-// V10 Slice 08 / BR-28 / TX-05: unify Job-team forced transfer and Application
-// pre-lifecycle handoff before LOCK/TERMINATE completion. Per-resource commits
-// may progress independently; final lifecycle commit still requires zero active
-// responsibility on both dimensions.
+// V10 ASSIGN/UNASSIGN Slice 07 / BR-28 / TX-05: Job-team forced transfer per V6
+// plus Application automatic Unassign (A → NONE) before LOCK/TERMINATE.
+// Application replacement is not required. Per-resource commits may progress
+// independently; final lifecycle commit still requires zero active
+// responsibility on both dimensions from current persisted state.
 const executeUnifiedResponsibilityHandoffBeforeLifecycleCompletion = async ({
   companyId,
   outgoingCompanyMemberId,
@@ -520,7 +482,8 @@ const executeUnifiedResponsibilityHandoffBeforeLifecycleCompletion = async ({
     supportingRecruiterCompanyMemberId: outgoingCompanyMemberId,
   });
 
-  // BR-27: unfinished Primary Jobs still require an explicit replacement.
+  // V6: unfinished Primary Jobs still require an explicit Primary replacement.
+  // Application responsibility does not create NONE Primary.
   for (const job of primaryJobs) {
     const jobIdStr = job._id.toString();
 
@@ -537,8 +500,7 @@ const executeUnifiedResponsibilityHandoffBeforeLifecycleCompletion = async ({
     }
   }
 
-  // 1) Job-team Primary transfers first so Application targets that become the
-  // new Primary are on the Recruitment Team before A→B handoff.
+  // 1) Resolve active Primary Job-team responsibility first (V6).
   for (const job of primaryJobs) {
     const jobIdStr = job._id.toString();
     const replacementId = transferMap.get(jobIdStr);
@@ -551,63 +513,14 @@ const executeUnifiedResponsibilityHandoffBeforeLifecycleCompletion = async ({
     });
   }
 
-  // 2) Application responsibility handoff for every non-terminal Application
-  // still assigned to the outgoing Recruiter (PUBLISHED/CLOSED/EXPIRED alike).
-  const assignedApplications =
-    await findNonTerminalApplicationsAssignedToRecruiter({
-      assigneeCompanyMemberId: outgoingCompanyMemberId,
-    });
+  // 2) Detach every current non-terminal Application still assigned to the
+  // outgoing Recruiter (A → NONE). No Application replacement; TX-05 keeps
+  // independently committed detaches. Retry rereads current responsibilities.
+  await automaticallyUnassignCurrentResponsibilitiesOfRecruiter({
+    outgoingRecruiterCompanyMemberId: outgoingCompanyMemberId,
+  });
 
-  const applicationsByJobId = new Map();
-
-  for (const application of assignedApplications) {
-    const jobIdStr = application.jobId.toString();
-
-    if (!applicationsByJobId.has(jobIdStr)) {
-      applicationsByJobId.set(jobIdStr, []);
-    }
-
-    applicationsByJobId.get(jobIdStr).push(application);
-  }
-
-  for (const [jobIdStr, applications] of applicationsByJobId) {
-    const job = await Job.findById(jobIdStr);
-
-    if (!job) {
-      throw new AppError(404, "Job not found", {
-        field: "jobId",
-        jobId: jobIdStr,
-      });
-    }
-
-    if (job.companyId.toString() !== companyId.toString()) {
-      throw new AppError(403, "Job does not belong to the expected Company", {
-        field: "companyId",
-      });
-    }
-
-    const replacementId = resolveApplicationHandoffReplacementCompanyMemberId({
-      job,
-      outgoingCompanyMemberId,
-      transferMap,
-    });
-
-    for (const application of applications) {
-      await executeTrustedPreLifecycleApplicationHandoff({
-        companyId,
-        jobId: application.jobId.toString(),
-        applicationId: application._id.toString(),
-        assigneeCompanyMemberId: replacementId,
-        expectedAssigneeCompanyMemberId: outgoingCompanyMemberId.toString(),
-        expectedVersion: application.version,
-        verifiedOutgoingSubjectCompanyMemberId:
-          outgoingCompanyMemberId.toString(),
-      });
-    }
-  }
-
-  // 3) Supporting removals after Application handoff so Take-over-to-Primary
-  // remains eligible while the outgoing Supporting is still on the team.
+  // 3) Supporting removals after Application detach (V6 team semantics).
   for (const job of supportingJobs) {
     await executeForcedSupportingRemoval({
       jobId: job._id,
@@ -845,7 +758,7 @@ const terminateRecruiter = async ({
 
   const transferMap = buildLifecycleTransferMap(transfers);
 
-  // Same unified Job-team + Application handoff foundation as LOCK (TX-05).
+  // Same unified Job-team + Application automatic-Unassign foundation as LOCK.
   await executeUnifiedResponsibilityHandoffBeforeLifecycleCompletion({
     companyId: context.companyId,
     outgoingCompanyMemberId: membership._id,

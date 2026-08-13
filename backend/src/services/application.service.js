@@ -2692,8 +2692,8 @@ const findNonTerminalApplicationsAssignedToRecruiter = async ({
 // independent per-Application A → NONE commits. No global all-or-nothing
 // transaction, no persisted progress/recovery state, no replacement selection.
 // Partial success is kept; callers retry remaining current responsibilities
-// from persisted Application state. Not wired into LOCK/TERMINATE, team
-// removal, or Platform User lifecycle in this slice.
+// from persisted Application state. CompanyMember LOCK/TERMINATE (Slice 07)
+// reuses this owner; team removal and Platform User lifecycle remain later.
 const automaticallyUnassignCurrentResponsibilitiesOfRecruiter = async ({
   outgoingRecruiterCompanyMemberId,
 } = {}) => {
