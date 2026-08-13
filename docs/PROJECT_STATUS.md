@@ -30,8 +30,9 @@ Application persistence foundation, Slice 02 — V9 compatibility +
 Job-retention compatibility, Slice 03 — Unassigned Applications +
 Primary Application View, Slice 04 — First Assign Application,
 Slice 05 — Reassign / Take over Application, Slice 06 — Company Manager
-Administrative Forced Reassignment, and the Slice 07 corrective assignment/
-handoff lifecycle-boundary foundation
+Administrative Forced Reassignment, the Slice 07 corrective assignment/
+handoff lifecycle-boundary foundation, and Slice 08 — Recruiter LOCK /
+TERMINATE Unified Responsibility Handoff
 `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
@@ -74,10 +75,16 @@ pre-lifecycle handoff (`executeTrustedPreLifecycleApplicationHandoff`) for
 still-eligible Assignees that are verified subjects of an eligibility-losing
 operation, keeps public CM force-reassign recovery-only, and joins First Assign/
 Reassign/handoff target commits to the shared ACTIVE membership TX-02 acquire
-used by Job-team responsibility. Full LOCK/TERMINATE/team-removal orchestration,
-final zero-active-responsibility Application guard, Recruitment Pipeline,
-Managed Jobs aggregates, My Applications, workload queries, and other remaining
-Fxx workflow surfaces remain deferred by the approved slice order.
+used by Job-team responsibility. Slice 08 extends existing Recruiter LOCK /
+TERMINATE so Active Recruiter Responsibility is the union of V6 Job-team
+responsibility and non-terminal Application responsibility
+(PUBLISHED/CLOSED/EXPIRED), reuses V6 forced-transfer plus Slice 07 trusted
+pre-lifecycle Application handoff before lifecycle completion, and commits
+`LOCKED`/`TERMINATED` only after the dual zero-responsibility final guard
+(TX-05 partial progress preserved). Recruitment Team removal orchestration
+(Slice 09), Recruitment Pipeline, Managed Jobs aggregates, My Applications,
+workload queries, and other remaining Fxx workflow surfaces remain deferred by
+the approved slice order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -116,20 +123,39 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 07 handoff foundation):** Slices 01–06
-  plus the Slice 07 corrective assignment/handoff lifecycle-boundary foundation
-  are complete. Full Recruiter LOCK/TERMINATE/team-removal orchestration,
-  final zero-active-responsibility Application guard, continuous eligibility
-  for pipeline processing, Recruitment Pipeline, Managed Jobs aggregates/counts,
-  Current Workload, Recruiter/Candidate My Applications, and related read
-  projections remain deferred until their owning slices start. Job retention
-  continues on the V5 lifecycle without an Application↔Job delete transaction.
+- **V10 subsequent slices (after Slice 08):** Slices 01–08 are complete,
+  including LOCK/TERMINATE unified Job-team + Application responsibility
+  handoff. Recruitment Team removal Application handoff (Slice 09), continuous
+  eligibility for pipeline processing, Recruitment Pipeline, Managed Jobs
+  aggregates/counts, Current Workload, Recruiter/Candidate My Applications, and
+  related read projections remain deferred until their owning slices start. Job
+  retention continues on the V5 lifecycle without an Application↔Job delete
+  transaction.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 08 — Recruiter LOCK / TERMINATE Unified
+  Responsibility Handoff (F04, F09 partial; BR-07–BR-08, BR-15–BR-17, BR-27–BR-28,
+  BR-33, BR-36–BR-38, BR-40, BR-42; TX-01; TX-02; TX-05; PI-24): extends
+  `lockRecruiter` / `terminateRecruiter` so Active Recruiter Responsibility is
+  the union of V6 unfinished Job-team responsibility and every non-terminal
+  Application assigned to the outgoing Recruiter (independent of Job
+  `PUBLISHED`/`CLOSED`/`EXPIRED`); required Application handoff reuses Slice 07
+  trusted pre-lifecycle `A → B` transfer with replacement from existing
+  `transfers[]` or Supporting→Primary Take-over context; terminal Applications
+  are left untouched; TX-05 keeps committed partial transfers when a later
+  handoff fails; final dual zero-responsibility guard inside the lifecycle
+  transaction blocks `LOCKED`/`TERMINATED` while any Job-team or Application
+  responsibility remains and serializes against concurrent First Assign/
+  Reassign. Focused coverage in
+  `test/application/v10-lock-terminate-application-handoff.test.js`. The
+  official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 95 files
+  / 757 tests).
 
 - **Implemented; verified:** V10 Slice 07 corrective finding — Assignment/handoff
   lifecycle boundary foundation (F04/BR-15/BR-28/BR-36–BR-38/BR-40/BR-42; TX-01;

@@ -1459,6 +1459,71 @@ const executeTrustedPreLifecycleApplicationHandoff = async ({
   });
 };
 
+// PI-21 / PI-22 / PI-24: non-terminal Application responsibility for a Recruiter
+// is independent of Job.status (PUBLISHED/CLOSED/EXPIRED all count).
+const findNonTerminalApplicationsAssignedToRecruiter = async ({
+  assigneeCompanyMemberId,
+  session,
+} = {}) => {
+  if (!mongoose.isValidObjectId(assigneeCompanyMemberId)) {
+    return [];
+  }
+
+  let query = Application.find({
+    assignedRecruiterCompanyMemberId: assigneeCompanyMemberId,
+    status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+  }).sort({ _id: 1 });
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  return query;
+};
+
+const countNonTerminalApplicationsAssignedToRecruiter = async ({
+  assigneeCompanyMemberId,
+  session,
+} = {}) => {
+  if (!mongoose.isValidObjectId(assigneeCompanyMemberId)) {
+    return 0;
+  }
+
+  let query = Application.countDocuments({
+    assignedRecruiterCompanyMemberId: assigneeCompanyMemberId,
+    status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+  });
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  return query;
+};
+
+// TX-02 / TX-05 / PI-24: final lifecycle guard dimension for Application
+// responsibility. Must run inside the terminal lifecycle transaction.
+const assertNoOutstandingRecruiterApplicationResponsibility = async ({
+  recruiterCompanyMemberId,
+  session,
+} = {}) => {
+  const outstanding = await countNonTerminalApplicationsAssignedToRecruiter({
+    assigneeCompanyMemberId: recruiterCompanyMemberId,
+    session,
+  });
+
+  if (outstanding > 0) {
+    throw new AppError(
+      409,
+      "Recruiter has outstanding non-terminal Application responsibility",
+      {
+        field: "assignedRecruiterCompanyMemberId",
+        count: outstanding,
+      },
+    );
+  }
+};
+
 const loadJobAcceptingDirectApplications = async (jobId, now = new Date()) => {
   if (!mongoose.isValidObjectId(jobId)) {
     throw new AppError(404, "Job not found", {
@@ -1944,11 +2009,14 @@ const withdrawApplication = async ({
 };
 
 export {
+  assertNoOutstandingRecruiterApplicationResponsibility,
   captureGeneratedSubmittedCvSnapshot,
   captureUploadedSubmittedCvSnapshot,
+  countNonTerminalApplicationsAssignedToRecruiter,
   deepCopyGeneratedContent,
   directApplyToJob,
   executeTrustedPreLifecycleApplicationHandoff,
+  findNonTerminalApplicationsAssignedToRecruiter,
   firstAssignApplication,
   forceReassignApplication,
   isApplicationUnassigned,
