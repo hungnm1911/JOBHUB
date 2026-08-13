@@ -18,6 +18,7 @@ import JOB_STATUS from "../../src/constants/job-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import Application from "../../src/models/application.model.js";
+import AuthSession from "../../src/models/auth-session.model.js";
 import CompanyMember from "../../src/models/company-member.model.js";
 import Job from "../../src/models/job.model.js";
 import User from "../../src/models/user.model.js";
@@ -27,6 +28,10 @@ import {
   reassignApplication,
   updateApplicationRecruitmentPipelineStatus,
 } from "../../src/services/application.service.js";
+import {
+  removeSupportingRecruiter,
+  replacePrimaryRecruiter,
+} from "../../src/services/job.service.js";
 import {
   lockAccount,
   terminateAccount,
@@ -74,14 +79,18 @@ const createJobWithTeam = async ({
   companyId,
   primaryMemberId,
   supportingMemberIds = [],
+  status = JOB_STATUS.PUBLISHED,
 }) =>
   Job.create({
     companyId,
     createdByCompanyMemberId: primaryMemberId,
     primaryRecruiterCompanyMemberId: primaryMemberId,
     supportingRecruiterCompanyMemberIds: supportingMemberIds,
-    status: JOB_STATUS.PUBLISHED,
-    publishedAt: new Date("2026-01-15"),
+    status,
+    publishedAt:
+      status === JOB_STATUS.DRAFT || status === JOB_STATUS.PENDING_APPROVAL
+        ? null
+        : new Date("2026-01-15"),
     applicationDeadline: FUTURE_DEADLINE(),
     title: "H2 Platform User Lifecycle Job",
   });
@@ -311,7 +320,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     await disconnectTestDatabase();
   });
 
-  it("1. Platform Admin lock succeeds with non-terminal assigned Application; assignee/status/snapshot unchanged (V1/V3)", async () => {
+  it("1. Platform Admin lock succeeds for Primary with non-terminal Application; responsibility refs remain unchanged (V1/V3)", async () => {
     const ctx = await setupH2Company({ emailPrefix: "v10.h2.c1" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -321,27 +330,32 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     const application = await createAssignedApplication({
       candidateUserId: ctx.candidate.user._id,
       jobId: job._id,
-      assigneeMemberId: ctx.supporting.membership._id,
+      assigneeMemberId: ctx.primary.membership._id,
       status: APPLICATION_STATUS.SCREENING,
     });
     const beforeApp = snapshotApplication(application);
     const beforeMembership = await CompanyMember.findById(
-      ctx.supporting.membership._id,
+      ctx.primary.membership._id,
     ).lean();
     const beforeJob = snapshotJobTeam(await Job.findById(job._id).lean());
+    await AuthSession.create({
+      userId: ctx.primary.user._id,
+      refreshTokenHash: "v10-f11-primary-lock-session",
+      expiresAt: FUTURE_DEADLINE(),
+    });
 
     const locked = await lockAccount({
-      targetUserId: ctx.supporting.user._id.toString(),
+      targetUserId: ctx.primary.user._id.toString(),
       actorUserId: ctx.platformAdmin.user._id,
     });
 
     expect(locked.status).toBe(USER_STATUS.LOCKED);
 
-    const user = await User.findById(ctx.supporting.user._id).lean();
+    const user = await User.findById(ctx.primary.user._id).lean();
     expect(user.status).toBe(USER_STATUS.LOCKED);
 
     const membership = await CompanyMember.findById(
-      ctx.supporting.membership._id,
+      ctx.primary.membership._id,
     ).lean();
     expect(membership.status).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
     expect(membership.status).toBe(beforeMembership.status);
@@ -354,6 +368,9 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
 
     const afterJob = snapshotJobTeam(await Job.findById(job._id).lean());
     expect(afterJob).toEqual(beforeJob);
+    expect(await AuthSession.countDocuments({ userId: ctx.primary.user._id })).toBe(
+      0,
+    );
   });
 
   it("2. After Platform lock, Recruiter cannot continue Pipeline (BR-08 / PI-14)", async () => {
@@ -716,5 +733,279 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     const primaryUser = await User.findById(ctx.primary.user._id).lean();
     expect(supportingUser.status).toBe(USER_STATUS.LOCKED);
     expect(primaryUser.status).toBe(USER_STATUS.TERMINATED);
+  });
+
+  for (const [index, lifecycle] of ["lock", "terminate"].entries()) {
+    for (const jobStatus of [
+      JOB_STATUS.PUBLISHED,
+      JOB_STATUS.CLOSED,
+      JOB_STATUS.EXPIRED,
+    ]) {
+      it(`9.${index}-${jobStatus}. CM recovers ${jobStatus} Application from Platform-${lifecycle} outgoing User`, async () => {
+        const ctx = await setupH2Company({
+          emailPrefix: `v10.f11.app.${index}.${jobStatus.toLowerCase()}`,
+        });
+        const job = await createJobWithTeam({
+          companyId: ctx.manager.company._id,
+          primaryMemberId: ctx.primary.membership._id,
+          supportingMemberIds: [
+            ctx.supporting.membership._id,
+            ctx.supportingB.membership._id,
+          ],
+          status: jobStatus,
+        });
+        const application = await createAssignedApplication({
+          candidateUserId: ctx.candidate.user._id,
+          jobId: job._id,
+          assigneeMemberId: ctx.supporting.membership._id,
+          status: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+        });
+        const before = snapshotApplication(application);
+
+        const accountAction = lifecycle === "lock" ? lockAccount : terminateAccount;
+        await accountAction({
+          targetUserId: ctx.supporting.user._id.toString(),
+          actorUserId: ctx.platformAdmin.user._id,
+        });
+
+        const recovered = await forceReassignApplication({
+          actorUser: ctx.manager.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          assigneeCompanyMemberId: ctx.supportingB.membership._id.toString(),
+          expectedAssigneeCompanyMemberId:
+            ctx.supporting.membership._id.toString(),
+          expectedVersion: 1,
+        });
+
+        expect(recovered.application).toMatchObject({
+          status: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+          assignedRecruiterCompanyMemberId:
+            ctx.supportingB.membership._id.toString(),
+          version: 2,
+          isUnassigned: false,
+        });
+
+        const after = snapshotApplication(
+          await Application.findById(application._id).lean(),
+        );
+        expect(after.status).toBe(before.status);
+        expect(after.snapshotStorageKey).toBe(before.snapshotStorageKey);
+        expect(after.snapshotName).toBe(before.snapshotName);
+
+        const membership = await CompanyMember.findById(
+          ctx.supporting.membership._id,
+        ).lean();
+        expect(membership.status).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
+      });
+    }
+  }
+
+  for (const jobStatus of [JOB_STATUS.DRAFT, JOB_STATUS.PENDING_APPROVAL]) {
+    it(`10-${jobStatus}. CM transfers Primary from Platform-ineligible User on unfinished ${jobStatus}`, async () => {
+      const ctx = await setupH2Company({
+        emailPrefix: `v10.f11.primary.${jobStatus.toLowerCase()}`,
+      });
+      const job = await createJobWithTeam({
+        companyId: ctx.manager.company._id,
+        primaryMemberId: ctx.primary.membership._id,
+        supportingMemberIds: [ctx.supporting.membership._id],
+        status: jobStatus,
+      });
+
+      await lockAccount({
+        targetUserId: ctx.primary.user._id.toString(),
+        actorUserId: ctx.platformAdmin.user._id,
+      });
+
+      const team = await replacePrimaryRecruiter({
+        managerUser: ctx.manager.user,
+        jobId: job._id.toString(),
+        newPrimaryCompanyMemberId: ctx.supporting.membership._id.toString(),
+        keepOldPrimaryAsSupporting: false,
+      });
+
+      expect(team.primaryRecruiterCompanyMemberId).toBe(
+        ctx.supporting.membership._id.toString(),
+      );
+      expect(team.supportingRecruiterCompanyMemberIds).not.toContain(
+        ctx.primary.membership._id.toString(),
+      );
+      expect(
+        (await CompanyMember.findById(ctx.primary.membership._id).lean()).status,
+      ).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
+      expect((await User.findById(ctx.primary.user._id).lean()).status).toBe(
+        USER_STATUS.LOCKED,
+      );
+    });
+
+    it(`11-${jobStatus}. CM removes Platform-ineligible Supporting on unfinished ${jobStatus}`, async () => {
+      const ctx = await setupH2Company({
+        emailPrefix: `v10.f11.supporting.${jobStatus.toLowerCase()}`,
+      });
+      const job = await createJobWithTeam({
+        companyId: ctx.manager.company._id,
+        primaryMemberId: ctx.primary.membership._id,
+        supportingMemberIds: [ctx.supporting.membership._id],
+        status: jobStatus,
+      });
+
+      await terminateAccount({
+        targetUserId: ctx.supporting.user._id.toString(),
+        actorUserId: ctx.platformAdmin.user._id,
+      });
+
+      const team = await removeSupportingRecruiter({
+        actorUser: ctx.manager.user,
+        jobId: job._id.toString(),
+        supportingRecruiterCompanyMemberId:
+          ctx.supporting.membership._id.toString(),
+      });
+
+      expect(team.supportingRecruiterCompanyMemberIds).not.toContain(
+        ctx.supporting.membership._id.toString(),
+      );
+      expect(
+        (await CompanyMember.findById(ctx.supporting.membership._id).lean())
+          .status,
+      ).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
+    });
+  }
+
+  it("12. CM removes Platform-ineligible Supporting only after PUBLISHED Application handoff", async () => {
+    const ctx = await setupH2Company({ emailPrefix: "v10.f11.supporting.app" });
+    const job = await createJobWithTeam({
+      companyId: ctx.manager.company._id,
+      primaryMemberId: ctx.primary.membership._id,
+      supportingMemberIds: [ctx.supporting.membership._id],
+    });
+    const application = await createAssignedApplication({
+      candidateUserId: ctx.candidate.user._id,
+      jobId: job._id,
+      assigneeMemberId: ctx.supporting.membership._id,
+      status: APPLICATION_STATUS.CONTACTED,
+    });
+    const before = snapshotApplication(application);
+
+    await lockAccount({
+      targetUserId: ctx.supporting.user._id.toString(),
+      actorUserId: ctx.platformAdmin.user._id,
+    });
+
+    const team = await removeSupportingRecruiter({
+      actorUser: ctx.manager.user,
+      jobId: job._id.toString(),
+      supportingRecruiterCompanyMemberId:
+        ctx.supporting.membership._id.toString(),
+    });
+
+    expect(team.supportingRecruiterCompanyMemberIds).not.toContain(
+      ctx.supporting.membership._id.toString(),
+    );
+    const after = snapshotApplication(
+      await Application.findById(application._id).lean(),
+    );
+    expect(after.assignedRecruiterCompanyMemberId).toBe(
+      ctx.primary.membership._id.toString(),
+    );
+    expect(after.status).toBe(before.status);
+    expect(after.snapshotStorageKey).toBe(before.snapshotStorageKey);
+  });
+
+  it("13. Unfinished recovery context cannot be used while outgoing User is eligible or retained as Supporting", async () => {
+    const ctx = await setupH2Company({ emailPrefix: "v10.f11.boundary" });
+    const job = await createJobWithTeam({
+      companyId: ctx.manager.company._id,
+      primaryMemberId: ctx.primary.membership._id,
+      supportingMemberIds: [
+        ctx.supporting.membership._id,
+        ctx.supportingB.membership._id,
+      ],
+      status: JOB_STATUS.DRAFT,
+    });
+
+    await expect(
+      replacePrimaryRecruiter({
+        managerUser: ctx.manager.user,
+        jobId: job._id.toString(),
+        newPrimaryCompanyMemberId: ctx.supporting.membership._id.toString(),
+        keepOldPrimaryAsSupporting: false,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    await expect(
+      removeSupportingRecruiter({
+        actorUser: ctx.manager.user,
+        jobId: job._id.toString(),
+        supportingRecruiterCompanyMemberId:
+          ctx.supportingB.membership._id.toString(),
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    await lockAccount({
+      targetUserId: ctx.primary.user._id.toString(),
+      actorUserId: ctx.platformAdmin.user._id,
+    });
+
+    await expect(
+      replacePrimaryRecruiter({
+        managerUser: ctx.manager.user,
+        jobId: job._id.toString(),
+        newPrimaryCompanyMemberId: ctx.supporting.membership._id.toString(),
+        keepOldPrimaryAsSupporting: true,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    const persisted = await Job.findById(job._id).lean();
+    expect(String(persisted.primaryRecruiterCompanyMemberId)).toBe(
+      ctx.primary.membership._id.toString(),
+    );
+  });
+
+  it("14. CM transfers PUBLISHED Primary and hands off its Application after Platform terminate", async () => {
+    const ctx = await setupH2Company({ emailPrefix: "v10.f11.primary.published" });
+    const job = await createJobWithTeam({
+      companyId: ctx.manager.company._id,
+      primaryMemberId: ctx.primary.membership._id,
+      supportingMemberIds: [ctx.supporting.membership._id],
+    });
+    const application = await createAssignedApplication({
+      candidateUserId: ctx.candidate.user._id,
+      jobId: job._id,
+      assigneeMemberId: ctx.primary.membership._id,
+      status: APPLICATION_STATUS.INTERVIEW_COMPLETED,
+    });
+    const before = snapshotApplication(application);
+
+    await terminateAccount({
+      targetUserId: ctx.primary.user._id.toString(),
+      actorUserId: ctx.platformAdmin.user._id,
+    });
+
+    const team = await replacePrimaryRecruiter({
+      managerUser: ctx.manager.user,
+      jobId: job._id.toString(),
+      newPrimaryCompanyMemberId: ctx.supporting.membership._id.toString(),
+      keepOldPrimaryAsSupporting: false,
+    });
+
+    expect(team.primaryRecruiterCompanyMemberId).toBe(
+      ctx.supporting.membership._id.toString(),
+    );
+    expect(team.supportingRecruiterCompanyMemberIds).not.toContain(
+      ctx.primary.membership._id.toString(),
+    );
+
+    const after = snapshotApplication(
+      await Application.findById(application._id).lean(),
+    );
+    expect(after.assignedRecruiterCompanyMemberId).toBe(
+      ctx.supporting.membership._id.toString(),
+    );
+    expect(after.status).toBe(before.status);
+    expect(after.snapshotStorageKey).toBe(before.snapshotStorageKey);
+    expect(
+      (await CompanyMember.findById(ctx.primary.membership._id).lean()).status,
+    ).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
   });
 });

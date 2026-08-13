@@ -36,7 +36,10 @@ TERMINATE Unified Responsibility Handoff, Slice 09 — Recruitment Team
 Eligibility-Loss Application Handoff, Slice 10 — Recruitment Pipeline,
 Slice 11 — Managed Jobs / Pipeline Workspace / Current Workload,
 Slice 12 — Recruiter My Applications, and Slice 13 — Candidate My
-Applications `IMPLEMENTED AND VERIFIED`. Its approved
+Applications, plus the V10 F11 business extension — Platform Admin Recruiter
+Account Lock/Terminate → Company Responsibility Recovery. Final Acceptance /
+regression closure has passed across F01–F11, BR-01–BR-53, and TX-01–TX-05;
+V10 is `COMPLETED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
 and
@@ -91,7 +94,11 @@ required non-terminal Application handoff completes before team-removal
 commit, reusing Slice 07 trusted A→B with canonical V6 replacement context
 (Supporting leave → current Primary; Primary leave → new Primary) while
 PRIMARY→SUPPORTING keep-eligible leaves assignments unchanged; V6 PUBLISHED-only
-team-mutation gates are preserved. Slice 10 adds current-Assignee-only
+normal team-mutation gates are preserved. F11 additionally allows the existing
+CM replace-Primary/remove-Supporting surfaces on unfinished `DRAFT` or
+`PENDING_APPROVAL` only when persisted outgoing Platform User is already
+`LOCKED`/`TERMINATED`; it does not open normal team management or mutate
+`CLOSED`/`EXPIRED` team history. Slice 10 adds current-Assignee-only
 Recruitment Pipeline via
 `POST /api/jobs/:jobId/applications/:applicationId/pipeline` with canonical
 forward and Reject transitions, continuous eligibility at commit, status/version
@@ -117,7 +124,11 @@ Statuses and Jobs in `PUBLISHED`/`CLOSED`/`EXPIRED`, with Job + Company +
 snapshot + live Assignee `fullName`/`avatarUrl`/`jobTitle` only (no email/phone
 or Assignment History), optional status/`q` filters, and no mutation of
 Application state or expansion of Replace/Withdraw/Pipeline authority.
-Remaining Fxx surfaces remain deferred by the approved slice order.
+The canonical V10 Product Specification now covers F01–F11 and BR-01–BR-53.
+F11 reuses the existing V1 Platform User lifecycle, V6 Recruitment Team,
+V10 administrative recovery handoff, active-responsibility derivation, and H3
+TX-02 coordination. No new V10 persistence entity, field, collection, counter,
+or history was needed.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -154,18 +165,54 @@ revision. My Applications, Invitation, Notification, and other deferred-scope
 modules remain not implemented by design; V9 Slice 06 Final Acceptance &
 Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
-## Ready for implementation
-
-- **V10 subsequent slices (after Slice 13):** Slices 01–13 are complete,
-  including Recruiter and Candidate My Applications. Remaining Fxx surfaces
-  remain deferred until their owning slices start. Job retention continues on
-  the V5 lifecycle without an Application↔Job delete transaction.
-
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Final Acceptance finding — Platform User
+  lifecycle vs Job-team responsibility writers (F11 / BR-49; H3 TX-02
+  coordination reuse): `createDraftJob`, `addSupportingRecruiter`, and
+  `executeForcedPrimaryTransfer` now conditionally acquire Company operational
+  + CompanyMember ACTIVE + User ACTIVE at the Job-team responsibility commit
+  boundary in the same Company → Membership → User order as
+  `replacePrimaryRecruiter` / H3, so a Platform Admin `User` LOCK/TERMINATE that
+  commits first blocks stale new Primary/Supporting responsibility while a
+  valid team mutation that commits first is retained and Platform lifecycle may
+  still complete afterward without responsibility rollback, zero-guard, or
+  CompanyMember lifecycle coupling. Focused regressions in
+  `test/job/v10-f11-job-team-user-eligibility-coordination.test.js`; adjacent
+  H2/H3/V6 team/forced-transfer suites remain green. The official backend gate
+  passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 104
+  files / 893 tests).
+
+- **Implemented; verified:** V10 F11 — Platform Admin Recruiter Account
+  Lock/Terminate → Company Responsibility Recovery (BR-46–BR-53): canonical
+  Platform Admin `User.status` lifecycle remains independent from Company
+  Manager `CompanyMember(RECRUITER).status` lifecycle. Platform lock/terminate
+  still commits immediately under V1, revokes sessions, retains identity, and
+  does not mutate CompanyMember, Job team, Application Assignee/status, or
+  `submittedCvSnapshot`. Existing CM `force-reassign` recovers non-terminal
+  Applications from outgoing `User = LOCKED | TERMINATED` across
+  `PUBLISHED`/`CLOSED`/`EXPIRED`; existing replace-Primary/remove-Supporting
+  surfaces now also recognize persisted Platform User ineligibility as the
+  only CM recovery context that opens V6 unfinished `DRAFT`/
+  `PENDING_APPROVAL` team mutation, while normal gates remain unchanged.
+  Platform-ineligible outgoing Primary must leave the active team; replacement
+  retains same-company/current-team/current-eligibility rules and uses shared
+  H3 Company/User coordination at commit. Terminal Applications retain final
+  Assignee; recovery does not synchronize CompanyMember lifecycle or change
+  Company-lock semantics. No endpoint, field, collection, counter, history,
+  queue, worker, or automatic/random replacement was added. Focused recovery
+  coverage in
+  `test/application/v10-h2-platform-admin-user-lifecycle-eligibility.test.js`
+  expanded from 8 to 21 tests; focused V10 recovery baseline passed 3 files /
+  50 tests, and adjacent V1/V3/V6/H3 regression baseline passed 9 files / 83
+  tests. The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 103 files / 887 tests).
 
 - **Implemented; verified:** V10 Final Acceptance finding H2 — Platform Admin
   User account lifecycle vs Application eligibility boundary (V1 F10/F11; V3
@@ -182,9 +229,9 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   Pipeline authority. After `User.status` leaves `ACTIVE`, continuous Assignee
   eligibility is lost and H3 TX-02 User acquires keep stale Assign/Reassign/
   Pipeline from committing; Application mutation that commits first is retained
-  and subsequent processing freezes.   Full Platform Admin eligibility-loss →
-  Company Manager responsibility-recovery orchestration is explicitly not
-  claimed. Focused regressions in
+  and subsequent processing freezes. The later V10 F11 extension above closes
+  the Company Manager responsibility-recovery orchestration that H2 alone did
+  not claim. Focused regressions in
   `test/application/v10-h2-platform-admin-user-lifecycle-eligibility.test.js`
   (8 tests). Related V1 lock/terminate + H3 TX-02 suites passed together
   (4 files / 36 tests). No product-behavior code change was required beyond

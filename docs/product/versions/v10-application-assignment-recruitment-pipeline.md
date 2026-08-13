@@ -27,6 +27,7 @@ V10 cho phép:
 * Primary Recruiter theo dõi toàn bộ `Application` của các Job mình đang quản lý;
 * các `Application` đã tồn tại tiếp tục được xử lý kể cả khi Job đã `CLOSED` hoặc `EXPIRED`;
 * hệ thống theo dõi current workload của Recruiter theo các non-terminal `Application` hiện đang được giao.
+* Company Manager phục hồi recruitment responsibility sau khi Platform Admin lock hoặc terminate Platform User của một Recruiter, trong khi Platform User lifecycle và Recruiter membership lifecycle vẫn độc lập.
 
 Từ V10, active responsibility của một Recruiter là hợp của hai dimension độc lập:
 
@@ -71,6 +72,8 @@ V10 không tạo lại `Application` và không thay đổi bản chất của `
 * Bảo vệ Job đã có Application khỏi hard delete.
 * Bảo vệ business state trước các thao tác cạnh tranh trên cùng `Application`.
 * Tích hợp non-terminal Application responsibility vào Recruiter lifecycle và Recruitment Team handoff boundary.
+* Platform Admin User lock/terminate làm Recruiter mất eligibility nhưng giữ nguyên persisted recruitment responsibility.
+* Company Manager recovery handoff và Recruitment Team recovery sau Platform User lock/terminate của một Recruiter.
 
 ### 2.2. Ngoài phạm vi
 
@@ -207,16 +210,31 @@ Company Manager:
 * chỉ được dùng quyền này cho recovery handoff khi current Assignee đã mất eligibility hoặc pre-lifecycle handoff thuộc một verified lifecycle/team operation sắp làm current Assignee mất eligibility;
 * không trở thành Assigned Recruiter thông qua administrative forced reassignment;
 * không có normal First Assign/Reassign/Take over authority hoặc quyền workload balancing tùy ý;
-* không được thay đổi Recruitment Status của Application với tư cách Company Manager.
+* không được thay đổi Recruitment Status của Application với tư cách Company Manager;
+* là actor Company-side phục hồi Job-team và non-terminal Application responsibility sau khi Platform Admin làm Platform User của Recruiter mất eligibility;
+* chỉ được recovery trong đúng Company mình quản lý và không được dùng recovery context để workload balancing tùy ý.
 
 ### 4.7. Platform Admin
+
+Platform Admin chỉ quản lý generic Platform User lifecycle theo authority đã có từ V1.
+
+Khi Platform Admin lock hoặc terminate User của một Recruiter:
+
+* User lifecycle được phép hoàn tất ngay cả khi Recruiter còn Job/Application responsibility;
+* mọi phiên của User bị thu hồi và identity được giữ theo V1;
+* CompanyMember lifecycle, Recruitment Team và Application state không tự thay đổi;
+* persisted responsibility chỉ còn là retained reference, không cấp processing authority khi User không còn `ACTIVE`.
 
 Platform Admin không:
 
 * Assign Application;
 * Reassign Application;
 * Take over Application;
-* trực tiếp cập nhật Recruitment Status của Application.
+* administrative forced reassignment hoặc chọn replacement Recruiter;
+* trực tiếp cập nhật Recruitment Status của Application;
+* transfer Primary responsibility, remove Supporting Recruiter hoặc tự động workload balance.
+
+Platform Admin không trở thành Company-side recruitment actor thông qua account lifecycle action.
 
 ### 4.8. Unassigned Application
 
@@ -448,6 +466,26 @@ Assigned Recruiter mới nhận trách nhiệm hiện tại
   ↓
 Recruitment Status không thay đổi
 ```
+
+Nếu Platform Admin lock hoặc terminate Platform User của một Recruiter đang giữ responsibility:
+
+```text
+Platform Admin hoàn tất User ACTIVE → LOCKED | TERMINATED theo V1
+  ↓
+CompanyMember, Job team và Application references được giữ nguyên
+  ↓
+Recruiter mất processing eligibility ngay khi User không còn ACTIVE
+  ↓
+Company Manager của đúng Company xác định current active responsibility
+  ↓
+Handoff mọi non-terminal Application cần recovery sang eligible team Recruiter
+  ↓
+Transfer Primary hoặc remove Supporting khỏi active Recruitment Team khi cần
+  ↓
+Recruitment operations tiếp tục với replacement Recruiter
+```
+
+Recovery không tự thay đổi `CompanyMember.status`. Nếu Company Manager sau đó muốn lock hoặc terminate Recruiter membership, operation đó tiếp tục dùng lifecycle riêng của V3/V6/V10.
 
 Job chuyển sang `CLOSED` hoặc `EXPIRED` không làm dừng xử lý các Application đã tồn tại.
 
@@ -1161,6 +1199,99 @@ Không được suy diễn current workload thành:
 
 ---
 
+## F11 — Phục hồi responsibility sau Platform User lock/terminate
+
+### Actor
+
+* Platform Admin đối với generic Platform User lifecycle.
+* Company Manager của Company sở hữu recruitment responsibility đối với recovery.
+
+### Mục tiêu
+
+Bảo đảm Platform Admin có thể lock hoặc terminate User ngay theo V1 mà không xử lý nghiệp vụ tuyển dụng, đồng thời Company Manager có thể đưa các Job/Application responsibility đang bị freeze về trạng thái tiếp tục xử lý được.
+
+### Tiền điều kiện
+
+* Target User là `COMPANY_STAFF` có CompanyMember role `RECRUITER`.
+* Platform Admin thực hiện một User lifecycle transition hợp lệ theo V1.
+* Recovery chỉ áp dụng trong Company mà Company Manager đang quản lý.
+* Replacement Recruiter thỏa current eligibility và Recruitment Team eligibility của responsibility tương ứng.
+
+### Luồng chính — Platform User lifecycle
+
+1. Platform Admin lock hoặc terminate target User theo V1.
+2. Operation không bị block bởi Primary, Supporting hoặc non-terminal Application responsibility còn tồn tại.
+3. User chuyển sang `LOCKED` hoặc `TERMINATED` và toàn bộ session bị thu hồi theo V1.
+4. `CompanyMember.status`, Job Primary, Supporting Team, Application Assignee, Application status và `submittedCvSnapshot` được giữ nguyên.
+5. Ngay khi User không còn `ACTIVE`, Recruiter không còn processing eligibility và không được nhận responsibility mới.
+
+### Luồng chính — Company responsibility recovery
+
+1. Company Manager xác định active responsibility từ current persisted relationships:
+
+   ```text
+   active Job-team responsibility
+   UNION
+   non-terminal Application responsibility
+   ```
+2. Mọi non-terminal Application đang assign cho outgoing Recruiter được handoff trực tiếp `A → B` sang eligible Recruiter của đúng Company và current Recruitment Team của Job, không phụ thuộc Job đang `PUBLISHED`, `CLOSED` hay `EXPIRED`.
+3. Nếu outgoing Recruiter là Primary của active Job, Company Manager chuyển Primary sang replacement hợp lệ.
+4. Nếu outgoing Recruiter là Supporting của active Job, Company Manager chỉ remove outgoing Recruiter sau khi required Application handoff trên Job đã hoàn tất.
+5. Terminal Application giữ final Assignee và không block recovery completion.
+6. Recovery không tự thay đổi CompanyMember lifecycle state.
+
+### Kết quả
+
+* Platform User lifecycle đã hoàn tất độc lập theo V1.
+* Persisted responsibility không bị mất hoặc tự động rewrite bởi Platform Admin.
+* Outgoing Recruiter không còn processing authority khi User ineligible.
+* Current non-terminal responsibility cần tiếp tục xử lý được chuyển sang eligible replacement bởi Company Manager.
+* Application giữ nguyên status, Candidate, Job, source và `submittedCvSnapshot`.
+* Không xuất hiện intermediate Unassigned hoặc synthetic replacement.
+
+### Trường hợp từ chối
+
+* Platform Admin cố chọn replacement, handoff Application, mutate Recruitment Status hoặc thay Recruitment Team.
+* Company Manager cố recovery resource ngoài Company mình quản lý.
+* Target Recruiter cross-company, off-team hoặc không còn current eligibility.
+* Client-declared company, outgoing identity hoặc recovery reason không được current persisted relationships chứng minh.
+* Recovery được dùng cho arbitrary workload balancing khi outgoing Recruiter vẫn fully eligible và không có trusted lifecycle/team context.
+
+### Business Rules liên quan
+
+* `BR-07`
+* `BR-08`
+* `BR-10`
+* `BR-15`
+* `BR-16`
+* `BR-17`
+* `BR-27`
+* `BR-28`
+* `BR-36`
+* `BR-37`
+* `BR-38`
+* `BR-40`
+* `BR-42`
+* `BR-46`
+* `BR-47`
+* `BR-48`
+* `BR-49`
+* `BR-50`
+* `BR-51`
+* `BR-52`
+* `BR-53`
+
+### Không thuộc chức năng này
+
+* Automatic recovery hoặc random replacement.
+* Platform Admin Application-management authority.
+* Đồng bộ User lifecycle với CompanyMember lifecycle.
+* Notification, background worker, recovery queue hoặc history.
+* Company-lock recovery.
+* Global transaction cho toàn bộ responsibility.
+
+---
+
 # 10. Business Rules
 
 ## BR-01 — V10 tiếp nhận Application từ V9
@@ -1512,7 +1643,7 @@ Job ended không suy ra Application responsibility ended.
 
 ---
 
-## BR-28 — Mất eligibility yêu cầu handoff trách nhiệm
+## BR-28 — Mất eligibility và lifecycle boundary
 
 Khi một Recruiter đang chịu trách nhiệm cho non-terminal Application sắp mất hoặc đã mất operational eligibility:
 
@@ -1521,7 +1652,7 @@ Khi một Recruiter đang chịu trách nhiệm cho non-terminal Application s�
 * responsibility phải được handoff cho Recruiter hợp lệ khác trước khi Application có thể tiếp tục pipeline;
 * các thao tác quản trị Recruiter/Recruitment Team không được coi Job `CLOSED` hoặc `EXPIRED` là lý do để bỏ qua active Application responsibility.
 
-Khi Company Manager yêu cầu `LOCKED` hoặc `TERMINATED` cho Recruiter:
+Khi Company Manager yêu cầu `LOCKED` hoặc `TERMINATED` cho Recruiter membership:
 
 1. resolve cả active Job-team responsibility và mọi non-terminal Application responsibility của Recruiter;
 2. hoàn tất required transfer/handoff;
@@ -1535,6 +1666,17 @@ nonTerminalAssignedApplicationCount == 0
 ```
 
 Nếu còn bất kỳ active responsibility nào hoặc không có replacement hợp lệ, lifecycle completion phải bị block. Handoff từng Job/Application đã commit hợp lệ có thể được giữ; V10 không yêu cầu global all-or-nothing transaction.
+
+Final zero-active-responsibility guard trên chỉ áp dụng cho Company Manager initiated CompanyMember lifecycle. Nó không áp dụng cho generic Platform User lifecycle của V1.
+
+Khi Platform Admin lock hoặc terminate `User` của Recruiter:
+
+1. User lifecycle có thể commit trước dù current active responsibility còn tồn tại;
+2. persisted CompanyMember, Job-team và Application responsibility references được giữ;
+3. processing bị freeze ngay khi `User.status != ACTIVE`;
+4. Company Manager sau đó recovery responsibility từ current persisted relationships.
+
+Platform User lifecycle không chờ pre-handoff và không chạy dual zero-responsibility guard. Application/team mutation commit hợp lệ trước Platform lifecycle được giữ; nếu Platform lifecycle commit trước, stale assignment/handoff/pipeline dựa trên `User.ACTIVE` cũ phải fail.
 
 Operation làm Recruiter rời Recruitment Team cũng phải handoff mọi non-terminal Application đang assign cho Recruiter trên Job đó trước khi team removal commit. Đổi Primary/Supporting nhưng Recruiter vẫn còn trong team và vẫn fully eligible không tự tạo handoff requirement.
 
@@ -1725,11 +1867,17 @@ Platform Admin không được:
 * Assign;
 * Reassign;
 * Take over;
-* cập nhật Recruitment Status.
+* administrative forced reassignment hoặc chọn replacement Recruiter;
+* cập nhật Recruitment Status;
+* transfer Primary responsibility;
+* remove Recruiter khỏi Recruitment Team;
+* tự động workload balance.
 
 Company Manager và Platform Admin không được trở thành Assigned Recruiter thông qua V10 nếu không đồng thời là một Recruiter hợp lệ theo business model hiện hành.
 
 Platform Admin tiếp tục không có normal Application assignment, administrative handoff hoặc pipeline authority. Platform Admin lock Company chỉ kích hoạt Company-lock freeze semantics của V10, không trực tiếp chọn Assignee hay mutate Application.
+
+Generic Platform User lock/terminate cũng không cấp Platform Admin bất kỳ responsibility-transfer authority nào. Company Manager của đúng Company là actor recovery sau khi User lifecycle action làm một Recruiter riêng lẻ mất eligibility.
 
 ---
 
@@ -1768,6 +1916,106 @@ Các Application từ Recruiter Invitation không thuộc V10.
 `INTERVIEW_SCHEDULED` và `INTERVIEW_COMPLETED` trong V10 chỉ xác định Recruitment Status hiện tại của Application.
 
 V10 không yêu cầu một Interview Schedule entity, lịch hẹn cụ thể hoặc Candidate response tương ứng.
+
+---
+
+## BR-46 — Platform User lifecycle và Recruiter membership lifecycle độc lập
+
+Platform Admin quản lý `User.status` theo generic Platform User lifecycle của V1.
+
+Company Manager quản lý `CompanyMember(RECRUITER).status` theo Recruiter membership lifecycle của V3/V6/V10.
+
+Platform Admin chuyển User sang `LOCKED` hoặc `TERMINATED` không tự chuyển CompanyMember sang cùng trạng thái và không được coi là Company Manager initiated Recruiter lifecycle completion.
+
+---
+
+## BR-47 — Platform User lifecycle không bị responsibility block
+
+Platform Admin được hoàn tất canonical User lock/terminate kể cả khi Recruiter đang giữ Primary, Supporting hoặc non-terminal Application responsibility.
+
+Operation phải giữ nguyên V1 account transition, session revocation, identity retention và các account invariant hiện hữu. Active Recruiter Responsibility không tạo pre-handoff hoặc final-zero guard cho generic Platform User lifecycle.
+
+---
+
+## BR-48 — Platform User lifecycle giữ persisted recruitment responsibility
+
+Platform Admin User lock/terminate không tự mutate:
+
+* `CompanyMember.status`;
+* Job Primary;
+* Job Supporting Team;
+* `Application.assignedRecruiterCompanyMemberId`;
+* `Application.status`;
+* `submittedCvSnapshot`.
+
+Không Unassign, auto reassign, tạo synthetic replacement hoặc tự Reject/Withdraw Application. Persisted responsibility sau eligibility loss là retained responsibility reference, không phải processing authority.
+
+---
+
+## BR-49 — Platform User eligibility loss freeze và stale-operation boundary
+
+Ngay khi `User.status != ACTIVE`, Recruiter:
+
+* không được tiếp tục Recruitment Pipeline;
+* không được nhận First Assign;
+* không được nhận Reassign, Take over hoặc administrative handoff mới;
+* không được dựa vào persisted Assignee reference để tiếp tục processing.
+
+Nếu Platform User lifecycle commit trước, operation dựa trên eligibility cũ không được commit. Nếu Application mutation hợp lệ commit trước, mutation đó được giữ, Platform lifecycle vẫn có thể commit sau theo V1, và mọi processing tiếp theo của outgoing Recruiter bị freeze.
+
+---
+
+## BR-50 — Company Manager recovery derive từ current active responsibility
+
+Sau Platform User lock/terminate của một Recruiter, Company Manager của đúng Company là actor phục hồi recruitment responsibility.
+
+Recovery scope được derive từ:
+
+```text
+active Job-team responsibility theo V6
+UNION
+non-terminal Application responsibility theo V10
+```
+
+Application responsibility không được filter bằng Job status. `PUBLISHED`, `CLOSED` và `EXPIRED` đều phải được xét nếu Application còn non-terminal và đang assign cho outgoing Recruiter.
+
+---
+
+## BR-51 — Recovery Job-team responsibility cho Platform-ineligible outgoing Recruiter
+
+Nếu outgoing Recruiter là Primary của active Job, Company Manager được chuyển Primary sang replacement hợp lệ theo Recruitment Team foundation dù outgoing User đã `LOCKED` hoặc `TERMINATED`.
+
+Replacement phải cùng Company, có role Recruiter, có CompanyMember `ACTIVE`, User `ACTIVE`, Company operational và thỏa current Recruitment Team eligibility của transfer flow.
+
+Nếu outgoing Recruiter là Supporting, Company Manager được remove outgoing Recruiter khỏi active Recruitment Team sau khi mọi required non-terminal Application responsibility trên Job đã được handoff. Recovery không yêu cầu outgoing User trở lại `ACTIVE` chỉ để transfer/remove.
+
+---
+
+## BR-52 — Recovery non-terminal Application responsibility
+
+Company Manager được handoff trực tiếp mọi non-terminal Application của outgoing Platform-ineligible Recruiter:
+
+```text
+ASSIGNED(A) → ASSIGNED(B)
+```
+
+với A có `User.status = LOCKED | TERMINATED` và B là current eligible Recruiter của đúng Company, đúng Recruitment Team của Job.
+
+Handoff giữ nguyên Recruitment Status, Candidate, Job, source và `submittedCvSnapshot`; không có intermediate Unassigned. Terminal Application giữ final Assignee, không bị rewrite và không block recovery completion.
+
+Recovery không yêu cầu `CompanyMember.status` của A phải là `LOCKED` hoặc `TERMINATED`.
+
+---
+
+## BR-53 — Recovery authority, tenant boundary và lifecycle non-synchronization
+
+Company Manager chỉ được recovery responsibility trong Company mình quản lý và không có normal Pipeline hoặc arbitrary workload-balancing authority.
+
+Target phải thuộc đúng Company, đúng current Recruitment Team và thỏa current V10 eligibility. Company, outgoing Recruiter và recovery context phải được chứng minh từ persisted relationships; client-supplied identifiers hoặc reason không tự tạo authority.
+
+Recovery completion không tự chuyển `CompanyMember.status` chỉ vì User đã `LOCKED` hoặc `TERMINATED`. Company Manager muốn lock/terminate membership sau đó phải dùng canonical CompanyMember lifecycle riêng.
+
+Company lock tiếp tục là special case: giữ assignments, không same-company reassign, không Unassign và freeze processing. Recovery trong BR-50–BR-52 chỉ áp dụng khi một Recruiter riêng lẻ mất Platform User eligibility trong khi Company vẫn operational.
 
 ---
 
@@ -1821,12 +2069,15 @@ Assign/Reassign không tự động tạo Recruitment Status transition.
 | Assign lần đầu                     | Primary Recruiter  | Unassigned non-terminal Application của Job     | Assignee mới hợp lệ                                   |
 | Reassign                           | Primary Recruiter  | Assigned non-terminal Application của Job       | Assignee mới hợp lệ                                   |
 | Take over                          | Primary Recruiter  | Non-terminal Application đang thuộc Supporting  | Primary trở thành Assignee                            |
-| Administrative forced reassignment | Company Manager    | Non-terminal Application thuộc Company của mình | Recovery hoặc verified pre-lifecycle handoff; target hợp lệ |
+| Administrative forced reassignment | Company Manager    | Non-terminal Application thuộc Company của mình | Recovery, gồm outgoing Platform User ineligible, hoặc verified pre-lifecycle handoff; target hợp lệ |
+| Recovery Primary responsibility sau Platform User lock/terminate | Company Manager | Active Job thuộc Company của mình | Replacement hợp lệ; không yêu cầu outgoing User ACTIVE |
+| Recovery remove Supporting sau Platform User lock/terminate | Company Manager | Active Job thuộc Company của mình | Required Application handoff đã hoàn tất; không yêu cầu outgoing User ACTIVE |
 | Cập nhật Recruitment Status        | Assigned Recruiter | Application đang assign cho chính actor         | Actor còn continuous eligibility và transition hợp lệ |
 | Xem My Applications Recruiter      | Recruiter          | Application đang assign cho chính actor         | Primary hoặc Supporting                               |
 | Xem Application của Candidate      | Candidate          | Application thuộc chính Candidate               | Không truy cập Application của Candidate khác         |
 | Withdraw                           | Candidate          | Application thuộc chính Candidate               | Application còn `APPLIED`                             |
 | Replace Submitted CV               | Candidate          | Application thuộc chính Candidate               | Giữ nguyên điều kiện V9                               |
+| Lock/terminate Platform User        | Platform Admin     | User thuộc canonical V1 account lifecycle       | Không responsibility guard hoặc recruitment mutation |
 | Assign/Reassign/Status update      | Platform Admin     | Không có                                        | Không được phép trong V10                             |
 
 Primary có quyền xem toàn bộ Application của Job nhưng không mặc nhiên có quyền trực tiếp thay Recruitment Status.
@@ -1836,6 +2087,8 @@ Supporting Recruiter chỉ được trực tiếp xử lý Application đang ass
 Company Manager có administrative handoff authority nhưng không có ordinary pipeline-processing authority.
 
 Company Manager cũng không có ordinary First Assign/Reassign/Take over hoặc workload-balancing authority. Pre-lifecycle handoff chỉ được authorize trong trusted context của chính eligibility-losing lifecycle/team operation; một client-declared reason không tự tạo quyền này.
+
+Platform Admin User lifecycle authority không bao gồm replacement selection, Application handoff, Recruitment Team mutation hoặc Recruitment Status mutation. Responsibility recovery sau Platform User eligibility loss chỉ thuộc Company Manager của đúng Company.
 
 Authorization không được suy ra từ identifier do client tự khai báo nếu identifier đó mâu thuẫn với ownership và role thực tế.
 
@@ -1869,6 +2122,8 @@ Các nguyên tắc:
 6. Recruiter không được dùng relationship với một Job của Company này để truy cập Application của Job thuộc Company khác.
 7. Candidate ownership là user-scoped và độc lập với Company membership; Candidate chỉ xem Application của chính mình.
 8. Company identity do client cung cấp không tự tạo ra quyền truy cập.
+9. Platform Admin account lifecycle action không tạo Company-side recruitment authority.
+10. Company Manager recovery phải resolve Company, outgoing Recruiter và target Recruiter từ current persisted relationships trong cùng tenant.
 
 Cross-tenant Assign, Reassign, Take over hoặc administrative forced reassignment đều bị cấm.
 
@@ -1930,10 +2185,20 @@ Các invariant sau phải luôn được bảo vệ trong V10:
 50. Recruiter không được rời Recruitment Team nếu required Application handoff trên Job đó chưa hoàn tất.
 51. Company lock giữ persisted assignment, freeze processing và không tạo Unassigned/synthetic replacement.
 52. Assignment/handoff cạnh tranh với lifecycle completion không được tạo `LOCKED`/`TERMINATED` Recruiter đang giữ active responsibility.
+53. Platform User lifecycle và CompanyMember Recruiter lifecycle là hai lifecycle độc lập.
+54. Generic Platform User lock/terminate không bị block bởi Job/Application responsibility và không chạy CompanyMember final-zero guard.
+55. Platform User lock/terminate giữ CompanyMember, Job team, Application Assignee/status/snapshot references và thu hồi session theo V1.
+56. Outgoing Recruiter mất processing eligibility ngay khi User không còn `ACTIVE` dù persisted responsibility còn tồn tại.
+57. Company Manager của đúng Company là actor recovery sau Platform User eligibility loss; Platform Admin không xử lý responsibility.
+58. Recovery Application responsibility không filter theo Job `PUBLISHED`, `CLOSED` hoặc `EXPIRED`.
+59. Recovery target phải current eligible, cùng Company và thuộc current Recruitment Team của Job.
+60. Terminal Application giữ final Assignee và không block recovery.
+61. Recovery không tự đồng bộ `CompanyMember.status` với `User.status`.
+62. Company-lock freeze semantics không bị thay đổi bởi recovery của một Recruiter riêng lẻ.
 
-## 14.1. Recruiter lifecycle completion
+## 14.1. CompanyMember Recruiter lifecycle completion
 
-Đối với Company Manager request `LOCKED` hoặc `TERMINATED`, lifecycle completion phải dùng toàn bộ Active Recruiter Responsibility:
+Đối với Company Manager request `CompanyMember(RECRUITER).status → LOCKED | TERMINATED`, lifecycle completion phải dùng toàn bộ Active Recruiter Responsibility:
 
 ```text
 Active Recruiter Responsibility
@@ -1957,6 +2222,8 @@ nonTerminalAssignedApplicationCount == 0
 ```
 
 Nếu replacement không hợp lệ/không tồn tại hoặc bất kỳ responsibility nào vẫn còn, lifecycle completion bị block. Các transfer riêng lẻ đã commit hợp lệ không phải rollback chỉ vì một transfer khác thất bại.
+
+Boundary này không áp dụng cho Platform Admin request `User.status → LOCKED | TERMINATED`. Generic Platform User lifecycle được phép commit trước, giữ persisted responsibility references, làm processing freeze và để Company Manager recovery sau đó.
 
 ## 14.2. Recruitment Team removal
 
@@ -2094,7 +2361,8 @@ V10 được coi là hoàn thành về mặt nghiệp vụ khi:
 * `F08` — Candidate My Applications được đáp ứng;
 * `F09` — Application tiếp tục được xử lý sau Job `CLOSED`/`EXPIRED`;
 * `F10` — Current Workload được đáp ứng;
-* toàn bộ `BR-01` đến `BR-45` được đáp ứng;
+* `F11` — Platform Admin User lifecycle independence và Company responsibility recovery được đáp ứng;
+* toàn bộ `BR-01` đến `BR-53` được đáp ứng;
 * chỉ các Recruitment Status transition được định nghĩa mới được hỗ trợ;
 * Assignment lifecycle không xuất hiện Unassign;
 * continuous Assignee eligibility được bảo vệ;
@@ -2106,6 +2374,13 @@ V10 được coi là hoàn thành về mặt nghiệp vụ khi:
 * Active Recruiter Responsibility được resolve trên cả active Job-team responsibility và non-terminal Application responsibility;
 * Recruiter lifecycle/team removal không bỏ lại non-terminal Application responsibility chưa handoff;
 * final `LOCKED`/`TERMINATED` guard bảo đảm cả hai responsibility count đều bằng zero;
+* final zero-responsibility guard chỉ áp dụng cho Company Manager initiated CompanyMember lifecycle, không block generic Platform User lifecycle;
+* Platform Admin lock/terminate giữ recruitment references, không mutate responsibility và vẫn giữ V1 session/account invariants;
+* processing freeze ngay khi outgoing User không còn `ACTIVE` và stale Application mutation không vượt qua eligibility loss đã commit;
+* Company Manager có thể recovery Primary, Supporting và mọi non-terminal Application responsibility từ Platform-ineligible outgoing Recruiter trong own Company;
+* recovery Application responsibility hoạt động độc lập với Job đang `PUBLISHED`, `CLOSED` hay `EXPIRED`;
+* terminal Application giữ final Assignee và không block recovery;
+* recovery không đồng bộ User lifecycle với CompanyMember lifecycle;
 * Company lock giữ assignment và freeze processing mà không reassign/unassign;
 * Candidate rights từ V9 không bị phá;
 * concurrent business operations không tạo stale overwrite;

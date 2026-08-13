@@ -29,7 +29,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
 | V8 | Job Discovery | PENDING |
 | V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
-| V10 | Phân công Application và Recruitment Pipeline | READY FOR IMPLEMENTATION |
+| V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
 | V11 | Conversation và Chat thuộc Application | PLANNED |
 | V12 | Interview Schedule | PLANNED |
 | V13 | Notification và phân phối realtime | PLANNED |
@@ -82,12 +82,12 @@ regression closure passed across F01–F10, BR-01–BR-46, and TX-01 after Slice
 approved Product/Data contracts; Slices 01–05 and Slice 06 Final Acceptance /
 Regression Closure are complete, including the recorded Application identity
 immutability remediation and required backend verification gate. V9 is
-`COMPLETED AND VERIFIED`. V10 has approved Product/Data contracts; Slices 01–04
-(Application persistence foundation; V9 compatibility + Job-retention
-compatibility; Unassigned Applications + Primary Application View; First Assign
-Application) are `IMPLEMENTED AND VERIFIED`. Subsequent V10 slices remain
-deferred by the approved slice order. V11 through V17 must not be
-implemented merely from their roadmap titles.
+`COMPLETED AND VERIFIED`. V10 Final Acceptance / regression closure passed
+across F01–F11, BR-01–BR-53, and TX-01–TX-05 after Slices 01–13, the F11
+Platform User lifecycle/recovery extension, and the Job-team responsibility
+writer remediation. The official backend gate passed with 104 test files / 893
+tests. V10 is `COMPLETED AND VERIFIED`. V11 through V17 must not be implemented
+merely from their roadmap titles.
 
 V10 canonical specification:
 
