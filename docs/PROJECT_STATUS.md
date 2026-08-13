@@ -77,8 +77,8 @@ on `CLOSED`/`EXPIRED`. The Slice 07 corrective foundation adds trusted internal
 pre-lifecycle handoff (`executeTrustedPreLifecycleApplicationHandoff`) for
 still-eligible Assignees that are verified subjects of an eligibility-losing
 operation, keeps public CM force-reassign recovery-only, and joins First Assign/
-Reassign/handoff target commits to the shared ACTIVE membership TX-02 acquire
-used by Job-team responsibility. Slice 08 extends existing Recruiter LOCK /
+Reassign/handoff target commits to the shared TX-02 multi-dimension Assignee
+eligibility acquires (Company + CompanyMember + User + Job team). Slice 08 extends existing Recruiter LOCK /
 TERMINATE so Active Recruiter Responsibility is the union of V6 Job-team
 responsibility and non-terminal Application responsibility
 (PUBLISHED/CLOSED/EXPIRED), reuses V6 forced-transfer plus Slice 07 trusted
@@ -166,6 +166,65 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Final Acceptance finding H2 — Platform Admin
+  User account lifecycle vs Application eligibility boundary (V1 F10/F11; V3
+  User.status ↔ CompanyMember.status independence; V10 BR-08/BR-28/BR-42;
+  PI-14/PI-17; TX-02 after H3): reconciled acceptance wording that would have
+  blocked generic Platform Admin `lockAccount`/`terminateAccount` while a
+  Recruiter still held Job/Application responsibility. Canonical owner remains
+  Platform Admin User lifecycle in `platform-admin.service.js`; PI-24 / TX-05
+  final zero-responsibility continues to apply only to Company Manager Recruiter
+  CompanyMember LOCK/TERMINATE. Platform lock/terminate may complete with
+  outstanding Application responsibility, must not mutate Application
+  assignment/status/snapshot or Job Recruitment Team / CompanyMember, and must
+  not gain First Assign / Reassign / Take over / administrative handoff /
+  Pipeline authority. After `User.status` leaves `ACTIVE`, continuous Assignee
+  eligibility is lost and H3 TX-02 User acquires keep stale Assign/Reassign/
+  Pipeline from committing; Application mutation that commits first is retained
+  and subsequent processing freezes.   Full Platform Admin eligibility-loss →
+  Company Manager responsibility-recovery orchestration is explicitly not
+  claimed. Focused regressions in
+  `test/application/v10-h2-platform-admin-user-lifecycle-eligibility.test.js`
+  (8 tests). Related V1 lock/terminate + H3 TX-02 suites passed together
+  (4 files / 36 tests). No product-behavior code change was required beyond
+  H3 coordination plus ownership/regression proof. The official backend gate
+  passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 103
+  files / 874 tests).
+
+- **Implemented; verified:** V10 Final Acceptance finding H3 — TX-02 multi-dimension
+  Assignee eligibility coordination (BR-07/BR-08/BR-28/BR-36–BR-38; TX-02):
+  Application First Assign / Reassign / Take over / administrative recovery &
+  pre-lifecycle handoff / Recruitment Pipeline commit paths now serialize against
+  eligibility-losing writers on Company, CompanyMember, User, and Job Recruitment
+  Team via shared conditional acquires in `assertAssigneeEligibleAtAssignmentCommit`
+  (Job-service helpers). Company lock and generic User lifecycle still do not
+  reassign/unassign Applications; Recruiter LOCK/TERMINATE final-zero-guard and
+  team-removal outstanding-responsibility invariants remain. Deterministic race
+  regressions in `test/application/v10-tx02-eligibility-coordination.test.js`
+  (14 tests). Focused V10/V6 TX-02 related suites passed 9 files / 142 tests.
+  The official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 102
+  files / 866 tests).
+
+- **Implemented; verified:** V10 Final Acceptance finding H1 — Application-scoped
+  `submittedCvSnapshot` Preview/Download (F06–F08; BR-31): authenticated delivery
+  of the persisted snapshot PDF via `file.service` + Application submitted-CV
+  restricted storage, without exposing `pdfFile.storageKey` on normal Application
+  projections and without falling back to live CandidateCV. Candidate owner
+  routes `GET /api/candidate/applications/:applicationId/submitted-cv/preview|download`;
+  current Primary routes
+  `GET /api/jobs/:jobId/applications/:applicationId/submitted-cv/preview|download`;
+  current Assignee routes
+  `GET /api/jobs/my-applications/:applicationId/submitted-cv/preview|download`.
+  Peer Candidate, non-Primary/non-Assignee Recruiter, cross-tenant, Company
+  Manager, and Platform Admin are denied; reads do not mutate Application,
+  snapshot, CandidateCV, Job, Assignee, or `version`. Focused coverage in
+  `test/application/v10-submitted-cv-snapshot-delivery.test.js` (9 tests). The
+  official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 101
+  files / 852 tests).
 
 - **Implemented; verified:** V10 Slice 13 — Candidate My Applications (F08, F09
   partial; BR-20, BR-23, BR-25–BR-27, BR-30–BR-32, BR-41): owner-scoped read

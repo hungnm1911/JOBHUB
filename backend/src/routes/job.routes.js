@@ -17,6 +17,8 @@ import {
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
 import {
+  downloadPrimaryJobApplicationSubmittedCvHandler,
+  downloadRecruiterMyApplicationSubmittedCvHandler,
   firstAssignApplicationHandler,
   forceReassignApplicationHandler,
   getManagedJobPipelineWorkspaceHandler,
@@ -24,6 +26,8 @@ import {
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
   listRecruiterMyApplicationsHandler,
+  previewPrimaryJobApplicationSubmittedCvHandler,
+  previewRecruiterMyApplicationSubmittedCvHandler,
   reassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
 } from "../controllers/application.controller.js";
@@ -72,6 +76,20 @@ router.get(
 );
 
 router.get(
+  "/my-applications/:applicationId/submitted-cv/preview",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  previewRecruiterMyApplicationSubmittedCvHandler,
+);
+
+router.get(
+  "/my-applications/:applicationId/submitted-cv/download",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  downloadRecruiterMyApplicationSubmittedCvHandler,
+);
+
+router.get(
   "/:jobId",
   authenticateAccess,
   authorizeCompanyStaffBusinessAccess,
@@ -91,6 +109,20 @@ router.get(
   authenticateAccess,
   authorizeRecruiterBusinessAccess,
   listPrimaryJobApplicationsHandler,
+);
+
+router.get(
+  "/:jobId/applications/:applicationId/submitted-cv/preview",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  previewPrimaryJobApplicationSubmittedCvHandler,
+);
+
+router.get(
+  "/:jobId/applications/:applicationId/submitted-cv/download",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  downloadPrimaryJobApplicationSubmittedCvHandler,
 );
 
 router.get(

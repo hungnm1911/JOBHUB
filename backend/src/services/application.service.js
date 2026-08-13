@@ -29,6 +29,9 @@ import {
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
 import {
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
+  acquireActiveUserForAssigneeEligibilityTx,
+  acquireJobTeamMembershipForAssigneeEligibilityTx,
+  acquireOperationalCompanyForAssigneeEligibilityTx,
   isJobPubliclyEligible,
   isOwningCompanyActiveForPublicEligibility,
   toPublicJob,
@@ -1137,9 +1140,11 @@ const assertAssigneeEligibleForJobAssignment = async ({
   return { membership, user, company };
 };
 
-// TX-02: assignment/handoff target eligibility at commit, serialized against
-// Recruiter lifecycle completion via the same ACTIVE membership acquire used by
-// Job-team responsibility assignment.
+// TX-02: assignment/handoff/Pipeline eligibility at commit. Canonical Assignee
+// eligibility depends on Company + CompanyMember + User + Job team; serialize
+// against eligibility-losing writers on each dimension via conditional acquires.
+// Lock order Company → CompanyMember → User → Job matches team-removal /
+// Recruiter LOCK writers (CompanyMember before Job) to avoid deadlock.
 const assertAssigneeEligibleAtAssignmentCommit = async ({
   assigneeCompanyMemberId,
   job,
@@ -1150,6 +1155,18 @@ const assertAssigneeEligibleAtAssignmentCommit = async ({
     job,
     session,
   });
+
+  const stillOperationalCompany =
+    await acquireOperationalCompanyForAssigneeEligibilityTx({
+      companyId: job.companyId,
+      session,
+    });
+
+  if (!stillOperationalCompany) {
+    throw new AppError(409, "Owning Company is not operational", {
+      field: "companyId",
+    });
+  }
 
   const stillActiveMembership =
     await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
@@ -1165,7 +1182,37 @@ const assertAssigneeEligibleAtAssignmentCommit = async ({
     });
   }
 
-  return assigneeContext;
+  const stillActiveUser = await acquireActiveUserForAssigneeEligibilityTx({
+    userId: assigneeContext.membership.userId,
+    session,
+  });
+
+  if (!stillActiveUser) {
+    throw new AppError(409, "Assignee User must be ACTIVE", {
+      field: "assigneeCompanyMemberId",
+    });
+  }
+
+  const stillOnTeam = await acquireJobTeamMembershipForAssigneeEligibilityTx({
+    jobId: job._id,
+    companyId: job.companyId,
+    assigneeCompanyMemberId: assigneeContext.membership._id,
+    session,
+  });
+
+  if (!stillOnTeam) {
+    throw new AppError(
+      409,
+      "Assignee must be the current Primary or Supporting Recruiter of the Job",
+      { field: "assigneeCompanyMemberId" },
+    );
+  }
+
+  return {
+    membership: stillActiveMembership,
+    user: stillActiveUser,
+    company: stillOperationalCompany,
+  };
 };
 
 // BR-07 / BR-28: current Assignee operational eligibility for recovery handoff
@@ -2360,8 +2407,8 @@ const updateApplicationRecruitmentPipelineStatus = async ({
       }
 
       // BR-08 / TX-02: stored assignee does not authorize processing; continuous
-      // eligibility (company/team/role/member/user + Company operational) and
-      // ACTIVE membership acquire must hold at commit.
+      // eligibility across Company/CompanyMember/User/Job-team must hold at
+      // commit via shared TX-02 acquires.
       assigneeContext = await assertAssigneeEligibleAtAssignmentCommit({
         assigneeCompanyMemberId: context.membership._id,
         job,
@@ -2679,6 +2726,292 @@ const downloadUploadedCandidateCvFile = (publicId) => {
     resourceType: CANDIDATE_CV_UPLOADED_STORAGE.RESOURCE_TYPE,
     deliveryType: CANDIDATE_CV_UPLOADED_STORAGE.DELIVERY_TYPE,
   });
+};
+
+const downloadSubmittedCvSnapshotFile = (publicId) => {
+  return downloadFileBuffer({
+    publicId,
+    resourceType: APPLICATION_SUBMITTED_CV_STORAGE.RESOURCE_TYPE,
+    deliveryType: APPLICATION_SUBMITTED_CV_STORAGE.DELIVERY_TYPE,
+  });
+};
+
+const sanitizeSubmittedCvSnapshotFileName = (
+  name,
+  fallback = "submitted-cv.pdf",
+) => {
+  const base =
+    typeof name === "string" && name.trim() !== ""
+      ? name.trim()
+      : fallback.replace(/\.pdf$/i, "");
+  const sanitized = base
+    .replace(/[^\w.\- ]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+
+  if (sanitized === "") {
+    return "submitted-cv.pdf";
+  }
+
+  return sanitized.toLowerCase().endsWith(".pdf")
+    ? sanitized
+    : `${sanitized}.pdf`;
+};
+
+/**
+ * Application-scoped snapshot PDF delivery (V10 H1 / F06–F08; BR-31).
+ * Reads only Application.submittedCvSnapshot.pdfFile — never live CandidateCV.
+ * Read-only: does not mutate Application, snapshot, CandidateCV, Job, or version.
+ */
+const buildSubmittedCvSnapshotPdfDelivery = async (application) => {
+  const snapshot = application.submittedCvSnapshot;
+
+  if (
+    snapshot?.pdfFile == null ||
+    typeof snapshot.pdfFile.storageKey !== "string" ||
+    snapshot.pdfFile.storageKey.trim() === ""
+  ) {
+    throw new AppError(409, "Application submitted CV snapshot is missing PDF", {
+      field: "submittedCvSnapshot",
+    });
+  }
+
+  let pdfBuffer;
+
+  try {
+    pdfBuffer = await downloadSubmittedCvSnapshotFile(
+      snapshot.pdfFile.storageKey,
+    );
+  } catch {
+    throw new AppError(502, "Failed to retrieve submitted CV snapshot PDF", {
+      field: "submittedCvSnapshot",
+    });
+  }
+
+  return {
+    buffer: pdfBuffer,
+    mimeType: snapshot.pdfFile.mimeType || "application/pdf",
+    fileName: sanitizeSubmittedCvSnapshotFileName(
+      snapshot.pdfFile.originalFileName,
+      sanitizeSubmittedCvSnapshotFileName(snapshot.name),
+    ),
+    sourceType: snapshot.sourceType,
+  };
+};
+
+const loadCandidateOwnedApplicationForSnapshotDelivery = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only access their own Applications",
+    );
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const application = await Application.findOne({
+    _id: applicationId,
+    candidateUserId,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  });
+
+  if (!application) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  return application;
+};
+
+const loadPrimaryManagedJobApplicationForSnapshotDelivery = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  clientCompanyId,
+}) => {
+  const { job } = await resolvePrimaryManagedJobContext({
+    actorUser,
+    jobId,
+    clientCompanyId,
+    actionLabel: "read the submitted CV snapshot of",
+  });
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const application = await Application.findById(applicationId);
+
+  if (
+    !application ||
+    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION ||
+    application.jobId.toString() !== job._id.toString()
+  ) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  return application;
+};
+
+const loadRecruiterMyApplicationForSnapshotDelivery = async ({
+  actorUser,
+  applicationId,
+  clientCompanyId,
+}) => {
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const application = await Application.findById(applicationId);
+
+  if (
+    !application ||
+    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+  ) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (
+    application.assignedRecruiterCompanyMemberId == null ||
+    application.assignedRecruiterCompanyMemberId.toString() !==
+      context.membership._id.toString()
+  ) {
+    throw new AppError(
+      403,
+      "Only the current Assigned Recruiter can read this Application submitted CV snapshot",
+      { field: "assignedRecruiterCompanyMemberId" },
+    );
+  }
+
+  const job = await Job.findById(application.jobId);
+
+  if (!job) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId: context.companyId,
+  });
+
+  return application;
+};
+
+const previewCandidateApplicationSubmittedCv = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+}) => {
+  const application = await loadCandidateOwnedApplicationForSnapshotDelivery({
+    candidateUserId,
+    actorUser,
+    applicationId,
+  });
+
+  return buildSubmittedCvSnapshotPdfDelivery(application);
+};
+
+const downloadCandidateApplicationSubmittedCv = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+}) => {
+  const application = await loadCandidateOwnedApplicationForSnapshotDelivery({
+    candidateUserId,
+    actorUser,
+    applicationId,
+  });
+
+  return buildSubmittedCvSnapshotPdfDelivery(application);
+};
+
+const previewPrimaryJobApplicationSubmittedCv = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  clientCompanyId,
+}) => {
+  const application =
+    await loadPrimaryManagedJobApplicationForSnapshotDelivery({
+      actorUser,
+      jobId,
+      applicationId,
+      clientCompanyId,
+    });
+
+  return buildSubmittedCvSnapshotPdfDelivery(application);
+};
+
+const downloadPrimaryJobApplicationSubmittedCv = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  clientCompanyId,
+}) => {
+  const application =
+    await loadPrimaryManagedJobApplicationForSnapshotDelivery({
+      actorUser,
+      jobId,
+      applicationId,
+      clientCompanyId,
+    });
+
+  return buildSubmittedCvSnapshotPdfDelivery(application);
+};
+
+const previewRecruiterMyApplicationSubmittedCv = async ({
+  actorUser,
+  applicationId,
+  clientCompanyId,
+}) => {
+  const application = await loadRecruiterMyApplicationForSnapshotDelivery({
+    actorUser,
+    applicationId,
+    clientCompanyId,
+  });
+
+  return buildSubmittedCvSnapshotPdfDelivery(application);
+};
+
+const downloadRecruiterMyApplicationSubmittedCv = async ({
+  actorUser,
+  applicationId,
+  clientCompanyId,
+}) => {
+  const application = await loadRecruiterMyApplicationForSnapshotDelivery({
+    actorUser,
+    applicationId,
+    clientCompanyId,
+  });
+
+  return buildSubmittedCvSnapshotPdfDelivery(application);
 };
 
 const loadEligibleCandidateCvForDirectApply = async ({
@@ -3140,6 +3473,9 @@ export {
   countNonTerminalApplicationsAssignedToRecruiterOnJob,
   deepCopyGeneratedContent,
   directApplyToJob,
+  downloadCandidateApplicationSubmittedCv,
+  downloadPrimaryJobApplicationSubmittedCv,
+  downloadRecruiterMyApplicationSubmittedCv,
   executeTrustedPreLifecycleApplicationHandoff,
   executeTrustedTeamRemovalApplicationHandoffs,
   findNonTerminalApplicationsAssignedToRecruiter,
@@ -3156,6 +3492,9 @@ export {
   listRecruiterMyApplications,
   loadEligibleCandidateCvForDirectApply,
   loadJobAcceptingDirectApplications,
+  previewCandidateApplicationSubmittedCv,
+  previewPrimaryJobApplicationSubmittedCv,
+  previewRecruiterMyApplicationSubmittedCv,
   reassignApplication,
   replaceSubmittedCv,
   updateApplicationRecruitmentPipelineStatus,

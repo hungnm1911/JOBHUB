@@ -1242,6 +1242,82 @@ const acquireActiveRecruiterMembershipForTeamResponsibilityTx = async ({
   );
 };
 
+// TX-02: serialize Application Assignee eligibility against Company operational
+// loss (e.g. Company lock). Conditional ACTIVE write conflicts with lock writers.
+const acquireOperationalCompanyForAssigneeEligibilityTx = async ({
+  companyId,
+  session,
+} = {}) => {
+  return Company.findOneAndUpdate(
+    {
+      _id: companyId,
+      approvalStatus: COMPANY_APPROVAL_STATUS.APPROVED,
+      operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
+    },
+    {
+      $set: {
+        operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
+// TX-02: serialize Application Assignee eligibility against User lifecycle loss
+// (generic Platform Admin lock/terminate). Does not mutate assignment/status.
+const acquireActiveUserForAssigneeEligibilityTx = async ({
+  userId,
+  session,
+} = {}) => {
+  return User.findOneAndUpdate(
+    {
+      _id: userId,
+      status: USER_STATUS.ACTIVE,
+    },
+    {
+      $set: {
+        status: USER_STATUS.ACTIVE,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
+// TX-02: serialize Application Assignee eligibility against Job Recruitment Team
+// mutations (Supporting removal / Primary leave-team). Noop tenant touch only.
+const acquireJobTeamMembershipForAssigneeEligibilityTx = async ({
+  jobId,
+  companyId,
+  assigneeCompanyMemberId,
+  session,
+} = {}) => {
+  return Job.findOneAndUpdate(
+    {
+      _id: jobId,
+      companyId,
+      $or: [
+        { primaryRecruiterCompanyMemberId: assigneeCompanyMemberId },
+        { supportingRecruiterCompanyMemberIds: assigneeCompanyMemberId },
+      ],
+    },
+    {
+      $set: {
+        companyId,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
 // Used by lock/terminate completion to preserve TX-02: a recruiter cannot be
 // LOCKED/TERMINATED while still having any active Primary/Supporting
 // responsibility on a job that hasn't ended (effective PUBLISHED or DRAFT or
@@ -2976,6 +3052,9 @@ const executeForcedSupportingRemoval = async ({
 
 export {
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
+  acquireActiveUserForAssigneeEligibilityTx,
+  acquireJobTeamMembershipForAssigneeEligibilityTx,
+  acquireOperationalCompanyForAssigneeEligibilityTx,
   approveAndPublishJob,
   addSupportingRecruiter,
   executeForcedPrimaryTransfer,

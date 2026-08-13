@@ -2,8 +2,10 @@ import express from "express";
 
 import {
   directApplyToJobHandler,
+  downloadCandidateApplicationSubmittedCvHandler,
   getCandidateMyApplicationHandler,
   listCandidateMyApplicationsHandler,
+  previewCandidateApplicationSubmittedCvHandler,
   replaceSubmittedCvHandler,
   withdrawApplicationHandler,
 } from "../controllers/application.controller.js";
@@ -172,6 +174,20 @@ router.get(
   authenticateAccess,
   authorizeCandidate,
   getCandidateMyApplicationHandler,
+);
+
+router.get(
+  "/applications/:applicationId/submitted-cv/preview",
+  authenticateAccess,
+  authorizeCandidate,
+  previewCandidateApplicationSubmittedCvHandler,
+);
+
+router.get(
+  "/applications/:applicationId/submitted-cv/download",
+  authenticateAccess,
+  authorizeCandidate,
+  downloadCandidateApplicationSubmittedCvHandler,
 );
 
 router.put(

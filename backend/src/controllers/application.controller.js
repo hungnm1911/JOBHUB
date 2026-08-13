@@ -1,5 +1,8 @@
 import {
   directApplyToJob,
+  downloadCandidateApplicationSubmittedCv,
+  downloadPrimaryJobApplicationSubmittedCv,
+  downloadRecruiterMyApplicationSubmittedCv,
   firstAssignApplication,
   forceReassignApplication,
   getCandidateMyApplication,
@@ -9,11 +12,27 @@ import {
   listManagedJobs,
   listPrimaryJobApplications,
   listRecruiterMyApplications,
+  previewCandidateApplicationSubmittedCv,
+  previewPrimaryJobApplicationSubmittedCv,
+  previewRecruiterMyApplicationSubmittedCv,
   reassignApplication,
   replaceSubmittedCv,
   updateApplicationRecruitmentPipelineStatus,
   withdrawApplication,
 } from "../services/application.service.js";
+
+const sendSubmittedCvSnapshotPdf = (response, delivery, disposition) => {
+  response.setHeader("Content-Type", delivery.mimeType);
+  response.setHeader(
+    "Content-Disposition",
+    `${disposition}; filename="${delivery.fileName}"`,
+  );
+  response.setHeader("Content-Length", delivery.buffer.length);
+  // Snapshot delivery must not leak storage URLs or invent public-access semantics.
+  response.setHeader("Cache-Control", "private, no-store");
+
+  return response.status(200).send(delivery.buffer);
+};
 
 const directApplyToJobHandler = async (request, response, next) => {
   try {
@@ -92,6 +111,42 @@ const getCandidateMyApplicationHandler = async (request, response, next) => {
     });
 
     return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const previewCandidateApplicationSubmittedCvHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const delivery = await previewCandidateApplicationSubmittedCv({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+    });
+
+    return sendSubmittedCvSnapshotPdf(response, delivery, "inline");
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const downloadCandidateApplicationSubmittedCvHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const delivery = await downloadCandidateApplicationSubmittedCv({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+    });
+
+    return sendSubmittedCvSnapshotPdf(response, delivery, "attachment");
   } catch (error) {
     return next(error);
   }
@@ -178,6 +233,80 @@ const getRecruiterMyApplicationHandler = async (request, response, next) => {
   }
 };
 
+const previewPrimaryJobApplicationSubmittedCvHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const delivery = await previewPrimaryJobApplicationSubmittedCv({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return sendSubmittedCvSnapshotPdf(response, delivery, "inline");
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const downloadPrimaryJobApplicationSubmittedCvHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const delivery = await downloadPrimaryJobApplicationSubmittedCv({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return sendSubmittedCvSnapshotPdf(response, delivery, "attachment");
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const previewRecruiterMyApplicationSubmittedCvHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const delivery = await previewRecruiterMyApplicationSubmittedCv({
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return sendSubmittedCvSnapshotPdf(response, delivery, "inline");
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const downloadRecruiterMyApplicationSubmittedCvHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const delivery = await downloadRecruiterMyApplicationSubmittedCv({
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return sendSubmittedCvSnapshotPdf(response, delivery, "attachment");
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const firstAssignApplicationHandler = async (request, response, next) => {
   try {
     const result = await firstAssignApplication({
@@ -257,6 +386,9 @@ const updateApplicationRecruitmentPipelineStatusHandler = async (
 
 export {
   directApplyToJobHandler,
+  downloadCandidateApplicationSubmittedCvHandler,
+  downloadPrimaryJobApplicationSubmittedCvHandler,
+  downloadRecruiterMyApplicationSubmittedCvHandler,
   firstAssignApplicationHandler,
   forceReassignApplicationHandler,
   getCandidateMyApplicationHandler,
@@ -266,6 +398,9 @@ export {
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
   listRecruiterMyApplicationsHandler,
+  previewCandidateApplicationSubmittedCvHandler,
+  previewPrimaryJobApplicationSubmittedCvHandler,
+  previewRecruiterMyApplicationSubmittedCvHandler,
   reassignApplicationHandler,
   replaceSubmittedCvHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
