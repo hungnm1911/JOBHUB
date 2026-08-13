@@ -25,19 +25,22 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** Slices 01–02 of the
+**V10 — Phân công Application và Recruitment Pipeline** Slices 01–03 of the
 current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
 opened the persistence state matrix so every non-terminal Recruitment Status
 can persist `UNASSIGNED` or Assigned. Slice 02 extends Primary Assign of
 Unassigned Applications (`NONE → Recruiter`) to every non-terminal status on
 `PUBLISHED`/`CLOSED`/`EXPIRED` Jobs, reusing the existing First Assign HTTP
-surface and TX-01/TX-02 foundation. The current Product/Data contracts remain
-approved implementation authority. The prior implementation and its
-104-file / 893-test green baseline encoded the old state matrix and
+surface and TX-01/TX-02 foundation. Slice 03 extends Primary Reassign /
+Take over / Unassign (`A → B`, `A → Primary`, `A → NONE`) to every
+non-terminal status on `PUBLISHED`/`CLOSED`/`EXPIRED` Jobs, converging those
+mutations onto one current-assignee CAS foundation. The current Product/Data
+contracts remain approved implementation authority. The prior implementation
+and its 104-file / 893-test green baseline encoded the old state matrix and
 direct-handoff lifecycle semantics; that baseline remains regression history,
 not completion evidence for the current canonical revision. Remaining
-`ASSIGN / UNASSIGN` slices (Primary Reassign/Unassign, Company Manager
-assignment management, automatic Unassign / lifecycle detach) are not started.
+`ASSIGN / UNASSIGN` slices (Company Manager assignment management, automatic
+Unassign / lifecycle detach, read-projection compatibility) are not started.
 
 Previous V10 implementation baseline (historical, not current completion
 evidence) has Slice 01 —
@@ -223,6 +226,27 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   The official backend gate passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 104
   files / 914 tests).
+
+- **Implemented; verified:** V10 Slice 03 — Primary Reassign / Take over /
+  Unassign Application (F03, F09, F10; BR-10–BR-14, BR-17–BR-19, BR-27,
+  BR-33–BR-38; TX-01, TX-02, TX-03): current Primary can change the current
+  Assignee of every non-terminal Direct Application via atomic `A → B`
+  (Reassign), `A → Primary` (Take over), or `A → NONE` (Unassign) on
+  `PUBLISHED`/`CLOSED`/`EXPIRED` Jobs. Mutations reuse one assigned-state CAS
+  foundation (`commitAssignedAssigneeMutation`) and Slice 02 TX-02 eligibility
+  only when the target is not `NONE`. Successful writes change only current
+  Assignee and concurrency metadata. After Unassign, the Application leaves
+  My Applications/workload, appears in the Unassigned projection, and cannot
+  continue Pipeline until Assign again. Terminal Applications and Supporting
+  Recruiter authority are rejected. Stale expected-assignee/version operations
+  cannot overwrite a newer Assignee or `NONE`. Company Manager assignment
+  management and automatic eligibility-loss Unassign remain later slices.
+  Focused coverage in `test/application/v10-reassign-takeover.test.js`
+  (1 file / 40 tests). Adjacent First Assign and force-reassign suites
+  remained green (3 files / 85 tests together). The official backend gate
+  passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 104
+  files / 936 tests).
 
 ## Previously completed and verified baseline
 

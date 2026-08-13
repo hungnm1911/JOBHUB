@@ -1449,6 +1449,41 @@ const commitAssignFromUnassigned = async ({
   );
 };
 
+// Canonical assigned-state mutation (Data Contract §8.2–§8.4 / TX-01 / TX-03):
+// atomic A → B or A → NONE. Mutates only current Assignee + version; never an
+// A → NONE → B intermediate. Target NONE is a committed Unassigned state.
+const commitAssignedAssigneeMutation = async ({
+  applicationId,
+  jobId,
+  expectedAssigneeCompanyMemberId,
+  expectedVersion,
+  nextAssignedRecruiterCompanyMemberId,
+  session,
+} = {}) => {
+  return Application.findOneAndUpdate(
+    {
+      _id: applicationId,
+      jobId,
+      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      version: expectedVersion,
+      assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
+      status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+    },
+    {
+      $set: {
+        assignedRecruiterCompanyMemberId: nextAssignedRecruiterCompanyMemberId,
+      },
+      $inc: {
+        version: 1,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
 const firstAssignApplication = async ({
   actorUser,
   jobId,
@@ -1600,7 +1635,7 @@ const firstAssignApplication = async ({
   };
 };
 
-const rejectFailedReassignCas = async ({
+const rejectFailedAssignedAssigneeCas = async ({
   applicationId,
   expectedVersion,
   expectedAssigneeCompanyMemberId,
@@ -1620,17 +1655,29 @@ const rejectFailedReassignCas = async ({
     });
   }
 
+  const isUnassign = actionLabel === "Unassign";
+
   if (isApplicationTerminalStatus(latestApplication.status)) {
-    throw new AppError(409, "Terminal Applications cannot be reassigned", {
-      field: "status",
-      status: latestApplication.status,
-    });
+    throw new AppError(
+      409,
+      isUnassign
+        ? "Terminal Applications cannot be unassigned"
+        : "Terminal Applications cannot be reassigned",
+      {
+        field: "status",
+        status: latestApplication.status,
+      },
+    );
   }
 
   if (isApplicationUnassigned(latestApplication)) {
-    throw new AppError(409, "Application has no Assignee to reassign", {
-      field: "assignedRecruiterCompanyMemberId",
-    });
+    throw new AppError(
+      409,
+      isUnassign
+        ? "Application has no Assignee to unassign"
+        : "Application has no Assignee to reassign",
+      { field: "assignedRecruiterCompanyMemberId" },
+    );
   }
 
   if (
@@ -1659,15 +1706,22 @@ const rejectFailedReassignCas = async ({
   );
 };
 
-const reassignApplication = async ({
+// F03 / F09 / F10 — Primary current-assignee mutation foundation.
+// nextAssigneeCompanyMemberId = Recruiter → A → B (Reassign / Take over);
+// nextAssigneeCompanyMemberId = null → A → NONE (Unassign). Target NONE skips
+// TX-02 eligibility. Take over is Reassign onto the current Primary.
+const executePrimaryCurrentAssigneeMutation = async ({
   actorUser,
   jobId,
   applicationId,
-  assigneeCompanyMemberId,
+  nextAssigneeCompanyMemberId,
   expectedAssigneeCompanyMemberId,
   expectedVersion,
   clientCompanyId,
+  actionLabel,
 } = {}) => {
+  const isUnassign = nextAssigneeCompanyMemberId == null;
+
   if (!mongoose.isValidObjectId(jobId)) {
     throw new AppError(404, "Job not found", {
       field: "jobId",
@@ -1697,9 +1751,8 @@ const reassignApplication = async ({
   }
 
   if (
-    assigneeCompanyMemberId != null &&
-    expectedAssigneeCompanyMemberId != null &&
-    assigneeCompanyMemberId.toString() ===
+    !isUnassign &&
+    nextAssigneeCompanyMemberId.toString() ===
       expectedAssigneeCompanyMemberId.toString()
   ) {
     throw new AppError(
@@ -1715,7 +1768,7 @@ const reassignApplication = async ({
   });
 
   const session = await mongoose.startSession();
-  let reassignedApplication = null;
+  let mutatedApplication = null;
   let job = null;
   let assigneeContext = null;
 
@@ -1734,12 +1787,12 @@ const reassignApplication = async ({
         tenantCompanyId: context.companyId,
       });
 
-      // BR-12 / BR-19 / BR-42: only current Primary may Reassign or Take over.
-      // Supporting cannot self-reassign, self-takeover, or claim another Assignee's Application.
+      // BR-12 / BR-19 / BR-42: only current Primary may Reassign, Take over,
+      // or Unassign. Supporting has no assignment-management authority.
       assertCurrentPrimaryOfJob({
         job,
         actorMembershipId: context.membership._id,
-        actionLabel: "Reassign",
+        actionLabel,
       });
 
       const application = await Application.findById(applicationId).session(
@@ -1758,33 +1811,43 @@ const reassignApplication = async ({
         });
       }
 
-      // BR-44: V10 Reassign/Take over only covers Direct Applications.
+      // BR-44: V10 assignment mutations only cover Direct Applications.
       if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(409, "Only Direct Applications can be reassigned", {
-          field: "source",
-        });
+        throw new AppError(
+          409,
+          isUnassign
+            ? "Only Direct Applications can be unassigned"
+            : "Only Direct Applications can be reassigned",
+          { field: "source" },
+        );
       }
 
       // BR-17: terminal Applications cannot change Assignee.
-      if (isApplicationTerminalStatus(application.status)) {
-        throw new AppError(409, "Terminal Applications cannot be reassigned", {
-          field: "status",
-          status: application.status,
-        });
+      if (
+        isApplicationTerminalStatus(application.status) ||
+        !APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)
+      ) {
+        throw new AppError(
+          409,
+          isUnassign
+            ? "Terminal Applications cannot be unassigned"
+            : "Terminal Applications cannot be reassigned",
+          {
+            field: "status",
+            status: application.status,
+          },
+        );
       }
 
-      if (!APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)) {
-        throw new AppError(409, "Terminal Applications cannot be reassigned", {
-          field: "status",
-          status: application.status,
-        });
-      }
-
-      // BR-10: no Unassign; Reassign requires an existing Assignee.
+      // BR-10 / F03: Reassign and Unassign both require a current Assignee.
       if (isApplicationUnassigned(application)) {
-        throw new AppError(409, "Application has no Assignee to reassign", {
-          field: "assignedRecruiterCompanyMemberId",
-        });
+        throw new AppError(
+          409,
+          isUnassign
+            ? "Application has no Assignee to unassign"
+            : "Application has no Assignee to reassign",
+          { field: "assignedRecruiterCompanyMemberId" },
+        );
       }
 
       if (
@@ -1793,14 +1856,15 @@ const reassignApplication = async ({
       ) {
         throw new AppError(
           409,
-          "Application Assignee has changed; refresh and retry Reassign",
+          `Application Assignee has changed; refresh and retry ${actionLabel}`,
           { field: "expectedAssigneeCompanyMemberId" },
         );
       }
 
       if (
-        assigneeCompanyMemberId.toString() ===
-        expectedAssigneeCompanyMemberId.toString()
+        !isUnassign &&
+        nextAssigneeCompanyMemberId.toString() ===
+          expectedAssigneeCompanyMemberId.toString()
       ) {
         throw new AppError(
           409,
@@ -1812,50 +1876,44 @@ const reassignApplication = async ({
       if (application.version !== expectedVersion) {
         throw new AppError(
           409,
-          "Application has changed; refresh and retry Reassign",
+          `Application has changed; refresh and retry ${actionLabel}`,
           { field: "expectedVersion" },
         );
       }
 
-      // TX-02: same canonical eligibility + lifecycle serialization as First Assign.
-      assigneeContext = await assertAssigneeEligibleAtAssignmentCommit({
-        assigneeCompanyMemberId,
-        job,
+      let nextAssignedRecruiterCompanyMemberId = null;
+
+      if (!isUnassign) {
+        // TX-02: reuse Slice 02 eligibility + lifecycle serialization when the
+        // target is a Recruiter. Unassign (A → NONE) has no target to revalidate.
+        assigneeContext = await assertAssigneeEligibleAtAssignmentCommit({
+          assigneeCompanyMemberId: nextAssigneeCompanyMemberId,
+          job,
+          session,
+        });
+        nextAssignedRecruiterCompanyMemberId = assigneeContext.membership._id;
+      }
+
+      // TX-01 / TX-03 / BR-10 / BR-14 / BR-36–BR-38:
+      // Atomic A → B or A → NONE; no A → NONE → B intermediate for Reassign.
+      // Non-terminal status CAS preserves a prior valid pipeline write on retry
+      // and blocks overwrite of HIRED/REJECTED/WITHDRAWN.
+      mutatedApplication = await commitAssignedAssigneeMutation({
+        applicationId: application._id,
+        jobId: job._id,
+        expectedAssigneeCompanyMemberId,
+        expectedVersion,
+        nextAssignedRecruiterCompanyMemberId,
         session,
       });
 
-      // TX-01 / TX-03 / BR-10 / BR-14 / BR-36–BR-38:
-      // Atomic A → B transition; no intermediate Unassigned; status unbound so a
-      // prior valid status mutation is preserved on retry, never rolled back.
-      reassignedApplication = await Application.findOneAndUpdate(
-        {
-          _id: application._id,
-          jobId: job._id,
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
-          version: expectedVersion,
-          assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
-          status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
-        },
-        {
-          $set: {
-            assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
-          },
-          $inc: {
-            version: 1,
-          },
-        },
-        {
-          returnDocument: "after",
-          session,
-        },
-      );
-
-      if (!reassignedApplication) {
-        await rejectFailedReassignCas({
+      if (!mutatedApplication) {
+        await rejectFailedAssignedAssigneeCas({
           applicationId: application._id,
           expectedVersion,
           expectedAssigneeCompanyMemberId,
           session,
+          actionLabel,
         });
       }
     });
@@ -1864,15 +1922,56 @@ const reassignApplication = async ({
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
-    application: reassignedApplication,
-    assigneeMembership: assigneeContext.membership,
-    assigneeUser: assigneeContext.user,
+    application: mutatedApplication,
+    assigneeMembership: assigneeContext?.membership ?? null,
+    assigneeUser: assigneeContext?.user ?? null,
   });
 
   return {
     job: toPublicJob(job),
     application: applicationView,
   };
+};
+
+const reassignApplication = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  assigneeCompanyMemberId,
+  expectedAssigneeCompanyMemberId,
+  expectedVersion,
+  clientCompanyId,
+} = {}) => {
+  return executePrimaryCurrentAssigneeMutation({
+    actorUser,
+    jobId,
+    applicationId,
+    nextAssigneeCompanyMemberId: assigneeCompanyMemberId,
+    expectedAssigneeCompanyMemberId,
+    expectedVersion,
+    clientCompanyId,
+    actionLabel: "Reassign",
+  });
+};
+
+const unassignApplication = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  expectedAssigneeCompanyMemberId,
+  expectedVersion,
+  clientCompanyId,
+} = {}) => {
+  return executePrimaryCurrentAssigneeMutation({
+    actorUser,
+    jobId,
+    applicationId,
+    nextAssigneeCompanyMemberId: null,
+    expectedAssigneeCompanyMemberId,
+    expectedVersion,
+    clientCompanyId,
+    actionLabel: "Unassign",
+  });
 };
 
 const runAdministrativeApplicationHandoffInSession = async ({
@@ -1995,32 +2094,19 @@ const runAdministrativeApplicationHandoffInSession = async ({
   // BR-27 / F09: CLOSED/EXPIRED Jobs still allow handoff of existing
   // non-terminal Applications — no Job-status gate here.
 
-  // TX-01 / TX-03 / BR-10: atomic A → B; no intermediate Unassigned.
-  const reassignedApplication = await Application.findOneAndUpdate(
-    {
-      _id: application._id,
-      jobId: job._id,
-      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
-      version: expectedVersion,
-      assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
-      status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
-    },
-    {
-      $set: {
-        assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
-      },
-      $inc: {
-        version: 1,
-      },
-    },
-    {
-      returnDocument: "after",
-      session,
-    },
-  );
+  // TX-01 / TX-03 / BR-10: atomic A → B via the shared assigned-state CAS.
+  // Public CM Unassign remains a later slice.
+  const reassignedApplication = await commitAssignedAssigneeMutation({
+    applicationId: application._id,
+    jobId: job._id,
+    expectedAssigneeCompanyMemberId,
+    expectedVersion,
+    nextAssignedRecruiterCompanyMemberId: assigneeContext.membership._id,
+    session,
+  });
 
   if (!reassignedApplication) {
-    await rejectFailedReassignCas({
+    await rejectFailedAssignedAssigneeCas({
       applicationId: application._id,
       expectedVersion,
       expectedAssigneeCompanyMemberId,
@@ -3516,6 +3602,7 @@ export {
   previewRecruiterMyApplicationSubmittedCv,
   reassignApplication,
   replaceSubmittedCv,
+  unassignApplication,
   updateApplicationRecruitmentPipelineStatus,
   withdrawApplication,
   toPrimaryJobApplicationView,
