@@ -21,7 +21,15 @@ import Company from "../../src/models/company.model.js";
 import CompanyMember from "../../src/models/company-member.model.js";
 import Job from "../../src/models/job.model.js";
 import User from "../../src/models/user.model.js";
-import { reassignApplication } from "../../src/services/application.service.js";
+import {
+  getManagedJobPipelineWorkspace,
+  listManagedJobs,
+  listPrimaryJobApplications,
+  listRecruiterMyApplications,
+  reassignApplication,
+  unassignApplication,
+  updateApplicationRecruitmentPipelineStatus,
+} from "../../src/services/application.service.js";
 import {
   createActiveCompanyManagerContext,
   createActiveRecruiterContext,
@@ -191,7 +199,7 @@ const setupCompanyWithTeam = async ({ emailPrefix = "v10.s05" } = {}) => {
   };
 };
 
-describe("V10 Slice 05 — Reassign and Take over Application (F03)", () => {
+describe("V10 Slice 03 — Primary Reassign / Take over / Unassign Application (F03, F09, F10)", () => {
   beforeAll(async () => {
     await connectTestDatabase();
   });
@@ -813,6 +821,548 @@ describe("V10 Slice 05 — Reassign and Take over Application (F03)", () => {
       );
       expect(persisted.version).toBe(2);
     });
+
+    it.each([JOB_STATUS.CLOSED, JOB_STATUS.EXPIRED])(
+      "Reassigns A → B on a %s Job without changing status (F09/BR-27)",
+      async (jobStatus) => {
+        const { primary, supporting, supportingB, job, candidate } =
+          await setupCompanyWithTeam({
+            emailPrefix: `v10.s03.reassign.job.${jobStatus.toLowerCase()}`,
+          });
+        await Job.updateOne({ _id: job._id }, { $set: { status: jobStatus } });
+        const application = await createAssignedApplication({
+          candidateUserId: candidate.user._id,
+          jobId: job._id,
+          assigneeMemberId: supporting.membership._id,
+          status: APPLICATION_STATUS.CONTACTED,
+        });
+
+        const result = await reassignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          assigneeCompanyMemberId: supportingB.membership._id.toString(),
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        });
+
+        expect(result.application.status).toBe(APPLICATION_STATUS.CONTACTED);
+        expect(result.application.assignedRecruiterCompanyMemberId).toBe(
+          supportingB.membership._id.toString(),
+        );
+        expect(result.job.status).toBe(jobStatus);
+      },
+    );
+
+    it("revalidates target B eligibility at commit for non-terminal Reassign (TX-02)", async () => {
+      const { primary, supporting, supportingB, job, candidate } =
+        await setupCompanyWithTeam({
+          emailPrefix: "v10.s03.reassign.elig.commit",
+        });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+        status: APPLICATION_STATUS.INTERVIEW_COMPLETED,
+      });
+      await CompanyMember.updateOne(
+        { _id: supportingB.membership._id },
+        { $set: { status: COMPANY_MEMBER_STATUS.LOCKED } },
+      );
+
+      await expect(
+        reassignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          assigneeCompanyMemberId: supportingB.membership._id.toString(),
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+
+      const persisted = await Application.findById(application._id).lean();
+      expect(String(persisted.assignedRecruiterCompanyMemberId)).toBe(
+        supporting.membership._id.toString(),
+      );
+      expect(persisted.status).toBe(APPLICATION_STATUS.INTERVIEW_COMPLETED);
+      expect(persisted.version).toBe(1);
+    });
+  });
+
+  describe("service — unassignApplication", () => {
+    it.each(NON_TERMINAL_STATUSES)(
+      "lets Primary Unassign A → NONE from %s without changing status (F03/BR-12/BR-14)",
+      async (status) => {
+        const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
+          emailPrefix: `v10.s03.unassign.${status.toLowerCase()}`,
+        });
+        const snapshot = buildUploadedSnapshot({ name: `Unassign ${status}` });
+        const application = await createAssignedApplication({
+          candidateUserId: candidate.user._id,
+          jobId: job._id,
+          assigneeMemberId: supporting.membership._id,
+          status,
+          submittedCvSnapshot: snapshot,
+        });
+        const before = await Application.findById(application._id).lean();
+
+        const result = await unassignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        });
+
+        expect(result.application).toMatchObject({
+          id: application._id.toString(),
+          status,
+          isUnassigned: true,
+          assignedRecruiterCompanyMemberId: null,
+          assignedRecruiter: null,
+          version: 2,
+        });
+
+        const persisted = await Application.findById(application._id).lean();
+        expect(persisted.assignedRecruiterCompanyMemberId).toBeNull();
+        expect(persisted.status).toBe(status);
+        expect(persisted.version).toBe(2);
+        expect(persisted.submittedCvSnapshot).toEqual(before.submittedCvSnapshot);
+        expect(String(persisted.candidateUserId)).toBe(String(before.candidateUserId));
+        expect(String(persisted.jobId)).toBe(String(before.jobId));
+        expect(persisted.source).toBe(before.source);
+      },
+    );
+
+    it.each([JOB_STATUS.CLOSED, JOB_STATUS.EXPIRED])(
+      "Unassigns A → NONE on a %s Job without changing status (F09/BR-27)",
+      async (jobStatus) => {
+        const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
+          emailPrefix: `v10.s03.unassign.job.${jobStatus.toLowerCase()}`,
+        });
+        await Job.updateOne({ _id: job._id }, { $set: { status: jobStatus } });
+        const application = await createAssignedApplication({
+          candidateUserId: candidate.user._id,
+          jobId: job._id,
+          assigneeMemberId: supporting.membership._id,
+          status: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+        });
+
+        const result = await unassignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        });
+
+        expect(result.application.status).toBe(
+          APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+        );
+        expect(result.application.isUnassigned).toBe(true);
+        expect(result.application.assignedRecruiterCompanyMemberId).toBeNull();
+        expect(result.job.status).toBe(jobStatus);
+      },
+    );
+
+    it("rejects Unassign on terminal Applications (BR-17)", async () => {
+      for (const [index, status] of TERMINAL_STATUSES.entries()) {
+        const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
+          emailPrefix: `v10.s03.unassign.term.${index}`,
+        });
+        const application = await createAssignedApplication({
+          candidateUserId: candidate.user._id,
+          jobId: job._id,
+          assigneeMemberId: supporting.membership._id,
+          status,
+        });
+
+        await expect(
+          unassignApplication({
+            actorUser: primary.user,
+            jobId: job._id.toString(),
+            applicationId: application._id.toString(),
+            expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+            expectedVersion: 1,
+          }),
+        ).rejects.toMatchObject({ statusCode: 409 });
+
+        const persisted = await Application.findById(application._id).lean();
+        expect(String(persisted.assignedRecruiterCompanyMemberId)).toBe(
+          supporting.membership._id.toString(),
+        );
+        expect(persisted.version).toBe(1);
+      }
+    });
+
+    it("denies Supporting Unassign (BR-19)", async () => {
+      const { supporting, supportingB, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v10.s03.unassign.supp.deny",
+      });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supportingB.membership._id,
+      });
+
+      await expect(
+        unassignApplication({
+          actorUser: supporting.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          expectedAssigneeCompanyMemberId: supportingB.membership._id.toString(),
+          expectedVersion: 1,
+        }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it("does not require target eligibility for A → NONE (F03/BR-12)", async () => {
+      const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v10.s03.unassign.no.target",
+      });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+        status: APPLICATION_STATUS.CONTACTED,
+      });
+      await CompanyMember.updateOne(
+        { _id: supporting.membership._id },
+        { $set: { status: COMPANY_MEMBER_STATUS.LOCKED } },
+      );
+
+      const result = await unassignApplication({
+        actorUser: primary.user,
+        jobId: job._id.toString(),
+        applicationId: application._id.toString(),
+        expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+        expectedVersion: 1,
+      });
+
+      expect(result.application.isUnassigned).toBe(true);
+      expect(result.application.status).toBe(APPLICATION_STATUS.CONTACTED);
+    });
+
+    it("rejects stale Unassign based on A after B is committed (BR-36/BR-37/TX-01)", async () => {
+      const { primary, supporting, supportingB, job, candidate } =
+        await setupCompanyWithTeam({
+          emailPrefix: "v10.s03.unassign.stale",
+        });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+      });
+
+      await reassignApplication({
+        actorUser: primary.user,
+        jobId: job._id.toString(),
+        applicationId: application._id.toString(),
+        assigneeCompanyMemberId: supportingB.membership._id.toString(),
+        expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+        expectedVersion: 1,
+      });
+
+      await expect(
+        unassignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+
+      const persisted = await Application.findById(application._id).lean();
+      expect(String(persisted.assignedRecruiterCompanyMemberId)).toBe(
+        supportingB.membership._id.toString(),
+      );
+      expect(persisted.version).toBe(2);
+    });
+
+    it("allows only one winner when Reassign and Unassign compete (BR-37/TX-01)", async () => {
+      const { primary, supporting, supportingB, job, candidate } =
+        await setupCompanyWithTeam({
+          emailPrefix: "v10.s03.reassign.unassign.race",
+        });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+      });
+
+      const results = await Promise.allSettled([
+        reassignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          assigneeCompanyMemberId: supportingB.membership._id.toString(),
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        }),
+        unassignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        }),
+      ]);
+
+      const fulfilled = results.filter((item) => item.status === "fulfilled");
+      const rejected = results.filter((item) => item.status === "rejected");
+
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason.statusCode).toBe(409);
+
+      const persisted = await Application.findById(application._id).lean();
+      expect(persisted.version).toBe(2);
+      expect(persisted.status).toBe(APPLICATION_STATUS.APPLIED);
+      const winnerIsUnassigned = persisted.assignedRecruiterCompanyMemberId == null;
+      const winnerIsB =
+        persisted.assignedRecruiterCompanyMemberId != null &&
+        String(persisted.assignedRecruiterCompanyMemberId) ===
+          supportingB.membership._id.toString();
+      expect(winnerIsUnassigned || winnerIsB).toBe(true);
+    });
+
+    it("blocks former Assignee Pipeline after Unassign wins (BR-18/BR-38)", async () => {
+      const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v10.s03.unassign.vs.pipeline",
+      });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+        status: APPLICATION_STATUS.APPLIED,
+      });
+
+      await unassignApplication({
+        actorUser: primary.user,
+        jobId: job._id.toString(),
+        applicationId: application._id.toString(),
+        expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+        expectedVersion: 1,
+      });
+
+      await expect(
+        updateApplicationRecruitmentPipelineStatus({
+          actorUser: supporting.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          targetStatus: APPLICATION_STATUS.SCREENING,
+          expectedStatus: APPLICATION_STATUS.APPLIED,
+          expectedVersion: 1,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+
+      await expect(
+        updateApplicationRecruitmentPipelineStatus({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          targetStatus: APPLICATION_STATUS.SCREENING,
+          expectedStatus: APPLICATION_STATUS.APPLIED,
+          expectedVersion: 2,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+
+      const persisted = await Application.findById(application._id).lean();
+      expect(persisted.status).toBe(APPLICATION_STATUS.APPLIED);
+      expect(persisted.assignedRecruiterCompanyMemberId).toBeNull();
+      expect(persisted.version).toBe(2);
+    });
+
+    it("preserves newer non-terminal status when Pipeline wins before Unassign (BR-38)", async () => {
+      const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v10.s03.pipeline.then.unassign",
+      });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+        status: APPLICATION_STATUS.APPLIED,
+      });
+
+      await updateApplicationRecruitmentPipelineStatus({
+        actorUser: supporting.user,
+        jobId: job._id.toString(),
+        applicationId: application._id.toString(),
+        targetStatus: APPLICATION_STATUS.SCREENING,
+        expectedStatus: APPLICATION_STATUS.APPLIED,
+        expectedVersion: 1,
+      });
+
+      await expect(
+        unassignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+
+      const retried = await unassignApplication({
+        actorUser: primary.user,
+        jobId: job._id.toString(),
+        applicationId: application._id.toString(),
+        expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+        expectedVersion: 2,
+      });
+
+      expect(retried.application.status).toBe(APPLICATION_STATUS.SCREENING);
+      expect(retried.application.isUnassigned).toBe(true);
+      expect(retried.application.version).toBe(3);
+    });
+
+    it("allows only one winner when Unassign and Pipeline compete (BR-38/TX-01)", async () => {
+      const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v10.s03.unassign.pipeline.race",
+      });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+        status: APPLICATION_STATUS.APPLIED,
+      });
+
+      const results = await Promise.allSettled([
+        unassignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        }),
+        updateApplicationRecruitmentPipelineStatus({
+          actorUser: supporting.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          targetStatus: APPLICATION_STATUS.SCREENING,
+          expectedStatus: APPLICATION_STATUS.APPLIED,
+          expectedVersion: 1,
+        }),
+      ]);
+
+      const fulfilled = results.filter((item) => item.status === "fulfilled");
+      const rejected = results.filter((item) => item.status === "rejected");
+
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason.statusCode).toBe(409);
+
+      const persisted = await Application.findById(application._id).lean();
+      expect(persisted.version).toBe(2);
+      if (persisted.assignedRecruiterCompanyMemberId == null) {
+        expect(persisted.status).toBe(APPLICATION_STATUS.APPLIED);
+      } else {
+        expect(persisted.status).toBe(APPLICATION_STATUS.SCREENING);
+        expect(String(persisted.assignedRecruiterCompanyMemberId)).toBe(
+          supporting.membership._id.toString(),
+        );
+      }
+    });
+
+    it("reflects current Assignee in My Applications, Unassigned, and workload (BR-33/BR-34)", async () => {
+      const { primary, supporting, supportingB, job, candidate } =
+        await setupCompanyWithTeam({
+          emailPrefix: "v10.s03.workload.projection",
+        });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+        status: APPLICATION_STATUS.SCREENING,
+      });
+
+      const beforeMine = await listRecruiterMyApplications({
+        actorUser: supporting.user,
+      });
+      expect(
+        beforeMine.applications.some(
+          (item) => item.id === application._id.toString(),
+        ),
+      ).toBe(true);
+      expect(beforeMine.currentWorkloadCount).toBeGreaterThanOrEqual(1);
+
+      await reassignApplication({
+        actorUser: primary.user,
+        jobId: job._id.toString(),
+        applicationId: application._id.toString(),
+        assigneeCompanyMemberId: supportingB.membership._id.toString(),
+        expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+        expectedVersion: 1,
+      });
+
+      const afterReassignOld = await listRecruiterMyApplications({
+        actorUser: supporting.user,
+      });
+      const afterReassignNew = await listRecruiterMyApplications({
+        actorUser: supportingB.user,
+      });
+      expect(
+        afterReassignOld.applications.some(
+          (item) => item.id === application._id.toString(),
+        ),
+      ).toBe(false);
+      expect(
+        afterReassignNew.applications.some(
+          (item) => item.id === application._id.toString(),
+        ),
+      ).toBe(true);
+
+      await unassignApplication({
+        actorUser: primary.user,
+        jobId: job._id.toString(),
+        applicationId: application._id.toString(),
+        expectedAssigneeCompanyMemberId: supportingB.membership._id.toString(),
+        expectedVersion: 2,
+      });
+
+      const afterUnassignOld = await listRecruiterMyApplications({
+        actorUser: supportingB.user,
+      });
+      expect(
+        afterUnassignOld.applications.some(
+          (item) => item.id === application._id.toString(),
+        ),
+      ).toBe(false);
+
+      const primaryView = await listPrimaryJobApplications({
+        actorUser: primary.user,
+        jobId: job._id.toString(),
+      });
+      const unassignedView = primaryView.applications.find(
+        (item) => item.id === application._id.toString(),
+      );
+      expect(unassignedView.isUnassigned).toBe(true);
+      expect(unassignedView.status).toBe(APPLICATION_STATUS.SCREENING);
+
+      const workspace = await getManagedJobPipelineWorkspace({
+        actorUser: primary.user,
+        jobId: job._id.toString(),
+      });
+      expect(
+        workspace.unassignedApplications.some(
+          (item) => item.id === application._id.toString(),
+        ),
+      ).toBe(true);
+      expect(
+        workspace.currentWorkloadByAssignee.some(
+          (entry) =>
+            entry.companyMemberId === supportingB.membership._id.toString(),
+        ),
+      ).toBe(false);
+
+      const managed = await listManagedJobs({ actorUser: primary.user });
+      const managedJob = managed.managedJobs.find(
+        (item) => item.job.id === job._id.toString(),
+      );
+      expect(managedJob.unassignedCount).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe("HTTP — POST /api/jobs/:jobId/applications/:applicationId/reassign", () => {
@@ -915,6 +1465,98 @@ describe("V10 Slice 05 — Reassign and Take over Application (F03)", () => {
         });
 
       expect(response.status).toBe(403);
+    });
+  });
+
+  describe("HTTP — POST /api/jobs/:jobId/applications/:applicationId/unassign", () => {
+    it("Unassigns via HTTP for authenticated Primary without changing status", async () => {
+      const agent = createTestAgent();
+      const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v10.s03.http.unassign",
+      });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+        status: APPLICATION_STATUS.SCREENING,
+      });
+      const token = await loginAndGetAccessToken(agent, {
+        email: primary.user.email,
+        password: DEFAULT_PASSWORD,
+      });
+
+      const response = await agent
+        .post(`/api/jobs/${job._id}/applications/${application._id}/unassign`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.application).toMatchObject({
+        status: APPLICATION_STATUS.SCREENING,
+        isUnassigned: true,
+        assignedRecruiterCompanyMemberId: null,
+        assignedRecruiter: null,
+        version: 2,
+      });
+    });
+
+    it("blocks Supporting Unassign over HTTP", async () => {
+      const agent = createTestAgent();
+      const { supporting, supportingB, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v10.s03.http.unassign.deny",
+      });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supportingB.membership._id,
+      });
+      const token = await loginAndGetAccessToken(agent, {
+        email: supporting.user.email,
+      });
+
+      const response = await agent
+        .post(`/api/jobs/${job._id}/applications/${application._id}/unassign`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          expectedAssigneeCompanyMemberId: supportingB.membership._id.toString(),
+          expectedVersion: 1,
+        });
+
+      expect(response.status).toBe(403);
+    });
+
+    it("lets Company Manager Unassign over HTTP (F04)", async () => {
+      const agent = createTestAgent();
+      const { manager, supporting, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v10.s03.http.unassign.cm",
+      });
+      const application = await createAssignedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+        assigneeMemberId: supporting.membership._id,
+      });
+      const token = await loginAndGetAccessToken(agent, {
+        email: manager.user.email,
+        password: DEFAULT_PASSWORD,
+      });
+
+      const response = await agent
+        .post(`/api/jobs/${job._id}/applications/${application._id}/unassign`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+          expectedVersion: 1,
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.application).toMatchObject({
+        isUnassigned: true,
+        assignedRecruiterCompanyMemberId: null,
+        version: 2,
+      });
     });
   });
 });

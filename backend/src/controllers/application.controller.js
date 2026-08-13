@@ -17,6 +17,7 @@ import {
   previewRecruiterMyApplicationSubmittedCv,
   reassignApplication,
   replaceSubmittedCv,
+  unassignApplication,
   updateApplicationRecruitmentPipelineStatus,
   withdrawApplication,
 } from "../services/application.service.js";
@@ -343,6 +344,24 @@ const reassignApplicationHandler = async (request, response, next) => {
   }
 };
 
+const unassignApplicationHandler = async (request, response, next) => {
+  try {
+    const result = await unassignApplication({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      expectedAssigneeCompanyMemberId:
+        request.body.expectedAssigneeCompanyMemberId,
+      expectedVersion: request.body.expectedVersion,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const forceReassignApplicationHandler = async (request, response, next) => {
   try {
     const result = await forceReassignApplication({
@@ -403,6 +422,7 @@ export {
   previewRecruiterMyApplicationSubmittedCvHandler,
   reassignApplicationHandler,
   replaceSubmittedCvHandler,
+  unassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
   withdrawApplicationHandler,
 };

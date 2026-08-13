@@ -270,7 +270,7 @@ describe("POST /api/platform-admin/accounts/:userId/terminate", () => {
     expect(persistedOtherAdmin.status).toBe(USER_STATUS.ACTIVE);
   });
 
-  it("rejects already TERMINATED targets and unknown accounts without changing other users", async () => {
+  it("treats already-TERMINATED retries as idempotent and rejects unknown accounts without changing other users", async () => {
     const agent = createTestAgent();
 
     await createVerifiedUser({
@@ -290,11 +290,17 @@ describe("POST /api/platform-admin/accounts/:userId/terminate", () => {
       email: "admin@example.com",
     });
 
+    // V10 TX-05: repeated TERMINATE of already-TERMINATED is the reconciliation
+    // path for remaining Application responsibilities; status stays TERMINATED.
     const terminatedResponse = await agent
       .post(`/api/platform-admin/accounts/${terminatedUser._id.toString()}/terminate`)
       .set("Authorization", `Bearer ${adminAccessToken}`);
 
-    expect(terminatedResponse.status).toBe(409);
+    expect(terminatedResponse.status).toBe(200);
+    expect(terminatedResponse.body.user).toMatchObject({
+      id: terminatedUser._id.toString(),
+      status: USER_STATUS.TERMINATED,
+    });
 
     const missingResponse = await agent
       .post("/api/platform-admin/accounts/507f1f77bcf86cd799439011/terminate")

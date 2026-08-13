@@ -29,6 +29,7 @@ import {
   previewPrimaryJobApplicationSubmittedCvHandler,
   previewRecruiterMyApplicationSubmittedCvHandler,
   reassignApplicationHandler,
+  unassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
 } from "../controllers/application.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
@@ -40,6 +41,7 @@ import validateAddSupportingRecruiter from "../middlewares/validate-add-supporti
 import validateFirstAssignApplication from "../middlewares/validate-first-assign-application.js";
 import validateForceReassignApplication from "../middlewares/validate-force-reassign-application.js";
 import validateReassignApplication from "../middlewares/validate-reassign-application.js";
+import validateUnassignApplication from "../middlewares/validate-unassign-application.js";
 import validateRecruitmentPipelineStatus from "../middlewares/validate-recruitment-pipeline-status.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
 import validateReplacePrimaryRecruiter from "../middlewares/validate-replace-primary-recruiter.js";
@@ -107,7 +109,7 @@ router.post(
 router.get(
   "/:jobId/applications",
   authenticateAccess,
-  authorizeRecruiterBusinessAccess,
+  authorizeCompanyStaffBusinessAccess,
   listPrimaryJobApplicationsHandler,
 );
 
@@ -135,7 +137,7 @@ router.get(
 router.post(
   "/:jobId/applications/:applicationId/assign",
   authenticateAccess,
-  authorizeRecruiterBusinessAccess,
+  authorizeCompanyStaffBusinessAccess,
   validateFirstAssignApplication,
   firstAssignApplicationHandler,
 );
@@ -143,9 +145,17 @@ router.post(
 router.post(
   "/:jobId/applications/:applicationId/reassign",
   authenticateAccess,
-  authorizeRecruiterBusinessAccess,
+  authorizeCompanyStaffBusinessAccess,
   validateReassignApplication,
   reassignApplicationHandler,
+);
+
+router.post(
+  "/:jobId/applications/:applicationId/unassign",
+  authenticateAccess,
+  authorizeCompanyStaffBusinessAccess,
+  validateUnassignApplication,
+  unassignApplicationHandler,
 );
 
 router.post(

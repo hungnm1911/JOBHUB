@@ -219,7 +219,7 @@ describe("POST /api/platform-admin/accounts/:userId/lock", () => {
     expect(persistedOtherAdmin.status).toBe(USER_STATUS.ACTIVE);
   });
 
-  it("rejects non-ACTIVE targets and unknown accounts without changing other users", async () => {
+  it("rejects TERMINATED targets and unknown accounts; already-LOCKED retries are idempotent", async () => {
     const agent = createTestAgent();
 
     await createVerifiedUser({
@@ -243,11 +243,17 @@ describe("POST /api/platform-admin/accounts/:userId/lock", () => {
       email: "admin@example.com",
     });
 
+    // V10 TX-05: repeated LOCK of already-LOCKED is the reconciliation path for
+    // remaining Application responsibilities; status stays LOCKED.
     const lockedResponse = await agent
       .post(`/api/platform-admin/accounts/${lockedUser._id.toString()}/lock`)
       .set("Authorization", `Bearer ${adminAccessToken}`);
 
-    expect(lockedResponse.status).toBe(409);
+    expect(lockedResponse.status).toBe(200);
+    expect(lockedResponse.body.user).toMatchObject({
+      id: lockedUser._id.toString(),
+      status: USER_STATUS.LOCKED,
+    });
 
     const terminatedResponse = await agent
       .post(`/api/platform-admin/accounts/${terminatedUser._id.toString()}/lock`)

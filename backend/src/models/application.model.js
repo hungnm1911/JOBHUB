@@ -12,13 +12,11 @@ const APPLICATION_SOURCE_VALUES = Object.values(APPLICATION_SOURCE);
 const APPLICATION_STATUS_VALUES = Object.values(APPLICATION_STATUS);
 const SNAPSHOT_SOURCE_TYPE_VALUES = Object.values(CANDIDATE_CV_SOURCE_TYPE);
 
-// Recruitment statuses that are only valid with a current Assigned Recruiter.
-// UNASSIGNED is an assignment-state derivation, never an Application.status value.
+// Terminal recruiter-owned statuses that must keep a final Assignee (PI-07).
+// Every non-terminal Recruitment Status may persist Unassigned (null/absent) or
+// Assigned. UNASSIGNED is an assignment-state derivation, never an
+// Application.status value.
 const APPLICATION_STATUSES_REQUIRING_ASSIGNEE = Object.freeze([
-  APPLICATION_STATUS.SCREENING,
-  APPLICATION_STATUS.CONTACTED,
-  APPLICATION_STATUS.INTERVIEW_SCHEDULED,
-  APPLICATION_STATUS.INTERVIEW_COMPLETED,
   APPLICATION_STATUS.HIRED,
   APPLICATION_STATUS.REJECTED,
 ]);
@@ -376,7 +374,8 @@ const APPLICATION_COLLECTION_VALIDATOR = Object.freeze({
       },
       {
         // Local status × assignment matrix (Data Contract §7.1 / PI-07):
-        // pipeline and terminal recruiter-owned statuses require an Assignee.
+        // HIRED and REJECTED require a final Assignee. Non-terminal statuses
+        // may persist Unassigned (null/absent) or Assigned.
         $or: [
           {
             $not: {

@@ -82,12 +82,17 @@ regression closure passed across F01–F10, BR-01–BR-46, and TX-01 after Slice
 approved Product/Data contracts; Slices 01–05 and Slice 06 Final Acceptance /
 Regression Closure are complete, including the recorded Application identity
 immutability remediation and required backend verification gate. V9 is
-`COMPLETED AND VERIFIED`. V10 Final Acceptance / regression closure passed
-across F01–F11, BR-01–BR-53, and TX-01–TX-05 after Slices 01–13, the F11
-Platform User lifecycle/recovery extension, and the Job-team responsibility
-writer remediation. The official backend gate passed with 104 test files / 893
-tests. V10 is `COMPLETED AND VERIFIED`. V11 through V17 must not be implemented
-merely from their roadmap titles.
+`COMPLETED AND VERIFIED`. V10 previously passed Final Acceptance / regression
+closure across F01–F11, BR-01–BR-53, and TX-01–TX-05 after Slices 01–13, the
+F11 Platform User lifecycle/recovery extension, and the Job-team responsibility
+writer remediation. That implementation remains the regression baseline. The
+approved V10 Product/Data contracts then defined the `ASSIGN / UNASSIGN` core
+lifecycle refactor; Slices 01–10 of that revision are implemented and verified,
+including Concurrency Closure / Final Acceptance (TX-01/TX-02/TX-05 race
+closure, Platform LOCK partial-progress retry, and stale trusted A→B cleanup).
+V10 is therefore `COMPLETED AND VERIFIED` against the current canonical
+revision. V11 through V17 must not be implemented merely from their
+roadmap titles.
 
 V10 canonical specification:
 

@@ -1289,19 +1289,21 @@ const findOutstandingSupportingResponsibility = async ({
   return query.select("_id status applicationDeadline").lean();
 };
 
-// TX-02: canonical serialization boundary between active Recruitment Team
-// responsibility assignment and Recruiter lifecycle completion (LOCK/TERMINATE).
-// Must run inside an active MongoDB transaction before committing either side.
-const acquireActiveRecruiterMembershipForTeamResponsibilityTx = async ({
-  recruiterCompanyMemberId,
+// TX-02: shared ACTIVE Company Staff membership acquire. Used by Recruitment
+// Team responsibility writers (Recruiter) and manual assignment-management
+// actor authority (Recruiter Primary or Company Manager) so lock order stays
+// Company → CompanyMember → User → Job without role-specific lock frameworks.
+const acquireActiveCompanyStaffMembershipForBusinessAccessTx = async ({
+  companyMemberId,
   companyId,
+  role,
   session,
 } = {}) => {
   return CompanyMember.findOneAndUpdate(
     {
-      _id: recruiterCompanyMemberId,
+      _id: companyMemberId,
       companyId,
-      role: COMPANY_MEMBER_ROLE.RECRUITER,
+      role,
       status: COMPANY_MEMBER_STATUS.ACTIVE,
     },
     {
@@ -1314,6 +1316,22 @@ const acquireActiveRecruiterMembershipForTeamResponsibilityTx = async ({
       session,
     },
   );
+};
+
+// TX-02: canonical serialization boundary between active Recruitment Team
+// responsibility assignment and Recruiter lifecycle completion (LOCK/TERMINATE).
+// Must run inside an active MongoDB transaction before committing either side.
+const acquireActiveRecruiterMembershipForTeamResponsibilityTx = async ({
+  recruiterCompanyMemberId,
+  companyId,
+  session,
+} = {}) => {
+  return acquireActiveCompanyStaffMembershipForBusinessAccessTx({
+    companyMemberId: recruiterCompanyMemberId,
+    companyId,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+    session,
+  });
 };
 
 // TX-02: serialize Application Assignee eligibility against Company operational
@@ -1379,6 +1397,32 @@ const acquireJobTeamMembershipForAssigneeEligibilityTx = async ({
         { primaryRecruiterCompanyMemberId: assigneeCompanyMemberId },
         { supportingRecruiterCompanyMemberIds: assigneeCompanyMemberId },
       ],
+    },
+    {
+      $set: {
+        companyId,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
+// TX-02: serialize manual assignment-management against Primary replacement.
+// Conditional noop write conflicts when the actor is no longer current Primary.
+const acquireJobCurrentPrimaryForAssignmentManagementTx = async ({
+  jobId,
+  companyId,
+  primaryCompanyMemberId,
+  session,
+} = {}) => {
+  return Job.findOneAndUpdate(
+    {
+      _id: jobId,
+      companyId,
+      primaryRecruiterCompanyMemberId: primaryCompanyMemberId,
     },
     {
       $set: {
@@ -2353,8 +2397,9 @@ const addSupportingRecruiter = async ({
   };
 };
 
-// V6 F03 + V10 Slice 09: Remove Supporting recruiter. Required non-terminal
-// Application handoff completes before team-removal commit (BR-28 / TX-02).
+// V6 F03 + V10 Slice 08: Remove Supporting recruiter. Required Job-scoped
+// automatic Unassign (A → NONE) completes before team-removal commit
+// (BR-28 / TX-02 / TX-05). No Application replacement.
 const removeSupportingRecruiter = async ({
   actorUser,
   jobId,
@@ -2427,7 +2472,7 @@ const removeSupportingRecruiter = async ({
   // BR-12/BR-13/BR-30 + V10 F11: normal removal remains effectively
   // PUBLISHED. Only CM recovery for a persisted Platform-ineligible outgoing
   // Recruiter may use the V6 unfinished DRAFT/PENDING/PUBLISHED set. Reject
-  // ended Jobs before Application handoff so team history is not mutated.
+  // ended Jobs before Application detach so team history is not mutated.
   if (
     !isJobEffectivelyPublished(job) &&
     !(isPlatformRecovery && isJobUnfinishedForForcedTransfer(job))
@@ -2441,17 +2486,14 @@ const removeSupportingRecruiter = async ({
 
   const {
     assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
-    executeTrustedTeamRemovalApplicationHandoffs,
+    automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval,
   } = await import("./application.service.js");
 
-  // V10 Slice 09: Supporting leave → current Primary is the canonical Take-over
-  // replacement context (same as LOCK/TERMINATE Supporting departure). Do not
-  // invent another selector. Application lookup itself does not filter Job.status.
-  await executeTrustedTeamRemovalApplicationHandoffs({
-    companyId: context.companyId,
+  // V10 Slice 08: Supporting leave → Job-scoped A → NONE for Applications
+  // still assigned to the outgoing Recruiter. No Take-over / replacement.
+  await automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval({
     jobId: job._id,
     outgoingCompanyMemberId: supportingRecruiterCompanyMemberId,
-    replacementCompanyMemberId: job.primaryRecruiterCompanyMemberId,
   });
 
   const session = await mongoose.startSession();
@@ -2548,7 +2590,7 @@ const removeSupportingRecruiter = async ({
   };
 };
 
-// V6 F04 + V10 Slice 09/F11: Replace Primary Recruiter. Only Company Manager
+// V6 F04 + V10 Slice 08/F11: Replace Primary Recruiter. Only Company Manager
 // may promote a current Supporting. Normal flow remains effectively PUBLISHED;
 // persisted Platform User ineligibility opens recovery on the V6 unfinished
 // Job set and requires the outgoing Primary to leave. TX-01 atomic mutation;
@@ -2631,20 +2673,18 @@ const replacePrimaryRecruiter = async ({
 
   const oldPrimaryId = job.primaryRecruiterCompanyMemberId;
 
-  // V10 Slice 09 / BR-28: leaving the team requires Application handoff to the
-  // canonical V6 successor (new Primary) while that successor is already on
-  // the Recruitment Team as Supporting. PRIMARY→SUPPORTING keeps eligibility
-  // and does not create a handoff requirement.
+  // V10 Slice 08 / BR-28: leaving the team requires Job-scoped automatic
+  // Unassign (A → NONE) for Applications still assigned to the outgoing
+  // Primary. PRIMARY→SUPPORTING keeps eligibility and does not Unassign.
+  // Application lookup itself does not filter Job.status.
   if (!keepOldPrimaryAsSupporting) {
-    const { executeTrustedTeamRemovalApplicationHandoffs } = await import(
-      "./application.service.js"
-    );
+    const {
+      automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval,
+    } = await import("./application.service.js");
 
-    await executeTrustedTeamRemovalApplicationHandoffs({
-      companyId: context.companyId,
+    await automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval({
       jobId: job._id,
       outgoingCompanyMemberId: oldPrimaryId,
-      replacementCompanyMemberId: newPrimaryCompanyMemberId,
     });
   }
 
@@ -3226,8 +3266,10 @@ const executeForcedSupportingRemoval = async ({
 };
 
 export {
+  acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
   acquireActiveUserForAssigneeEligibilityTx,
+  acquireJobCurrentPrimaryForAssignmentManagementTx,
   acquireJobTeamMembershipForAssigneeEligibilityTx,
   acquireOperationalCompanyForAssigneeEligibilityTx,
   approveAndPublishJob,
