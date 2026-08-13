@@ -1048,7 +1048,7 @@ const assertCurrentPrimaryOfJob = ({
   }
 };
 
-// BR-07 / TX-02: assignee eligibility for First Assign and Reassign/Take over —
+// BR-07 / TX-02: assignee eligibility for Assign and Reassign/Take over —
 // derived from persisted Job/Member/User/Company at commit time.
 const assertAssigneeEligibleForJobAssignment = async ({
   assigneeCompanyMemberId,
@@ -1403,15 +1403,49 @@ const rejectFailedFirstAssignCas = async ({
   if (latestApplication.version !== expectedVersion) {
     throw new AppError(
       409,
-      "Application has changed; refresh and retry First Assign",
+      "Application has changed; refresh and retry Assign",
       { field: "expectedVersion" },
     );
   }
 
   throw new AppError(
     409,
-    "Application has changed; refresh and retry First Assign",
+    "Application has changed; refresh and retry Assign",
     { field: "expectedVersion" },
+  );
+};
+
+// Canonical NONE → Recruiter persistence mutation (Data Contract §8.1 / TX-01).
+// Matches Unassigned + expected version + current non-terminal status; does not
+// mutate Recruitment Status, identity, snapshot, or Recruitment Team.
+const commitAssignFromUnassigned = async ({
+  applicationId,
+  jobId,
+  assigneeCompanyMemberId,
+  expectedVersion,
+  session,
+} = {}) => {
+  return Application.findOneAndUpdate(
+    {
+      _id: applicationId,
+      jobId,
+      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+      version: expectedVersion,
+      assignedRecruiterCompanyMemberId: null,
+    },
+    {
+      $set: {
+        assignedRecruiterCompanyMemberId: assigneeCompanyMemberId,
+      },
+      $inc: {
+        version: 1,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
   );
 };
 
@@ -1470,11 +1504,12 @@ const firstAssignApplication = async ({
         tenantCompanyId: context.companyId,
       });
 
-      // BR-06 / BR-09 / BR-42: only current Primary may First Assign.
+      // BR-06 / BR-09: only current Primary may Assign Unassigned Applications.
+      // Company Manager assignment-management authority is a later slice.
       assertCurrentPrimaryOfJob({
         job,
         actorMembershipId: context.membership._id,
-        actionLabel: "First Assign",
+        actionLabel: "Assign",
       });
 
       const application = await Application.findById(applicationId).session(
@@ -1493,9 +1528,9 @@ const firstAssignApplication = async ({
         });
       }
 
-      // BR-44: V10 First Assign only covers Direct Applications.
+      // BR-44: V10 Assign only covers Direct Applications.
       if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(409, "Only Direct Applications can be First Assigned", {
+        throw new AppError(409, "Only Direct Applications can be Assigned", {
           field: "source",
         });
       }
@@ -1508,14 +1543,11 @@ const firstAssignApplication = async ({
         });
       }
 
-      // Canonical V10 Unassigned + First Assign boundary is APPLIED only
-      // (status×assignment matrix forbids Unassigned pipeline states).
-      if (application.status !== APPLICATION_STATUS.APPLIED) {
-        throw new AppError(
-          409,
-          "Only APPLIED Unassigned Applications can be First Assigned",
-          { field: "status", status: application.status },
-        );
+      if (!APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot be assigned", {
+          field: "status",
+          status: application.status,
+        });
       }
 
       if (!isApplicationUnassigned(application)) {
@@ -1532,30 +1564,17 @@ const firstAssignApplication = async ({
         session,
       });
 
-      // TX-01 / BR-36 / BR-37: atomic Unassigned + version CAS; no intermediate state.
-      // MongoDB null equality matches both explicit null and missing assignee fields.
-      assignedApplication = await Application.findOneAndUpdate(
-        {
-          _id: application._id,
-          jobId: job._id,
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
-          status: APPLICATION_STATUS.APPLIED,
-          version: expectedVersion,
-          assignedRecruiterCompanyMemberId: null,
-        },
-        {
-          $set: {
-            assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
-          },
-          $inc: {
-            version: 1,
-          },
-        },
-        {
-          returnDocument: "after",
-          session,
-        },
-      );
+      // TX-01 / BR-36 / BR-37: atomic Unassigned + version CAS; no intermediate
+      // state. Status is constrained to current non-terminal values so a
+      // concurrent Withdraw/terminal write cannot be overwritten. MongoDB null
+      // equality matches both explicit null and missing assignee fields.
+      assignedApplication = await commitAssignFromUnassigned({
+        applicationId: application._id,
+        jobId: job._id,
+        assigneeCompanyMemberId: assigneeContext.membership._id,
+        expectedVersion,
+        session,
+      });
 
       if (!assignedApplication) {
         await rejectFailedFirstAssignCas({

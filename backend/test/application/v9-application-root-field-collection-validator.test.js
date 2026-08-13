@@ -184,19 +184,55 @@ describe("V9 — Application root-field collection validator", () => {
     );
   });
 
-  it("rejects raw update that sets SCREENING without Assignee", async () => {
-    const { user } = await createVerifiedUser({
-      email: "raw-root-validator.screening-unassigned@example.com",
-    });
-    const doc = buildValidRawDocument(user._id);
-    await Application.collection.insertOne(doc);
+  it("accepts raw update to every Unassigned-capable status without Assignee", async () => {
+    const statusesAllowingUnassigned = [
+      APPLICATION_STATUS.APPLIED,
+      APPLICATION_STATUS.SCREENING,
+      APPLICATION_STATUS.CONTACTED,
+      APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+      APPLICATION_STATUS.INTERVIEW_COMPLETED,
+      APPLICATION_STATUS.WITHDRAWN,
+    ];
 
-    await expectRawWriteRejected(() =>
-      Application.collection.updateOne(
+    for (const status of statusesAllowingUnassigned) {
+      const doc = buildValidRawDocument(new mongoose.Types.ObjectId());
+      await Application.collection.insertOne(doc);
+
+      const update = { status, version: 1 };
+      if (status === APPLICATION_STATUS.WITHDRAWN) {
+        update.withdrawnAt = new Date();
+      }
+
+      await Application.collection.updateOne(
         { _id: doc._id },
-        { $set: { status: APPLICATION_STATUS.SCREENING } },
-      ),
-    );
+        { $set: update },
+      );
+
+      const persisted = await Application.collection.findOne({ _id: doc._id });
+      expect(persisted.status).toBe(status);
+      expect(persisted.assignedRecruiterCompanyMemberId ?? null).toBeNull();
+    }
+  });
+
+  it("rejects raw update that sets HIRED or REJECTED without Assignee", async () => {
+    for (const status of [
+      APPLICATION_STATUS.HIRED,
+      APPLICATION_STATUS.REJECTED,
+    ]) {
+      const doc = buildValidRawDocument(new mongoose.Types.ObjectId());
+      await Application.collection.insertOne(doc);
+
+      await expectRawWriteRejected(() =>
+        Application.collection.updateOne(
+          { _id: doc._id },
+          { $set: { status, version: 1 } },
+        ),
+      );
+
+      const persisted = await Application.collection.findOne({ _id: doc._id });
+      expect(persisted.status).toBe(APPLICATION_STATUS.APPLIED);
+      expect(persisted.assignedRecruiterCompanyMemberId ?? null).toBeNull();
+    }
   });
 
   describe("withdrawal state matrix at collection boundary", () => {

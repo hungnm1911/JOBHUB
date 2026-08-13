@@ -25,7 +25,22 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** has Slice 01 —
+**V10 — Phân công Application và Recruitment Pipeline** Slices 01–02 of the
+current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
+opened the persistence state matrix so every non-terminal Recruitment Status
+can persist `UNASSIGNED` or Assigned. Slice 02 extends Primary Assign of
+Unassigned Applications (`NONE → Recruiter`) to every non-terminal status on
+`PUBLISHED`/`CLOSED`/`EXPIRED` Jobs, reusing the existing First Assign HTTP
+surface and TX-01/TX-02 foundation. The current Product/Data contracts remain
+approved implementation authority. The prior implementation and its
+104-file / 893-test green baseline encoded the old state matrix and
+direct-handoff lifecycle semantics; that baseline remains regression history,
+not completion evidence for the current canonical revision. Remaining
+`ASSIGN / UNASSIGN` slices (Primary Reassign/Unassign, Company Manager
+assignment management, automatic Unassign / lifecycle detach) are not started.
+
+Previous V10 implementation baseline (historical, not current completion
+evidence) has Slice 01 —
 Application persistence foundation, Slice 02 — V9 compatibility +
 Job-retention compatibility, Slice 03 — Unassigned Applications +
 Primary Application View, Slice 04 — First Assign Application,
@@ -37,10 +52,9 @@ Eligibility-Loss Application Handoff, Slice 10 — Recruitment Pipeline,
 Slice 11 — Managed Jobs / Pipeline Workspace / Current Workload,
 Slice 12 — Recruiter My Applications, and Slice 13 — Candidate My
 Applications, plus the V10 F11 business extension — Platform Admin Recruiter
-Account Lock/Terminate → Company Responsibility Recovery. Final Acceptance /
-regression closure has passed across F01–F11, BR-01–BR-53, and TX-01–TX-05;
-V10 is `COMPLETED AND VERIFIED`. Its approved
-Product/Data contracts are
+Account Lock/Terminate → Company Responsibility Recovery. That prior revision's
+Final Acceptance / regression closure passed across F01–F11, BR-01–BR-53, and
+TX-01–TX-05. The canonical Product/Data contract paths are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
 and
 `docs/data/versions/v10-application-assignment-recruitment-pipeline-data-model.md`.
@@ -124,11 +138,13 @@ Statuses and Jobs in `PUBLISHED`/`CLOSED`/`EXPIRED`, with Job + Company +
 snapshot + live Assignee `fullName`/`avatarUrl`/`jobTitle` only (no email/phone
 or Assignment History), optional status/`q` filters, and no mutation of
 Application state or expansion of Replace/Withdraw/Pipeline authority.
-The canonical V10 Product Specification now covers F01–F11 and BR-01–BR-53.
-F11 reuses the existing V1 Platform User lifecycle, V6 Recruitment Team,
-V10 administrative recovery handoff, active-responsibility derivation, and H3
-TX-02 coordination. No new V10 persistence entity, field, collection, counter,
-or history was needed.
+The current canonical V10 Product Specification covers F01–F11 and BR-01–BR-53.
+Slice 01 reuses the existing Application field, indexes, revision/CAS,
+Candidate–Job uniqueness, identity immutability, and snapshot contract. It
+changed only the local status × assignment-state persistence matrix so every
+non-terminal Recruitment Status can persist `UNASSIGNED`; no new V10
+persistence entity, field, collection, counter, history, index, migration, or
+backfill was added.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -169,7 +185,51 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
-## Completed and verified
+## Current V10 ASSIGN / UNASSIGN revision
+
+- **Implemented; verified:** V10 Slice 01 — Persistence State Matrix (F01, F02,
+  F03, F04, F11 persistence enabler; BR-03–BR-05, BR-10, BR-17, BR-20, BR-28,
+  BR-52; PI-07, PI-10, PI-14, PI-23, PI-26; TX-01 foundation): updates the
+  Application local and collection status × assignment-state matrix so every
+  non-terminal Recruitment Status (`APPLIED`, `SCREENING`, `CONTACTED`,
+  `INTERVIEW_SCHEDULED`, `INTERVIEW_COMPLETED`) may persist Unassigned
+  (`assignedRecruiterCompanyMemberId` null/absent) or a current Assignee;
+  `UNASSIGNED` remains assignment-state only and is not a Recruitment Status;
+  `HIRED`/`REJECTED` still require a final Assignee; `WITHDRAWN` keeps V9
+  compatibility (null or last Assignee). No status-enum, field, collection,
+  index, migration, or backfill change. Assign/Unassign/Reassign APIs,
+  automatic Unassign, and later-slice orchestration are unchanged. Focused
+  coverage in `test/application/v10-application-foundation.test.js` and
+  `test/application/v9-application-root-field-collection-validator.test.js`
+  (2 files / 37 tests). The official backend gate passed (ESLint: 0 errors / 2
+  existing warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through
+  ARCH-016; Vitest: 104 files / 900 tests).
+
+- **Implemented; verified:** V10 Slice 02 — Assign Unassigned Application at
+  every non-terminal Recruitment Status by Primary Recruiter (F02, F09;
+  BR-06–BR-11, BR-17, BR-27, BR-36–BR-38, BR-40; TX-01, TX-02): extends the
+  existing `firstAssignApplication` / `POST /api/jobs/:jobId/applications/:applicationId/assign`
+  owner so current Primary can Assign an Unassigned Application (`NONE → Recruiter`)
+  to self or a current eligible Supporting Recruiter from `APPLIED`,
+  `SCREENING`, `CONTACTED`, `INTERVIEW_SCHEDULED`, or `INTERVIEW_COMPLETED`,
+  including on `CLOSED`/`EXPIRED` Jobs. Assign mutates only current Assignee and
+  concurrency metadata; Recruitment Status, Candidate, Job, source,
+  `submittedCvSnapshot`, and Recruitment Team are unchanged. Target eligibility
+  is revalidated at commit (TX-02). Supporting cannot self-claim. Terminal and
+  already-Assigned Applications are rejected. Concurrent/stale Assign cannot
+  overwrite a newer state. Company Manager Assign, Unassign, Reassign/Take over
+  behavior, and automatic eligibility-loss Unassign are unchanged. Focused
+  coverage in `test/application/v10-first-assign.test.js` (1 file / 28 tests).
+  The official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 104
+  files / 914 tests).
+
+## Previously completed and verified baseline
+
+The V10 entries below record verification evidence for the implementation that
+predates the current approved `ASSIGN / UNASSIGN` contract revision. They remain
+regression history and reusable implementation evidence, but they do not mark
+the current V10 revision complete.
 
 - **Implemented; verified:** V10 Final Acceptance finding — Platform User
   lifecycle vs Job-team responsibility writers (F11 / BR-49; H3 TX-02
@@ -844,6 +904,8 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V10 Slice 02 Assign Unassigned Application (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after Primary Assign was extended to every non-terminal Unassigned status (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 104 files / 914 tests). Focused Assign coverage passed 1 file / 28 tests. No Unassign, Company Manager Assign, automatic lifecycle detach, field, collection, index, history, or migration was added.
+- V10 Slice 01 Persistence State Matrix (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after the local/collection status × assignment-state matrix update (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 104 files / 900 tests). Focused persistence coverage passed 2 files / 37 tests. No schema, index, migration, or backfill was added.
 - V9 Slice 01 Implementation Readiness baseline (pre-implementation): the
   official `cd backend && npm run verify:agent` gate passed after the
   readiness-only canonical/ownership/V6-regression changes (ESLint: 0 errors /

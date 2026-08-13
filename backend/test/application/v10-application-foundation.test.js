@@ -14,6 +14,7 @@ import CANDIDATE_CV_SOURCE_TYPE from "../../src/constants/candidate-cv-source-ty
 import CANDIDATE_CV_UPLOADED_PDF from "../../src/constants/candidate-cv-uploaded-pdf.js";
 import Application, {
   APPLICATION_STATUSES_REQUIRING_ASSIGNEE,
+  assertApplicationLocalInvariants,
   ensureApplicationCollectionInvariants,
 } from "../../src/models/application.model.js";
 import { createVerifiedUser } from "../helpers/auth-fixtures.js";
@@ -36,6 +37,19 @@ const V10_STATUS_VALUES = [
   APPLICATION_STATUS.HIRED,
   APPLICATION_STATUS.REJECTED,
   APPLICATION_STATUS.WITHDRAWN,
+];
+
+const NON_TERMINAL_STATUSES = [
+  APPLICATION_STATUS.APPLIED,
+  APPLICATION_STATUS.SCREENING,
+  APPLICATION_STATUS.CONTACTED,
+  APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+  APPLICATION_STATUS.INTERVIEW_COMPLETED,
+];
+
+const TERMINAL_STATUSES_REQUIRING_FINAL_ASSIGNEE = [
+  APPLICATION_STATUS.HIRED,
+  APPLICATION_STATUS.REJECTED,
 ];
 
 const buildSnapshotPdfFile = (overrides = {}) => ({
@@ -268,8 +282,161 @@ describe("V10 Slice 01 — Application persistence foundation", () => {
   });
 
   describe("Local status × assignment state matrix", () => {
-    it("rejects statuses that require Assignee when assignee is null or absent", async () => {
-      for (const status of APPLICATION_STATUSES_REQUIRING_ASSIGNEE) {
+    const assigneeId = new mongoose.Types.ObjectId();
+
+    const localInvariantInput = ({
+      status,
+      assignedRecruiterCompanyMemberId = null,
+      withdrawnAt = null,
+      withdrawReason = null,
+      version = 1,
+    }) => ({
+      status,
+      assignedRecruiterCompanyMemberId,
+      withdrawnAt,
+      withdrawReason,
+      version,
+      submittedCvSnapshot: buildUploadedSnapshot(),
+    });
+
+    it("exports HIRED and REJECTED as the only statuses that require a final Assignee", () => {
+      expect([...APPLICATION_STATUSES_REQUIRING_ASSIGNEE]).toEqual(
+        TERMINAL_STATUSES_REQUIRING_FINAL_ASSIGNEE,
+      );
+      for (const status of NON_TERMINAL_STATUSES) {
+        expect(APPLICATION_STATUSES_REQUIRING_ASSIGNEE).not.toContain(status);
+      }
+      expect(APPLICATION_STATUSES_REQUIRING_ASSIGNEE).not.toContain(
+        APPLICATION_STATUS.WITHDRAWN,
+      );
+    });
+
+    it("allows every non-terminal status with Unassigned or Assigned at the local invariant", () => {
+      for (const status of NON_TERMINAL_STATUSES) {
+        expect(
+          assertApplicationLocalInvariants(
+            localInvariantInput({
+              status,
+              assignedRecruiterCompanyMemberId: null,
+            }),
+          ),
+        ).toEqual([]);
+        expect(
+          assertApplicationLocalInvariants(
+            localInvariantInput({
+              status,
+              assignedRecruiterCompanyMemberId: assigneeId,
+            }),
+          ),
+        ).toEqual([]);
+      }
+    });
+
+    it("allows WITHDRAWN with Unassigned or Assigned at the local invariant", () => {
+      expect(
+        assertApplicationLocalInvariants(
+          localInvariantInput({
+            status: APPLICATION_STATUS.WITHDRAWN,
+            assignedRecruiterCompanyMemberId: null,
+            withdrawnAt: WITHDRAWN_AT,
+          }),
+        ),
+      ).toEqual([]);
+      expect(
+        assertApplicationLocalInvariants(
+          localInvariantInput({
+            status: APPLICATION_STATUS.WITHDRAWN,
+            assignedRecruiterCompanyMemberId: assigneeId,
+            withdrawnAt: WITHDRAWN_AT,
+          }),
+        ),
+      ).toEqual([]);
+    });
+
+    it("rejects HIRED and REJECTED without a final Assignee at the local invariant", () => {
+      for (const status of TERMINAL_STATUSES_REQUIRING_FINAL_ASSIGNEE) {
+        const errorsForNull = assertApplicationLocalInvariants(
+          localInvariantInput({
+            status,
+            assignedRecruiterCompanyMemberId: null,
+          }),
+        );
+        const absentAssignee = localInvariantInput({ status });
+        delete absentAssignee.assignedRecruiterCompanyMemberId;
+        const errorsForAbsent =
+          assertApplicationLocalInvariants(absentAssignee);
+
+        expect(errorsForNull).toContain(
+          `${status} Application must have assignedRecruiterCompanyMemberId`,
+        );
+        expect(errorsForAbsent).toContain(
+          `${status} Application must have assignedRecruiterCompanyMemberId`,
+        );
+      }
+    });
+
+    it("persists every Unassigned-capable status with explicit null or legacy absent assignee", async () => {
+      const statusesAllowingUnassigned = [
+        ...NON_TERMINAL_STATUSES,
+        APPLICATION_STATUS.WITHDRAWN,
+      ];
+
+      for (const status of statusesAllowingUnassigned) {
+        const withdrawnAt =
+          status === APPLICATION_STATUS.WITHDRAWN ? WITHDRAWN_AT : null;
+        const explicitNull = buildRawDocument({
+          status,
+          assignedRecruiterCompanyMemberId: null,
+          withdrawnAt,
+          version: 1,
+        });
+        const legacyAbsent = buildRawDocument({
+          status,
+          includeAssigneeField: false,
+          withdrawnAt,
+          version: 1,
+        });
+
+        await Application.collection.insertOne(explicitNull);
+        await Application.collection.insertOne(legacyAbsent);
+
+        const persistedNull = await Application.collection.findOne({
+          _id: explicitNull._id,
+        });
+        const persistedAbsent = await Application.collection.findOne({
+          _id: legacyAbsent._id,
+        });
+
+        expect(persistedNull.status).toBe(status);
+        expect(persistedNull.assignedRecruiterCompanyMemberId).toBeNull();
+        expect(persistedAbsent.status).toBe(status);
+        expect(persistedAbsent).not.toHaveProperty(
+          "assignedRecruiterCompanyMemberId",
+        );
+      }
+    });
+
+    it("persists every Recruitment Status with a current Assignee reference", async () => {
+      for (const status of V10_STATUS_VALUES) {
+        const doc = buildRawDocument({
+          status,
+          assignedRecruiterCompanyMemberId: assigneeId,
+          withdrawnAt:
+            status === APPLICATION_STATUS.WITHDRAWN ? WITHDRAWN_AT : null,
+          version: 1,
+        });
+        await Application.collection.insertOne(doc);
+
+        const persisted = await Application.collection.findOne({ _id: doc._id });
+        expect(persisted.status).toBe(status);
+        expect(persisted.assignedRecruiterCompanyMemberId.toString()).toBe(
+          assigneeId.toString(),
+        );
+      }
+    });
+
+    it("rejects HIRED and REJECTED when assignee is null or absent at the collection boundary", async () => {
+      for (const status of TERMINAL_STATUSES_REQUIRING_FINAL_ASSIGNEE) {
         await expectWriteRejectedByPersistence(() =>
           Application.collection.insertOne(
             buildRawDocument({
@@ -292,68 +459,87 @@ describe("V10 Slice 01 — Application persistence foundation", () => {
       }
     });
 
-    it("accepts statuses that require Assignee when assignee is present", async () => {
-      const assigneeId = new mongoose.Types.ObjectId();
+    it("allows mongoose save of every Unassigned-capable status", async () => {
+      const { user } = await createVerifiedUser({
+        email: "v10.matrix-save-unassigned-pipeline@example.com",
+      });
+      const statusesAllowingUnassigned = [
+        ...NON_TERMINAL_STATUSES,
+        APPLICATION_STATUS.WITHDRAWN,
+      ];
 
-      for (const status of APPLICATION_STATUSES_REQUIRING_ASSIGNEE) {
-        const doc = buildRawDocument({
-          status,
-          assignedRecruiterCompanyMemberId: assigneeId,
-          version: 1,
-        });
-        await Application.collection.insertOne(doc);
+      for (const status of statusesAllowingUnassigned) {
+        const application = await Application.create(
+          buildApplicationFields({
+            candidateUserId: user._id,
+            jobId: new mongoose.Types.ObjectId(),
+          }),
+        );
 
-        const persisted = await Application.collection.findOne({ _id: doc._id });
+        application.status = status;
+        application.withdrawnAt =
+          status === APPLICATION_STATUS.WITHDRAWN ? WITHDRAWN_AT : null;
+        application.version = 1;
+        await application.save();
+
+        const persisted = await Application.findById(application._id).lean();
+        expect(persisted.status).toBe(status);
+        expect(persisted.assignedRecruiterCompanyMemberId).toBeNull();
+        expect(persisted.version).toBe(1);
+      }
+    });
+
+    it("allows mongoose save of every Recruitment Status after Assignee is set", async () => {
+      const { user } = await createVerifiedUser({
+        email: "v10.matrix-save-assigned@example.com",
+      });
+
+      for (const status of V10_STATUS_VALUES) {
+        const application = await Application.create(
+          buildApplicationFields({
+            candidateUserId: user._id,
+            jobId: new mongoose.Types.ObjectId(),
+          }),
+        );
+
+        application.status = status;
+        application.assignedRecruiterCompanyMemberId = assigneeId;
+        application.withdrawnAt =
+          status === APPLICATION_STATUS.WITHDRAWN ? WITHDRAWN_AT : null;
+        application.version = 1;
+        await application.save();
+
+        const persisted = await Application.findById(application._id).lean();
         expect(persisted.status).toBe(status);
         expect(persisted.assignedRecruiterCompanyMemberId.toString()).toBe(
           assigneeId.toString(),
         );
+        expect(persisted.version).toBe(1);
       }
     });
 
-    it("rejects mongoose save that moves APPLIED Unassigned into SCREENING without Assignee", async () => {
+    it("rejects mongoose save that moves APPLIED Unassigned into HIRED or REJECTED without Assignee", async () => {
       const { user } = await createVerifiedUser({
-        email: "v10.matrix-save@example.com",
+        email: "v10.matrix-save-hired-unassigned@example.com",
       });
-      const application = await Application.create(
-        buildApplicationFields({
-          candidateUserId: user._id,
-          jobId: new mongoose.Types.ObjectId(),
-        }),
-      );
 
-      application.status = APPLICATION_STATUS.SCREENING;
+      for (const status of TERMINAL_STATUSES_REQUIRING_FINAL_ASSIGNEE) {
+        const application = await Application.create(
+          buildApplicationFields({
+            candidateUserId: user._id,
+            jobId: new mongoose.Types.ObjectId(),
+          }),
+        );
 
-      await expectWriteRejectedByPersistence(() => application.save());
+        application.status = status;
+        application.version = 1;
 
-      const persisted = await Application.findById(application._id).lean();
-      expect(persisted.status).toBe(APPLICATION_STATUS.APPLIED);
-      expect(persisted.assignedRecruiterCompanyMemberId).toBeNull();
-    });
+        await expectWriteRejectedByPersistence(() => application.save());
 
-    it("allows mongoose save of SCREENING only after Assignee is set", async () => {
-      const { user } = await createVerifiedUser({
-        email: "v10.matrix-save-assigned@example.com",
-      });
-      const assigneeId = new mongoose.Types.ObjectId();
-      const application = await Application.create(
-        buildApplicationFields({
-          candidateUserId: user._id,
-          jobId: new mongoose.Types.ObjectId(),
-        }),
-      );
-
-      application.status = APPLICATION_STATUS.SCREENING;
-      application.assignedRecruiterCompanyMemberId = assigneeId;
-      application.version = 1;
-      await application.save();
-
-      const persisted = await Application.findById(application._id).lean();
-      expect(persisted.status).toBe(APPLICATION_STATUS.SCREENING);
-      expect(persisted.assignedRecruiterCompanyMemberId.toString()).toBe(
-        assigneeId.toString(),
-      );
-      expect(persisted.version).toBe(1);
+        const persisted = await Application.findById(application._id).lean();
+        expect(persisted.status).toBe(APPLICATION_STATUS.APPLIED);
+        expect(persisted.assignedRecruiterCompanyMemberId).toBeNull();
+      }
     });
   });
 
@@ -364,10 +550,9 @@ describe("V10 Slice 01 — Application persistence foundation", () => {
       });
       const assigneeId = new mongoose.Types.ObjectId();
 
-      for (const status of [
-        ...APPLICATION_STATUSES_REQUIRING_ASSIGNEE,
-        APPLICATION_STATUS.WITHDRAWN,
-      ]) {
+      for (const status of V10_STATUS_VALUES.filter(
+        (value) => value !== APPLICATION_STATUS.APPLIED,
+      )) {
         await expectWriteRejectedByPersistence(() =>
           Application.create(
             buildApplicationFields({

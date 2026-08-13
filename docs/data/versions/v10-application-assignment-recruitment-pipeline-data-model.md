@@ -54,7 +54,7 @@ Không tạo collection nghiệp vụ mới.
 
 | Entity / Collection                                | Trạng thái  | Mô tả                                                                                                                                                          |
 | -------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Application` / `applications`                     | `UPDATED`   | Thêm current Assignee, kích hoạt assignment, reassignment, take over và Recruitment Pipeline; bổ sung persistence constraints/index phục vụ V10              |
+| `Application` / `applications`                     | `UPDATED`   | Thêm current Assignee, hỗ trợ Assign/Reassign/Take over/Unassign, automatic Unassign và Recruitment Pipeline; bổ sung persistence constraints/index phục vụ V10 |
 | `Job` / `jobs`                                     | `UPDATED`   | Không thêm business field; bổ sung persistence access path cho Managed Jobs, giữ Job retention theo lifecycle V5                                               |
 | `CompanyMember` / `company_members`                | `UNCHANGED` | Dùng để resolve Primary, Supporting, Assigned Recruiter, role, membership status và `jobTitle`                                                                 |
 | `User` / `users`                                   | `UNCHANGED` | Dùng để resolve Candidate, Recruiter account status, `fullName` và `avatarUrl`                                                                                 |
@@ -93,6 +93,8 @@ V10 mở rộng persistence behavior của `Application` bằng:
 
 * Recruitment Status transitions;
 * assignment transitions;
+* automatic Unassign khi current Assignee mất eligibility theo Product
+  Specification;
 * state combination constraints;
 * concurrency protection;
 * indexes phục vụ Managed Jobs, My Applications, Pipeline và current workload.
@@ -419,7 +421,6 @@ V10 không thêm snapshot hoặc duplicate các field trên vào Application.
 * thời điểm apply;
 * dữ liệu Withdraw thuộc V9;
 * current Assigned Recruiter;
-* source Recruiter nếu source cần;
 * Job;
 * Candidate;
 * `submittedCvSnapshot`;
@@ -578,7 +579,8 @@ Mục đích:
 * My Applications của Recruiter;
 * current workload theo non-terminal status;
 * lookup Applications hiện đang assign cho một Recruiter.
-* resolve non-terminal Application responsibility cho lifecycle/team handoff và final guard.
+* resolve non-terminal Application responsibility cho automatic Unassign,
+  lifecycle/team coordination và final guard.
 
 ### IDX-A05 — Candidate My Applications
 
@@ -598,6 +600,11 @@ V10 không thêm index cho:
 * Status History;
 * historical KPI;
 * future Invitation source.
+
+Revision sang model `ASSIGN / UNASSIGN` không yêu cầu schema hoặc index mới.
+Nullable `assignedRecruiterCompanyMemberId`, `version` và các access path
+IDX-A03/IDX-A04 đã đủ để biểu diễn/query Unassigned, current Assignee, current
+workload và tập non-terminal Applications cần automatic Unassign.
 
 Các field `updatedAt` có thể được sử dụng trong projection/sorting implementation, nhưng Product Specification không định nghĩa một canonical sort order nên V10 Data Contract không tạo business guarantee về thứ tự danh sách.
 
@@ -626,7 +633,7 @@ Persistence rules:
 * Assign không thay snapshot;
 * Reassign không thay snapshot;
 * Take over không thay snapshot;
-* forced reassignment không thay snapshot;
+* Unassign và automatic Unassign không thay snapshot;
 * Recruitment Status transition không thay snapshot;
 * terminal transition không xóa snapshot.
 
@@ -772,11 +779,13 @@ User.status = ACTIVE
 là một phần của operational eligibility.
 
 Platform Admin `User.status → LOCKED | TERMINATED` giữ nguyên
-`CompanyMember`, Job Recruitment Team và Application responsibility references.
-Đây không phải CompanyMember Recruiter lifecycle, không tạo persistence field
-mới, và không chạy final zero-responsibility guard. User lifecycle đã commit
-làm Recruiter mất processing/target eligibility; Company Manager recovery sau
-đó tiếp tục derive từ current persisted relationships.
+`CompanyMember` và Job Recruitment Team nhưng làm mọi non-terminal Application
+đang assign cho Recruiter đó được persist về
+`assignedRecruiterCompanyMemberId = null`. Đây không phải CompanyMember
+Recruiter lifecycle, không tạo persistence field mới, không chọn replacement và
+không chạy final zero-responsibility guard. Terminal Application giữ final
+Assignee nếu đã có. Company Manager recovery Job-team và Primary/Company Manager
+Assign lại Application tiếp tục derive từ current persisted relationships.
 
 Candidate-facing Assignee projection dùng:
 
@@ -828,13 +837,13 @@ assignedRecruiterCompanyMemberId != null
 | --------------------- | -------- | -----: | --------------------------------------------------- |
 | `APPLIED`             | `null`   |    YES | Direct Application chưa được phân công              |
 | `APPLIED`             | non-null |    YES | Đã assign nhưng chưa Screening                      |
-| `SCREENING`           | `null`   |     NO | Không được tồn tại                                  |
+| `SCREENING`           | `null`   |    YES | Giữ bước Screening và chờ Assign lại                |
 | `SCREENING`           | non-null |    YES | Assignee đang xử lý                                 |
-| `CONTACTED`           | `null`   |     NO | Không được tồn tại                                  |
+| `CONTACTED`           | `null`   |    YES | Giữ bước Contacted và chờ Assign lại                |
 | `CONTACTED`           | non-null |    YES | Assignee đang xử lý                                 |
-| `INTERVIEW_SCHEDULED` | `null`   |     NO | Không được tồn tại                                  |
+| `INTERVIEW_SCHEDULED` | `null`   |    YES | Giữ bước Interview Scheduled và chờ Assign lại      |
 | `INTERVIEW_SCHEDULED` | non-null |    YES | Assignee đang xử lý                                 |
-| `INTERVIEW_COMPLETED` | `null`   |     NO | Không được tồn tại                                  |
+| `INTERVIEW_COMPLETED` | `null`   |    YES | Giữ bước Interview Completed và chờ Assign lại      |
 | `INTERVIEW_COMPLETED` | non-null |    YES | Assignee đang xử lý                                 |
 | `HIRED`               | `null`   |     NO | Không được tồn tại                                  |
 | `HIRED`               | non-null |    YES | Terminal; giữ Assignee cuối                         |
@@ -882,15 +891,24 @@ Ba trường hợp:
 | ---------- | -------------------- | ------------------------------------------------------------------------------------------------ |
 | Unassigned | —                    | Không Recruiter nào được xử lý                                                                   |
 | Assigned   | eligible             | Current Assignee được xử lý theo transition hợp lệ                                               |
-| Assigned   | ineligible           | Reference có thể vẫn tồn tại; Assignee không được xử lý; cần handoff trước khi pipeline tiếp tục |
+| Assigned   | ineligible           | Không được xử lý; lifecycle/team trigger của một Recruiter phải automatic Unassign, riêng Company lock giữ reference và freeze processing |
 
-Việc Assignee mất eligibility không tự động:
+Khi current Assignee mất eligibility do CompanyMember lifecycle, rời current
+Recruitment Team hoặc Platform User chuyển sang `LOCKED`/`TERMINATED`, canonical
+persisted outcome cho mọi affected non-terminal Application là:
 
 ```text
 assignedRecruiterCompanyMemberId = null
 ```
 
-vì V10 không có Unassign.
+Recruitment Status và toàn bộ Application business content được giữ. Không cần
+replacement Recruiter để hoàn tất Application-side detach. Với operation xử lý
+nhiều Application, reference ineligible có thể chỉ tồn tại trong partial
+progress trước khi automatic Unassign của Application đó commit; nó không phải
+completion outcome và không cấp processing authority.
+
+Company lock là ngoại lệ riêng: action lock Company giữ current assignment
+reference và freeze processing; nó không tự tạo automatic Unassign.
 
 Active responsibility derivation cũng không phụ thuộc Job status:
 
@@ -912,11 +930,22 @@ Terminal Application giữ Assignee cuối cùng nếu có nhưng không còn đ
 
 # 8. Persistence Transitions
 
-## 8.1. Assign lần đầu
+Các transition quản lý current Assignee trong 8.1–8.4 chỉ mutate:
+
+```text
+assignedRecruiterCompanyMemberId
+version
+updatedAt
+```
+
+Chúng không mutate Recruitment Status, Candidate, Job, source,
+`submittedCvSnapshot` hoặc Recruitment Team.
+
+## 8.1. Assign từ Unassigned
 
 ### Trigger business
 
-`F02`, `BR-06`–`BR-11`.
+`F02`, `F04`, `BR-06`–`BR-11`, `BR-15`–`BR-17`.
 
 ### Trước
 
@@ -954,6 +983,7 @@ Application.updatedAt = now
 * Application có đúng một Assignee sau Assign.
 * Status không thay đổi.
 * Candidate/Job/source/snapshot không thay đổi.
+* Recruitment Team không thay đổi.
 * Assign stale dựa trên `UNASSIGNED` cũ không được overwrite Assign đã commit trước.
 
 ---
@@ -962,7 +992,7 @@ Application.updatedAt = now
 
 ### Trigger
 
-`F03`, `BR-12`, `BR-14`.
+`F03`, `F04`, `BR-10`, `BR-12`–`BR-17`.
 
 ### Trước
 
@@ -983,8 +1013,10 @@ Application.updatedAt = now
 
 ### Invariant
 
-* `A → null → B` không được persist như một intermediate business state;
-* Application chuyển trực tiếp `A → B`;
+* Reassign là một atomic current-reference change `A → B` trên Application;
+* không cần Unassign trước khi thực hiện một Reassign đã được yêu cầu;
+* một committed `A → null` từ business operation Unassign riêng là hợp lệ và
+  không bị coi là intermediate state lỗi;
 * snapshot không thay đổi;
 * stale write của A không được ghi đè B.
 
@@ -1018,41 +1050,41 @@ Recruitment Status giữ nguyên.
 
 ---
 
-## 8.4. Administrative Forced Reassignment
+## 8.4. Unassign
 
-Persistence representation:
+### Trigger
 
-```text
-assignedRecruiterCompanyMemberId = A
-↓
-assignedRecruiterCompanyMemberId = B
-```
+`F03`, `F04`, `BR-10`, `BR-12`, `BR-14`–`BR-17`.
 
-với B là target Recruiter hợp lệ.
-
-Operation chỉ được authorize trong một trong hai trusted context:
-
-* recovery handoff: A đã mất current eligibility;
-* pre-lifecycle handoff: A vẫn eligible nhưng là subject của verified lifecycle/team operation sắp làm A mất eligibility.
-
-Pre-lifecycle handoff không yêu cầu persist A thành ineligible trước và không thêm `lifecycleOperationId` trên Application. Trusted lifecycle/team operation context thuộc action coordination boundary, không phải business field mới.
-
-Không persist Company Manager làm Assignee.
-
-Không thêm:
+### Trước
 
 ```text
-forced = true
-forcedBy
-forcedReason
-assignmentType
+Application.assignedRecruiterCompanyMemberId = A
+Application.status = non-terminal
+Application.version = V
 ```
 
-vì V10 không lưu Assignment History hoặc audit history như một business capability.
+### Sau
 
-Việc authorization actor là Company Manager được kiểm tra tại action boundary, không được suy ra từ persisted Assignee field.
+```text
+Application.assignedRecruiterCompanyMemberId = null
+Application.status = giữ nguyên
+Application.version = V + 1
+Application.updatedAt = now
+```
 
-Không được dùng transition này cho arbitrary workload balancing hoặc để cấp normal First Assign/Reassign/Take over authority cho Company Manager.
+### Invariant
+
+* `A → null` là canonical committed assignment transition;
+* không cần target replacement;
+* Candidate, Job, source, `submittedCvSnapshot` và Recruitment Team không thay đổi;
+* Application không được tiến pipeline khi còn Unassigned;
+* stale Unassign dựa trên A không được clear Assignee B hoặc state mới hơn.
+
+Company Manager assignment management dùng cùng nullable Assignee
+representation cho `null → B`, `A → B` và `A → null`; không persist Company
+Manager làm Assignee và không thêm `forced`, `forcedBy`, `forcedReason` hoặc
+`assignmentType`.
 
 ---
 
@@ -1210,7 +1242,9 @@ Replace và `APPLIED → SCREENING` phải cạnh tranh trên cùng current Appl
 
 ## 8.10. Assignee mất operational eligibility
 
-Eligibility loss không tự tạo Application transition.
+Eligibility loss của một Recruiter do CompanyMember lifecycle, Platform User
+lock/terminate hoặc rời current Recruitment Team tạo automatic Unassign trên
+mọi affected non-terminal Application.
 
 ### Trước
 
@@ -1220,33 +1254,42 @@ Application.assignedRecruiterCompanyMemberId = A
 A = eligible
 ```
 
-### Sau eligibility change
-
-Có thể tồn tại:
+### Sau automatic Unassign của từng Application
 
 ```text
 Application.status = non-terminal
-Application.assignedRecruiterCompanyMemberId = A
-A = no longer eligible
+Application.assignedRecruiterCompanyMemberId = null
+Application.version = V + 1
+Application.updatedAt = now
 ```
 
-Application reference không bị tự động xóa.
-
-Persistence consequence:
+Automatic Unassign phải dùng expected current Assignee, current non-terminal
+status và concurrency metadata để không clear một Assignee/state mới hơn.
 
 ```text
-A không được commit pipeline transition mới.
+Candidate = giữ nguyên
+Job = giữ nguyên
+source = giữ nguyên
+submittedCvSnapshot = giữ nguyên
+Recruitment Team = giữ nguyên
 ```
 
-Application chỉ tiếp tục pipeline sau khi:
+Không yêu cầu replacement để commit detach. Application chỉ tiếp tục pipeline
+sau một business operation Assign độc lập:
 
 ```text
-A → B
+null → B
 ```
 
-và B là eligible Assignee.
+và B là current eligible Assignee.
 
-Nếu Company toàn bộ không operational, không có Assignee trong Company đáp ứng eligibility; V10 không tự mutate Application sang trạng thái khác chỉ để giải quyết trường hợp này.
+Terminal Application không bị automatic Unassign; final Assignee nếu có được
+giữ. Nếu Company toàn bộ không operational, không có Assignee trong Company đáp
+ứng eligibility và processing bị freeze, nhưng Company lock tự nó không phải
+automatic-Unassign trigger.
+
+Automatic Unassign không filter theo `Job.status`; affected non-terminal
+Application trên Job `PUBLISHED`, `CLOSED` hoặc `EXPIRED` đều dùng cùng outcome.
 
 Company lock special case:
 
@@ -1304,7 +1347,7 @@ theo lifecycle V5.
 
 ---
 
-## 8.13. CompanyMember Recruiter lifecycle và Recruitment Team handoff
+## 8.13. CompanyMember Recruiter lifecycle và Recruitment Team detach
 
 V10 mở rộng responsibility lookup của lifecycle/team operation mà không thay schema V6:
 
@@ -1317,10 +1360,21 @@ non-terminal Application responsibility theo V10
 ```
 
 Trước khi Company Manager commit `CompanyMember(RECRUITER).status` thành
-`LOCKED`/`TERMINATED`, required Application handoff dùng direct mutation `A → B`
-và giữ nguyên status, Candidate, Job, source cùng `submittedCvSnapshot`.
+`LOCKED`/`TERMINATED`, mọi non-terminal Application đang assign cho outgoing
+Recruiter phải được persist bằng direct mutation `A → null`, giữ nguyên status,
+Candidate, Job, source cùng `submittedCvSnapshot`.
 
-Trước khi Recruiter bị remove khỏi Recruitment Team của một Job, mọi non-terminal Application của Job đang trỏ tới Recruiter phải được handoff. Thay đổi Primary/Supporting mà Recruiter vẫn thuộc team và vẫn fully eligible không tự mutate Application.
+Trước khi hoặc cùng business completion làm Recruiter rời Recruitment Team của
+một Job, mọi non-terminal Application của Job đang trỏ tới Recruiter phải được
+Unassign. Không cần replacement Application Assignee. Thay đổi
+Primary/Supporting mà Recruiter vẫn thuộc team và vẫn fully eligible không tự
+mutate Application.
+
+Application detach không bị bỏ qua khi Job đã `CLOSED` hoặc `EXPIRED`.
+
+Job-team transfer/removal tiếp tục theo V6. Primary replacement vẫn bắt buộc khi
+V6 yêu cầu và không được persist nullable Primary; Application detach không
+redesign Recruitment Team persistence.
 
 Final lifecycle completion guard phải đọc current persisted outcome:
 
@@ -1334,30 +1388,43 @@ Không persist các count này làm source of truth.
 
 ---
 
-## 8.14. Platform User eligibility loss và Company recovery
+## 8.14. Platform User eligibility loss và automatic Unassign
 
-Generic Platform Admin lifecycle chỉ mutate canonical `User.status` và revoke
-session theo V1. Nó không mutate `CompanyMember.status`, Job Primary/Supporting,
-Application Assignee/Status hoặc `submittedCvSnapshot`; không persist recovery
+Generic Platform Admin lifecycle mutate canonical `User.status`, revoke session
+theo V1 và không mutate `CompanyMember.status` hay Job Primary/Supporting.
+Business consequence bắt buộc trên Application là automatic Unassign mọi
+non-terminal Application đang trỏ tới outgoing Recruiter. Không persist recovery
 flag, queue, history, counter hay replacement record.
 
-Khi `User.status != ACTIVE`, persisted responsibility reference được giữ nhưng
-không còn processing authority. Application First Assign/Reassign/handoff/
-Pipeline và Job-team operation trao Primary/Supporting responsibility phải dùng
-current User eligibility tại commit boundary. Nếu User lifecycle commit trước,
-stale operation không được commit; nếu responsibility mutation commit trước,
-mutation được giữ và User lifecycle vẫn có thể hoàn tất sau.
+Khi `User.status != ACTIVE`, outgoing Recruiter không còn processing/target
+eligibility. Application Assign/Reassign/Pipeline và Job-team operation trao
+Primary/Supporting responsibility phải dùng current User eligibility tại commit
+boundary. Nếu User lifecycle commit trước, stale operation không được commit và
+automatic Unassign phải clear mọi current non-terminal reference tới outgoing
+Recruiter. Nếu một Application mutation hợp lệ commit trước, mutation đó được
+giữ; Platform User lifecycle vẫn có thể hoàn tất và automatic Unassign sau đó
+phải xét current state để đưa Application về `null` khi nó vẫn non-terminal và
+vẫn trỏ tới outgoing Recruiter.
 
-Company Manager recovery dùng các current references đã tồn tại:
+Platform User lifecycle không bị block bởi Application/Job responsibility,
+không chạy CompanyMember final-zero guard và không chọn replacement. Terminal
+Application giữ final Assignee.
+
+Automatic Unassign không filter theo Job status.
+
+Sau automatic Unassign, responsibility recovery tách theo current persisted
+state:
 
 ```text
 active Job-team responsibility theo V6
-UNION
-non-terminal Application responsibility theo V10
+→ Company Manager xử lý theo Job-team rules khi cần
+
+non-terminal Application đã UNASSIGNED
+→ Primary Recruiter hoặc Company Manager có thể Assign lại sau
 ```
 
-Recovery không đồng bộ `User.status` với `CompanyMember.status`, không tạo
-global all-or-nothing transaction và không thay đổi Company-lock freeze
+Các operation trên không đồng bộ `User.status` với `CompanyMember.status`, không
+tạo global all-or-nothing transaction và không thay đổi Company-lock freeze
 semantics.
 
 ---
@@ -1384,7 +1451,8 @@ Các operation cạnh tranh trên cùng Application bao gồm:
 * Assign;
 * Reassign;
 * Take over;
-* administrative forced reassignment;
+* Unassign;
+* automatic Unassign;
 * Recruitment Status update;
 * V9 Replace Submitted CV;
 * V9 Withdraw.
@@ -1413,6 +1481,13 @@ Nếu Reassign `A → B` commit trước:
 
 ```text
 A không được commit status update dựa trên assignment cũ.
+```
+
+Nếu Unassign `A → null` commit trước:
+
+```text
+A không được commit status update dựa trên assignment cũ
+và stale operation không được khôi phục A.
 ```
 
 Nếu Withdraw commit trước:
@@ -1455,8 +1530,8 @@ Các operation phải phối hợp tại boundary này gồm:
 
 * First Assign;
 * Reassign/Take over;
-* administrative recovery handoff;
-* administrative pre-lifecycle handoff;
+* Unassign;
+* automatic Unassign;
 * Recruitment Status update;
 * Job-team operation trao Primary hoặc Supporting responsibility;
 * lifecycle/team operation làm Recruiter mất eligibility;
@@ -1481,11 +1556,19 @@ Required persisted outcomes:
 Nếu lifecycle/team operation đã commit làm Recruiter mất eligibility:
 
 ```text
-First Assign/Reassign/handoff vào Recruiter đó
+First Assign/Reassign/Take over vào Recruiter đó
 → không được commit
 ```
 
-Pipeline mutation của Recruiter đó cũng không được commit dựa trên eligibility cũ.
+Pipeline mutation của Recruiter đó cũng không được commit dựa trên eligibility
+cũ, và automatic Unassign phải đưa mọi current non-terminal assignment của
+Recruiter đó về `null`.
+
+CompanyMember lifecycle hoặc Recruitment Team removal không được đạt business
+completion khi còn affected non-terminal Application trỏ tới outgoing
+Recruiter. Generic Platform User lifecycle là ngoại lệ về completion ordering:
+User transition được phép commit ngay theo V1, nhưng canonical automatic
+Unassign outcome trên các Application vẫn bắt buộc.
 
 ### Trường hợp CompanyMember lifecycle responsibility commit trước
 
@@ -1494,10 +1577,12 @@ Nếu First Assign/Reassign vào Recruiter commit trước lifecycle completion:
 ```text
 final lifecycle guard
 → phải nhìn thấy non-terminal responsibility mới
-→ không được commit LOCKED/TERMINATED
+→ lifecycle operation phải Unassign responsibility đó
+→ chỉ được commit LOCKED/TERMINATED khi final guard bằng zero
 ```
 
-Lifecycle completion chỉ tiếp tục sau khi responsibility mới được handoff hoặc trở thành terminal theo một transition hợp lệ.
+Lifecycle completion không cần Application replacement; responsibility được
+resolve bằng `A → null` hoặc trở thành terminal theo một transition hợp lệ.
 
 ### Trường hợp generic Platform User lifecycle
 
@@ -1505,40 +1590,50 @@ Platform User lifecycle không dùng CompanyMember final guard. Nếu Platform
 `User` lifecycle commit trước, stale Application hoặc Job-team responsibility
 operation vào User đó không được commit. Nếu Application hoặc Job-team
 responsibility mutation hợp lệ commit trước, persisted mutation được giữ và
-Platform User lifecycle vẫn có thể commit sau; reference được giữ nhưng User đã
-mất processing eligibility.
+Platform User lifecycle vẫn có thể commit sau; automatic Unassign phải xét
+current non-terminal Applications sau commit mà không chờ hoặc chọn replacement.
 
-### Recovery và pre-lifecycle handoff
+### Company lock boundary
 
-Recovery handoff dùng current ineligible Assignee.
-
-Pre-lifecycle handoff được phép khi current Assignee vẫn eligible nhưng là subject của chính verified eligibility-losing lifecycle/team operation. Không được buộc operation phải persist eligibility loss trước rồi mới cho handoff; cũng không được dùng pre-lifecycle context như arbitrary workload-balancing authority.
+Company lock giữ assignment reference và freeze processing. TX-02 không được
+suy diễn Company lock thành automatic Unassign hoặc same-company replacement.
 
 ### Stale-state boundary
 
-Stale eligibility, stale Assignee hoặc stale Application version không được ghi đè current state. Final lifecycle guard không được dựa trên một count/snapshot cũ nếu assignment hoặc handoff đã commit sau snapshot đó.
+Stale eligibility, stale Assignee hoặc stale Application version không được ghi
+đè current state. Automatic Unassign không được clear Assignee mới nếu
+Application đã đổi responsibility khỏi outgoing Recruiter. Final lifecycle
+guard không được dựa trên một count/snapshot cũ nếu assignment hoặc Unassign đã
+commit sau snapshot đó.
 
 Data Contract chỉ yêu cầu coordination/persisted outcome này. Nó không bắt buộc MongoDB primitive, lock strategy, transaction architecture hoặc một `lifecycleOperationId` persisted trên Application.
 
 ---
 
-## TX-03 — Reassign/Take over/Forced Reassign là một assignment transition
+## TX-03 — Assignment reference transition trên một Application
 
-Assignment transition:
+Mỗi assignment transition:
 
 ```text
+null → A
 A → B
+A → null
 ```
 
-phải atomic đối với persisted Application.
+phải atomic đối với persisted Application, giữ nguyên Recruitment Status và
+Application business content.
 
-Không được xuất hiện committed business state trung gian:
+`A → null` là canonical committed state, không phải intermediate state lỗi.
+Unassign và Assign lại có thể là hai business operations độc lập:
 
 ```text
-assignedRecruiterCompanyMemberId = null
+A → null
+null → B
 ```
 
-giữa A và B.
+Không yêu cầu hai operation này nằm trong một transaction toàn cục. Nếu actor
+yêu cầu trực tiếp `A → B`, Reassign vẫn commit như một current-reference change
+đơn trên Application.
 
 Không cần mutate:
 
@@ -1577,28 +1672,34 @@ của V10.
 
 ---
 
-## TX-05 — Multi-Application administrative handoff
+## TX-05 — Multi-Application automatic Unassign và lifecycle coordination
 
 V10 không bổ sung requirement:
 
 ```text
 mọi Application của một Recruiter
-phải được reassign trong một global all-or-nothing transaction
+phải được Unassign trong một global all-or-nothing transaction
 ```
 
-Mỗi Reassign/Forced Reassign được bảo vệ atomic trên từng Application theo TX-01/TX-03.
+Mỗi automatic Unassign được bảo vệ atomic trên từng Application theo
+TX-01/TX-03.
 
-Nếu một Recruiter có nhiều non-terminal Applications cần handoff, mỗi Application có thể hoàn tất responsibility transition độc lập.
+Nếu một Recruiter có nhiều non-terminal Applications cần detach, mỗi
+Application có thể hoàn tất `A → null` độc lập. Không yêu cầu tự chọn B hoặc gộp
+`A → null → B` thành một operation toàn cục.
 
-Điều này cũng áp dụng khi cùng lifecycle request cần transfer nhiều Job và Application. Ví dụ transfer của Job/Application A và B đã commit nhưng C thất bại thì A/B có thể được giữ; không yêu cầu distributed/global rollback.
+Điều này cũng áp dụng khi cùng lifecycle request cần transfer nhiều Job-team
+responsibility và Unassign nhiều Application. Partial Application Unassign đã
+commit được giữ; không yêu cầu distributed/global rollback.
 
-Tuy nhiên, bất kỳ Application nào chưa handoff và đang trỏ tới một Assignee không còn eligible:
+Tuy nhiên, bất kỳ Application nào chưa hoàn tất automatic Unassign và đang trỏ
+tới một Assignee không còn eligible:
 
 ```text
 không được tiếp tục Recruitment Pipeline
 ```
 
-cho tới khi có eligible Assignee.
+cho tới khi automatic Unassign rồi được Assign lại cho eligible Assignee.
 
 Đối với Company Manager initiated CompanyMember Recruiter
 `LOCKED`/`TERMINATED`, partial progress không cho phép lifecycle completion
@@ -1610,7 +1711,13 @@ AND
 nonTerminalAssignedApplicationCount == 0
 ```
 
-Nếu còn bất kỳ active responsibility nào, lifecycle completion bị block dù các handoff khác đã thành công.
+Nếu còn bất kỳ active responsibility nào, CompanyMember lifecycle completion bị
+block dù các detach/Job-team transfer khác đã thành công.
+
+Generic Platform User lifecycle không bị block bởi guard này. Nó có thể commit
+theo V1; automatic Unassign sau đó phải dùng current per-Application state để
+đạt canonical outcome cho toàn bộ affected non-terminal Applications. Không
+persist recovery task/status để biểu diễn partial progress.
 
 Không nâng mức guarantee thành global transaction và không persist workload/active-responsibility counter làm canonical state.
 
@@ -1638,17 +1745,19 @@ Database/schema chịu trách nhiệm với các constraint có đủ local pers
 | `version` là concurrency token hợp lệ                                          | Schema/database | Local concurrency metadata                                |
 | Invalid local `status + assignee-nullability` combination không được persist   | Schema/database | Cả hai state dimension nằm trên cùng Application document |
 
-Đặc biệt state matrix local phải ngăn persisted state như:
+State matrix local cho phép `null` ở mọi non-terminal status và `WITHDRAWN`.
+Schema/database chỉ phải ngăn các terminal combination không phát sinh từ
+canonical lifecycle:
 
 ```text
-status = SCREENING
+status = HIRED
 assignedRecruiterCompanyMemberId = null
 ```
 
 hoặc:
 
 ```text
-status = HIRED
+status = REJECTED
 assignedRecruiterCompanyMemberId = null
 ```
 
@@ -1672,20 +1781,20 @@ Các constraint cần business hoặc cross-document context thuộc service.
 | Actor có phải current Assignee không                              | Service            | Authorization + current state       |
 | Supporting có được tự Assign không                                | Service            | Business authorization              |
 | Primary phải Take over trước khi xử lý Application của Supporting | Service            | Business authorization              |
-| Không Unassign sau khi đã Assign                                  | Service            | Transition cần previous state       |
+| Assign/Reassign/Take over/Unassign chỉ áp dụng non-terminal       | Service            | Lifecycle + assignment state        |
 | Terminal Application không reopen                                 | Service            | Lifecycle rule                      |
-| Reassign chỉ áp dụng non-terminal                                 | Service            | Lifecycle rule                      |
 | Candidate chỉ truy cập Application của chính mình                 | Service            | Ownership                           |
-| Company Manager chỉ forced reassign trong own Company             | Service            | Tenant + authorization              |
-| Forced reassign chỉ là recovery hoặc verified pre-lifecycle handoff | Service + trusted lifecycle/team context | Administrative authority boundary |
-| Platform Admin không Assign/Reassign/Pipeline hoặc Job-team recovery mutation | Service | Authorization |
+| Company Manager chỉ quản lý current Assignee trong own Company    | Service            | Tenant + authorization              |
+| Primary chỉ quản lý current Assignee trên Managed Job             | Service            | Current Job-team authority          |
+| `A → null` giữ status/content và không cần replacement            | Service + TX-01/TX-03 | Assignment transition             |
+| Platform Admin không có assignment/pipeline authority             | Service            | Authorization                       |
 | Job retention sau Direct Application                               | Job lifecycle V5   | V5 lifecycle invariant               |
 | V10 mutation không được thay snapshot ngoài Replace của V9        | Service            | Workflow ownership                  |
 | Current workload chỉ dựa trên current non-terminal assignment     | Service/read model | Derived business projection         |
 | Active Application responsibility không lọc theo Job status       | Service/read model | V10 lifecycle derivation            |
-| Team removal chỉ commit sau required Application handoff          | Service + TX-02    | Cross-resource responsibility guard |
+| Eligibility loss/team removal automatic Unassign affected non-terminal Applications | Service + TX-02/TX-05 | Cross-resource responsibility outcome |
 | CompanyMember Recruiter lifecycle final guard thấy current Job/Application responsibility | Service + TX-02/TX-05 | Cross-resource lifecycle invariant |
-| Platform User lifecycle giữ responsibility references nhưng làm User mất eligibility | Service + TX-02 | V1/V10 lifecycle boundary |
+| Platform User lock/terminate automatic Unassign nhưng giữ CompanyMember/Job team/status/content | Service + TX-02/TX-05 | V1/V10 lifecycle boundary |
 | Company lock giữ assignment và freeze processing                  | Service            | Company-wide eligibility boundary   |
 
 ---
@@ -1735,13 +1844,16 @@ Owner:
 ```text
 Platform User lifecycle
 +
-Service current-persisted-relationship recovery
+Per-Application automatic Unassign trên current persisted state
 +
 TX-02 eligibility coordination
++
+TX-05 partial-progress boundary
 ```
 
 Generic Platform User lifecycle không đọc/ghi derived zero-responsibility count;
-recovery không thêm persistence state.
+automatic Unassign không thêm recovery persistence state và không mutate
+CompanyMember hoặc Recruitment Team.
 
 # 11. Token / TTL Lifecycle
 
@@ -1826,7 +1938,12 @@ nếu:
 Assignee.companyId != Job.companyId
 ```
 
-Không được forced reassign Application sang CompanyMember thuộc Company khác.
+Không được Assign/Reassign Application sang CompanyMember thuộc Company khác.
+
+Primary hoặc Company Manager không được dùng Unassign để mutate Application
+ngoài Job/Company scope hiện tại của actor. Automatic Unassign resolve outgoing
+Recruiter, Application và Job từ current persisted relationships; client input
+không được mở rộng tập Application bị detach.
 
 Không được dùng Recruiter membership ở Company A để xử lý Application thuộc Job của Company B.
 
@@ -2071,7 +2188,12 @@ non-terminal Application responsibility theo V10
 
 Active Application responsibility phải được tính đến khi lifecycle/team operation ảnh hưởng khả năng tiếp tục xử lý Application, kể cả Application thuộc Job `CLOSED`/`EXPIRED`. Đây là V10 integration của responsibility mà V6 đã defer; không reinterpret historical Job-team reference trên Job đã kết thúc thành active Job-team responsibility.
 
-Team removal phải handoff non-terminal Application responsibility trước khi Recruiter rời team. Recruiter lock/terminate phải pass final zero guard trên cả hai responsibility dimension.
+Team removal phải đưa affected non-terminal Application responsibility về
+`UNASSIGNED` trước hoặc cùng business completion làm Recruiter rời team, không
+cần Application replacement. Company Manager initiated CompanyMember
+lock/terminate phải pass final zero guard trên cả hai responsibility dimension;
+generic Platform User lock/terminate không dùng guard đó và automatic Unassign
+mọi affected non-terminal Applications.
 
 ---
 
@@ -2196,16 +2318,18 @@ Không persist `status = UNASSIGNED`.
 
 ## PI-07 — Status/assignment matrix
 
-Không persist:
+Mọi non-terminal Recruitment Status cho phép:
 
 ```text
-SCREENING + null assignee
-CONTACTED + null assignee
-INTERVIEW_SCHEDULED + null assignee
-INTERVIEW_COMPLETED + null assignee
-HIRED + null assignee
-REJECTED + null assignee
+assignedRecruiterCompanyMemberId = null
+OR
+assignedRecruiterCompanyMemberId = current Recruiter reference
 ```
+
+`WITHDRAWN` giữ Assignment State tại thời điểm Candidate Withdraw nên có thể có
+Assignee `null` hoặc non-null. `HIRED` và `REJECTED` chỉ được tạo bởi current
+eligible Assignee và giữ final non-null Assignee; không persist
+`HIRED + null` hoặc `REJECTED + null`.
 
 **Owner:** Schema/database local state validation.
 
@@ -2213,13 +2337,15 @@ REJECTED + null assignee
 
 ## PI-08 — Assignment không mutate immutable Application identity
 
-Assign/Reassign/Take over/Forced Reassign không thay:
+Assign/Reassign/Take over/Unassign/automatic Unassign không thay:
 
 ```text
 candidateUserId
 jobId
 source
 submittedCvSnapshot
+status
+Recruitment Team
 ```
 
 **Owner:** Schema immutability + service workflow.
@@ -2239,27 +2365,21 @@ submittedCvSnapshot
 
 ---
 
-## PI-10 — No Unassign
+## PI-10 — Assignment model `ASSIGN / UNASSIGN`
 
-Sau khi một non-terminal Application đã được assign:
-
-```text
-A
-```
-
-normal responsibility transition chỉ được:
+Các current assignment transition hợp lệ trên non-terminal Application gồm:
 
 ```text
+null → A
 A → B
-```
-
-không:
-
-```text
 A → null
 ```
 
-**Owner:** Service.
+`A → null` là canonical committed transition và không cần replacement. Một
+Assign sau đó từ `null → B` là business operation độc lập. Tất cả transition
+giữ nguyên Recruitment Status và Application business content.
+
+**Owner:** Service + TX-01/TX-03.
 
 ---
 
@@ -2297,7 +2417,12 @@ Terminal Application vẫn giữ `submittedCvSnapshot`.
 
 Một Assigned Recruiter chỉ được commit processing action nếu eligibility hiện tại hợp lệ.
 
-Persisted Assignee reference có thể tạm thời trỏ tới Recruiter đã mất eligibility, nhưng reference đó không cấp processing authority.
+Khi Recruiter riêng lẻ mất eligibility do CompanyMember lifecycle, Platform User
+lock/terminate hoặc rời Recruitment Team, canonical outcome của mọi affected
+non-terminal Application là Assignee `null`. Reference ineligible nếu còn trong
+partial multi-Application progress không cấp processing authority và phải được
+automatic Unassign. Company lock là boundary riêng: giữ reference và freeze
+processing.
 
 Eligibility được derive từ same Company, current Job team, Recruiter role, CompanyMember `ACTIVE`, User `ACTIVE` và Company operational; không persist `assigneeEligible` hoặc `processingAllowed`.
 
@@ -2422,13 +2547,18 @@ Job status không tham gia expression. Terminal Assignee reference là historica
 
 ---
 
-## PI-23 — Administrative handoff context
+## PI-23 — Assignment management và eligibility-loss detach
 
-Administrative `A → B` chỉ được commit cho recovery handoff hoặc verified pre-lifecycle handoff. B phải current eligible; A không cần persist ineligible trước trong pre-lifecycle flow.
+Primary Recruiter hoặc Company Manager có thể commit `null → B`, `A → B` hoặc
+`A → null` trong current authority scope; mọi target B phải current eligible.
+Eligibility-losing lifecycle/team operation phải commit automatic `A → null`
+cho affected non-terminal Applications và không cần target B.
 
-Không persist `A → null → B`, `lifecycleOperationId`, handoff history hoặc synthetic Unassigned.
+Không persist `lifecycleOperationId`, handoff history, replacement hint hoặc
+synthetic assignment state. Nếu Application được Assign lại sau Unassign, hai
+operation không cần một global atomic boundary.
 
-**Owner:** Service authorization + TX-01/TX-02/TX-03.
+**Owner:** Service authorization + TX-01/TX-02/TX-03/TX-05.
 
 ---
 
@@ -2444,9 +2574,10 @@ nonTerminalAssignedApplicationCount == 0
 ```
 
 Các count được derive tại guard, không persist. Assignment commit trước guard phải
-được nhìn thấy; CompanyMember lifecycle commit trước làm target ineligible phải
-ngăn assignment mới. Guard này không áp dụng cho generic Platform
-`User.status → LOCKED | TERMINATED`.
+được nhìn thấy và affected non-terminal Application phải được Unassign; không
+cần replacement Application Assignee. CompanyMember lifecycle commit trước làm
+target ineligible phải ngăn assignment mới. Guard này không áp dụng cho generic
+Platform `User.status → LOCKED | TERMINATED`.
 
 **Owner:** Service + TX-02/TX-05.
 
@@ -2460,19 +2591,23 @@ Company mất operational state không tự mutate Application status/Assignee, 
 
 ---
 
-## PI-26 — Platform User lifecycle giữ responsibility references
+## PI-26 — Platform User lifecycle automatic Unassign
 
-Platform `User.status → LOCKED | TERMINATED` không mutate
-`CompanyMember.status`, Job Primary/Supporting, Application Assignee/Status hay
-`submittedCvSnapshot`; session/account persistence tiếp tục theo V1. Persisted
-reference tới outgoing Recruiter không cấp processing authority sau khi User mất
-`ACTIVE`.
+Platform `User.status → LOCKED | TERMINATED` giữ `CompanyMember.status`, Job
+Primary/Supporting, Application status/content và session/account persistence
+theo V1, đồng thời automatic Unassign mọi affected non-terminal Application:
 
-Company Manager recovery derive từ current Job-team và non-terminal Application
-references, không persist recovery state/counter/history và không đồng bộ
-CompanyMember lifecycle.
+```text
+assignedRecruiterCompanyMemberId = outgoing Recruiter
+→ null
+```
 
-**Owner:** Platform User lifecycle service + responsibility services + TX-02.
+Không chọn replacement, không rewrite terminal final Assignee và không đồng bộ
+CompanyMember lifecycle. Company Manager recovery Job-team và Primary/Company
+Manager Assign lại Application derive từ current persisted relationships, không
+persist recovery state/counter/history.
+
+**Owner:** Platform User lifecycle service + responsibility services + TX-02/TX-05.
 
 ---
 
@@ -2490,7 +2625,7 @@ V10 Data Contract được coi là hoàn thành khi:
 * không duplicate Company/Recruitment Team vào Application;
 * index phục vụ Pipeline, Unassigned, My Applications, Managed Jobs và current workload đã được xác định;
 * State Matrix đã khóa các combination được phép persist;
-* Assign/Reassign/Take over/Forced Reassign persistence transition đã rõ;
+* Assign/Reassign/Take over/Unassign/automatic Unassign persistence transition đã rõ;
 * Recruitment Pipeline persistence transitions đã rõ;
 * V9 Replace/Withdraw compatibility đã rõ;
 * Job `CLOSED`/`EXPIRED` không làm Application mutate ngoài ý muốn;
@@ -2498,10 +2633,15 @@ V10 Data Contract được coi là hoàn thành khi:
 * continuous eligibility và eligibility race đã có consistency requirement;
 * Active Recruiter Responsibility đã được định nghĩa là union của Job-team và non-terminal Application responsibility;
 * Application responsibility/current workload derivation không lọc `Job.status`;
-* recovery và pre-lifecycle handoff đã có authority/persistence boundary rõ;
+* mọi non-terminal status đều cho phép nullable Assignee và chỉ tiến pipeline
+  khi có current eligible Assignee;
+* eligibility-loss Application detach bằng `A → null` đã có
+  authority/persistence boundary rõ và không cần replacement;
 * CompanyMember Recruiter lifecycle final zero guard và partial-progress semantics đã rõ;
-* Platform User lifecycle/recovery giữ responsibility references, không đồng bộ lifecycle và có stale-operation boundary rõ;
-* Team removal không được bỏ lại non-terminal Application responsibility;
+* Platform User lifecycle automatic Unassign, không đồng bộ CompanyMember/Job
+  team và có stale-operation boundary rõ;
+* Team removal đưa affected non-terminal Application về `UNASSIGNED` mà không
+  redesign Job-team persistence;
 * Company lock giữ assignment, không reassign/unassign và freeze processing;
 * stale mutation protection đã rõ;
 * constraint ownership giữa schema/database và service đã rõ;
