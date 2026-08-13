@@ -34,9 +34,9 @@ Administrative Forced Reassignment, the Slice 07 corrective assignment/
 handoff lifecycle-boundary foundation, Slice 08 — Recruiter LOCK /
 TERMINATE Unified Responsibility Handoff, Slice 09 — Recruitment Team
 Eligibility-Loss Application Handoff, Slice 10 — Recruitment Pipeline,
-Slice 11 — Managed Jobs / Pipeline Workspace / Current Workload, and
-Slice 12 — Recruiter My Applications
-`IMPLEMENTED AND VERIFIED`. Its approved
+Slice 11 — Managed Jobs / Pipeline Workspace / Current Workload,
+Slice 12 — Recruiter My Applications, and Slice 13 — Candidate My
+Applications `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
 and
@@ -109,9 +109,15 @@ adds Recruiter My Applications via `GET /api/jobs/my-applications` and
 Applications on `PUBLISHED`/`CLOSED`/`EXPIRED` Jobs, exposing Candidate/Job/
 status/Assignee/`appliedAt`/`submittedCvSnapshot` without CandidateCV library
 access, keeping terminal Applications readable but out of active workload, and
-never granting Pipeline authority from list membership alone. Candidate My
-Applications and remaining Fxx surfaces remain deferred by the approved slice
-order.
+never granting Pipeline authority from list membership alone. Slice 13 adds
+Candidate My Applications via `GET /api/candidate/applications` and
+`GET /api/candidate/applications/:applicationId` as an owner-scoped projection
+(`candidateUserId` = authenticated Candidate), covering all eight Recruitment
+Statuses and Jobs in `PUBLISHED`/`CLOSED`/`EXPIRED`, with Job + Company +
+snapshot + live Assignee `fullName`/`avatarUrl`/`jobTitle` only (no email/phone
+or Assignment History), optional status/`q` filters, and no mutation of
+Application state or expansion of Replace/Withdraw/Pipeline authority.
+Remaining Fxx surfaces remain deferred by the approved slice order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -150,17 +156,34 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 12):** Slices 01–12 are complete,
-  including Recruiter My Applications for current Assignees. Candidate My
-  Applications and related remaining read surfaces remain deferred until their
-  owning slices start. Job retention continues on the V5 lifecycle without an
-  Application↔Job delete transaction.
+- **V10 subsequent slices (after Slice 13):** Slices 01–13 are complete,
+  including Recruiter and Candidate My Applications. Remaining Fxx surfaces
+  remain deferred until their owning slices start. Job retention continues on
+  the V5 lifecycle without an Application↔Job delete transaction.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 13 — Candidate My Applications (F08, F09
+  partial; BR-20, BR-23, BR-25–BR-27, BR-30–BR-32, BR-41): owner-scoped read
+  projections via `GET /api/candidate/applications` and
+  `GET /api/candidate/applications/:applicationId`; membership is authenticated
+  `candidateUserId` only (never client-supplied identity); all eight Recruitment
+  Statuses remain visible; Applications on `PUBLISHED`/`CLOSED`/`EXPIRED` Jobs
+  stay in Candidate history without auto status mutation; projection includes
+  Job, Company, `appliedAt`, `submittedCvSnapshot`, and live Assignee
+  `fullName`/`avatarUrl`/`jobTitle` only (Unassigned → null; Reassign reflects
+  current Assignee; no email/phone/`companyMemberId`/history); optional F08
+  status/`q` filters reuse IDX-A05 without new collections; Recruiter/CM/
+  Platform Admin denied; reads do not mutate Application or expand
+  Replace/Withdraw/Pipeline authority. Focused coverage in
+  `test/application/v10-candidate-my-applications.test.js` (11 tests). The
+  official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 100
+  files / 843 tests).
 
 - **Implemented; verified:** V10 Slice 12 — Recruiter My Applications (F07, F09
   partial; BR-08, BR-18, BR-20, BR-25, BR-27, BR-30–BR-31, BR-33–BR-34, BR-40):

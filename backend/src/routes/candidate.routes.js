@@ -2,6 +2,8 @@ import express from "express";
 
 import {
   directApplyToJobHandler,
+  getCandidateMyApplicationHandler,
+  listCandidateMyApplicationsHandler,
   replaceSubmittedCvHandler,
   withdrawApplicationHandler,
 } from "../controllers/application.controller.js";
@@ -156,6 +158,20 @@ router.post(
   authorizeCandidate,
   validateDirectApply,
   directApplyToJobHandler,
+);
+
+router.get(
+  "/applications",
+  authenticateAccess,
+  authorizeCandidate,
+  listCandidateMyApplicationsHandler,
+);
+
+router.get(
+  "/applications/:applicationId",
+  authenticateAccess,
+  authorizeCandidate,
+  getCandidateMyApplicationHandler,
 );
 
 router.put(

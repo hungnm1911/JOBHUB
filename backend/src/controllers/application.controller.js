@@ -2,8 +2,10 @@ import {
   directApplyToJob,
   firstAssignApplication,
   forceReassignApplication,
+  getCandidateMyApplication,
   getManagedJobPipelineWorkspace,
   getRecruiterMyApplication,
+  listCandidateMyApplications,
   listManagedJobs,
   listPrimaryJobApplications,
   listRecruiterMyApplications,
@@ -61,6 +63,35 @@ const withdrawApplicationHandler = async (request, response, next) => {
     return response.status(200).json({
       application,
     });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const listCandidateMyApplicationsHandler = async (request, response, next) => {
+  try {
+    const result = await listCandidateMyApplications({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      status: request.query?.status,
+      q: request.query?.q,
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getCandidateMyApplicationHandler = async (request, response, next) => {
+  try {
+    const result = await getCandidateMyApplication({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+    });
+
+    return response.status(200).json(result);
   } catch (error) {
     return next(error);
   }
@@ -228,8 +259,10 @@ export {
   directApplyToJobHandler,
   firstAssignApplicationHandler,
   forceReassignApplicationHandler,
+  getCandidateMyApplicationHandler,
   getManagedJobPipelineWorkspaceHandler,
   getRecruiterMyApplicationHandler,
+  listCandidateMyApplicationsHandler,
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
   listRecruiterMyApplicationsHandler,

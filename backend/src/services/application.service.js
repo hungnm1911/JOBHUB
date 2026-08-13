@@ -724,6 +724,288 @@ const getRecruiterMyApplication = async ({
   };
 };
 
+// F08 / F09 partial: Candidate My Applications — owner-scoped read projection.
+// BR-32: Candidate-visible Assignee is live fullName/avatarUrl/jobTitle only.
+const toCandidateVisibleAssignedRecruiter = ({ membership, user } = {}) => {
+  if (membership == null) {
+    return null;
+  }
+
+  return {
+    fullName: user?.fullName ?? null,
+    avatarUrl: user?.avatarUrl ?? null,
+    jobTitle: membership.jobTitle ?? null,
+  };
+};
+
+const toCandidateVisibleCompany = (company) => {
+  if (company == null) {
+    return null;
+  }
+
+  return {
+    id: company._id.toString(),
+    name: company.name,
+    logoUrl: company.logoUrl ?? null,
+  };
+};
+
+// Candidate Job view omits Recruitment Team membership identifiers (BR-41 scope).
+const toCandidateMyApplicationJob = (job) => {
+  return {
+    id: job._id.toString(),
+    companyId: job.companyId.toString(),
+    title: job.title,
+    jobDescription: job.jobDescription,
+    requiredSkills: job.requiredSkills,
+    salaryText: job.salaryText,
+    location: job.location,
+    employmentType: job.employmentType,
+    workModes: job.workModes,
+    applicationDeadline: job.applicationDeadline,
+    status: job.status,
+    publishedAt: job.publishedAt,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+};
+
+const toCandidateMyApplicationView = (
+  application,
+  { job, company, assignedRecruiter } = {},
+) => {
+  return {
+    id: application._id.toString(),
+    jobId: application.jobId.toString(),
+    source: application.source,
+    status: application.status,
+    isUnassigned: isApplicationUnassigned(application),
+    assignedRecruiter: assignedRecruiter ?? null,
+    job: job == null ? null : toCandidateMyApplicationJob(job),
+    company: toCandidateVisibleCompany(company),
+    submittedCvSnapshot: toPublicSubmittedCvSnapshot(
+      application.submittedCvSnapshot,
+    ),
+    appliedAt: application.appliedAt,
+    withdrawnAt: application.withdrawnAt,
+    withdrawReason: application.withdrawReason,
+    version: application.version,
+    createdAt: application.createdAt,
+    updatedAt: application.updatedAt,
+  };
+};
+
+const hydrateCandidateMyApplicationViews = async (applications) => {
+  if (applications.length === 0) {
+    return [];
+  }
+
+  const jobIds = [
+    ...new Set(applications.map((application) => application.jobId.toString())),
+  ];
+  const jobs = await Job.find({ _id: { $in: jobIds } });
+  const jobById = new Map(jobs.map((job) => [job._id.toString(), job]));
+
+  const companyIds = [
+    ...new Set(jobs.map((job) => job.companyId.toString())),
+  ];
+  const companies =
+    companyIds.length === 0
+      ? []
+      : await Company.find({ _id: { $in: companyIds } }).select("name logoUrl");
+  const companyById = new Map(
+    companies.map((company) => [company._id.toString(), company]),
+  );
+
+  const assigneeMemberIds = [
+    ...new Set(
+      applications
+        .filter((application) => !isApplicationUnassigned(application))
+        .map((application) =>
+          application.assignedRecruiterCompanyMemberId.toString(),
+        ),
+    ),
+  ];
+  const assigneeMemberships =
+    assigneeMemberIds.length === 0
+      ? []
+      : await CompanyMember.find({ _id: { $in: assigneeMemberIds } }).select(
+          "userId jobTitle",
+        );
+  const assigneeMembershipById = new Map(
+    assigneeMemberships.map((membership) => [
+      membership._id.toString(),
+      membership,
+    ]),
+  );
+
+  const assigneeUserIds = [
+    ...new Set(
+      assigneeMemberships.map((membership) => membership.userId.toString()),
+    ),
+  ];
+  const assigneeUsers =
+    assigneeUserIds.length === 0
+      ? []
+      : await User.find({ _id: { $in: assigneeUserIds } }).select(
+          "fullName avatarUrl",
+        );
+  const assigneeUserById = new Map(
+    assigneeUsers.map((user) => [user._id.toString(), user]),
+  );
+
+  return applications.map((application) => {
+    const job = jobById.get(application.jobId.toString()) ?? null;
+    const company =
+      job == null ? null : companyById.get(job.companyId.toString()) ?? null;
+
+    let assignedRecruiter = null;
+
+    if (!isApplicationUnassigned(application)) {
+      const membership = assigneeMembershipById.get(
+        application.assignedRecruiterCompanyMemberId.toString(),
+      );
+      const assigneeUser =
+        membership == null
+          ? null
+          : assigneeUserById.get(membership.userId.toString());
+
+      assignedRecruiter = toCandidateVisibleAssignedRecruiter({
+        membership,
+        user: assigneeUser,
+      });
+    }
+
+    return toCandidateMyApplicationView(application, {
+      job,
+      company,
+      assignedRecruiter,
+    });
+  });
+};
+
+const normalizeCandidateMyApplicationsStatusFilter = (status) => {
+  if (status == null || status === "") {
+    return null;
+  }
+
+  if (
+    typeof status !== "string" ||
+    !APPLICATION_PIPELINE_STATUSES.includes(status)
+  ) {
+    throw new AppError(400, "Invalid Application status filter", {
+      field: "status",
+    });
+  }
+
+  return status;
+};
+
+const normalizeCandidateMyApplicationsSearch = (search) => {
+  if (search == null || search === "") {
+    return null;
+  }
+
+  if (typeof search !== "string") {
+    throw new AppError(400, "Search must be a string", {
+      field: "q",
+    });
+  }
+
+  const trimmed = search.trim();
+  return trimmed === "" ? null : trimmed.toLowerCase();
+};
+
+const listCandidateMyApplications = async ({
+  candidateUserId,
+  actorUser,
+  status,
+  q,
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  // BR-41: ownership from authenticated identity only — never client candidateUserId.
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only access their own Applications",
+    );
+  }
+
+  const statusFilter = normalizeCandidateMyApplicationsStatusFilter(status);
+  const search = normalizeCandidateMyApplicationsSearch(q);
+
+  // IDX-A05: Candidate My Applications by owner (+ optional status).
+  const query = {
+    candidateUserId,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  };
+
+  if (statusFilter != null) {
+    query.status = statusFilter;
+  }
+
+  const applications = await Application.find(query).sort({
+    appliedAt: -1,
+    _id: -1,
+  });
+
+  let views = await hydrateCandidateMyApplicationViews(applications);
+
+  // F08: optional Job/Company name search on the current owner projection.
+  if (search != null) {
+    views = views.filter((application) => {
+      const jobTitle = application.job?.title?.toLowerCase() ?? "";
+      const companyName = application.company?.name?.toLowerCase() ?? "";
+      return jobTitle.includes(search) || companyName.includes(search);
+    });
+  }
+
+  return {
+    applications: views,
+  };
+};
+
+const getCandidateMyApplication = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only access their own Applications",
+    );
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  // BR-41: owner-scoped lookup — foreign Applications are not readable.
+  const application = await Application.findOne({
+    _id: applicationId,
+    candidateUserId,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  });
+
+  if (!application) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const [view] = await hydrateCandidateMyApplicationViews([application]);
+
+  return {
+    application: view,
+  };
+};
+
 // BR-21 / BR-22: canonical forward chain + Reject from any non-terminal stage.
 const PIPELINE_FORWARD_TARGET_BY_SOURCE = Object.freeze({
   [APPLICATION_STATUS.APPLIED]: APPLICATION_STATUS.SCREENING,
@@ -2864,9 +3146,11 @@ export {
   findNonTerminalApplicationsAssignedToRecruiterOnJob,
   firstAssignApplication,
   forceReassignApplication,
+  getCandidateMyApplication,
   getManagedJobPipelineWorkspace,
   getRecruiterMyApplication,
   isApplicationUnassigned,
+  listCandidateMyApplications,
   listManagedJobs,
   listPrimaryJobApplications,
   listRecruiterMyApplications,
