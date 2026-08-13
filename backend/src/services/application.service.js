@@ -23,14 +23,23 @@ import AppError from "../utils/app-error.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
 import {
   assertSameCompanyTenant,
+  resolveCompanyManagerRecruiterManagementContext,
   resolveRecruiterBusinessContext,
 } from "./company.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
 import {
+  acquireActiveRecruiterMembershipForTeamResponsibilityTx,
   isJobPubliclyEligible,
   isOwningCompanyActiveForPublicEligibility,
   toPublicJob,
 } from "./job.service.js";
+
+// Administrative handoff modes (F04 / BR-15 / PI-23). Public CM force-reassign
+// is recovery-only; pre-lifecycle requires trusted orchestration context.
+const ADMINISTRATIVE_HANDOFF_MODE = Object.freeze({
+  RECOVERY: "recovery",
+  PRE_LIFECYCLE: "pre-lifecycle",
+});
 
 const uploadApplicationSubmittedCvSnapshotFile = (buffer) => {
   return uploadFileBuffer({
@@ -448,6 +457,139 @@ const assertAssigneeEligibleForJobAssignment = async ({
   return { membership, user, company };
 };
 
+// TX-02: assignment/handoff target eligibility at commit, serialized against
+// Recruiter lifecycle completion via the same ACTIVE membership acquire used by
+// Job-team responsibility assignment.
+const assertAssigneeEligibleAtAssignmentCommit = async ({
+  assigneeCompanyMemberId,
+  job,
+  session,
+} = {}) => {
+  const assigneeContext = await assertAssigneeEligibleForJobAssignment({
+    assigneeCompanyMemberId,
+    job,
+    session,
+  });
+
+  const stillActiveMembership =
+    await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+      recruiterCompanyMemberId: assigneeContext.membership._id,
+      companyId: job.companyId,
+      session,
+    });
+
+  if (!stillActiveMembership) {
+    throw new AppError(409, "Assignee CompanyMember must be ACTIVE", {
+      field: "assigneeCompanyMemberId",
+      status: COMPANY_MEMBER_STATUS.LOCKED,
+    });
+  }
+
+  return assigneeContext;
+};
+
+// BR-07 / BR-28: current Assignee operational eligibility for recovery handoff
+// (team/role/member/user). Company operational state is enforced on the
+// replacement target, not as a reason to invent a handoff replacement when the
+// Company itself cannot host an eligible Assignee.
+const isCurrentAssigneeOperationallyEligible = async ({
+  assigneeCompanyMemberId,
+  job,
+  session,
+} = {}) => {
+  if (!mongoose.isValidObjectId(assigneeCompanyMemberId)) {
+    return false;
+  }
+
+  let membershipQuery = CompanyMember.findById(assigneeCompanyMemberId);
+  if (session) {
+    membershipQuery = membershipQuery.session(session);
+  }
+
+  const membership = await membershipQuery;
+
+  if (!membership) {
+    return false;
+  }
+
+  if (membership.companyId.toString() !== job.companyId.toString()) {
+    return false;
+  }
+
+  if (membership.role !== COMPANY_MEMBER_ROLE.RECRUITER) {
+    return false;
+  }
+
+  if (membership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+    return false;
+  }
+
+  const membershipIdStr = membership._id.toString();
+  const isPrimary =
+    job.primaryRecruiterCompanyMemberId.toString() === membershipIdStr;
+  const isSupporting = (job.supportingRecruiterCompanyMemberIds ?? []).some(
+    (id) => id.toString() === membershipIdStr,
+  );
+
+  if (!isPrimary && !isSupporting) {
+    return false;
+  }
+
+  let userQuery = User.findById(membership.userId).select("status");
+  if (session) {
+    userQuery = userQuery.session(session);
+  }
+
+  const user = await userQuery;
+
+  if (!user || user.status !== USER_STATUS.ACTIVE) {
+    return false;
+  }
+
+  return true;
+};
+
+// BR-15 / PI-23: recovery requires current Assignee ineligible; pre-lifecycle
+// allows still-eligible Assignees only when they are the verified subject of the
+// trusted eligibility-losing lifecycle/team operation.
+const assertAdministrativeHandoffAuthorized = async ({
+  assigneeCompanyMemberId,
+  job,
+  session,
+  handoffMode,
+  verifiedOutgoingSubjectCompanyMemberId,
+} = {}) => {
+  if (handoffMode === ADMINISTRATIVE_HANDOFF_MODE.PRE_LIFECYCLE) {
+    if (
+      !mongoose.isValidObjectId(verifiedOutgoingSubjectCompanyMemberId) ||
+      verifiedOutgoingSubjectCompanyMemberId.toString() !==
+        assigneeCompanyMemberId.toString()
+    ) {
+      throw new AppError(
+        409,
+        "Pre-lifecycle handoff requires the outgoing Assignee to be the verified subject of the eligibility-losing operation",
+        { field: "verifiedOutgoingSubjectCompanyMemberId" },
+      );
+    }
+
+    return;
+  }
+
+  const stillEligible = await isCurrentAssigneeOperationallyEligible({
+    assigneeCompanyMemberId,
+    job,
+    session,
+  });
+
+  if (stillEligible) {
+    throw new AppError(
+      409,
+      "Administrative forced reassignment requires the current Assignee to be ineligible for handoff",
+      { field: "expectedAssigneeCompanyMemberId" },
+    );
+  }
+};
+
 const buildPrimaryApplicationViewFromDocs = async ({
   application,
   assigneeMembership,
@@ -655,8 +797,9 @@ const firstAssignApplication = async ({
         });
       }
 
-      // TX-02: re-validate target eligibility inside the commit transaction.
-      assigneeContext = await assertAssigneeEligibleForJobAssignment({
+      // TX-02: re-validate target eligibility and serialize against lifecycle
+      // completion inside the commit transaction.
+      assigneeContext = await assertAssigneeEligibleAtAssignmentCommit({
         assigneeCompanyMemberId,
         job,
         session,
@@ -716,6 +859,7 @@ const rejectFailedReassignCas = async ({
   expectedVersion,
   expectedAssigneeCompanyMemberId,
   session,
+  actionLabel = "Reassign",
 } = {}) => {
   let latestQuery = Application.findById(applicationId);
   if (session) {
@@ -749,7 +893,7 @@ const rejectFailedReassignCas = async ({
   ) {
     throw new AppError(
       409,
-      "Application Assignee has changed; refresh and retry Reassign",
+      `Application Assignee has changed; refresh and retry ${actionLabel}`,
       { field: "expectedAssigneeCompanyMemberId" },
     );
   }
@@ -757,14 +901,14 @@ const rejectFailedReassignCas = async ({
   if (latestApplication.version !== expectedVersion) {
     throw new AppError(
       409,
-      "Application has changed; refresh and retry Reassign",
+      `Application has changed; refresh and retry ${actionLabel}`,
       { field: "expectedVersion" },
     );
   }
 
   throw new AppError(
     409,
-    "Application has changed; refresh and retry Reassign",
+    `Application has changed; refresh and retry ${actionLabel}`,
     { field: "expectedVersion" },
   );
 };
@@ -927,9 +1071,8 @@ const reassignApplication = async ({
         );
       }
 
-      // TX-02: re-validate target eligibility inside the commit transaction
-      // (same canonical eligibility as First Assign).
-      assigneeContext = await assertAssigneeEligibleForJobAssignment({
+      // TX-02: same canonical eligibility + lifecycle serialization as First Assign.
+      assigneeContext = await assertAssigneeEligibleAtAssignmentCommit({
         assigneeCompanyMemberId,
         job,
         session,
@@ -984,6 +1127,336 @@ const reassignApplication = async ({
     job: toPublicJob(job),
     application: applicationView,
   };
+};
+
+const runAdministrativeApplicationHandoffInSession = async ({
+  session,
+  tenantCompanyId,
+  jobId,
+  applicationId,
+  assigneeCompanyMemberId,
+  expectedAssigneeCompanyMemberId,
+  expectedVersion,
+  handoffMode,
+  verifiedOutgoingSubjectCompanyMemberId,
+} = {}) => {
+  const job = await Job.findById(jobId).session(session);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  // BR-40: tenant from Manager membership / trusted orchestration → Job.companyId.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId,
+  });
+
+  const application = await Application.findById(applicationId).session(session);
+
+  if (!application) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (application.jobId.toString() !== job._id.toString()) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  // BR-44: Direct Applications only.
+  if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
+    throw new AppError(
+      409,
+      "Only Direct Applications can be force-reassigned",
+      { field: "source" },
+    );
+  }
+
+  // BR-17: terminal Applications cannot change Assignee.
+  if (isApplicationTerminalStatus(application.status)) {
+    throw new AppError(409, "Terminal Applications cannot be reassigned", {
+      field: "status",
+      status: application.status,
+    });
+  }
+
+  if (!APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)) {
+    throw new AppError(409, "Terminal Applications cannot be reassigned", {
+      field: "status",
+      status: application.status,
+    });
+  }
+
+  // BR-10: no Unassign; administrative handoff requires an existing Assignee.
+  if (isApplicationUnassigned(application)) {
+    throw new AppError(409, "Application has no Assignee to reassign", {
+      field: "assignedRecruiterCompanyMemberId",
+    });
+  }
+
+  if (
+    application.assignedRecruiterCompanyMemberId.toString() !==
+    expectedAssigneeCompanyMemberId.toString()
+  ) {
+    throw new AppError(
+      409,
+      "Application Assignee has changed; refresh and retry Forced Reassignment",
+      { field: "expectedAssigneeCompanyMemberId" },
+    );
+  }
+
+  if (
+    assigneeCompanyMemberId.toString() ===
+    expectedAssigneeCompanyMemberId.toString()
+  ) {
+    throw new AppError(
+      409,
+      "Forced reassignment target must differ from the current Assignee",
+      { field: "assigneeCompanyMemberId" },
+    );
+  }
+
+  if (application.version !== expectedVersion) {
+    throw new AppError(
+      409,
+      "Application has changed; refresh and retry Forced Reassignment",
+      { field: "expectedVersion" },
+    );
+  }
+
+  // BR-15 / BR-28 / PI-23 / TX-02: recovery vs verified pre-lifecycle boundary.
+  await assertAdministrativeHandoffAuthorized({
+    assigneeCompanyMemberId: expectedAssigneeCompanyMemberId,
+    job,
+    session,
+    handoffMode,
+    verifiedOutgoingSubjectCompanyMemberId,
+  });
+
+  // TX-02 / BR-07: replacement target eligibility at commit, serialized against
+  // lifecycle completion (Company Manager cannot become Assignee via this authority).
+  const assigneeContext = await assertAssigneeEligibleAtAssignmentCommit({
+    assigneeCompanyMemberId,
+    job,
+    session,
+  });
+
+  // BR-27 / F09: CLOSED/EXPIRED Jobs still allow handoff of existing
+  // non-terminal Applications — no Job-status gate here.
+
+  // TX-01 / TX-03 / BR-10: atomic A → B; no intermediate Unassigned.
+  const reassignedApplication = await Application.findOneAndUpdate(
+    {
+      _id: application._id,
+      jobId: job._id,
+      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      version: expectedVersion,
+      assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
+      status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+    },
+    {
+      $set: {
+        assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
+      },
+      $inc: {
+        version: 1,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+
+  if (!reassignedApplication) {
+    await rejectFailedReassignCas({
+      applicationId: application._id,
+      expectedVersion,
+      expectedAssigneeCompanyMemberId,
+      session,
+      actionLabel: "Forced Reassignment",
+    });
+  }
+
+  return {
+    job,
+    reassignedApplication,
+    assigneeContext,
+  };
+};
+
+const executeAdministrativeApplicationHandoff = async ({
+  handoffMode,
+  actorUser,
+  companyId,
+  jobId,
+  applicationId,
+  assigneeCompanyMemberId,
+  expectedAssigneeCompanyMemberId,
+  expectedVersion,
+  clientCompanyId,
+  verifiedOutgoingSubjectCompanyMemberId,
+  session: outerSession,
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (!mongoose.isValidObjectId(expectedAssigneeCompanyMemberId)) {
+    throw new AppError(400, "Invalid expected Assignee CompanyMember id", {
+      field: "expectedAssigneeCompanyMemberId",
+    });
+  }
+
+  if (
+    typeof expectedVersion !== "number" ||
+    !Number.isInteger(expectedVersion) ||
+    expectedVersion < 0
+  ) {
+    throw new AppError(400, "expectedVersion must be a non-negative integer", {
+      field: "expectedVersion",
+    });
+  }
+
+  if (
+    assigneeCompanyMemberId != null &&
+    expectedAssigneeCompanyMemberId != null &&
+    assigneeCompanyMemberId.toString() ===
+      expectedAssigneeCompanyMemberId.toString()
+  ) {
+    throw new AppError(
+      409,
+      "Forced reassignment target must differ from the current Assignee",
+      { field: "assigneeCompanyMemberId" },
+    );
+  }
+
+  let tenantCompanyId = companyId;
+
+  if (handoffMode === ADMINISTRATIVE_HANDOFF_MODE.RECOVERY) {
+    // BR-15 / BR-42: public Company Manager administrative recovery authority only.
+    // Client-declared lifecycle reasons / pre-lifecycle flags are ignored.
+    const context = await resolveCompanyManagerRecruiterManagementContext({
+      user: actorUser,
+      clientCompanyId,
+    });
+    tenantCompanyId = context.companyId;
+  } else if (handoffMode === ADMINISTRATIVE_HANDOFF_MODE.PRE_LIFECYCLE) {
+    if (!mongoose.isValidObjectId(companyId)) {
+      throw new AppError(400, "Invalid Company id", {
+        field: "companyId",
+      });
+    }
+  } else {
+    throw new AppError(400, "Unsupported administrative handoff mode", {
+      field: "handoffMode",
+    });
+  }
+
+  const runWithSession = async (session) => {
+    return runAdministrativeApplicationHandoffInSession({
+      session,
+      tenantCompanyId,
+      jobId,
+      applicationId,
+      assigneeCompanyMemberId,
+      expectedAssigneeCompanyMemberId,
+      expectedVersion,
+      handoffMode,
+      verifiedOutgoingSubjectCompanyMemberId,
+    });
+  };
+
+  let handoffResult;
+
+  if (outerSession) {
+    handoffResult = await runWithSession(outerSession);
+  } else {
+    const session = await mongoose.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        handoffResult = await runWithSession(session);
+      });
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  const applicationView = await buildPrimaryApplicationViewFromDocs({
+    application: handoffResult.reassignedApplication,
+    assigneeMembership: handoffResult.assigneeContext.membership,
+    assigneeUser: handoffResult.assigneeContext.user,
+  });
+
+  return {
+    job: toPublicJob(handoffResult.job),
+    application: applicationView,
+  };
+};
+
+// F04 public recovery path: CM may force-reassign only when current Assignee is
+// already operationally ineligible. Does not accept client-declared pre-lifecycle
+// authority.
+const forceReassignApplication = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  assigneeCompanyMemberId,
+  expectedAssigneeCompanyMemberId,
+  expectedVersion,
+  clientCompanyId,
+} = {}) => {
+  return executeAdministrativeApplicationHandoff({
+    handoffMode: ADMINISTRATIVE_HANDOFF_MODE.RECOVERY,
+    actorUser,
+    jobId,
+    applicationId,
+    assigneeCompanyMemberId,
+    expectedAssigneeCompanyMemberId,
+    expectedVersion,
+    clientCompanyId,
+  });
+};
+
+// Trusted internal pre-lifecycle handoff for later LOCK/TERMINATE/team-removal
+// orchestration (Slice 07 foundation). Outgoing Assignee may still be eligible
+// when they are the verified subject of the eligibility-losing operation.
+// Not exposed on the public CM force-reassign HTTP API.
+const executeTrustedPreLifecycleApplicationHandoff = async ({
+  companyId,
+  jobId,
+  applicationId,
+  assigneeCompanyMemberId,
+  expectedAssigneeCompanyMemberId,
+  expectedVersion,
+  verifiedOutgoingSubjectCompanyMemberId,
+  session,
+} = {}) => {
+  return executeAdministrativeApplicationHandoff({
+    handoffMode: ADMINISTRATIVE_HANDOFF_MODE.PRE_LIFECYCLE,
+    companyId,
+    jobId,
+    applicationId,
+    assigneeCompanyMemberId,
+    expectedAssigneeCompanyMemberId,
+    expectedVersion,
+    verifiedOutgoingSubjectCompanyMemberId,
+    session,
+  });
 };
 
 const loadJobAcceptingDirectApplications = async (jobId, now = new Date()) => {
@@ -1475,7 +1948,9 @@ export {
   captureUploadedSubmittedCvSnapshot,
   deepCopyGeneratedContent,
   directApplyToJob,
+  executeTrustedPreLifecycleApplicationHandoff,
   firstAssignApplication,
+  forceReassignApplication,
   isApplicationUnassigned,
   listPrimaryJobApplications,
   loadEligibleCandidateCvForDirectApply,

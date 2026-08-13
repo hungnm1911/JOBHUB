@@ -28,6 +28,18 @@ V10 cho phép:
 * các `Application` đã tồn tại tiếp tục được xử lý kể cả khi Job đã `CLOSED` hoặc `EXPIRED`;
 * hệ thống theo dõi current workload của Recruiter theo các non-terminal `Application` hiện đang được giao.
 
+Từ V10, active responsibility của một Recruiter là hợp của hai dimension độc lập:
+
+```text
+Active Recruiter Responsibility
+=
+active Job-team responsibility theo V6
+UNION
+non-terminal Application responsibility theo V10
+```
+
+Job đã kết thúc accepting lifecycle không đồng nghĩa Application responsibility đã kết thúc.
+
 V10 không tạo lại `Application` và không thay đổi bản chất của `submittedCvSnapshot` đã được xác định từ V9.
 
 ---
@@ -58,6 +70,7 @@ V10 không tạo lại `Application` và không thay đổi bản chất của `
 * Tiếp tục xử lý Application sau khi Job `CLOSED` hoặc `EXPIRED`.
 * Bảo vệ Job đã có Application khỏi hard delete.
 * Bảo vệ business state trước các thao tác cạnh tranh trên cùng `Application`.
+* Tích hợp non-terminal Application responsibility vào Recruiter lifecycle và Recruitment Team handoff boundary.
 
 ### 2.2. Ngoài phạm vi
 
@@ -191,7 +204,9 @@ Company Manager được thực hiện administrative forced reassignment khi c�
 
 Company Manager:
 
+* chỉ được dùng quyền này cho recovery handoff khi current Assignee đã mất eligibility hoặc pre-lifecycle handoff thuộc một verified lifecycle/team operation sắp làm current Assignee mất eligibility;
 * không trở thành Assigned Recruiter thông qua administrative forced reassignment;
+* không có normal First Assign/Reassign/Take over authority hoặc quyền workload balancing tùy ý;
 * không được thay đổi Recruitment Status của Application với tư cách Company Manager.
 
 ### 4.7. Platform Admin
@@ -214,6 +229,31 @@ Unassigned không phải Recruitment Status.
 Current workload của Recruiter là tập hoặc số lượng non-terminal Applications hiện đang được assign trực tiếp cho Recruiter đó.
 
 Current workload không phải performance KPI và không biểu diễn lịch sử trách nhiệm.
+
+### 4.10. Active Recruiter Responsibility
+
+Active Recruiter Responsibility là hợp của:
+
+* active Job-team responsibility do V6 xác định trên Job chưa kết thúc;
+* non-terminal Application responsibility do V10 xác định.
+
+Non-terminal Application responsibility tồn tại khi:
+
+```text
+Application.assignedRecruiterCompanyMemberId = Recruiter
+AND
+Application.status IN {
+  APPLIED,
+  SCREENING,
+  CONTACTED,
+  INTERVIEW_SCHEDULED,
+  INTERVIEW_COMPLETED
+}
+```
+
+Dimension này không phụ thuộc Job đang `PUBLISHED`, `CLOSED` hay `EXPIRED`.
+
+Terminal Application ở `HIRED`, `REJECTED` hoặc `WITHDRAWN` không còn active responsibility cần handoff. Assignee cuối cùng, nếu có, tiếp tục là current persisted historical association và không bị rewrite chỉ vì Recruiter sau đó mất eligibility.
 
 ---
 
@@ -249,6 +289,14 @@ Assigned Recruiter của Application phải là Recruiter hợp lệ thuộc Rec
 Primary Recruiter của Job không tự động là Assigned Recruiter của mọi Application.
 
 Supporting Recruiter thuộc team cũng không tự động có quyền trực tiếp xử lý mọi Application.
+
+```text
+Recruiter
+├── active Job-team responsibility (V6)
+└── non-terminal Application responsibility (V10)
+```
+
+Hai responsibility dimension này được resolve độc lập. Một Job `CLOSED` hoặc `EXPIRED` có thể không còn active Job-team responsibility theo V6 nhưng vẫn còn non-terminal Application responsibility theo V10.
 
 ```text
 Application
@@ -611,22 +659,26 @@ Chuyển trách nhiệm trực tiếp của một non-terminal Application từ 
 
 ### Mục tiêu
 
-Cho phép Company Manager bảo đảm handoff trách nhiệm khi Assigned Recruiter của một non-terminal Application cần hoặc sắp mất operational eligibility.
+Cho phép Company Manager bảo đảm responsibility handoff ở eligibility/lifecycle/team boundary mà không phải chờ outgoing Recruiter trở thành ineligible.
 
 ### Tiền điều kiện
 
 * Application thuộc Job của Company do Company Manager quản lý.
 * Application chưa kết thúc.
-* Có nhu cầu administrative handoff.
+* Current Assignee thuộc một trong hai trường hợp:
+
+  * đã mất eligibility và cần recovery handoff; hoặc
+  * vẫn eligible nhưng là subject của một verified lifecycle/team operation sắp làm Recruiter `LOCKED`, `TERMINATED` hoặc rời Recruitment Team và cần pre-lifecycle handoff.
 * Assignee mới là Recruiter hợp lệ của Recruitment Team hiện tại của Job.
 
 ### Luồng chính
 
-1. Xác định non-terminal Application cần handoff.
-2. Company Manager chọn Recruiter thay thế hợp lệ.
-3. Current responsibility được chuyển trực tiếp sang Assignee mới.
-4. Recruitment Status giữ nguyên.
-5. Assignee mới tiếp tục xử lý Application theo quyền của Assigned Recruiter.
+1. Xác định non-terminal Application cần handoff và trusted recovery/pre-lifecycle context tương ứng.
+2. Nếu là pre-lifecycle handoff, xác nhận outgoing Recruiter là subject của chính lifecycle/team operation sẽ làm mất eligibility.
+3. Company Manager chọn Recruiter thay thế hợp lệ.
+4. Current responsibility được chuyển trực tiếp sang Assignee mới.
+5. Recruitment Status giữ nguyên.
+6. Assignee mới tiếp tục xử lý Application theo quyền của Assigned Recruiter.
 
 ### Kết quả
 
@@ -634,12 +686,15 @@ Cho phép Company Manager bảo đảm handoff trách nhiệm khi Assigned Recru
 * Company Manager không trở thành Assignee.
 * Company Manager không có quyền cập nhật Recruitment Status vì đã thực hiện forced reassignment.
 * Responsibility được handoff cho Recruiter hợp lệ.
+* Pre-lifecycle handoff có thể hoàn tất trước khi outgoing Recruiter thực sự mất eligibility.
 
 ### Trường hợp từ chối
 
 * Application đã terminal.
 * Application không thuộc Company của Company Manager.
 * Assignee mới không hợp lệ.
+* Current Assignee vẫn eligible và không phải subject của verified eligibility-losing lifecycle/team operation.
+* Yêu cầu chỉ nhằm workload balancing hoặc thay Assignee tùy ý.
 * Yêu cầu nhằm cho Company Manager trực tiếp xử lý Recruitment Pipeline.
 
 ### Business Rules liên quan
@@ -652,11 +707,17 @@ Cho phép Company Manager bảo đảm handoff trách nhiệm khi Assigned Recru
 * `BR-17`
 * `BR-27`
 * `BR-28`
+* `BR-36`
+* `BR-37`
+* `BR-38`
+* `BR-40`
+* `BR-42`
 
 ### Không thuộc chức năng này
 
 * Company Manager thực hiện Screening.
 * Company Manager Reject/Hire Candidate với tư cách người xử lý Application.
+* Normal First Assign/Reassign/Take over hoặc workload balancing.
 * Tự thay đổi Recruitment Team thông qua Application assignment.
 
 ---
@@ -1007,11 +1068,13 @@ Khi Job chuyển sang `CLOSED` hoặc `EXPIRED`:
 * Assigned Recruiter vẫn có thể tiếp tục Recruitment Pipeline nếu còn đủ eligibility;
 * Application vẫn có thể kết thúc bằng `REJECTED` hoặc `HIRED`;
 * Candidate vẫn có thể Withdraw nếu Application còn `APPLIED`.
+* mọi non-terminal Application đang assign vẫn là active Application responsibility cần được xét độc lập khi Recruiter bị lock/terminate hoặc bị loại khỏi Recruitment Team.
 
 ### Kết quả
 
 * Job Status và Application Status tiếp tục là hai lifecycle độc lập.
 * Recruitment responsibility đối với non-terminal Application không tự động kết thúc cùng Job.
+* Không được suy ra `Job ended → Application responsibility ended`.
 * Job đã có Application phải tiếp tục tồn tại.
 
 ### Trường hợp từ chối
@@ -1028,6 +1091,7 @@ Khi Job chuyển sang `CLOSED` hoặc `EXPIRED`:
 * `BR-28`
 * `BR-29`
 * `BR-30`
+* `BR-33`
 
 ### Không thuộc chức năng này
 
@@ -1055,6 +1119,8 @@ Cho phép theo dõi trách nhiệm xử lý Application hiện tại của Recru
 ### Luồng chính
 
 Current workload của Recruiter được xác định từ các non-terminal Application hiện đang được giao trực tiếp cho Recruiter đó.
+
+Application thuộc Job `CLOSED` hoặc `EXPIRED` vẫn nằm trong current workload nếu còn non-terminal và đang assign cho Recruiter. Job status không phải điều kiện của workload derivation.
 
 Khi Reassign hoặc Take over:
 
@@ -1162,6 +1228,8 @@ Một Recruiter chỉ hợp lệ để trở thành Assigned Recruiter khi đồ
 * User đang ACTIVE;
 * Company đang hoạt động.
 
+Toàn bộ điều kiện trên áp dụng cho target của First Assign, Reassign, Take over và administrative handoff, kể cả khi Job đã `CLOSED` hoặc `EXPIRED`.
+
 ---
 
 ## BR-08 — Continuous Assignee Eligibility
@@ -1171,6 +1239,10 @@ Eligibility không chỉ được yêu cầu tại thời điểm Assign/Reassig
 Assigned Recruiter phải tiếp tục thỏa eligibility tại thời điểm thực hiện mỗi hành động xử lý Application.
 
 Recruiter đã mất eligibility không được tiếp tục Recruitment Pipeline chỉ vì vẫn đang được ghi nhận là Assignee.
+
+Stored assignment chỉ là current responsibility reference; nó không tự tạo processing authority. Continuous eligibility gồm đúng Company, current Recruitment Team membership, role Recruiter, CompanyMember `ACTIVE`, User `ACTIVE` và Company operational.
+
+Khi Company không operational, mọi Assigned Recruiter trong Company đều không có processing authority cho tới khi Company trở lại operational theo một lifecycle transition được canonical version khác cho phép. V10 không tự tạo transition phục hồi Company.
 
 ---
 
@@ -1242,7 +1314,12 @@ Reassign không được thay đổi:
 
 ## BR-15 — Company Manager có administrative forced reassignment
 
-Company Manager được phép forced reassign non-terminal Application thuộc Company của mình khi cần administrative handoff trách nhiệm.
+Company Manager được phép forced reassign non-terminal Application thuộc Company của mình chỉ khi cần administrative handoff tại eligibility/lifecycle/team boundary:
+
+* recovery handoff khi current Assignee đã ineligible; hoặc
+* pre-lifecycle handoff khi current Assignee còn eligible nhưng là subject của một verified lifecycle/team operation sắp làm Recruiter mất eligibility.
+
+Outgoing Recruiter không cần trở thành ineligible trước khi pre-lifecycle handoff được phép.
 
 Quyền này không biến Company Manager thành Recruiter xử lý Application.
 
@@ -1253,6 +1330,8 @@ Quyền này không biến Company Manager thành Recruiter xử lý Application
 Company Manager không được trực tiếp thực hiện Recruitment Status transition chỉ vì có quyền forced reassignment.
 
 Sau handoff, quyền xử lý thuộc về Assigned Recruiter mới.
+
+Quyền administrative handoff không cấp normal First Assign/Reassign/Take over, workload balancing hoặc Recruitment Pipeline authority cho Company Manager.
 
 ---
 
@@ -1271,6 +1350,8 @@ Không được Assign/Reassign/Take over:
 * `HIRED`;
 * `REJECTED`;
 * `WITHDRAWN`.
+
+Administrative handoff cũng chỉ áp dụng cho năm trạng thái non-terminal trên. Terminal Application không còn active responsibility cần handoff; Assignee cuối cùng nếu có được giữ và không bị rewrite chỉ vì Recruiter sau đó mất eligibility, bị lock/terminate hoặc rời team.
 
 ---
 
@@ -1401,7 +1482,15 @@ Quyền Withdraw của một `APPLIED` Application vẫn được giữ.
 
 ## BR-27 — Application responsibility có thể tồn tại sau Job lifecycle
 
-Job đã `CLOSED` hoặc `EXPIRED` nhưng còn non-terminal Application vẫn còn recruitment responsibility.
+Non-terminal Application responsibility tồn tại khi Application đang assign cho Recruiter và status thuộc:
+
+* `APPLIED`;
+* `SCREENING`;
+* `CONTACTED`;
+* `INTERVIEW_SCHEDULED`;
+* `INTERVIEW_COMPLETED`.
+
+Không thêm điều kiện Job phải `PUBLISHED`. Job đã `CLOSED` hoặc `EXPIRED` nhưng còn non-terminal Application vẫn còn active recruitment responsibility.
 
 Các Application đó vẫn phải có khả năng:
 
@@ -1411,15 +1500,45 @@ Các Application đó vẫn phải có khả năng:
 * administrative forced reassignment;
 * tiếp tục Recruitment Pipeline.
 
+Active Recruiter Responsibility từ V10 là:
+
+```text
+active Job-team responsibility theo V6
+UNION
+non-terminal Application responsibility theo V10
+```
+
+Job ended không suy ra Application responsibility ended.
+
 ---
 
 ## BR-28 — Mất eligibility yêu cầu handoff trách nhiệm
 
-Khi một Recruiter đang chịu trách nhiệm cho non-terminal Application cần mất hoặc đã mất operational eligibility:
+Khi một Recruiter đang chịu trách nhiệm cho non-terminal Application sắp mất hoặc đã mất operational eligibility:
 
-* Recruiter đó không được tiếp tục xử lý;
+* sau khi eligibility mất, Recruiter đó không được tiếp tục xử lý;
+* trước khi eligibility mất, pre-lifecycle handoff được phép trong verified lifecycle/team operation dù outgoing Recruiter vẫn đang eligible;
 * responsibility phải được handoff cho Recruiter hợp lệ khác trước khi Application có thể tiếp tục pipeline;
 * các thao tác quản trị Recruiter/Recruitment Team không được coi Job `CLOSED` hoặc `EXPIRED` là lý do để bỏ qua active Application responsibility.
+
+Khi Company Manager yêu cầu `LOCKED` hoặc `TERMINATED` cho Recruiter:
+
+1. resolve cả active Job-team responsibility và mọi non-terminal Application responsibility của Recruiter;
+2. hoàn tất required transfer/handoff;
+3. chạy final zero-active-responsibility guard;
+4. chỉ commit lifecycle completion khi:
+
+```text
+activeJobResponsibilityCount == 0
+AND
+nonTerminalAssignedApplicationCount == 0
+```
+
+Nếu còn bất kỳ active responsibility nào hoặc không có replacement hợp lệ, lifecycle completion phải bị block. Handoff từng Job/Application đã commit hợp lệ có thể được giữ; V10 không yêu cầu global all-or-nothing transaction.
+
+Operation làm Recruiter rời Recruitment Team cũng phải handoff mọi non-terminal Application đang assign cho Recruiter trên Job đó trước khi team removal commit. Đổi Primary/Supporting nhưng Recruiter vẫn còn trong team và vẫn fully eligible không tự tạo handoff requirement.
+
+Company lock là trường hợp đặc biệt: khi Company mất operational state, toàn bộ Recruiter của Company đồng thời mất processing eligibility nên không tự reassign sang Recruiter khác trong cùng Company, không unassign và không tạo synthetic replacement. Current assignment được giữ, pipeline bị freeze, và nếu một canonical version sau này cho Company trở lại operational thì eligibility được đánh giá lại từ các persisted relationship hiện tại.
 
 Application assignment không được tự tạo Recruiter mới hoặc tự thay đổi Recruitment Team.
 
@@ -1489,6 +1608,8 @@ Current workload của Recruiter chỉ bao gồm non-terminal Applications hiệ
 
 Terminal Applications không thuộc current workload.
 
+Job status không tham gia workload derivation; non-terminal assigned Application trên Job `CLOSED`/`EXPIRED` vẫn thuộc current workload.
+
 ---
 
 ## BR-34 — Reassign chuyển current workload
@@ -1527,6 +1648,8 @@ Khi nhiều hành động cạnh tranh trên cùng Application, một hành đ�
 
 Business result phải phản ánh state hợp lệ mới nhất đã được hoàn tất trước.
 
+Quy tắc này cũng áp dụng giữa Application assignment/handoff và lifecycle/team operation làm Recruiter mất eligibility. Stale eligibility, stale Assignee hoặc stale Application version không được ghi đè current state hay vượt qua final lifecycle guard.
+
 ---
 
 ## BR-37 — Cạnh tranh khi Assign/Reassign
@@ -1536,6 +1659,11 @@ Assign lần đầu chỉ được thành công nếu Application vẫn đang Un
 Reassign chỉ được thành công nếu Application vẫn đang ở responsibility state mà hành động Reassign đang dựa vào.
 
 Hai hành động cạnh tranh không được làm Application có nhiều Assignee hoặc làm assignment cũ ghi đè assignment mới.
+
+First Assign, Reassign và administrative handoff còn phải phối hợp với lifecycle completion:
+
+* nếu lifecycle completion thắng trước, Recruiter đã mất eligibility không được nhận responsibility mới;
+* nếu assignment vào Recruiter thắng trước, final lifecycle guard phải nhìn thấy responsibility mới và block `LOCKED`/`TERMINATED` cho tới khi responsibility được xử lý.
 
 ---
 
@@ -1547,6 +1675,8 @@ Nếu Recruiter A đang cập nhật Recruitment Status đồng thời Primary R
 * nếu status update của A hoàn tất hợp lệ trước, status mới được giữ và Reassign có thể tiếp tục dựa trên state mới.
 
 Không được để request dựa trên Assignee cũ ghi đè responsibility mới.
+
+Administrative handoff cạnh tranh với status update theo cùng nguyên tắc: mutation dựa trên outgoing Assignee hoặc Application state cũ không được commit sau khi handoff đã thay current responsibility. Lifecycle/team operation không được dùng một Application count hoặc eligibility snapshot cũ để hoàn tất sau một assignment mới.
 
 ---
 
@@ -1572,6 +1702,8 @@ Primary Recruiter, Supporting Recruiter và Assigned Recruiter của một Job p
 
 Không được dùng Recruiter thuộc Company khác làm Assignee.
 
+Replacement của recovery hoặc pre-lifecycle handoff phải là eligible Recruiter của đúng Company và current Recruitment Team của Job. Company lock không được tạo synthetic same-company replacement vì toàn bộ Company đồng thời không operational.
+
 ---
 
 ## BR-41 — Candidate ownership boundary
@@ -1584,7 +1716,9 @@ Candidate không được truy cập Application của Candidate khác.
 
 ## BR-42 — Administrative actor boundary
 
-Company Manager chỉ có quyền administrative forced reassignment đã được định nghĩa trong V10.
+Company Manager chỉ có quyền administrative forced reassignment đã được định nghĩa trong V10 để phục vụ recovery/pre-lifecycle responsibility handoff tại eligibility/lifecycle/team boundary.
+
+Quyền này không cấp normal First Assign/Reassign/Take over, workload balancing hoặc Recruitment Pipeline authority.
 
 Platform Admin không được:
 
@@ -1594,6 +1728,8 @@ Platform Admin không được:
 * cập nhật Recruitment Status.
 
 Company Manager và Platform Admin không được trở thành Assigned Recruiter thông qua V10 nếu không đồng thời là một Recruiter hợp lệ theo business model hiện hành.
+
+Platform Admin tiếp tục không có normal Application assignment, administrative handoff hoặc pipeline authority. Platform Admin lock Company chỉ kích hoạt Company-lock freeze semantics của V10, không trực tiếp chọn Assignee hay mutate Application.
 
 ---
 
@@ -1662,7 +1798,7 @@ Không có Recruitment Status transition nào khác thuộc V10.
 | Assign lần đầu                     | `UNASSIGNED`           | `ASSIGNED(A)`       | Primary Recruiter |
 | Reassign                           | `ASSIGNED(A)`          | `ASSIGNED(B)`       | Primary Recruiter |
 | Take over                          | `ASSIGNED(Supporting)` | `ASSIGNED(Primary)` | Primary Recruiter |
-| Administrative forced reassignment | `ASSIGNED(A)`          | `ASSIGNED(B)`       | Company Manager   |
+| Administrative forced reassignment | `ASSIGNED(A)`          | `ASSIGNED(B)`       | Company Manager trong recovery/pre-lifecycle handoff |
 
 Không có:
 
@@ -1685,7 +1821,7 @@ Assign/Reassign không tự động tạo Recruitment Status transition.
 | Assign lần đầu                     | Primary Recruiter  | Unassigned non-terminal Application của Job     | Assignee mới hợp lệ                                   |
 | Reassign                           | Primary Recruiter  | Assigned non-terminal Application của Job       | Assignee mới hợp lệ                                   |
 | Take over                          | Primary Recruiter  | Non-terminal Application đang thuộc Supporting  | Primary trở thành Assignee                            |
-| Administrative forced reassignment | Company Manager    | Non-terminal Application thuộc Company của mình | Chỉ phục vụ administrative handoff; target hợp lệ     |
+| Administrative forced reassignment | Company Manager    | Non-terminal Application thuộc Company của mình | Recovery hoặc verified pre-lifecycle handoff; target hợp lệ |
 | Cập nhật Recruitment Status        | Assigned Recruiter | Application đang assign cho chính actor         | Actor còn continuous eligibility và transition hợp lệ |
 | Xem My Applications Recruiter      | Recruiter          | Application đang assign cho chính actor         | Primary hoặc Supporting                               |
 | Xem Application của Candidate      | Candidate          | Application thuộc chính Candidate               | Không truy cập Application của Candidate khác         |
@@ -1698,6 +1834,8 @@ Primary có quyền xem toàn bộ Application của Job nhưng không mặc nhi
 Supporting Recruiter chỉ được trực tiếp xử lý Application đang assign cho chính mình.
 
 Company Manager có administrative handoff authority nhưng không có ordinary pipeline-processing authority.
+
+Company Manager cũng không có ordinary First Assign/Reassign/Take over hoặc workload-balancing authority. Pre-lifecycle handoff chỉ được authorize trong trusted context của chính eligibility-losing lifecycle/team operation; một client-declared reason không tự tạo quyền này.
 
 Authorization không được suy ra từ identifier do client tự khai báo nếu identifier đó mâu thuẫn với ownership và role thực tế.
 
@@ -1783,6 +1921,61 @@ Các invariant sau phải luôn được bảo vệ trong V10:
 41. Application không được vừa `WITHDRAWN` vừa tiếp tục Recruitment Pipeline.
 42. Cross-tenant Application assignment và processing bị cấm.
 43. `INTERVIEW_SCHEDULED` và `INTERVIEW_COMPLETED` trong V10 không yêu cầu Interview Schedule entity.
+44. Active Recruiter Responsibility là hợp của active Job-team responsibility và non-terminal Application responsibility.
+45. Non-terminal Application responsibility không phụ thuộc Job đang `PUBLISHED`, `CLOSED` hay `EXPIRED`.
+46. Terminal Application không còn active responsibility cần handoff và giữ final Assignee nếu đã có.
+47. Stored assignment không tự cấp processing authority khi current Assignee đã mất eligibility.
+48. Pre-lifecycle handoff được phép trước khi outgoing Recruiter thực sự mất eligibility, nhưng chỉ trong verified lifecycle/team operation.
+49. Recruiter chỉ được hoàn tất `LOCKED`/`TERMINATED` khi cả active Job-team responsibility và non-terminal Application responsibility đều bằng zero.
+50. Recruiter không được rời Recruitment Team nếu required Application handoff trên Job đó chưa hoàn tất.
+51. Company lock giữ persisted assignment, freeze processing và không tạo Unassigned/synthetic replacement.
+52. Assignment/handoff cạnh tranh với lifecycle completion không được tạo `LOCKED`/`TERMINATED` Recruiter đang giữ active responsibility.
+
+## 14.1. Recruiter lifecycle completion
+
+Đối với Company Manager request `LOCKED` hoặc `TERMINATED`, lifecycle completion phải dùng toàn bộ Active Recruiter Responsibility:
+
+```text
+Active Recruiter Responsibility
+=
+active Job-team responsibility theo V6
+UNION
+non-terminal Application responsibility theo V10
+```
+
+Required sequence về business outcome:
+
+1. resolve toàn bộ active responsibility;
+2. thực hiện required Job/team transfer và Application handoff;
+3. chạy final guard trên current state;
+4. chỉ commit lifecycle state khi:
+
+```text
+activeJobResponsibilityCount == 0
+AND
+nonTerminalAssignedApplicationCount == 0
+```
+
+Nếu replacement không hợp lệ/không tồn tại hoặc bất kỳ responsibility nào vẫn còn, lifecycle completion bị block. Các transfer riêng lẻ đã commit hợp lệ không phải rollback chỉ vì một transfer khác thất bại.
+
+## 14.2. Recruitment Team removal
+
+Operation làm Recruiter chuyển khỏi Primary/Supporting sang `NONE` phải resolve non-terminal Application responsibility trên Job đó. Required handoff phải hoàn tất trước team removal; nếu không, removal bị block.
+
+Việc chỉ đổi Primary/Supporting position trong khi Recruiter vẫn thuộc team, cùng Company và fully eligible không tự tạo Application handoff requirement.
+
+## 14.3. Company lock
+
+Khi Company mất operational state:
+
+* toàn bộ Recruiter trong Company đồng thời mất processing eligibility;
+* không tự reassign Application sang Recruiter khác trong cùng Company;
+* không clear Assignee hoặc tạo synthetic `UNASSIGNED`;
+* giữ current persisted assignment và freeze Application processing;
+* không tạo synthetic replacement;
+* nếu một canonical version sau này cho Company trở lại operational, eligibility được đánh giá lại từ current persisted Company/Job/team/Assignee relationships.
+
+V10 không bổ sung Company reactivation transition và không trao Application authority cho Platform Admin thông qua Company lock.
 
 ---
 
@@ -1910,6 +2103,10 @@ V10 được coi là hoàn thành về mặt nghiệp vụ khi:
 * Candidate ownership boundary được giữ;
 * Job đã có Application không bị hard delete;
 * non-terminal Application không mất recruitment responsibility chỉ vì Job đã `CLOSED` hoặc `EXPIRED`;
+* Active Recruiter Responsibility được resolve trên cả active Job-team responsibility và non-terminal Application responsibility;
+* Recruiter lifecycle/team removal không bỏ lại non-terminal Application responsibility chưa handoff;
+* final `LOCKED`/`TERMINATED` guard bảo đảm cả hai responsibility count đều bằng zero;
+* Company lock giữ assignment và freeze processing mà không reassign/unassign;
 * Candidate rights từ V9 không bị phá;
 * concurrent business operations không tạo stale overwrite;
 * terminal Application không reopen;

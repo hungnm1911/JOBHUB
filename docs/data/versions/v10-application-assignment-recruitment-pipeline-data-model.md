@@ -31,6 +31,7 @@ Data Contract này xác định:
 * constraint nào cần business context và thuộc service;
 * multi-tenant data boundary;
 * lifecycle của `submittedCvSnapshot`;
+* derivation và lifecycle coordination của non-terminal Application responsibility;
 * các field/collection chủ động không thêm.
 
 V10 không được dùng persistence design để tạo thêm business behavior ngoài Product Specification.
@@ -271,6 +272,22 @@ Reference chỉ được tạo/chuyển sang CompanyMember đáp ứng Assignee 
 
 Assigned Recruiter phải được resolve thông qua `CompanyMember`, không phải chỉ thông qua `User`.
 
+**Active Application responsibility**
+
+```text
+Application.assignedRecruiterCompanyMemberId = recruiterId
+AND
+Application.status NOT IN { HIRED, REJECTED, WITHDRAWN }
+```
+
+Không thêm điều kiện:
+
+```text
+Job.status = PUBLISHED
+```
+
+Vì vậy Application thuộc Job `CLOSED` hoặc `EXPIRED` vẫn là active Application responsibility khi còn non-terminal và assigned.
+
 ---
 
 ## 4.4. Job → Primary Recruiter
@@ -406,6 +423,8 @@ V10 không thêm snapshot hoặc duplicate các field trên vào Application.
 * `submittedCvSnapshot`;
 * concurrency version;
 * timestamps.
+
+`assignedRecruiterCompanyMemberId` là current responsibility reference duy nhất. Active Application responsibility và current workload đều được derive từ reference này cùng current non-terminal status; không persist counter hoặc eligibility decision.
 
 `Application` không chịu trách nhiệm persist:
 
@@ -557,6 +576,7 @@ Mục đích:
 * My Applications của Recruiter;
 * current workload theo non-terminal status;
 * lookup Applications hiện đang assign cho một Recruiter.
+* resolve non-terminal Application responsibility cho lifecycle/team handoff và final guard.
 
 ### IDX-A05 — Candidate My Applications
 
@@ -774,6 +794,8 @@ Company phải ở trạng thái operational cho phép Recruiter xử lý Applic
 
 V10 không thêm Application list hoặc current workload vào Company.
 
+Khi Company không operational, current assignment reference trên Application được giữ. V10 không persist synthetic replacement, synthetic Unassigned hoặc một eligibility result trên Application.
+
 ---
 
 # 7. State Matrix
@@ -860,6 +882,22 @@ assignedRecruiterCompanyMemberId = null
 ```
 
 vì V10 không có Unassign.
+
+Active responsibility derivation cũng không phụ thuộc Job status:
+
+```text
+assignedRecruiterCompanyMemberId = recruiterId
+AND
+status IN {
+  APPLIED,
+  SCREENING,
+  CONTACTED,
+  INTERVIEW_SCHEDULED,
+  INTERVIEW_COMPLETED
+}
+```
+
+Terminal Application giữ Assignee cuối cùng nếu có nhưng không còn được tính là active responsibility.
 
 ---
 
@@ -983,6 +1021,13 @@ assignedRecruiterCompanyMemberId = B
 
 với B là target Recruiter hợp lệ.
 
+Operation chỉ được authorize trong một trong hai trusted context:
+
+* recovery handoff: A đã mất current eligibility;
+* pre-lifecycle handoff: A vẫn eligible nhưng là subject của verified lifecycle/team operation sắp làm A mất eligibility.
+
+Pre-lifecycle handoff không yêu cầu persist A thành ineligible trước và không thêm `lifecycleOperationId` trên Application. Trusted lifecycle/team operation context thuộc action coordination boundary, không phải business field mới.
+
 Không persist Company Manager làm Assignee.
 
 Không thêm:
@@ -997,6 +1042,8 @@ assignmentType
 vì V10 không lưu Assignment History hoặc audit history như một business capability.
 
 Việc authorization actor là Company Manager được kiểm tra tại action boundary, không được suy ra từ persisted Assignee field.
+
+Không được dùng transition này cho arbitrary workload balancing hoặc để cấp normal First Assign/Reassign/Take over authority cho Company Manager.
 
 ---
 
@@ -1192,6 +1239,16 @@ và B là eligible Assignee.
 
 Nếu Company toàn bộ không operational, không có Assignee trong Company đáp ứng eligibility; V10 không tự mutate Application sang trạng thái khác chỉ để giải quyết trường hợp này.
 
+Company lock special case:
+
+```text
+Company operational → non-operational
+Application.assignedRecruiterCompanyMemberId = giữ nguyên
+Application.status = giữ nguyên
+```
+
+Không auto reassign sang Recruiter khác trong cùng Company, không persist `null`, không tạo synthetic replacement và không mutate workload counter. Application processing bị freeze. Nếu một canonical version sau này cho Company operational trở lại, eligibility được derive lại từ current Company/Job/team/Assignee relationships; V10 không tạo Company reactivation transition.
+
 ---
 
 ## 8.11. Job `CLOSED` / `EXPIRED`
@@ -1217,6 +1274,8 @@ Application.assignedRecruiterCompanyMemberId = giữ nguyên
 
 Application vẫn có thể tiếp tục các transition V10 hợp lệ.
 
+Nếu Application còn non-terminal và assigned, Application vẫn được tính là active Application responsibility và current workload dù Job đã `CLOSED` hoặc `EXPIRED`.
+
 Không:
 
 ```text
@@ -1233,6 +1292,34 @@ V10 không mutate `Application` khi Job `CLOSED` hoặc `EXPIRED` và không b�
 sung hard-delete workflow. Direct Application chỉ được tạo trên Job đủ điều
 kiện `PUBLISHED` theo V9; Job đã `PUBLISHED`, `CLOSED` hoặc `EXPIRED` được giữ
 theo lifecycle V5.
+
+---
+
+## 8.13. Recruiter lifecycle và Recruitment Team handoff
+
+V10 mở rộng responsibility lookup của lifecycle/team operation mà không thay schema V6:
+
+```text
+Active Recruiter Responsibility
+=
+active Job-team responsibility theo V6
+UNION
+non-terminal Application responsibility theo V10
+```
+
+Trước khi Recruiter được commit `LOCKED`/`TERMINATED`, required Application handoff dùng direct mutation `A → B` và giữ nguyên status, Candidate, Job, source cùng `submittedCvSnapshot`.
+
+Trước khi Recruiter bị remove khỏi Recruitment Team của một Job, mọi non-terminal Application của Job đang trỏ tới Recruiter phải được handoff. Thay đổi Primary/Supporting mà Recruiter vẫn thuộc team và vẫn fully eligible không tự mutate Application.
+
+Final lifecycle completion guard phải đọc current persisted outcome:
+
+```text
+activeJobResponsibilityCount == 0
+AND
+nonTerminalAssignedApplicationCount == 0
+```
+
+Không persist các count này làm source of truth.
 
 ---
 
@@ -1321,16 +1408,23 @@ TX-01 không tự yêu cầu transaction đa collection nếu single-document at
 * `BR-08`
 * `BR-18`
 * `BR-28`
+* `BR-36`
+* `BR-37`
+* `BR-38`
 
-Các operation sau phải sử dụng eligibility hiện tại:
+Các operation phải phối hợp tại boundary này gồm:
 
-* Assign;
-* Reassign;
-* Take over;
-* forced reassignment;
-* Recruitment Status update.
+* First Assign;
+* Reassign/Take over;
+* administrative recovery handoff;
+* administrative pre-lifecycle handoff;
+* Recruitment Status update;
+* lifecycle/team operation làm Recruiter mất eligibility;
+* final `LOCKED`/`TERMINATED` completion.
 
-Eligibility phụ thuộc vào nhiều persisted resources:
+Application operation phải dùng current Application state và current eligibility. Lifecycle completion phải dùng current active-responsibility state.
+
+Eligibility phụ thuộc vào:
 
 ```text
 Application
@@ -1340,35 +1434,42 @@ User
 Company
 ```
 
-Required ordering semantics:
+Required persisted outcomes:
 
-### Trường hợp eligibility loss commit trước
+### Trường hợp lifecycle/team eligibility loss commit trước
 
-```text
-Recruiter/User/Company/Team state
-→ target/current Assignee không còn eligible
-```
-
-thì Application operation dựa trên eligibility cũ không được commit như một operation hợp lệ.
-
-### Trường hợp Application operation commit trước
-
-Nếu tại thời điểm Application mutation được commit, Assignee vẫn eligible:
+Nếu lifecycle/team operation đã commit làm Recruiter mất eligibility:
 
 ```text
-Application mutation được giữ.
+First Assign/Reassign/handoff vào Recruiter đó
+→ không được commit
 ```
 
-Nếu eligibility mất sau đó:
+Pipeline mutation của Recruiter đó cũng không được commit dựa trên eligibility cũ.
+
+### Trường hợp Application responsibility commit trước
+
+Nếu First Assign/Reassign vào Recruiter commit trước lifecycle completion:
 
 ```text
-các processing operation tiếp theo phải bị block
-cho tới khi eligibility được phục hồi hoặc responsibility được handoff.
+final lifecycle guard
+→ phải nhìn thấy non-terminal responsibility mới
+→ không được commit LOCKED/TERMINATED
 ```
 
-Data Contract yêu cầu hai loại operation này được phối hợp đủ để không chấp nhận một stale eligibility decision.
+Lifecycle completion chỉ tiếp tục sau khi responsibility mới được handoff hoặc trở thành terminal theo một transition hợp lệ.
 
-Tài liệu này không bắt buộc một transaction primitive cụ thể; Engineering Contract được quyền chọn cơ chế miễn giữ đúng persisted outcome trên.
+### Recovery và pre-lifecycle handoff
+
+Recovery handoff dùng current ineligible Assignee.
+
+Pre-lifecycle handoff được phép khi current Assignee vẫn eligible nhưng là subject của chính verified eligibility-losing lifecycle/team operation. Không được buộc operation phải persist eligibility loss trước rồi mới cho handoff; cũng không được dùng pre-lifecycle context như arbitrary workload-balancing authority.
+
+### Stale-state boundary
+
+Stale eligibility, stale Assignee hoặc stale Application version không được ghi đè current state. Final lifecycle guard không được dựa trên một count/snapshot cũ nếu assignment hoặc handoff đã commit sau snapshot đó.
+
+Data Contract chỉ yêu cầu coordination/persisted outcome này. Nó không bắt buộc MongoDB primitive, lock strategy, transaction architecture hoặc một `lifecycleOperationId` persisted trên Application.
 
 ---
 
@@ -1440,6 +1541,8 @@ Mỗi Reassign/Forced Reassign được bảo vệ atomic trên từng Applicati
 
 Nếu một Recruiter có nhiều non-terminal Applications cần handoff, mỗi Application có thể hoàn tất responsibility transition độc lập.
 
+Điều này cũng áp dụng khi cùng lifecycle request cần transfer nhiều Job và Application. Ví dụ transfer của Job/Application A và B đã commit nhưng C thất bại thì A/B có thể được giữ; không yêu cầu distributed/global rollback.
+
 Tuy nhiên, bất kỳ Application nào chưa handoff và đang trỏ tới một Assignee không còn eligible:
 
 ```text
@@ -1448,7 +1551,17 @@ không được tiếp tục Recruitment Pipeline
 
 cho tới khi có eligible Assignee.
 
-Không nâng mức guarantee thành global transaction nếu Product Specification không yêu cầu.
+Đối với Recruiter `LOCKED`/`TERMINATED`, partial progress không cho phép lifecycle completion commit sớm. Final current-state guard bắt buộc:
+
+```text
+activeJobResponsibilityCount == 0
+AND
+nonTerminalAssignedApplicationCount == 0
+```
+
+Nếu còn bất kỳ active responsibility nào, lifecycle completion bị block dù các handoff khác đã thành công.
+
+Không nâng mức guarantee thành global transaction và không persist workload/active-responsibility counter làm canonical state.
 
 ---
 
@@ -1513,10 +1626,15 @@ Các constraint cần business hoặc cross-document context thuộc service.
 | Reassign chỉ áp dụng non-terminal                                 | Service            | Lifecycle rule                      |
 | Candidate chỉ truy cập Application của chính mình                 | Service            | Ownership                           |
 | Company Manager chỉ forced reassign trong own Company             | Service            | Tenant + authorization              |
+| Forced reassign chỉ là recovery hoặc verified pre-lifecycle handoff | Service + trusted lifecycle/team context | Administrative authority boundary |
 | Platform Admin không Assign/Reassign/Pipeline                     | Service            | Authorization                       |
 | Job retention sau Direct Application                               | Job lifecycle V5   | V5 lifecycle invariant               |
 | V10 mutation không được thay snapshot ngoài Replace của V9        | Service            | Workflow ownership                  |
 | Current workload chỉ dựa trên current non-terminal assignment     | Service/read model | Derived business projection         |
+| Active Application responsibility không lọc theo Job status       | Service/read model | V10 lifecycle derivation            |
+| Team removal chỉ commit sau required Application handoff          | Service + TX-02    | Cross-resource responsibility guard |
+| Recruiter lifecycle final guard thấy current Job/Application responsibility | Service + TX-02/TX-05 | Cross-resource lifecycle invariant |
+| Company lock giữ assignment và freeze processing                  | Service            | Company-wide eligibility boundary   |
 
 ---
 
@@ -1543,6 +1661,20 @@ Service cross-document validation
 +
 TX-02 coordination
 ```
+
+### Recruiter lifecycle final guard
+
+Owner:
+
+```text
+Service current active-responsibility lookup
++
+TX-02 ordering
++
+TX-05 partial-progress boundary
+```
+
+Guard result được derive, không persist thành counter trên Recruiter/Application.
 
 # 11. Token / TTL Lifecycle
 
@@ -1770,6 +1902,7 @@ primaryRecruiterCompanyMemberId
 supportingRecruiterCompanyMemberIds
 previousAssigneeId
 assignmentHistory
+handoffHistory
 statusHistory
 statusTimeline
 assignedFrom
@@ -1782,8 +1915,11 @@ forcedBy
 forcedReason
 takeOverAt
 currentWorkload
+activeResponsibilityCount
+nonTerminalAssignedApplicationCount
 assigneeEligible
 processingAllowed
+lifecycleOperationId
 jobSnapshot
 ```
 
@@ -1794,6 +1930,7 @@ currentApplicationIds
 assignedApplicationIds
 workload
 kpi
+activeResponsibilityCount
 ```
 
 Không thêm vào `Job`:
@@ -1857,7 +1994,17 @@ V10 assignment không:
 
 V10 chỉ dùng current Recruitment Team làm source of truth cho Assignee eligibility.
 
-Active Application responsibility phải được tính đến khi các lifecycle/team operation ảnh hưởng khả năng tiếp tục xử lý Application.
+Active Recruiter Responsibility từ V10 là hợp của:
+
+```text
+active Job-team responsibility theo V6
+UNION
+non-terminal Application responsibility theo V10
+```
+
+Active Application responsibility phải được tính đến khi lifecycle/team operation ảnh hưởng khả năng tiếp tục xử lý Application, kể cả Application thuộc Job `CLOSED`/`EXPIRED`. Đây là V10 integration của responsibility mà V6 đã defer; không reinterpret historical Job-team reference trên Job đã kết thúc thành active Job-team responsibility.
+
+Team removal phải handoff non-terminal Application responsibility trước khi Recruiter rời team. Recruiter lock/terminate phải pass final zero guard trên cả hai responsibility dimension.
 
 ---
 
@@ -1881,6 +2028,8 @@ Job lifecycle vẫn độc lập với Application lifecycle.
 
 `CLOSED` / `EXPIRED` không mutate Application status.
 
+`CLOSED` / `EXPIRED` cũng không loại non-terminal assigned Application khỏi active responsibility hoặc current workload derivation.
+
 Thay đổi được V10 bổ sung:
 
 ```text
@@ -1901,6 +2050,7 @@ V10 không được:
 * tạo Job snapshot;
 * tạo status history;
 * tự clear Assignee khi terminal;
+* rewrite final Assignee của terminal Application khi Recruiter mất eligibility;
 * thay Recruitment Team thông qua Assign/Reassign;
 * cascade delete Application cùng Job.
 
@@ -2082,6 +2232,8 @@ Một Assigned Recruiter chỉ được commit processing action nếu eligibili
 
 Persisted Assignee reference có thể tạm thời trỏ tới Recruiter đã mất eligibility, nhưng reference đó không cấp processing authority.
 
+Eligibility được derive từ same Company, current Job team, Recruiter role, CompanyMember `ACTIVE`, User `ACTIVE` và Company operational; không persist `assigneeEligible` hoặc `processingAllowed`.
+
 **Owner:** Service + TX-02.
 
 ---
@@ -2127,6 +2279,8 @@ Company operational
 
 và current team membership.
 
+Stored assignment không thay thế bất kỳ điều kiện nào trong tập trên.
+
 **Owner:** Service + TX-02.
 
 ---
@@ -2168,12 +2322,70 @@ Current workload được derive từ:
 ```text
 assignedRecruiterCompanyMemberId = recruiter
 AND
-status ∈ non-terminal statuses
+status IN {
+  APPLIED,
+  SCREENING,
+  CONTACTED,
+  INTERVIEW_SCHEDULED,
+  INTERVIEW_COMPLETED
+}
 ```
+
+Không thêm `Job.status = PUBLISHED`. Application trên Job `CLOSED`/`EXPIRED` vẫn thuộc current workload nếu thỏa expression trên.
 
 Không có persisted workload counter là canonical source of truth.
 
 **Owner:** derived data contract.
+
+---
+
+## PI-22 — Active Application responsibility
+
+Non-terminal Application responsibility dùng cùng canonical derivation với PI-21:
+
+```text
+assignedRecruiterCompanyMemberId = recruiterId
+AND
+status NOT IN { HIRED, REJECTED, WITHDRAWN }
+```
+
+Job status không tham gia expression. Terminal Assignee reference là historical association, không phải active responsibility.
+
+**Owner:** Service/read model + lifecycle coordination.
+
+---
+
+## PI-23 — Administrative handoff context
+
+Administrative `A → B` chỉ được commit cho recovery handoff hoặc verified pre-lifecycle handoff. B phải current eligible; A không cần persist ineligible trước trong pre-lifecycle flow.
+
+Không persist `A → null → B`, `lifecycleOperationId`, handoff history hoặc synthetic Unassigned.
+
+**Owner:** Service authorization + TX-01/TX-02/TX-03.
+
+---
+
+## PI-24 — Recruiter lifecycle final guard
+
+`LOCKED`/`TERMINATED` chỉ được commit khi current state thỏa:
+
+```text
+activeJobResponsibilityCount == 0
+AND
+nonTerminalAssignedApplicationCount == 0
+```
+
+Các count được derive tại guard, không persist. Assignment commit trước guard phải được nhìn thấy; lifecycle commit trước làm target ineligible phải ngăn assignment mới.
+
+**Owner:** Service + TX-02/TX-05.
+
+---
+
+## PI-25 — Company lock giữ assignment
+
+Company mất operational state không tự mutate Application status/Assignee, không auto reassign trong cùng Company và không tạo synthetic Unassigned/replacement. Processing bị freeze trong khi Company non-operational.
+
+**Owner:** Service + Company lifecycle boundary.
 
 ---
 
@@ -2197,6 +2409,12 @@ V10 Data Contract được coi là hoàn thành khi:
 * Job `CLOSED`/`EXPIRED` không làm Application mutate ngoài ý muốn;
 * Job retention tiếp tục theo canonical lifecycle V5, không thêm Apply/Delete transaction;
 * continuous eligibility và eligibility race đã có consistency requirement;
+* Active Recruiter Responsibility đã được định nghĩa là union của Job-team và non-terminal Application responsibility;
+* Application responsibility/current workload derivation không lọc `Job.status`;
+* recovery và pre-lifecycle handoff đã có authority/persistence boundary rõ;
+* final Recruiter lifecycle zero guard và partial-progress semantics đã rõ;
+* Team removal không được bỏ lại non-terminal Application responsibility;
+* Company lock giữ assignment, không reassign/unassign và freeze processing;
 * stale mutation protection đã rõ;
 * constraint ownership giữa schema/database và service đã rõ;
 * Company tenant boundary đã rõ;

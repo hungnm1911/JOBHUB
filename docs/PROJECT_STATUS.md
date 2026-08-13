@@ -28,8 +28,10 @@ V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the record
 **V10 — Phân công Application và Recruitment Pipeline** has Slice 01 —
 Application persistence foundation, Slice 02 — V9 compatibility +
 Job-retention compatibility, Slice 03 — Unassigned Applications +
-Primary Application View, Slice 04 — First Assign Application, and
-Slice 05 — Reassign / Take over Application
+Primary Application View, Slice 04 — First Assign Application,
+Slice 05 — Reassign / Take over Application, Slice 06 — Company Manager
+Administrative Forced Reassignment, and the Slice 07 corrective assignment/
+handoff lifecycle-boundary foundation
 `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
@@ -61,10 +63,21 @@ Slice 05 adds Primary-only Reassign / Take over via
 Assigned Application transfers responsibility atomically `A → B` (Take over =
 target is current Primary) without Unassign, status/snapshot/identity changes,
 or takeover history fields, reusing First Assign eligibility and version +
-expected-assignee CAS. Forced reassignment, automatic eligibility handoff,
-Recruitment Pipeline, Managed Jobs aggregates, My Applications, workload
-queries, and other remaining Fxx workflow surfaces remain deferred by the
-approved slice order.
+expected-assignee CAS. Slice 06 adds Company Manager-only administrative forced
+reassignment via
+`POST /api/jobs/:jobId/applications/:applicationId/force-reassign` when the
+current Assignee is operationally ineligible, transferring `A → B` to an
+eligible Recruiter without making the Manager an Assignee, without arbitrary
+reassignment while Assignee remains eligible, and without Job-status blocking
+on `CLOSED`/`EXPIRED`. The Slice 07 corrective foundation adds trusted internal
+pre-lifecycle handoff (`executeTrustedPreLifecycleApplicationHandoff`) for
+still-eligible Assignees that are verified subjects of an eligibility-losing
+operation, keeps public CM force-reassign recovery-only, and joins First Assign/
+Reassign/handoff target commits to the shared ACTIVE membership TX-02 acquire
+used by Job-team responsibility. Full LOCK/TERMINATE/team-removal orchestration,
+final zero-active-responsibility Application guard, Recruitment Pipeline,
+Managed Jobs aggregates, My Applications, workload queries, and other remaining
+Fxx workflow surfaces remain deferred by the approved slice order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -103,18 +116,54 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 05):** Slices 01–05 are complete. Forced
-  reassignment, continuous eligibility for pipeline processing, Recruitment
-  Pipeline, Managed Jobs aggregates/counts, Current Workload,
-  Recruiter/Candidate My Applications, and related read projections remain
-  deferred until their owning slices start. Job retention continues on the V5
-  lifecycle without an Application↔Job delete transaction.
+- **V10 subsequent slices (after Slice 07 handoff foundation):** Slices 01–06
+  plus the Slice 07 corrective assignment/handoff lifecycle-boundary foundation
+  are complete. Full Recruiter LOCK/TERMINATE/team-removal orchestration,
+  final zero-active-responsibility Application guard, continuous eligibility
+  for pipeline processing, Recruitment Pipeline, Managed Jobs aggregates/counts,
+  Current Workload, Recruiter/Candidate My Applications, and related read
+  projections remain deferred until their owning slices start. Job retention
+  continues on the V5 lifecycle without an Application↔Job delete transaction.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 07 corrective finding — Assignment/handoff
+  lifecycle boundary foundation (F04/BR-15/BR-28/BR-36–BR-38/BR-40/BR-42; TX-01;
+  TX-02; PI-23): public CM `forceReassignApplication` remains recovery-only
+  when the current Assignee is operationally ineligible; trusted internal
+  `executeTrustedPreLifecycleApplicationHandoff` allows `A → B` while the
+  outgoing Assignee is still eligible only when they are the verified subject
+  of an eligibility-losing lifecycle/team operation (not via client-declared
+  reason on the public API); First Assign/Reassign/handoff reuse shared target
+  eligibility and acquire ACTIVE Recruiter membership at commit through
+  `acquireActiveRecruiterMembershipForTeamResponsibilityTx` so responsibility
+  cannot land on a Recruiter that already lost eligibility; atomic A→B CAS
+  preserves status/snapshot/identity and continues on `CLOSED`/`EXPIRED` Jobs;
+  terminal Applications remain blocked. Focused coverage in
+  `test/application/v10-slice07-handoff-lifecycle-boundary.test.js` plus Slice
+  04–06 regressions. The official backend gate passed (ESLint: 0 errors / 2
+  existing warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through
+  ARCH-016; Vitest: 94 files / 744 tests).
+
+- **Implemented; verified:** V10 Slice 06 — Company Manager Administrative
+  Forced Reassignment (F04, F09 partial; BR-07, BR-10, BR-15–BR-17, BR-27–BR-28,
+  BR-36–BR-38, BR-40, BR-42; TX-01; TX-02 administrative handoff): authenticated
+  Company Manager force-reassigns a non-terminal Assigned `DIRECT_APPLICATION`
+  via `POST /api/jobs/:jobId/applications/:applicationId/force-reassign`
+  (`forceReassignApplication`) only when the current Assignee is operationally
+  ineligible (off-team / non-ACTIVE membership / non-ACTIVE User / non-Recruiter
+  role); target must be an eligible Primary or Supporting Recruiter; Manager
+  cannot become Assignee; still-eligible Assignee blocks arbitrary swap; atomic
+  A→B CAS preserves status/snapshot/identity and works on `CLOSED`/`EXPIRED`
+  Jobs; Platform Admin/Recruiter/Candidate and cross-tenant Managers denied.
+  Focused coverage in `test/application/v10-force-reassign.test.js`. The
+  official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 93 files
+  / 733 tests).
 
 - **Implemented; verified:** V10 Slice 05 — Reassign and Take over Application
   (F03; BR-10, BR-12–BR-14, BR-17–BR-19, BR-34, BR-36–BR-38, BR-40; TX-01;

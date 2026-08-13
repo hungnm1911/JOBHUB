@@ -1,6 +1,7 @@
 import {
   directApplyToJob,
   firstAssignApplication,
+  forceReassignApplication,
   listPrimaryJobApplications,
   reassignApplication,
   replaceSubmittedCv,
@@ -119,9 +120,29 @@ const reassignApplicationHandler = async (request, response, next) => {
   }
 };
 
+const forceReassignApplicationHandler = async (request, response, next) => {
+  try {
+    const result = await forceReassignApplication({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      assigneeCompanyMemberId: request.body.assigneeCompanyMemberId,
+      expectedAssigneeCompanyMemberId:
+        request.body.expectedAssigneeCompanyMemberId,
+      expectedVersion: request.body.expectedVersion,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   directApplyToJobHandler,
   firstAssignApplicationHandler,
+  forceReassignApplicationHandler,
   listPrimaryJobApplicationsHandler,
   reassignApplicationHandler,
   replaceSubmittedCvHandler,
