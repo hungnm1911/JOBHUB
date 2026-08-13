@@ -12,6 +12,7 @@ import JOB_STATUS, {
   PRE_PUBLICATION_DELETABLE_JOB_STATUSES,
 } from "../constants/job-status.js";
 import LOCATION from "../constants/location.js";
+import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
 import Category from "../models/category.model.js";
@@ -339,6 +340,38 @@ const createDraftJob = async ({
 
   try {
     await session.withTransaction(async () => {
+      // F11 / BR-49 / TX-02: eligibility-at-commit for new Primary responsibility.
+      // Order matches replacePrimaryRecruiter / H3: Company → Membership → User.
+      const targetUser = await User.findById(context.membership.userId)
+        .session(session)
+        .select("status mustChangePassword");
+
+      if (
+        !targetUser ||
+        targetUser.status !== USER_STATUS.ACTIVE ||
+        targetUser.mustChangePassword !== false
+      ) {
+        throw new AppError(
+          409,
+          "Recruiter is not eligible for active responsibility during draft Job creation",
+          { field: "userId" },
+        );
+      }
+
+      const owningCompany =
+        await acquireOperationalCompanyForAssigneeEligibilityTx({
+          companyId: context.companyId,
+          session,
+        });
+
+      if (!owningCompany) {
+        throw new AppError(
+          409,
+          "Job Company is not available for active responsibility",
+          { field: "companyId" },
+        );
+      }
+
       const stillActive =
         await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
           recruiterCompanyMemberId: context.membership._id,
@@ -351,6 +384,19 @@ const createDraftJob = async ({
           409,
           "Recruiter is no longer active during draft Job creation",
           { field: "membershipStatus" },
+        );
+      }
+
+      const stillActiveUser = await acquireActiveUserForAssigneeEligibilityTx({
+        userId: context.membership.userId,
+        session,
+      });
+
+      if (!stillActiveUser) {
+        throw new AppError(
+          409,
+          "Recruiter User is no longer active during draft Job creation",
+          { field: "userId" },
         );
       }
 
@@ -846,6 +892,34 @@ const isJobUnfinishedForForcedTransfer = (job, now = new Date()) => {
   );
 };
 
+// V10 F11 / BR-46–BR-53: generic Platform User lifecycle is independent from
+// Recruiter membership lifecycle. This trusted recovery context is derived
+// from persisted relationships only; it does not trust a client-declared
+// reason and does not broaden normal V6 team management.
+const isPlatformIneligibleRecruiterRecovery = async ({
+  companyId,
+  recruiterCompanyMemberId,
+} = {}) => {
+  const membership = await CompanyMember.findOne({
+    _id: recruiterCompanyMemberId,
+    companyId,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+    status: COMPANY_MEMBER_STATUS.ACTIVE,
+  }).select("userId");
+
+  if (!membership) {
+    return false;
+  }
+
+  const user = await User.findOne({
+    _id: membership.userId,
+    role: USER_ROLE.COMPANY_STAFF,
+    status: { $in: [USER_STATUS.LOCKED, USER_STATUS.TERMINATED] },
+  }).select("_id");
+
+  return user != null;
+};
+
 // BR-35: owning Company must still be operationally active.
 const isOwningCompanyActiveForPublicEligibility = (company) => {
   if (company == null) {
@@ -1233,6 +1307,82 @@ const acquireActiveRecruiterMembershipForTeamResponsibilityTx = async ({
     {
       $set: {
         status: COMPANY_MEMBER_STATUS.ACTIVE,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
+// TX-02: serialize Application Assignee eligibility against Company operational
+// loss (e.g. Company lock). Conditional ACTIVE write conflicts with lock writers.
+const acquireOperationalCompanyForAssigneeEligibilityTx = async ({
+  companyId,
+  session,
+} = {}) => {
+  return Company.findOneAndUpdate(
+    {
+      _id: companyId,
+      approvalStatus: COMPANY_APPROVAL_STATUS.APPROVED,
+      operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
+    },
+    {
+      $set: {
+        operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
+// TX-02: serialize Application Assignee eligibility against User lifecycle loss
+// (generic Platform Admin lock/terminate). Does not mutate assignment/status.
+const acquireActiveUserForAssigneeEligibilityTx = async ({
+  userId,
+  session,
+} = {}) => {
+  return User.findOneAndUpdate(
+    {
+      _id: userId,
+      status: USER_STATUS.ACTIVE,
+    },
+    {
+      $set: {
+        status: USER_STATUS.ACTIVE,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
+// TX-02: serialize Application Assignee eligibility against Job Recruitment Team
+// mutations (Supporting removal / Primary leave-team). Noop tenant touch only.
+const acquireJobTeamMembershipForAssigneeEligibilityTx = async ({
+  jobId,
+  companyId,
+  assigneeCompanyMemberId,
+  session,
+} = {}) => {
+  return Job.findOneAndUpdate(
+    {
+      _id: jobId,
+      companyId,
+      $or: [
+        { primaryRecruiterCompanyMemberId: assigneeCompanyMemberId },
+        { supportingRecruiterCompanyMemberIds: assigneeCompanyMemberId },
+      ],
+    },
+    {
+      $set: {
+        companyId,
       },
     },
     {
@@ -1695,6 +1845,7 @@ const assertCompanyManagerPrimaryReassignmentAuthority = ({
   job,
   companyRole,
   tenantCompanyId,
+  allowUnfinishedPlatformRecovery = false,
   now = new Date(),
 } = {}) => {
   if (companyRole !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
@@ -1713,6 +1864,13 @@ const assertCompanyManagerPrimaryReassignmentAuthority = ({
     resourceCompanyId: job.companyId,
     tenantCompanyId,
   });
+
+  if (
+    allowUnfinishedPlatformRecovery &&
+    isJobUnfinishedForForcedTransfer(job, now)
+  ) {
+    return;
+  }
 
   if (!isJobEffectivelyPublished(job, now)) {
     throw new AppError(
@@ -2076,15 +2234,15 @@ const addSupportingRecruiter = async ({
         );
       }
 
-      const owningCompany = await Company.findById(context.companyId)
-        .session(session)
-        .select("approvalStatus operationalStatus");
+      // F11 / BR-49 / TX-02: Company → Membership → User at Supporting commit
+      // (same order as replacePrimaryRecruiter / H3).
+      const owningCompany =
+        await acquireOperationalCompanyForAssigneeEligibilityTx({
+          companyId: context.companyId,
+          session,
+        });
 
-      if (
-        !owningCompany ||
-        owningCompany.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
-        owningCompany.operationalStatus !== COMPANY_OPERATIONAL_STATUS.ACTIVE
-      ) {
+      if (!owningCompany) {
         throw new AppError(
           409,
           "Job Company is not available for active responsibility",
@@ -2106,6 +2264,20 @@ const addSupportingRecruiter = async ({
         throw new AppError(
           409,
           "Target Supporting Recruiter is no longer active during the operation",
+          { field: "supportingRecruiterCompanyMemberId" },
+        );
+      }
+
+      const stillActiveTargetUser =
+        await acquireActiveUserForAssigneeEligibilityTx({
+          userId: targetMembership.userId,
+          session,
+        });
+
+      if (!stillActiveTargetUser) {
+        throw new AppError(
+          409,
+          "Target Supporting Recruiter User is no longer active during the operation",
           { field: "supportingRecruiterCompanyMemberId" },
         );
       }
@@ -2181,7 +2353,8 @@ const addSupportingRecruiter = async ({
   };
 };
 
-// V6 F03: Remove Supporting recruiter.
+// V6 F03 + V10 Slice 09: Remove Supporting recruiter. Required non-terminal
+// Application handoff completes before team-removal commit (BR-28 / TX-02).
 const removeSupportingRecruiter = async ({
   actorUser,
   jobId,
@@ -2231,6 +2404,13 @@ const removeSupportingRecruiter = async ({
     );
   }
 
+  const isPlatformRecovery =
+    isCompanyManager &&
+    (await isPlatformIneligibleRecruiterRecovery({
+      companyId: context.companyId,
+      recruiterCompanyMemberId: supportingRecruiterCompanyMemberId,
+    }));
+
   // Target must be current Supporting (not Primary, not absent).
   if (
     !(job.supportingRecruiterCompanyMemberIds ?? []).some(
@@ -2244,50 +2424,118 @@ const removeSupportingRecruiter = async ({
     );
   }
 
-  // BR-12/BR-13/BR-30: effectively PUBLISHED only. Atomic conditional write
-  // with $$NOW deadline guard ensures mutation-boundary consistency.
-  // Recruiter remove also binds current Primary so concurrent F04 cannot let
-  // a former Primary mutate Supporting after losing Primary authority.
-  const removeFilter = bindActorPrimaryToJobMutationFilter({
-    filter: {
-      _id: job._id,
-      companyId: context.companyId,
-      status: JOB_STATUS.PUBLISHED,
-      ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
-      supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
-    },
-    isCompanyManager,
-    actorMembershipId: context.membership._id,
-  });
-
-  const updatedJob = await Job.findOneAndUpdate(
-    removeFilter,
-    {
-      $pull: {
-        supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
-      },
-    },
-    {
-      returnDocument: "after",
-      runValidators: true,
-    },
-  );
-
-  if (!updatedJob) {
-    if (!isCompanyManager) {
-      await assertRecruiterStillCurrentPrimaryAfterMutationMiss({
-        jobId: job._id,
-        actorMembershipId: context.membership._id,
-        unauthorizedMessage:
-          "Only Company Manager or current Primary Recruiter can remove Supporting",
-      });
-    }
-
+  // BR-12/BR-13/BR-30 + V10 F11: normal removal remains effectively
+  // PUBLISHED. Only CM recovery for a persisted Platform-ineligible outgoing
+  // Recruiter may use the V6 unfinished DRAFT/PENDING/PUBLISHED set. Reject
+  // ended Jobs before Application handoff so team history is not mutated.
+  if (
+    !isJobEffectivelyPublished(job) &&
+    !(isPlatformRecovery && isJobUnfinishedForForcedTransfer(job))
+  ) {
     throw new AppError(
       409,
-      "Supporting can only be removed while the Job is effectively PUBLISHED",
+      "Supporting can only be removed in normal PUBLISHED management or verified Platform User recovery on an unfinished Job",
       { field: "status" },
     );
+  }
+
+  const {
+    assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
+    executeTrustedTeamRemovalApplicationHandoffs,
+  } = await import("./application.service.js");
+
+  // V10 Slice 09: Supporting leave → current Primary is the canonical Take-over
+  // replacement context (same as LOCK/TERMINATE Supporting departure). Do not
+  // invent another selector. Application lookup itself does not filter Job.status.
+  await executeTrustedTeamRemovalApplicationHandoffs({
+    companyId: context.companyId,
+    jobId: job._id,
+    outgoingCompanyMemberId: supportingRecruiterCompanyMemberId,
+    replacementCompanyMemberId: job.primaryRecruiterCompanyMemberId,
+  });
+
+  const session = await mongoose.startSession();
+  let updatedJob;
+
+  try {
+    await session.withTransaction(async () => {
+      // TX-02: serialize against concurrent First Assign/Reassign onto the
+      // outgoing Supporting before team-removal completion.
+      const stillActiveOutgoing =
+        await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+          recruiterCompanyMemberId: supportingRecruiterCompanyMemberId,
+          companyId: context.companyId,
+          session,
+        });
+
+      if (!stillActiveOutgoing) {
+        throw new AppError(
+          409,
+          "Supporting Recruiter is no longer active during the operation",
+          { field: "supportingRecruiterCompanyMemberId" },
+        );
+      }
+
+      await assertNoOutstandingRecruiterApplicationResponsibilityOnJob({
+        recruiterCompanyMemberId: supportingRecruiterCompanyMemberId,
+        jobId: job._id,
+        session,
+      });
+
+      // Recruiter remove also binds current Primary so concurrent F04 cannot let
+      // a former Primary mutate Supporting after losing Primary authority.
+      const teamMutationEligibility = isPlatformRecovery
+        ? JOB_STILL_UNFINISHED_AT_FORCED_MUTATION
+        : {
+            status: JOB_STATUS.PUBLISHED,
+            ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
+          };
+
+      const removeFilter = bindActorPrimaryToJobMutationFilter({
+        filter: {
+          _id: job._id,
+          companyId: context.companyId,
+          ...teamMutationEligibility,
+          supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
+        },
+        isCompanyManager,
+        actorMembershipId: context.membership._id,
+      });
+
+      updatedJob = await Job.findOneAndUpdate(
+        removeFilter,
+        {
+          $pull: {
+            supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
+          },
+        },
+        {
+          returnDocument: "after",
+          runValidators: true,
+          session,
+        },
+      );
+
+      if (!updatedJob) {
+        if (!isCompanyManager) {
+          await assertRecruiterStillCurrentPrimaryAfterMutationMiss({
+            jobId: job._id,
+            actorMembershipId: context.membership._id,
+            unauthorizedMessage:
+              "Only Company Manager or current Primary Recruiter can remove Supporting",
+            session,
+          });
+        }
+
+        throw new AppError(
+          409,
+          "Supporting can only be removed in normal PUBLISHED management or verified Platform User recovery on an unfinished Job",
+          { field: "status" },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
   }
 
   return {
@@ -2300,10 +2548,11 @@ const removeSupportingRecruiter = async ({
   };
 };
 
-// V6 F04: Replace Primary Recruiter. Only Company Manager may promote a
-// current Supporting to Primary. Old Primary either stays as Supporting or
-// leaves team. TX-01 atomic single-document mutation; TX-02 concurrency
-// boundary with lock/terminate via in-transaction membership lock.
+// V6 F04 + V10 Slice 09/F11: Replace Primary Recruiter. Only Company Manager
+// may promote a current Supporting. Normal flow remains effectively PUBLISHED;
+// persisted Platform User ineligibility opens recovery on the V6 unfinished
+// Job set and requires the outgoing Primary to leave. TX-01 atomic mutation;
+// TX-02 coordinates target CompanyMember/User/Company eligibility.
 const replacePrimaryRecruiter = async ({
   managerUser,
   jobId,
@@ -2338,12 +2587,26 @@ const replacePrimaryRecruiter = async ({
     throw new AppError(404, "Job not found", { field: "jobId" });
   }
 
+  const isPlatformRecovery = await isPlatformIneligibleRecruiterRecovery({
+    companyId: context.companyId,
+    recruiterCompanyMemberId: job.primaryRecruiterCompanyMemberId,
+  });
+
   // BR-19 / BR-12 / BR-13: early checks before transaction.
   assertCompanyManagerPrimaryReassignmentAuthority({
     job,
     companyRole: context.companyRole,
     tenantCompanyId: context.companyId,
+    allowUnfinishedPlatformRecovery: isPlatformRecovery,
   });
+
+  if (isPlatformRecovery && keepOldPrimaryAsSupporting) {
+    throw new AppError(
+      409,
+      "Platform-ineligible Primary must leave the active Recruitment Team during recovery",
+      { field: "keepOldPrimaryAsSupporting" },
+    );
+  }
 
   // BR-20: new Primary must currently be Supporting of this Job.
   const newPrimaryIdStr = newPrimaryCompanyMemberId.toString();
@@ -2363,6 +2626,25 @@ const replacePrimaryRecruiter = async ({
   if (job.primaryRecruiterCompanyMemberId.toString() === newPrimaryIdStr) {
     throw new AppError(409, "Recruiter is already the Primary of this Job", {
       field: "newPrimaryCompanyMemberId",
+    });
+  }
+
+  const oldPrimaryId = job.primaryRecruiterCompanyMemberId;
+
+  // V10 Slice 09 / BR-28: leaving the team requires Application handoff to the
+  // canonical V6 successor (new Primary) while that successor is already on
+  // the Recruitment Team as Supporting. PRIMARY→SUPPORTING keeps eligibility
+  // and does not create a handoff requirement.
+  if (!keepOldPrimaryAsSupporting) {
+    const { executeTrustedTeamRemovalApplicationHandoffs } = await import(
+      "./application.service.js"
+    );
+
+    await executeTrustedTeamRemovalApplicationHandoffs({
+      companyId: context.companyId,
+      jobId: job._id,
+      outgoingCompanyMemberId: oldPrimaryId,
+      replacementCompanyMemberId: newPrimaryCompanyMemberId,
     });
   }
 
@@ -2408,15 +2690,13 @@ const replacePrimaryRecruiter = async ({
         );
       }
 
-      const owningCompany = await Company.findById(context.companyId)
-        .session(session)
-        .select("approvalStatus operationalStatus");
+      const owningCompany =
+        await acquireOperationalCompanyForAssigneeEligibilityTx({
+          companyId: context.companyId,
+          session,
+        });
 
-      if (
-        !owningCompany ||
-        owningCompany.approvalStatus !== COMPANY_APPROVAL_STATUS.APPROVED ||
-        owningCompany.operationalStatus !== COMPANY_OPERATIONAL_STATUS.ACTIVE
-      ) {
+      if (!owningCompany) {
         throw new AppError(
           409,
           "Job Company is not available for active responsibility",
@@ -2441,20 +2721,67 @@ const replacePrimaryRecruiter = async ({
         );
       }
 
+      const stillActiveTargetUser =
+        await acquireActiveUserForAssigneeEligibilityTx({
+          userId: targetMembership.userId,
+          session,
+        });
+
+      if (!stillActiveTargetUser) {
+        throw new AppError(
+          409,
+          "New Primary Recruiter User is no longer active during the operation",
+          { field: "newPrimaryCompanyMemberId" },
+        );
+      }
+
+      if (!keepOldPrimaryAsSupporting) {
+        // Serialize against concurrent assignment onto the outgoing Primary and
+        // re-check Job-scoped Application responsibility before leave-team.
+        const stillActiveOutgoing =
+          await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+            recruiterCompanyMemberId: oldPrimaryId,
+            companyId: context.companyId,
+            session,
+          });
+
+        if (!stillActiveOutgoing) {
+          throw new AppError(
+            409,
+            "Outgoing Primary Recruiter is no longer active during the operation",
+            { field: "primaryRecruiterCompanyMemberId" },
+          );
+        }
+
+        const {
+          assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
+        } = await import("./application.service.js");
+
+        await assertNoOutstandingRecruiterApplicationResponsibilityOnJob({
+          recruiterCompanyMemberId: oldPrimaryId,
+          jobId: job._id,
+          session,
+        });
+      }
+
       // TX-01 / BR-22: atomic replacement — set new Primary, remove new from
       // Supporting, and conditionally add old Primary to Supporting.
       // MongoDB does not allow $pull and $addToSet on the same field in one
       // update. When keeping old Primary as Supporting we use a two-step
       // approach within the same transaction: first swap Primary + pull new
       // from Supporting, then addToSet old Primary.
-      const oldPrimaryId = job.primaryRecruiterCompanyMemberId;
+      const teamMutationEligibility = isPlatformRecovery
+        ? JOB_STILL_UNFINISHED_AT_FORCED_MUTATION
+        : {
+            status: JOB_STATUS.PUBLISHED,
+            ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
+          };
 
       updatedJob = await Job.findOneAndUpdate(
         {
           _id: job._id,
           companyId: context.companyId,
-          status: JOB_STATUS.PUBLISHED,
-          ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
+          ...teamMutationEligibility,
           primaryRecruiterCompanyMemberId: oldPrimaryId,
           supportingRecruiterCompanyMemberIds: newPrimaryCompanyMemberId,
         },
@@ -2724,11 +3051,28 @@ const executeForcedPrimaryTransfer = async ({
 
   try {
     await session.withTransaction(async () => {
-      await assertReplacementOperationalEligibility({
-        replacementCompanyMemberId,
-        companyId,
-        session,
-      });
+      const { membership: replacementMembership } =
+        await assertReplacementOperationalEligibility({
+          replacementCompanyMemberId,
+          companyId,
+          session,
+        });
+
+      // F11 / BR-49 / TX-02: Company → Membership → User at forced Primary
+      // transfer commit (same order as replacePrimaryRecruiter / H3).
+      const owningCompany =
+        await acquireOperationalCompanyForAssigneeEligibilityTx({
+          companyId,
+          session,
+        });
+
+      if (!owningCompany) {
+        throw new AppError(
+          409,
+          "Job Company is not available for active responsibility",
+          { field: "companyId" },
+        );
+      }
 
       // TX-02: concurrency guard — lock replacement membership to prevent
       // concurrent LOCKED/TERMINATED from committing.
@@ -2743,6 +3087,20 @@ const executeForcedPrimaryTransfer = async ({
         throw new AppError(
           409,
           "Replacement Recruiter is no longer active during the operation",
+          { field: "replacementCompanyMemberId" },
+        );
+      }
+
+      const stillActiveReplacementUser =
+        await acquireActiveUserForAssigneeEligibilityTx({
+          userId: replacementMembership.userId,
+          session,
+        });
+
+      if (!stillActiveReplacementUser) {
+        throw new AppError(
+          409,
+          "Replacement Recruiter User is no longer active during the operation",
           { field: "replacementCompanyMemberId" },
         );
       }
@@ -2869,6 +3227,9 @@ const executeForcedSupportingRemoval = async ({
 
 export {
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
+  acquireActiveUserForAssigneeEligibilityTx,
+  acquireJobTeamMembershipForAssigneeEligibilityTx,
+  acquireOperationalCompanyForAssigneeEligibilityTx,
   approveAndPublishJob,
   addSupportingRecruiter,
   executeForcedPrimaryTransfer,
