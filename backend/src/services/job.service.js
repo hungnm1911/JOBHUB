@@ -1289,19 +1289,21 @@ const findOutstandingSupportingResponsibility = async ({
   return query.select("_id status applicationDeadline").lean();
 };
 
-// TX-02: canonical serialization boundary between active Recruitment Team
-// responsibility assignment and Recruiter lifecycle completion (LOCK/TERMINATE).
-// Must run inside an active MongoDB transaction before committing either side.
-const acquireActiveRecruiterMembershipForTeamResponsibilityTx = async ({
-  recruiterCompanyMemberId,
+// TX-02: shared ACTIVE Company Staff membership acquire. Used by Recruitment
+// Team responsibility writers (Recruiter) and manual assignment-management
+// actor authority (Recruiter Primary or Company Manager) so lock order stays
+// Company → CompanyMember → User → Job without role-specific lock frameworks.
+const acquireActiveCompanyStaffMembershipForBusinessAccessTx = async ({
+  companyMemberId,
   companyId,
+  role,
   session,
 } = {}) => {
   return CompanyMember.findOneAndUpdate(
     {
-      _id: recruiterCompanyMemberId,
+      _id: companyMemberId,
       companyId,
-      role: COMPANY_MEMBER_ROLE.RECRUITER,
+      role,
       status: COMPANY_MEMBER_STATUS.ACTIVE,
     },
     {
@@ -1314,6 +1316,22 @@ const acquireActiveRecruiterMembershipForTeamResponsibilityTx = async ({
       session,
     },
   );
+};
+
+// TX-02: canonical serialization boundary between active Recruitment Team
+// responsibility assignment and Recruiter lifecycle completion (LOCK/TERMINATE).
+// Must run inside an active MongoDB transaction before committing either side.
+const acquireActiveRecruiterMembershipForTeamResponsibilityTx = async ({
+  recruiterCompanyMemberId,
+  companyId,
+  session,
+} = {}) => {
+  return acquireActiveCompanyStaffMembershipForBusinessAccessTx({
+    companyMemberId: recruiterCompanyMemberId,
+    companyId,
+    role: COMPANY_MEMBER_ROLE.RECRUITER,
+    session,
+  });
 };
 
 // TX-02: serialize Application Assignee eligibility against Company operational
@@ -1379,6 +1397,32 @@ const acquireJobTeamMembershipForAssigneeEligibilityTx = async ({
         { primaryRecruiterCompanyMemberId: assigneeCompanyMemberId },
         { supportingRecruiterCompanyMemberIds: assigneeCompanyMemberId },
       ],
+    },
+    {
+      $set: {
+        companyId,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
+// TX-02: serialize manual assignment-management against Primary replacement.
+// Conditional noop write conflicts when the actor is no longer current Primary.
+const acquireJobCurrentPrimaryForAssignmentManagementTx = async ({
+  jobId,
+  companyId,
+  primaryCompanyMemberId,
+  session,
+} = {}) => {
+  return Job.findOneAndUpdate(
+    {
+      _id: jobId,
+      companyId,
+      primaryRecruiterCompanyMemberId: primaryCompanyMemberId,
     },
     {
       $set: {
@@ -3222,8 +3266,10 @@ const executeForcedSupportingRemoval = async ({
 };
 
 export {
+  acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
   acquireActiveUserForAssigneeEligibilityTx,
+  acquireJobCurrentPrimaryForAssignmentManagementTx,
   acquireJobTeamMembershipForAssigneeEligibilityTx,
   acquireOperationalCompanyForAssigneeEligibilityTx,
   approveAndPublishJob,

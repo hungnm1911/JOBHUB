@@ -576,7 +576,7 @@ describe("V10 Slice 09 — Platform Admin User LOCK/TERMINATE automatic Unassign
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it("keeps partial Application Unassign progress across User LOCK and retries remaining via TERMINATE (TX-05)", async () => {
+  it("keeps partial Application Unassign progress across User LOCK and retries remaining via repeated LOCK (TX-05)", async () => {
     const ctx = await setupSlice09Company({
       emailPrefix: "v10.s09.partial",
     });
@@ -660,6 +660,90 @@ describe("V10 Slice 09 — Platform Admin User LOCK/TERMINATE automatic Unassign
     expect(unassignedCount).toBe(1);
     expect(stillAssignedCount).toBe(1);
 
+    // Same desired lifecycle state (LOCKED) reconciles remaining responsibilities
+    // without forcing Platform Admin to change intent to TERMINATED.
+    const retry = await lockAccount({
+      targetUserId: ctx.outgoing.user._id.toString(),
+      actorUserId: ctx.platformAdmin.user._id,
+    });
+
+    expect(retry.status).toBe(USER_STATUS.LOCKED);
+    expect(
+      (await Application.findById(appA._id).lean())
+        .assignedRecruiterCompanyMemberId,
+    ).toBeNull();
+    expect(
+      (await Application.findById(appB._id).lean())
+        .assignedRecruiterCompanyMemberId,
+    ).toBeNull();
+    expect((await User.findById(ctx.outgoing.user._id).lean()).status).toBe(
+      USER_STATUS.LOCKED,
+    );
+    expect(
+      (await CompanyMember.findById(ctx.outgoing.membership._id).lean()).status,
+    ).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
+  });
+
+  it("TERMINATE of already-LOCKED User still reconciles remaining Application refs (TX-05)", async () => {
+    const ctx = await setupSlice09Company({
+      emailPrefix: "v10.s09.partial.terminate",
+    });
+    const job = await createJobWithTeam({
+      companyId: ctx.manager.company._id,
+      primaryMemberId: ctx.primary.membership._id,
+      supportingMemberIds: [ctx.outgoing.membership._id],
+    });
+    const appA = await createAssignedApplication({
+      candidateUserId: ctx.candidate.user._id,
+      jobId: job._id,
+      assigneeMemberId: ctx.outgoing.membership._id,
+      status: APPLICATION_STATUS.SCREENING,
+    });
+    const candidateB = await createVerifiedUser({
+      email: "v10.s09.partial.terminate.candidate.b@example.com",
+    });
+    const appB = await createAssignedApplication({
+      candidateUserId: candidateB.user._id,
+      jobId: job._id,
+      assigneeMemberId: ctx.outgoing.membership._id,
+      status: APPLICATION_STATUS.CONTACTED,
+    });
+
+    const orderedIds = [appA._id, appB._id].map(String).sort();
+    const failingApplicationId = orderedIds[1];
+
+    const originalFindOneAndUpdate =
+      Application.findOneAndUpdate.bind(Application);
+    vi.spyOn(Application, "findOneAndUpdate").mockImplementation(
+      function mockFindOneAndUpdate(...args) {
+        const [filter, update] = args;
+        const isAutomaticUnassign =
+          filter?.assignedRecruiterCompanyMemberId != null &&
+          update?.$set &&
+          Object.prototype.hasOwnProperty.call(
+            update.$set,
+            "assignedRecruiterCompanyMemberId",
+          ) &&
+          update.$set.assignedRecruiterCompanyMemberId === null;
+
+        if (
+          isAutomaticUnassign &&
+          String(filter._id) === failingApplicationId
+        ) {
+          return Promise.resolve(null);
+        }
+
+        return originalFindOneAndUpdate.apply(this, args);
+      },
+    );
+
+    await lockAccount({
+      targetUserId: ctx.outgoing.user._id.toString(),
+      actorUserId: ctx.platformAdmin.user._id,
+    });
+
+    vi.restoreAllMocks();
+
     await terminateAccount({
       targetUserId: ctx.outgoing.user._id.toString(),
       actorUserId: ctx.platformAdmin.user._id,
@@ -675,6 +759,192 @@ describe("V10 Slice 09 — Platform Admin User LOCK/TERMINATE automatic Unassign
     ).toBeNull();
     expect((await User.findById(ctx.outgoing.user._id).lean()).status).toBe(
       USER_STATUS.TERMINATED,
+    );
+  });
+
+  it("keeps partial Application Unassign progress across direct TERMINATE and retries remaining via repeated TERMINATE (TX-05)", async () => {
+    const ctx = await setupSlice09Company({
+      emailPrefix: "v10.s09.partial.direct.terminate",
+    });
+    const job = await createJobWithTeam({
+      companyId: ctx.manager.company._id,
+      primaryMemberId: ctx.primary.membership._id,
+      supportingMemberIds: [
+        ctx.outgoing.membership._id,
+        ctx.supportingB.membership._id,
+      ],
+    });
+    const appDetachOk = await createAssignedApplication({
+      candidateUserId: ctx.candidate.user._id,
+      jobId: job._id,
+      assigneeMemberId: ctx.outgoing.membership._id,
+      status: APPLICATION_STATUS.SCREENING,
+    });
+    const candidateRetry = await createVerifiedUser({
+      email: "v10.s09.partial.direct.terminate.candidate.retry@example.com",
+    });
+    const appRetry = await createAssignedApplication({
+      candidateUserId: candidateRetry.user._id,
+      jobId: job._id,
+      assigneeMemberId: ctx.outgoing.membership._id,
+      status: APPLICATION_STATUS.CONTACTED,
+    });
+    const candidateTerminal = await createVerifiedUser({
+      email: "v10.s09.partial.direct.terminate.candidate.terminal@example.com",
+    });
+    const appTerminal = await createAssignedApplication({
+      candidateUserId: candidateTerminal.user._id,
+      jobId: job._id,
+      assigneeMemberId: ctx.outgoing.membership._id,
+      status: APPLICATION_STATUS.HIRED,
+    });
+    const candidateNewer = await createVerifiedUser({
+      email: "v10.s09.partial.direct.terminate.candidate.newer@example.com",
+    });
+    const appNewerAssignee = await createAssignedApplication({
+      candidateUserId: candidateNewer.user._id,
+      jobId: job._id,
+      assigneeMemberId: ctx.outgoing.membership._id,
+      status: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+    });
+
+    const failingApplicationId = appRetry._id.toString();
+    const newerApplicationId = appNewerAssignee._id.toString();
+
+    const originalFindOneAndUpdate =
+      Application.findOneAndUpdate.bind(Application);
+    vi.spyOn(Application, "findOneAndUpdate").mockImplementation(
+      async function mockFindOneAndUpdate(...args) {
+        const [filter, update] = args;
+        const isAutomaticUnassign =
+          filter?.assignedRecruiterCompanyMemberId != null &&
+          update?.$set &&
+          Object.prototype.hasOwnProperty.call(
+            update.$set,
+            "assignedRecruiterCompanyMemberId",
+          ) &&
+          update.$set.assignedRecruiterCompanyMemberId === null;
+
+        if (
+          isAutomaticUnassign &&
+          String(filter._id) === failingApplicationId
+        ) {
+          return Promise.resolve(null);
+        }
+
+        if (
+          isAutomaticUnassign &&
+          String(filter._id) === newerApplicationId
+        ) {
+          await originalFindOneAndUpdate(
+            {
+              _id: appNewerAssignee._id,
+              assignedRecruiterCompanyMemberId: ctx.outgoing.membership._id,
+              version: 1,
+              status: { $in: [...NON_TERMINAL_STATUSES] },
+            },
+            {
+              $set: {
+                assignedRecruiterCompanyMemberId: ctx.supportingB.membership._id,
+                version: 2,
+              },
+            },
+          );
+        }
+
+        return originalFindOneAndUpdate.apply(this, args);
+      },
+    );
+
+    await terminateAccount({
+      targetUserId: ctx.outgoing.user._id.toString(),
+      actorUserId: ctx.platformAdmin.user._id,
+    });
+
+    vi.restoreAllMocks();
+
+    expect((await User.findById(ctx.outgoing.user._id).lean()).status).toBe(
+      USER_STATUS.TERMINATED,
+    );
+    expect(
+      (await CompanyMember.findById(ctx.outgoing.membership._id).lean()).status,
+    ).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
+
+    const afterFirstDetachOk = await Application.findById(appDetachOk._id).lean();
+    const afterFirstRetry = await Application.findById(appRetry._id).lean();
+    const afterFirstTerminal = await Application.findById(appTerminal._id).lean();
+    const afterFirstNewer = await Application.findById(appNewerAssignee._id).lean();
+
+    expect(afterFirstDetachOk.assignedRecruiterCompanyMemberId).toBeNull();
+    expect(afterFirstDetachOk.status).toBe(APPLICATION_STATUS.SCREENING);
+    expect(afterFirstDetachOk.version).toBe(2);
+
+    expect(String(afterFirstRetry.assignedRecruiterCompanyMemberId)).toBe(
+      ctx.outgoing.membership._id.toString(),
+    );
+    expect(afterFirstRetry.status).toBe(APPLICATION_STATUS.CONTACTED);
+
+    expect(afterFirstTerminal.status).toBe(APPLICATION_STATUS.HIRED);
+    expect(String(afterFirstTerminal.assignedRecruiterCompanyMemberId)).toBe(
+      ctx.outgoing.membership._id.toString(),
+    );
+
+    expect(String(afterFirstNewer.assignedRecruiterCompanyMemberId)).toBe(
+      ctx.supportingB.membership._id.toString(),
+    );
+    expect(afterFirstNewer.status).toBe(APPLICATION_STATUS.INTERVIEW_SCHEDULED);
+    expect(afterFirstNewer.version).toBe(2);
+
+    // Same desired lifecycle state (TERMINATED) reconciles remaining current
+    // responsibilities without inventing a different business intent.
+    const retry = await terminateAccount({
+      targetUserId: ctx.outgoing.user._id.toString(),
+      actorUserId: ctx.platformAdmin.user._id,
+    });
+
+    expect(retry.status).toBe(USER_STATUS.TERMINATED);
+    expect((await User.findById(ctx.outgoing.user._id).lean()).status).toBe(
+      USER_STATUS.TERMINATED,
+    );
+    expect(
+      (await CompanyMember.findById(ctx.outgoing.membership._id).lean()).status,
+    ).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
+
+    const afterRetryDetachOk = await Application.findById(appDetachOk._id).lean();
+    const afterRetryRemaining = await Application.findById(appRetry._id).lean();
+    const afterRetryTerminal = await Application.findById(appTerminal._id).lean();
+    const afterRetryNewer = await Application.findById(appNewerAssignee._id).lean();
+
+    expect(afterRetryDetachOk.assignedRecruiterCompanyMemberId).toBeNull();
+    expect(afterRetryDetachOk.status).toBe(APPLICATION_STATUS.SCREENING);
+    expect(afterRetryDetachOk.version).toBe(2);
+
+    expect(afterRetryRemaining.assignedRecruiterCompanyMemberId).toBeNull();
+    expect(afterRetryRemaining.status).toBe(APPLICATION_STATUS.CONTACTED);
+    expect(afterRetryRemaining.version).toBe(2);
+
+    expect(afterRetryTerminal.status).toBe(APPLICATION_STATUS.HIRED);
+    expect(String(afterRetryTerminal.assignedRecruiterCompanyMemberId)).toBe(
+      ctx.outgoing.membership._id.toString(),
+    );
+
+    expect(String(afterRetryNewer.assignedRecruiterCompanyMemberId)).toBe(
+      ctx.supportingB.membership._id.toString(),
+    );
+    expect(afterRetryNewer.status).toBe(APPLICATION_STATUS.INTERVIEW_SCHEDULED);
+    expect(afterRetryNewer.version).toBe(2);
+
+    const jobAfter = await Job.findById(job._id).lean();
+    expect(String(jobAfter.primaryRecruiterCompanyMemberId)).toBe(
+      ctx.primary.membership._id.toString(),
+    );
+    expect(
+      jobAfter.supportingRecruiterCompanyMemberIds.map(String).sort(),
+    ).toEqual(
+      [
+        ctx.outgoing.membership._id.toString(),
+        ctx.supportingB.membership._id.toString(),
+      ].sort(),
     );
   });
 

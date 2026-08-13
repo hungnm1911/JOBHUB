@@ -544,6 +544,19 @@ const lockAccount = async ({ targetUserId, actorUserId }) => {
     );
   }
 
+  // V10 TX-05 / BR-48 / BR-52: repeated LOCK of an already-LOCKED account is
+  // the canonical reconciliation path for remaining non-terminal Application
+  // responsibilities after a prior partial automatic Unassign. Keep LOCKED
+  // (no business-intent change to TERMINATED), revoke sessions again, and
+  // re-run detach from current persisted responsibilities.
+  if (targetUser.status === USER_STATUS.LOCKED) {
+    await AuthSession.deleteMany({ userId: targetUser._id });
+    await automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss(
+      { targetUser },
+    );
+    return toPublicUser(targetUser);
+  }
+
   if (targetUser.status !== USER_STATUS.ACTIVE) {
     throw new AppError(409, "Only ACTIVE accounts can be locked", {
       field: "status",
@@ -671,6 +684,20 @@ const terminateAccount = async ({ targetUserId, actorUserId }) => {
         field: "userId",
       },
     );
+  }
+
+  // V10 TX-05 / BR-48 / BR-52: repeated TERMINATE of an already-TERMINATED
+  // account is the canonical reconciliation path for remaining non-terminal
+  // Application responsibilities after a prior partial automatic Unassign.
+  // Keep TERMINATED (no new lifecycle transition), revoke sessions again, and
+  // re-run detach from current persisted responsibilities. Do not treat other
+  // invalid User transitions as idempotent.
+  if (targetUser.status === USER_STATUS.TERMINATED) {
+    await AuthSession.deleteMany({ userId: targetUser._id });
+    await automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss(
+      { targetUser },
+    );
+    return toPublicUser(targetUser);
   }
 
   if (!TERMINATABLE_STATUSES.has(targetUser.status)) {

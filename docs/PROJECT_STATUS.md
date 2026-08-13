@@ -25,7 +25,7 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** Slices 01–09 of the
+**V10 — Phân công Application và Recruitment Pipeline** Slices 01–10 of the
 current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
 opened the persistence state matrix so every non-terminal Recruitment Status
 can persist `UNASSIGNED` or Assigned. Slice 02 extends Primary Assign of
@@ -60,13 +60,18 @@ LOCK/TERMINATE: V1 User lifecycle still commits without Job/Application
 zero-responsibility guard and without mutating CompanyMember or Job-team;
 after eligibility loss, current non-terminal Applications are automatic
 Unassigned (`A → NONE`) independently per Application (TX-05).
-The current Product/Data
-contracts remain approved implementation authority.
+Slice 10 closes concurrency/final acceptance: deterministic TX-01/TX-02/TX-05
+race coverage across Assign/Reassign/Unassign/Pipeline/Replace/Withdraw and
+lifecycle/team/Platform eligibility races; Platform already-`LOCKED` retry
+reconciles remaining Application responsibilities without forcing TERMINATE;
+dead trusted pre-lifecycle A→B handoff helper removed (CM `force-reassign`
+remains the public A→B compatibility surface). The current Product/Data
+contracts remain approved implementation authority. V10 Assignment Model
+Revision is `COMPLETED AND VERIFIED`.
 The prior implementation and its 104-file / 893-test green baseline encoded
 the old state matrix and direct-handoff lifecycle semantics; that baseline
 remains regression history, not completion evidence for the current canonical
-revision. Remaining `ASSIGN / UNASSIGN` slice (final race/acceptance sweep) is
-not started.
+revision.
 
 Previous V10 implementation baseline (historical, not current completion
 evidence) has Slice 01 —
@@ -406,7 +411,8 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   and `submittedCvSnapshot` are preserved; terminal Applications keep their
   final Assignee. TX-05 keeps independently committed Application detaches;
   partial progress does not roll back User lifecycle; retry continues from
-  current responsibilities (including TERMINATE of an already LOCKED User);
+  current responsibilities (including TERMINATE of an already LOCKED User and
+  repeated TERMINATE of an already TERMINATED User);
   stale automatic Unassign cannot clear a newer Assignee; User lifecycle vs
   Assign/Pipeline races obey TX-02. CompanyMember LOCK/TERMINATE, generic
   team removal, and Company-lock freeze semantics are unchanged. Focused
@@ -416,6 +422,95 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   backend gate passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 108
   files / 1020 tests).
+
+- **Implemented; verified:** V10 Slice 10 — Concurrency Closure and Final
+  Acceptance (F02–F11; BR-07–BR-08, BR-17–BR-20, BR-23, BR-28, BR-33–BR-40,
+  BR-47–BR-53; TX-01, TX-02, TX-05): final integration slice for the
+  `ASSIGN / UNASSIGN` revision. Deterministic regressions close remaining
+  same-Application races (Assign↔Reassign, Assign↔Unassign, manual
+  Unassign↔Replace/Withdraw) on top of existing Assign↔Assign,
+  Reassign↔Unassign, Unassign↔Pipeline, automatic Unassign↔Pipeline/Replace/
+  Withdraw, and Reassign↔Pipeline coverage; TX-02 eligibility races across
+  Company/CompanyMember/User/team/Platform boundaries remain green; TX-05
+  partial-progress is proven for CompanyMember LOCK/TERMINATE, team removal,
+  and Platform User LOCK/TERMINATE. Smallest defect fixed: repeated Platform
+  Admin LOCK of an already-`LOCKED` Recruiter User reconciles remaining
+  non-terminal Application responsibilities without forcing TERMINATE.
+  Stale trusted pre-lifecycle A→B helper
+  (`executeTrustedPreLifecycleApplicationHandoff` /
+  `executeAdministrativeApplicationHandoff`) removed — no production callers;
+  public CM `force-reassign` remains the canonical A→B compatibility surface.
+  Canonical-state acceptance reconfirmed (non-terminal Assigned/Unassigned
+  matrix, Unassigned cannot Pipeline, Assign-again continues current status,
+  terminals keep final Assignee, WITHDRAWN may be Assigned or Unassigned,
+  assignment mutations do not change status/snapshot/identity/team, workload
+  stays derived, CLOSED/EXPIRED continuity, Company-lock freeze without
+  auto-Unassign, V6 exactly-one Primary). Focused coverage in
+  `test/application/v10-assignment-concurrency-acceptance.test.js`, updated
+  Platform User lifecycle / V1 lock / stale-helper cleanup suites. Focused V10
+  + lock baseline passed 23 files / 372 tests. The official backend gate
+  passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 109
+  files / 1019 tests). V10 Assignment Model Revision is
+  `COMPLETED AND VERIFIED`.
+
+- **Implemented; verified:** V10 Final Acceptance finding H1 — manual Unassign /
+  assignment-management commit with stale actor authority or Company state
+  (BR-06/BR-12/BR-15/BR-53; TX-02): shared manual Assign/Reassign/Unassign
+  owners revalidate/acquire current actor authority and Company operational
+  state at the commit boundary. Target `NONE` still skips target eligibility
+  but no longer skips actor/Company coordination. Automatic Unassign remains
+  a trusted internal path without the manual actor gate. Deterministic races:
+  stale Primary Unassign after Primary replacement fails and preserves
+  Assignee; stale Unassign after Company LOCK fails and keeps assignment under
+  freeze semantics; current Primary/CM Unassign and automatic Unassign under
+  locked Company remain green. Focused regressions in
+  `test/application/v10-h1-manual-unassign-actor-authority.test.js` (5 tests).
+  Remains closed; later extended by the actor lifecycle-eligibility finding
+  below without redesigning H1 Primary-replacement / Company-lock semantics.
+
+- **Implemented; verified:** V10 Final Acceptance finding — manual
+  assignment-management actor lifecycle eligibility at commit (BR-06/BR-12/
+  BR-15/BR-53; V1/V3 Company Staff business access; TX-02): H1 Company +
+  Primary-relation commit boundary extended so Primary and Company Manager
+  actors also soft-read then conditionally acquire current
+  `CompanyMember` (same Company, expected role, `ACTIVE`) and `User`
+  (`ACTIVE` + current `mustChangePassword=false`) before Application CAS.
+  Shared helper `acquireActiveCompanyStaffMembershipForBusinessAccessTx`
+  covers Recruiter and Company Manager roles; acquire order is
+  Company → actor Membership → actor User → target Membership/User (when
+  target ≠ NONE) → Job → Application CAS, avoiding Job→Membership/User
+  inversion. Automatic Unassign remains outside this gate. Deterministic
+  regressions in
+  `test/application/v10-manual-assignment-actor-lifecycle-eligibility.test.js`
+  (11 tests): Primary User LOCK before Unassign/First Assign/Reassign;
+  Primary CompanyMember LOCK before Unassign; CM User/Membership loss before
+  Unassign; winner reverse; valid Primary/CM paths; `mustChangePassword`
+  current-state rejection; automatic Unassign unaffected. Prior H1 and H2
+  remain closed. Focused assignment/TX-02/lifecycle suites passed 12 files /
+  224 tests. The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 111 files / 1036 tests).
+
+- **Implemented; verified:** V10 Final Acceptance finding H2 — direct Platform
+  User `TERMINATE` same-intent retry/reconciliation after partial automatic
+  Unassign (F11; BR-47/BR-48/BR-52; TX-05): `terminateAccount` now treats
+  already-`TERMINATED` as an idempotent reconciliation path mirroring
+  repeated LOCK. No new lifecycle transition; User stays `TERMINATED`;
+  sessions are revoked again; current non-terminal Application
+  responsibilities are rescanned from persisted state and remaining
+  outgoing-Assignee refs are detached. Already-detached Applications are
+  skipped safely; terminal final Assignees and newer Assignees are not
+  stale-cleared. Other invalid User transitions remain non-idempotent. No
+  queue/worker/recovery entity/`lifecycleOperationId`, global transaction,
+  CompanyMember/Job-team mutation, or Platform Admin assignment authority.
+  Focused regression in
+  `test/application/v10-platform-admin-user-lifecycle-automatic-unassign.test.js`
+  plus updated V1 terminate account suite. Engineering SoT ownership rows
+  updated for repeated TERMINATE. Focused lifecycle/Unassign/LOCK/TERMINATE/
+  TX-05 suites passed 8 files / 106 tests. The official backend gate passed
+  (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`;
+  ARCH-001 through ARCH-016; Vitest: 110 files / 1025 tests).
 
 ## Previously completed and verified baseline
 
