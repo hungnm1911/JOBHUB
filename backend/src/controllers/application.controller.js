@@ -5,6 +5,7 @@ import {
   listPrimaryJobApplications,
   reassignApplication,
   replaceSubmittedCv,
+  updateApplicationRecruitmentPipelineStatus,
   withdrawApplication,
 } from "../services/application.service.js";
 
@@ -139,6 +140,28 @@ const forceReassignApplicationHandler = async (request, response, next) => {
   }
 };
 
+const updateApplicationRecruitmentPipelineStatusHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const result = await updateApplicationRecruitmentPipelineStatus({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      targetStatus: request.body.targetStatus,
+      expectedStatus: request.body.expectedStatus,
+      expectedVersion: request.body.expectedVersion,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   directApplyToJobHandler,
   firstAssignApplicationHandler,
@@ -146,5 +169,6 @@ export {
   listPrimaryJobApplicationsHandler,
   reassignApplicationHandler,
   replaceSubmittedCvHandler,
+  updateApplicationRecruitmentPipelineStatusHandler,
   withdrawApplicationHandler,
 };

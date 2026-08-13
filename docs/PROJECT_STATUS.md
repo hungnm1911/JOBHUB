@@ -32,8 +32,8 @@ Primary Application View, Slice 04 — First Assign Application,
 Slice 05 — Reassign / Take over Application, Slice 06 — Company Manager
 Administrative Forced Reassignment, the Slice 07 corrective assignment/
 handoff lifecycle-boundary foundation, Slice 08 — Recruiter LOCK /
-TERMINATE Unified Responsibility Handoff, and Slice 09 — Recruitment Team
-Eligibility-Loss Application Handoff
+TERMINATE Unified Responsibility Handoff, Slice 09 — Recruitment Team
+Eligibility-Loss Application Handoff, and Slice 10 — Recruitment Pipeline
 `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
@@ -89,9 +89,13 @@ required non-terminal Application handoff completes before team-removal
 commit, reusing Slice 07 trusted A→B with canonical V6 replacement context
 (Supporting leave → current Primary; Primary leave → new Primary) while
 PRIMARY→SUPPORTING keep-eligible leaves assignments unchanged; V6 PUBLISHED-only
-team-mutation gates are preserved. Recruitment Pipeline, Managed Jobs
-aggregates, My Applications, workload queries, and other remaining Fxx workflow
-surfaces remain deferred by the approved slice order.
+team-mutation gates are preserved. Slice 10 adds current-Assignee-only
+Recruitment Pipeline via
+`POST /api/jobs/:jobId/applications/:applicationId/pipeline` with canonical
+forward and Reject transitions, continuous eligibility at commit, status/version
+CAS (TX-01), and CLOSED/EXPIRED Job continuity for existing Applications.
+Managed Jobs aggregates, My Applications, workload queries, and other remaining
+Fxx workflow surfaces remain deferred by the approved slice order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -130,19 +134,39 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 09):** Slices 01–09 are complete,
-  including LOCK/TERMINATE unified responsibility handoff and Recruitment Team
-  eligibility-loss Application handoff. Continuous eligibility for pipeline
-  processing, Recruitment Pipeline, Managed Jobs aggregates/counts, Current
-  Workload, Recruiter/Candidate My Applications, and related read projections
-  remain deferred until their owning slices start. Job retention continues on
-  the V5 lifecycle without an Application↔Job delete transaction.
+- **V10 subsequent slices (after Slice 10):** Slices 01–10 are complete,
+  including Recruitment Pipeline for the current eligible Assignee. Managed Jobs
+  aggregates/counts, Current Workload, Recruiter/Candidate My Applications, and
+  related read projections remain deferred until their owning slices start. Job
+  retention continues on the V5 lifecycle without an Application↔Job delete
+  transaction.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 10 — Recruitment Pipeline (F05, F09
+  partial; BR-08, BR-18–BR-24, BR-30–BR-31, BR-36, BR-38–BR-39, BR-43, BR-45;
+  TX-01; TX-02): current eligible Assignee advances or rejects a Direct
+  Application through the canonical Recruitment Status chain via
+  `POST /api/jobs/:jobId/applications/:applicationId/pipeline`; authority is
+  Assignee-bound (Primary of the Job does not bypass Supporting responsibility;
+  Supporting processes only own assignments; CM/Platform Admin/Candidate have no
+  Pipeline authority); continuous eligibility (company/team/role/member/user +
+  Company operational) is re-checked at commit and stored assignee alone does
+  not authorize; mutations touch only `status` + `version` while preserving
+  assignee/snapshot/identity; skip/backward/reopen/`WITHDRAWN` Recruiter
+  transitions are rejected; Interview statuses remain status-only with no
+  schedule entity or history timestamps; existing Applications remain processable
+  on `CLOSED`/`EXPIRED` Jobs; Company lock freezes processing without mutating
+  Application; Reassign↔Pipeline, Replace↔SCREENING, and Withdraw↔SCREENING
+  races follow TX-01 winners. Focused coverage in
+  `test/application/v10-recruitment-pipeline.test.js`. The official backend gate
+  passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 97 files
+  / 804 tests).
 
 - **Implemented; verified:** V10 Slice 09 — Recruitment Team Eligibility-Loss
   Application Handoff (F04, F09 partial; BR-07–BR-08, BR-15–BR-17, BR-27–BR-28,

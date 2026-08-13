@@ -347,6 +347,27 @@ const APPLICATION_NON_TERMINAL_STATUSES = Object.freeze([
   APPLICATION_STATUS.INTERVIEW_COMPLETED,
 ]);
 
+// BR-21 / BR-22: canonical forward chain + Reject from any non-terminal stage.
+const PIPELINE_FORWARD_TARGET_BY_SOURCE = Object.freeze({
+  [APPLICATION_STATUS.APPLIED]: APPLICATION_STATUS.SCREENING,
+  [APPLICATION_STATUS.SCREENING]: APPLICATION_STATUS.CONTACTED,
+  [APPLICATION_STATUS.CONTACTED]: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+  [APPLICATION_STATUS.INTERVIEW_SCHEDULED]:
+    APPLICATION_STATUS.INTERVIEW_COMPLETED,
+  [APPLICATION_STATUS.INTERVIEW_COMPLETED]: APPLICATION_STATUS.HIRED,
+});
+
+const isAllowedRecruitmentPipelineTransition = ({
+  expectedStatus,
+  targetStatus,
+} = {}) => {
+  if (targetStatus === APPLICATION_STATUS.REJECTED) {
+    return APPLICATION_NON_TERMINAL_STATUSES.includes(expectedStatus);
+  }
+
+  return PIPELINE_FORWARD_TARGET_BY_SOURCE[expectedStatus] === targetStatus;
+};
+
 const isApplicationTerminalStatus = (status) => {
   return APPLICATION_TERMINAL_STATUSES.includes(status);
 };
@@ -1432,6 +1453,314 @@ const forceReassignApplication = async ({
   });
 };
 
+const rejectFailedRecruitmentPipelineCas = async ({
+  applicationId,
+  expectedStatus,
+  expectedVersion,
+  actorMembershipId,
+  session,
+} = {}) => {
+  let latestQuery = Application.findById(applicationId);
+  if (session) {
+    latestQuery = latestQuery.session(session);
+  }
+
+  const latestApplication = await latestQuery;
+
+  if (!latestApplication) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (isApplicationTerminalStatus(latestApplication.status)) {
+    throw new AppError(
+      409,
+      "Terminal Applications cannot be updated in Recruitment Pipeline",
+      {
+        field: "status",
+        status: latestApplication.status,
+      },
+    );
+  }
+
+  if (isApplicationUnassigned(latestApplication)) {
+    throw new AppError(
+      409,
+      "Application has no Assignee; Recruitment Pipeline requires an Assignee",
+      { field: "assignedRecruiterCompanyMemberId" },
+    );
+  }
+
+  if (
+    latestApplication.assignedRecruiterCompanyMemberId.toString() !==
+    actorMembershipId.toString()
+  ) {
+    throw new AppError(
+      409,
+      "Application Assignee has changed; refresh and retry Recruitment Pipeline",
+      { field: "assignedRecruiterCompanyMemberId" },
+    );
+  }
+
+  if (latestApplication.status !== expectedStatus) {
+    throw new AppError(
+      409,
+      "Application status has changed; refresh and retry Recruitment Pipeline",
+      {
+        field: "expectedStatus",
+        status: latestApplication.status,
+      },
+    );
+  }
+
+  if (latestApplication.version !== expectedVersion) {
+    throw new AppError(
+      409,
+      "Application has changed; refresh and retry Recruitment Pipeline",
+      { field: "expectedVersion" },
+    );
+  }
+
+  throw new AppError(
+    409,
+    "Application has changed; refresh and retry Recruitment Pipeline",
+    { field: "expectedVersion" },
+  );
+};
+
+// F05 / F09 partial — current eligible Assignee advances or rejects through the
+// canonical Recruitment Pipeline. Mutates only status + version (TX-01);
+// continuous eligibility re-checked at commit (BR-08 / TX-02). Does not use Job
+// accepting/public eligibility; CLOSED/EXPIRED Jobs keep existing Applications
+// processable (BR-25 / BR-30).
+const updateApplicationRecruitmentPipelineStatus = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  targetStatus,
+  expectedStatus,
+  expectedVersion,
+  clientCompanyId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (
+    typeof expectedVersion !== "number" ||
+    !Number.isInteger(expectedVersion) ||
+    expectedVersion < 0
+  ) {
+    throw new AppError(400, "expectedVersion must be a non-negative integer", {
+      field: "expectedVersion",
+    });
+  }
+
+  if (!Object.values(APPLICATION_STATUS).includes(expectedStatus)) {
+    throw new AppError(400, "Invalid expectedStatus", {
+      field: "expectedStatus",
+    });
+  }
+
+  if (!Object.values(APPLICATION_STATUS).includes(targetStatus)) {
+    throw new AppError(400, "Invalid targetStatus", {
+      field: "targetStatus",
+    });
+  }
+
+  // BR-20 / BR-23 / BR-24: WITHDRAWN is Candidate-only; no reopen / reverse /
+  // skip; HIRED/REJECTED/WITHDRAWN are not pipeline sources.
+  if (
+    expectedStatus === APPLICATION_STATUS.WITHDRAWN ||
+    targetStatus === APPLICATION_STATUS.WITHDRAWN
+  ) {
+    throw new AppError(
+      409,
+      "WITHDRAWN is Candidate-controlled and cannot be set by Recruitment Pipeline",
+      { field: "targetStatus" },
+    );
+  }
+
+  if (!isAllowedRecruitmentPipelineTransition({ expectedStatus, targetStatus })) {
+    throw new AppError(409, "Invalid Recruitment Pipeline transition", {
+      field: "targetStatus",
+      expectedStatus,
+      targetStatus,
+    });
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const session = await mongoose.startSession();
+  let updatedApplication = null;
+  let job = null;
+  let assigneeContext = null;
+
+  try {
+    await session.withTransaction(async () => {
+      job = await Job.findById(jobId).session(session);
+
+      if (!job) {
+        throw new AppError(404, "Job not found", {
+          field: "jobId",
+        });
+      }
+
+      assertSameCompanyTenant({
+        resourceCompanyId: job.companyId,
+        tenantCompanyId: context.companyId,
+      });
+
+      const application = await Application.findById(applicationId).session(
+        session,
+      );
+
+      if (!application) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      if (application.jobId.toString() !== job._id.toString()) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      // BR-44: V10 Pipeline only covers Direct Applications.
+      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
+        throw new AppError(
+          409,
+          "Only Direct Applications can be updated in Recruitment Pipeline",
+          { field: "source" },
+        );
+      }
+
+      // BR-18: Unassigned Applications have no pipeline processing authority.
+      if (isApplicationUnassigned(application)) {
+        throw new AppError(
+          409,
+          "Application has no Assignee; Recruitment Pipeline requires an Assignee",
+          { field: "assignedRecruiterCompanyMemberId" },
+        );
+      }
+
+      // BR-18 / BR-19: pipeline authority belongs to current Assignee only —
+      // Primary of the Job does not bypass Supporting responsibility.
+      if (
+        application.assignedRecruiterCompanyMemberId.toString() !==
+        context.membership._id.toString()
+      ) {
+        throw new AppError(
+          403,
+          "Only the current Assignee can update Recruitment Pipeline for this Application",
+          { field: "role" },
+        );
+      }
+
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(
+          409,
+          "Terminal Applications cannot be updated in Recruitment Pipeline",
+          {
+            field: "status",
+            status: application.status,
+          },
+        );
+      }
+
+      if (application.status !== expectedStatus) {
+        throw new AppError(
+          409,
+          "Application status has changed; refresh and retry Recruitment Pipeline",
+          {
+            field: "expectedStatus",
+            status: application.status,
+          },
+        );
+      }
+
+      if (application.version !== expectedVersion) {
+        throw new AppError(
+          409,
+          "Application has changed; refresh and retry Recruitment Pipeline",
+          { field: "expectedVersion" },
+        );
+      }
+
+      // BR-08 / TX-02: stored assignee does not authorize processing; continuous
+      // eligibility (company/team/role/member/user + Company operational) and
+      // ACTIVE membership acquire must hold at commit.
+      assigneeContext = await assertAssigneeEligibleAtAssignmentCommit({
+        assigneeCompanyMemberId: context.membership._id,
+        job,
+        session,
+      });
+
+      // TX-01 / BR-31 / BR-36 / BR-38 / BR-39:
+      // Atomic status-only mutation; assignee, snapshot, identity unchanged.
+      // Competing Reassign/Replace/Withdraw on the same revision lose atomically.
+      updatedApplication = await Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          jobId: job._id,
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          status: expectedStatus,
+          version: expectedVersion,
+          assignedRecruiterCompanyMemberId: context.membership._id,
+        },
+        {
+          $set: {
+            status: targetStatus,
+          },
+          $inc: {
+            version: 1,
+          },
+        },
+        {
+          returnDocument: "after",
+          session,
+        },
+      );
+
+      if (!updatedApplication) {
+        await rejectFailedRecruitmentPipelineCas({
+          applicationId: application._id,
+          expectedStatus,
+          expectedVersion,
+          actorMembershipId: context.membership._id,
+          session,
+        });
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  const applicationView = await buildPrimaryApplicationViewFromDocs({
+    application: updatedApplication,
+    assigneeMembership: assigneeContext.membership,
+    assigneeUser: assigneeContext.user,
+  });
+
+  return {
+    job: toPublicJob(job),
+    application: applicationView,
+  };
+};
+
 // Trusted internal pre-lifecycle handoff for later LOCK/TERMINATE/team-removal
 // orchestration (Slice 07 foundation). Outgoing Assignee may still be eligible
 // when they are the verified subject of the eligibility-losing operation.
@@ -2164,6 +2493,7 @@ export {
   loadJobAcceptingDirectApplications,
   reassignApplication,
   replaceSubmittedCv,
+  updateApplicationRecruitmentPipelineStatus,
   withdrawApplication,
   toPrimaryJobApplicationView,
   toPublicApplication,

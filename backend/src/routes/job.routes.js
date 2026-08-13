@@ -16,7 +16,7 @@ import {
   submitDraftJobHandler,
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
-import { listPrimaryJobApplicationsHandler, firstAssignApplicationHandler, reassignApplicationHandler, forceReassignApplicationHandler } from "../controllers/application.controller.js";
+import { listPrimaryJobApplicationsHandler, firstAssignApplicationHandler, reassignApplicationHandler, forceReassignApplicationHandler, updateApplicationRecruitmentPipelineStatusHandler } from "../controllers/application.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-company-manager-business-access.js";
 import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-company-staff-business-access.js";
@@ -26,6 +26,7 @@ import validateAddSupportingRecruiter from "../middlewares/validate-add-supporti
 import validateFirstAssignApplication from "../middlewares/validate-first-assign-application.js";
 import validateForceReassignApplication from "../middlewares/validate-force-reassign-application.js";
 import validateReassignApplication from "../middlewares/validate-reassign-application.js";
+import validateRecruitmentPipelineStatus from "../middlewares/validate-recruitment-pipeline-status.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
 import validateReplacePrimaryRecruiter from "../middlewares/validate-replace-primary-recruiter.js";
 import validateUpdateDraftJob from "../middlewares/validate-update-draft-job.js";
@@ -83,6 +84,14 @@ router.post(
   authorizeCompanyManagerBusinessAccess,
   validateForceReassignApplication,
   forceReassignApplicationHandler,
+);
+
+router.post(
+  "/:jobId/applications/:applicationId/pipeline",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  validateRecruitmentPipelineStatus,
+  updateApplicationRecruitmentPipelineStatusHandler,
 );
 
 router.get(
