@@ -25,18 +25,20 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** is `READY FOR
-IMPLEMENTATION` for Slice 01 after G00 readiness alignment. Its approved
+**V10 — Phân công Application và Recruitment Pipeline** has Slice 01 —
+Application persistence foundation `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
 and
 `docs/data/versions/v10-application-assignment-recruitment-pipeline-data-model.md`.
-G00 establishes the V10 authority chain, clarifies that V10 adds only
-`assignedRecruiterCompanyMemberId` (legacy absent equals Unassigned), and keeps
-Job retention on the V5 lifecycle without an Application↔Job delete
-transaction. No V10 Fxx behavior is implemented. S02 onward, including V10
-Application workflow compatibility, lifecycle handoff coordination, and read
-projections, remain deferred by the approved slice order.
+Slice 01 extends the canonical Application status vocabulary to the eight V10
+Recruitment Statuses, adds nullable `assignedRecruiterCompanyMemberId`
+(legacy absent and explicit `null` both mean Unassigned; no V9 backfill),
+enforces the local status×assignment matrix, keeps `version`/CAS, and adds
+IDX-A02–A05 while preserving Candidate–Job uniqueness and V9 identity/snapshot
+invariants. Assign/Reassign/Take over, Recruitment Pipeline, Managed Jobs,
+My Applications, workload queries, and other F01–F10 workflow surfaces remain
+deferred by the approved slice order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -75,19 +77,39 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 Slice 01 — Application persistence foundation:** G00 readiness is
-  complete. The existing MongoDB replica-set harness, Application collection
-  validator pattern, and transaction test infrastructure support the S01
-  persistence/index/state-matrix scope; the deterministic architecture gate
-  permits extensions of the canonical Application constants/model owners. No
-  test infrastructure or verification gate was changed. V10 business behavior
-  has not started.
+- **V10 subsequent slices (after Slice 01):** Slice 01 persistence foundation is
+  complete. Assign/Reassign/Take over, continuous eligibility, Recruitment
+  Pipeline, Managed Jobs, Current Workload, Recruiter/Candidate My Applications,
+  and related read projections remain deferred until their owning slices start.
+  Job retention continues on the V5 lifecycle without an Application↔Job delete
+  transaction.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 01 — Application persistence foundation
+  (persistence enabler for F01–F10; BR-03–BR-05, BR-17, BR-20, BR-33, BR-35–BR-36,
+  BR-43–BR-45; TX-01 persistence foundation): extends canonical
+  `application-status.js` to the eight V10 Recruitment Statuses (`APPLIED`,
+  `SCREENING`, `CONTACTED`, `INTERVIEW_SCHEDULED`, `INTERVIEW_COMPLETED`,
+  `HIRED`, `REJECTED`, `WITHDRAWN`) without adding `UNASSIGNED` to status;
+  extends `application.model.js` with nullable
+  `assignedRecruiterCompanyMemberId` (legacy absent and `null` both Unassigned;
+  no V9 backfill), local + collection status×assignment matrix guards, preserved
+  `version`/CAS, Direct Apply creation still forced to `APPLIED` + Unassigned so
+  the expanded enum cannot invent pipeline states through V9 create, and
+  indexes `{ jobId, status }`, `{ jobId, assignedRecruiterCompanyMemberId }`,
+  `{ assignedRecruiterCompanyMemberId, status }`, `{ candidateUserId, status }`
+  while keeping unique `{ candidateUserId, jobId }`. No Assign/Pipeline
+  workflows, history/KPI/workload fields, Job snapshot, Interview entity,
+  `sourceRecruiterCompanyMemberId`, or Job delete-guard changes. Focused
+  coverage in `test/application/v10-application-foundation.test.js`. The
+  official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 88 files
+  / 665 tests).
 
 - **Implemented; verified:** V9 Slice 05 — Withdraw Application (F05; BR-03,
   BR-12–BR-16, BR-32–BR-39, BR-42; PT-03; TX-03; TX-04): extends canonical

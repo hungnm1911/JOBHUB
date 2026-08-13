@@ -270,7 +270,7 @@ describe("V9 Slice 02 — Direct Apply with Generated ACTIVE CV (F01–F03)", ()
         "jobhub/applications/submitted-cv-snapshots/snapshot.pdf",
       );
       expect(persisted).not.toHaveProperty("companyId");
-      expect(persisted).not.toHaveProperty("assignedRecruiterCompanyMemberId");
+      expect(persisted.assignedRecruiterCompanyMemberId).toBeNull();
 
       const jobAfter = await Job.findById(job._id).lean();
       const cvAfter = await CandidateCV.findById(candidateCv._id).lean();

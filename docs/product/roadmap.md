@@ -82,8 +82,9 @@ regression closure passed across F01–F10, BR-01–BR-46, and TX-01 after Slice
 approved Product/Data contracts; Slices 01–05 and Slice 06 Final Acceptance /
 Regression Closure are complete, including the recorded Application identity
 immutability remediation and required backend verification gate. V9 is
-`COMPLETED AND VERIFIED`. V10 has approved Product/Data contracts and is
-`READY FOR IMPLEMENTATION` for Slice 01. V11 through V17 must not be
+`COMPLETED AND VERIFIED`. V10 has approved Product/Data contracts; Slice 01 —
+Application persistence foundation is `IMPLEMENTED AND VERIFIED`. Subsequent
+V10 slices remain deferred by the approved slice order. V11 through V17 must not be
 implemented merely from their roadmap titles.
 
 V10 canonical specification:
