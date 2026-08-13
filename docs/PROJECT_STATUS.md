@@ -25,7 +25,7 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** Slices 01–07 of the
+**V10 — Phân công Application và Recruitment Pipeline** Slices 01–08 of the
 current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
 opened the persistence state matrix so every non-terminal Recruitment Status
 can persist `UNASSIGNED` or Assigned. Slice 02 extends Primary Assign of
@@ -49,14 +49,19 @@ LOCK/TERMINATE: non-terminal Applications are automatic-Unassigned
 (`A → NONE`) before lifecycle completion, Job-team Primary transfer and
 Supporting removal still follow V6 (no `NONE Primary`), and the final
 zero-responsibility guard reads current persisted Job + Application state.
+Slice 08 wires the same primitive into Recruitment Team removal
+(`removeSupportingRecruiter`, Primary leave via `replacePrimaryRecruiter`):
+Job-scoped non-terminal Applications assigned to the outgoing Recruiter become
+`A → NONE` before team-removal completion; Primary↔Supporting role changes
+while the Recruiter remains on-team and eligible do not Unassign; V6 Job-team
+invariants (exactly one Primary; no Application replacement) remain.
 The current Product/Data
 contracts remain approved implementation authority.
 The prior implementation and its 104-file / 893-test green baseline encoded
 the old state matrix and direct-handoff lifecycle semantics; that baseline
 remains regression history, not completion evidence for the current canonical
-revision. Remaining `ASSIGN / UNASSIGN` slices (Recruitment Team removal and
-Platform Admin User lifecycle integration of automatic Unassign) are not
-started.
+revision. Remaining `ASSIGN / UNASSIGN` slice (Platform Admin User lifecycle
+integration of automatic Unassign) is not started.
 
 Previous V10 implementation baseline (historical, not current completion
 evidence) has Slice 01 —
@@ -351,11 +356,36 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   from current responsibilities; concurrent Assign before the final boundary
   is visible to the guard; stale automatic Unassign cannot clear a newer
   Assignee. Generic Recruitment Team removal and Platform Admin User
-  LOCK/TERMINATE are unchanged. Focused coverage in
+  LOCK/TERMINATE are unchanged by this slice (team removal is Slice 08). Focused
+  coverage in
   `test/application/v10-lock-terminate-application-handoff.test.js`
   (1 file / 17 tests). The official backend gate passed (ESLint: 0 errors / 2
   existing warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through
   ARCH-016; Vitest: 107 files / 998 tests).
+
+- **Implemented; verified:** V10 Slice 08 — Recruitment Team Removal
+  automatic Unassign integration (F09, F11; BR-08, BR-27–BR-28, BR-36–BR-38,
+  BR-50–BR-52; TX-02, TX-05): `removeSupportingRecruiter` and Primary leave via
+  `replacePrimaryRecruiter` reuse Slice 06 Job-scoped automatic Unassign
+  (`automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval` →
+  `automaticallyUnassignCurrentResponsibilitiesOfRecruiterOnJob`) so every
+  non-terminal Application of the mutated Job still assigned to the outgoing
+  Recruiter becomes `A → NONE` before team-removal completion. No Application
+  replacement and no synthetic `A → B` / Take-over to Primary or new Primary.
+  Primary↔Supporting role changes while the Recruiter remains on-team and
+  eligible do not Unassign. Recruitment Status, Candidate, Job, source, and
+  `submittedCvSnapshot` are preserved; terminal Applications keep their final
+  Assignee; only Applications of the mutated Job are detached. V6 Job-team
+  invariants remain (exactly one Primary; PUBLISHED-only normal mutation;
+  F11 unfinished recovery gates). TX-05 keeps independently committed
+  Application detaches; retry continues from current Job/Application state;
+  stale automatic Unassign cannot clear a newer Assignee; team-removal vs
+  Assign/Pipeline races obey TX-02. Platform Admin User LOCK/TERMINATE is
+  unchanged. Focused coverage in
+  `test/application/v10-team-removal-application-handoff.test.js` plus updated
+  TX-02 / F11 recovery assertions. The official backend gate passed (ESLint: 0
+  errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; ARCH-001
+  through ARCH-016; Vitest: 107 files / 1008 tests).
 
 ## Previously completed and verified baseline
 

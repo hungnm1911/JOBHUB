@@ -716,9 +716,7 @@ describe("V10 Final Acceptance H3 — TX-02 multi-dimension Assignee eligibility
     });
 
     const after = await Application.findById(application._id).lean();
-    expect(String(after.assignedRecruiterCompanyMemberId)).toBe(
-      ctx.primary.membership._id.toString(),
-    );
+    expect(after.assignedRecruiterCompanyMemberId).toBeNull();
     expect(after.status).toBe(APPLICATION_STATUS.SCREENING);
 
     const persistedJob = await Job.findById(job._id).lean();
@@ -727,7 +725,7 @@ describe("V10 Final Acceptance H3 — TX-02 multi-dimension Assignee eligibility
     ).not.toContain(ctx.supporting.membership._id.toString());
   });
 
-  it("5b. Pipeline wins before Supporting removal → removal observes current state and completes handoff", async () => {
+  it("5b. Pipeline wins before Supporting removal → removal observes current state and Unassigns", async () => {
     const ctx = await setupTx02Company({ emailPrefix: "v10.h3.c5b" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -759,9 +757,7 @@ describe("V10 Final Acceptance H3 — TX-02 multi-dimension Assignee eligibility
 
     const after = await Application.findById(application._id).lean();
     expect(after.status).toBe(APPLICATION_STATUS.CONTACTED);
-    expect(String(after.assignedRecruiterCompanyMemberId)).toBe(
-      ctx.primary.membership._id.toString(),
-    );
+    expect(after.assignedRecruiterCompanyMemberId).toBeNull();
   });
 
   it("6a. Primary leave-team wins before outgoing Assignee Pipeline → Pipeline fails", async () => {
@@ -802,13 +798,11 @@ describe("V10 Final Acceptance H3 — TX-02 multi-dimension Assignee eligibility
     });
 
     const after = await Application.findById(application._id).lean();
-    expect(String(after.assignedRecruiterCompanyMemberId)).toBe(
-      ctx.supporting.membership._id.toString(),
-    );
+    expect(after.assignedRecruiterCompanyMemberId).toBeNull();
     expect(after.status).toBe(APPLICATION_STATUS.SCREENING);
   });
 
-  it("6b. Pipeline wins before Primary leave-team → leave-team handoff preserves committed status", async () => {
+  it("6b. Pipeline wins before Primary leave-team → leave-team Unassign preserves committed status", async () => {
     const ctx = await setupTx02Company({ emailPrefix: "v10.h3.c6b" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -840,9 +834,7 @@ describe("V10 Final Acceptance H3 — TX-02 multi-dimension Assignee eligibility
 
     const after = await Application.findById(application._id).lean();
     expect(after.status).toBe(APPLICATION_STATUS.CONTACTED);
-    expect(String(after.assignedRecruiterCompanyMemberId)).toBe(
-      ctx.supporting.membership._id.toString(),
-    );
+    expect(after.assignedRecruiterCompanyMemberId).toBeNull();
   });
 
   it("7. Recruiter LOCK/TERMINATE ↔ First Assign keeps final-zero-guard invariant", async () => {

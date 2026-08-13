@@ -872,7 +872,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     });
   }
 
-  it("12. CM removes Platform-ineligible Supporting only after PUBLISHED Application handoff", async () => {
+  it("12. CM removes Platform-ineligible Supporting only after PUBLISHED Application Unassign", async () => {
     const ctx = await setupH2Company({ emailPrefix: "v10.f11.supporting.app" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -905,9 +905,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     const after = snapshotApplication(
       await Application.findById(application._id).lean(),
     );
-    expect(after.assignedRecruiterCompanyMemberId).toBe(
-      ctx.primary.membership._id.toString(),
-    );
+    expect(after.assignedRecruiterCompanyMemberId).toBeNull();
     expect(after.status).toBe(before.status);
     expect(after.snapshotStorageKey).toBe(before.snapshotStorageKey);
   });
@@ -962,7 +960,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     );
   });
 
-  it("14. CM transfers PUBLISHED Primary and hands off its Application after Platform terminate", async () => {
+  it("14. CM transfers PUBLISHED Primary and Unassigns its Application after Platform terminate", async () => {
     const ctx = await setupH2Company({ emailPrefix: "v10.f11.primary.published" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -999,9 +997,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     const after = snapshotApplication(
       await Application.findById(application._id).lean(),
     );
-    expect(after.assignedRecruiterCompanyMemberId).toBe(
-      ctx.supporting.membership._id.toString(),
-    );
+    expect(after.assignedRecruiterCompanyMemberId).toBeNull();
     expect(after.status).toBe(before.status);
     expect(after.snapshotStorageKey).toBe(before.snapshotStorageKey);
     expect(

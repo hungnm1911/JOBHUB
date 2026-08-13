@@ -2640,9 +2640,10 @@ const updateApplicationRecruitmentPipelineStatus = async ({
   };
 };
 
-// Trusted internal pre-lifecycle handoff for later LOCK/TERMINATE/team-removal
-// orchestration (Slice 07 foundation). Outgoing Assignee may still be eligible
-// when they are the verified subject of the eligibility-losing operation.
+// Trusted internal pre-lifecycle A→B handoff foundation (historical Slice 07
+// corrective). CompanyMember LOCK/TERMINATE and Recruitment Team removal no
+// longer use A→B; they reuse automatic Unassign (A→NONE). Kept for the
+// administrative handoff primitive surface and focused boundary tests.
 // Not exposed on the public CM force-reassign HTTP API.
 const executeTrustedPreLifecycleApplicationHandoff = async ({
   companyId,
@@ -2693,7 +2694,7 @@ const findNonTerminalApplicationsAssignedToRecruiter = async ({
 // transaction, no persisted progress/recovery state, no replacement selection.
 // Partial success is kept; callers retry remaining current responsibilities
 // from persisted Application state. CompanyMember LOCK/TERMINATE (Slice 07)
-// reuses this owner; team removal and Platform User lifecycle remain later.
+// reuses this owner; Platform User lifecycle remains a later slice.
 const automaticallyUnassignCurrentResponsibilitiesOfRecruiter = async ({
   outgoingRecruiterCompanyMemberId,
 } = {}) => {
@@ -2706,6 +2707,51 @@ const automaticallyUnassignCurrentResponsibilitiesOfRecruiter = async ({
   const applications = await findNonTerminalApplicationsAssignedToRecruiter({
     assigneeCompanyMemberId: outgoingRecruiterCompanyMemberId,
   });
+
+  const detached = [];
+  const failed = [];
+
+  for (const application of applications) {
+    try {
+      const unassignedApplication = await automaticallyUnassignApplication({
+        applicationId: application._id,
+        expectedAssigneeCompanyMemberId: outgoingRecruiterCompanyMemberId,
+        expectedVersion: application.version,
+      });
+      detached.push(unassignedApplication);
+    } catch (error) {
+      failed.push({
+        applicationId: application._id,
+        error,
+      });
+    }
+  }
+
+  return { detached, failed };
+};
+
+// TX-05 Job-scoped variant for Recruitment Team removal: only non-terminal
+// Applications of the mutated Job that still name the outgoing Recruiter.
+// Independent per-Application A → NONE; no replacement; no cross-Job detach.
+const automaticallyUnassignCurrentResponsibilitiesOfRecruiterOnJob = async ({
+  outgoingRecruiterCompanyMemberId,
+  jobId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(outgoingRecruiterCompanyMemberId)) {
+    throw new AppError(400, "Invalid outgoing Recruiter CompanyMember id", {
+      field: "outgoingRecruiterCompanyMemberId",
+    });
+  }
+
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(400, "Invalid Job id", { field: "jobId" });
+  }
+
+  const applications =
+    await findNonTerminalApplicationsAssignedToRecruiterOnJob({
+      assigneeCompanyMemberId: outgoingRecruiterCompanyMemberId,
+      jobId,
+    });
 
   const detached = [];
   const failed = [];
@@ -2772,7 +2818,7 @@ const assertNoOutstandingRecruiterApplicationResponsibility = async ({
   }
 };
 
-// V10 Slice 09 / PI-22: Job-scoped Application responsibility. Job.status does
+// V10 Slice 08 / PI-22: Job-scoped Application responsibility. Job.status does
 // not participate — PUBLISHED/CLOSED/EXPIRED Applications all count.
 const findNonTerminalApplicationsAssignedToRecruiterOnJob = async ({
   assigneeCompanyMemberId,
@@ -2850,56 +2896,18 @@ const assertNoOutstandingRecruiterApplicationResponsibilityOnJob = async ({
   }
 };
 
-// V10 Slice 09 / BR-28 / TX-05: trusted pre-lifecycle A→B for every non-terminal
-// Application on one Job before team-removal completion. Replacement must come
-// from canonical V6 team-transfer context (Primary Take-over or explicit
-// successor) — this helper does not invent a selector.
-const executeTrustedTeamRemovalApplicationHandoffs = async ({
-  companyId,
+// V10 ASSIGN/UNASSIGN Slice 08 / BR-28 / TX-05: Job-scoped automatic Unassign
+// before Recruitment Team removal completion. A → NONE only; no Application
+// replacement and no synthetic A → B. Partial detaches are kept; the Job-scoped
+// outstanding guard blocks team-removal completion until current state is zero.
+const automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval = async ({
   jobId,
   outgoingCompanyMemberId,
-  replacementCompanyMemberId,
 } = {}) => {
-  if (!mongoose.isValidObjectId(replacementCompanyMemberId)) {
-    throw new AppError(
-      409,
-      "Recruiter has outstanding Application responsibility and no replacement was specified",
-      {
-        field: "assigneeCompanyMemberId",
-        jobId: jobId?.toString?.() ?? jobId,
-      },
-    );
-  }
-
-  const outgoingIdStr = outgoingCompanyMemberId.toString();
-  const replacementIdStr = replacementCompanyMemberId.toString();
-
-  if (outgoingIdStr === replacementIdStr) {
-    throw new AppError(
-      409,
-      "Application handoff target must differ from the outgoing Recruiter",
-      { field: "assigneeCompanyMemberId" },
-    );
-  }
-
-  const applications = await findNonTerminalApplicationsAssignedToRecruiterOnJob(
-    {
-      assigneeCompanyMemberId: outgoingCompanyMemberId,
-      jobId,
-    },
-  );
-
-  for (const application of applications) {
-    await executeTrustedPreLifecycleApplicationHandoff({
-      companyId,
-      jobId: application.jobId.toString(),
-      applicationId: application._id.toString(),
-      assigneeCompanyMemberId: replacementIdStr,
-      expectedAssigneeCompanyMemberId: outgoingIdStr,
-      expectedVersion: application.version,
-      verifiedOutgoingSubjectCompanyMemberId: outgoingIdStr,
-    });
-  }
+  await automaticallyUnassignCurrentResponsibilitiesOfRecruiterOnJob({
+    outgoingRecruiterCompanyMemberId: outgoingCompanyMemberId,
+    jobId,
+  });
 
   await assertNoOutstandingRecruiterApplicationResponsibilityOnJob({
     recruiterCompanyMemberId: outgoingCompanyMemberId,
@@ -3682,6 +3690,8 @@ export {
   assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
   automaticallyUnassignApplication,
   automaticallyUnassignCurrentResponsibilitiesOfRecruiter,
+  automaticallyUnassignCurrentResponsibilitiesOfRecruiterOnJob,
+  automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval,
   captureGeneratedSubmittedCvSnapshot,
   captureUploadedSubmittedCvSnapshot,
   countNonTerminalApplicationsAssignedToRecruiter,
@@ -3692,7 +3702,6 @@ export {
   downloadPrimaryJobApplicationSubmittedCv,
   downloadRecruiterMyApplicationSubmittedCv,
   executeTrustedPreLifecycleApplicationHandoff,
-  executeTrustedTeamRemovalApplicationHandoffs,
   findNonTerminalApplicationsAssignedToRecruiter,
   findNonTerminalApplicationsAssignedToRecruiterOnJob,
   firstAssignApplication,
