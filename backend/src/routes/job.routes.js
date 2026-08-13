@@ -20,8 +20,10 @@ import {
   firstAssignApplicationHandler,
   forceReassignApplicationHandler,
   getManagedJobPipelineWorkspaceHandler,
+  getRecruiterMyApplicationHandler,
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
+  listRecruiterMyApplicationsHandler,
   reassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
 } from "../controllers/application.controller.js";
@@ -53,6 +55,20 @@ router.get(
   authenticateAccess,
   authorizeRecruiterBusinessAccess,
   listManagedJobsHandler,
+);
+
+router.get(
+  "/my-applications",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  listRecruiterMyApplicationsHandler,
+);
+
+router.get(
+  "/my-applications/:applicationId",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  getRecruiterMyApplicationHandler,
 );
 
 router.get(

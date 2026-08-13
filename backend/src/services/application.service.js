@@ -584,6 +584,146 @@ const getManagedJobPipelineWorkspace = async ({
   };
 };
 
+// F07 / F09 partial: Recruiter My Applications — current assignee projection.
+// Read-only; never invent pipeline authority from list membership alone.
+const toRecruiterMyApplicationView = (applicationView, job) => {
+  return {
+    ...applicationView,
+    job: toPublicJob(job),
+    // BR-20 / BR-33: terminals remain readable historical responsibility when
+    // still assigned, but are not active Current Workload.
+    isActiveWorkload: APPLICATION_NON_TERMINAL_STATUSES.includes(
+      applicationView.status,
+    ),
+  };
+};
+
+const loadRecruiterMyApplicationsForActor = async ({
+  actorMembershipId,
+  tenantCompanyId,
+} = {}) => {
+  // IDX-A04: current responsibility only — never Assignment History / prior assignee.
+  const applications = await Application.find({
+    assignedRecruiterCompanyMemberId: actorMembershipId,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  }).sort({ appliedAt: 1, _id: 1 });
+
+  if (applications.length === 0) {
+    return [];
+  }
+
+  const jobIds = [
+    ...new Set(applications.map((application) => application.jobId.toString())),
+  ];
+  const jobs = await Job.find({
+    _id: { $in: jobIds },
+    companyId: tenantCompanyId,
+  });
+  const jobById = new Map(jobs.map((job) => [job._id.toString(), job]));
+
+  // BR-40: drop any row whose Job is outside the trusted membership tenant.
+  const tenantApplications = applications.filter((application) =>
+    jobById.has(application.jobId.toString()),
+  );
+
+  const applicationViews =
+    await hydratePrimaryJobApplicationViews(tenantApplications);
+
+  return applicationViews.map((applicationView) => {
+    const job = jobById.get(applicationView.jobId);
+    return toRecruiterMyApplicationView(applicationView, job);
+  });
+};
+
+const listRecruiterMyApplications = async ({
+  actorUser,
+  clientCompanyId,
+} = {}) => {
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const applications = await loadRecruiterMyApplicationsForActor({
+    actorMembershipId: context.membership._id,
+    tenantCompanyId: context.companyId,
+  });
+
+  // BR-33 / BR-34: active workload is derived from current non-terminal rows only.
+  const currentWorkloadCount = applications.filter(
+    (application) => application.isActiveWorkload,
+  ).length;
+
+  return {
+    applications,
+    currentWorkloadCount,
+  };
+};
+
+const getRecruiterMyApplication = async ({
+  actorUser,
+  applicationId,
+  clientCompanyId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const application = await Application.findById(applicationId);
+
+  if (
+    !application ||
+    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+  ) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  // F07: My Applications is current assignee scope only — Primary of the Job
+  // does not expand this surface beyond Applications assigned to the actor.
+  if (
+    application.assignedRecruiterCompanyMemberId == null ||
+    application.assignedRecruiterCompanyMemberId.toString() !==
+      context.membership._id.toString()
+  ) {
+    throw new AppError(
+      403,
+      "Only the current Assigned Recruiter can view this Application in My Applications",
+      { field: "assignedRecruiterCompanyMemberId" },
+    );
+  }
+
+  const job = await Job.findById(application.jobId);
+
+  if (!job) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  // BR-40: tenant via membership → assignee → Job.companyId.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId: context.companyId,
+  });
+
+  const [applicationView] = await hydratePrimaryJobApplicationViews([
+    application,
+  ]);
+
+  return {
+    application: toRecruiterMyApplicationView(applicationView, job),
+  };
+};
+
 // BR-21 / BR-22: canonical forward chain + Reject from any non-terminal stage.
 const PIPELINE_FORWARD_TARGET_BY_SOURCE = Object.freeze({
   [APPLICATION_STATUS.APPLIED]: APPLICATION_STATUS.SCREENING,
@@ -2725,9 +2865,11 @@ export {
   firstAssignApplication,
   forceReassignApplication,
   getManagedJobPipelineWorkspace,
+  getRecruiterMyApplication,
   isApplicationUnassigned,
   listManagedJobs,
   listPrimaryJobApplications,
+  listRecruiterMyApplications,
   loadEligibleCandidateCvForDirectApply,
   loadJobAcceptingDirectApplications,
   reassignApplication,

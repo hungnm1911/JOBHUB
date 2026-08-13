@@ -3,8 +3,10 @@ import {
   firstAssignApplication,
   forceReassignApplication,
   getManagedJobPipelineWorkspace,
+  getRecruiterMyApplication,
   listManagedJobs,
   listPrimaryJobApplications,
+  listRecruiterMyApplications,
   reassignApplication,
   replaceSubmittedCv,
   updateApplicationRecruitmentPipelineStatus,
@@ -118,6 +120,33 @@ const getManagedJobPipelineWorkspaceHandler = async (
   }
 };
 
+const listRecruiterMyApplicationsHandler = async (request, response, next) => {
+  try {
+    const result = await listRecruiterMyApplications({
+      actorUser: request.auth.user,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getRecruiterMyApplicationHandler = async (request, response, next) => {
+  try {
+    const result = await getRecruiterMyApplication({
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const firstAssignApplicationHandler = async (request, response, next) => {
   try {
     const result = await firstAssignApplication({
@@ -200,8 +229,10 @@ export {
   firstAssignApplicationHandler,
   forceReassignApplicationHandler,
   getManagedJobPipelineWorkspaceHandler,
+  getRecruiterMyApplicationHandler,
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
+  listRecruiterMyApplicationsHandler,
   reassignApplicationHandler,
   replaceSubmittedCvHandler,
   updateApplicationRecruitmentPipelineStatusHandler,

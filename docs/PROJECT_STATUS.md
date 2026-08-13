@@ -34,7 +34,8 @@ Administrative Forced Reassignment, the Slice 07 corrective assignment/
 handoff lifecycle-boundary foundation, Slice 08 — Recruiter LOCK /
 TERMINATE Unified Responsibility Handoff, Slice 09 — Recruitment Team
 Eligibility-Loss Application Handoff, Slice 10 — Recruitment Pipeline,
-and Slice 11 — Managed Jobs / Pipeline Workspace / Current Workload
+Slice 11 — Managed Jobs / Pipeline Workspace / Current Workload, and
+Slice 12 — Recruiter My Applications
 `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
@@ -101,9 +102,16 @@ actor is current `primaryRecruiterCompanyMemberId` (including
 `PUBLISHED`/`CLOSED`/`EXPIRED`), eight-status Pipeline grouping, Unassigned as
 assignment-state only, and Current Workload derived from non-terminal assigned
 Applications scoped to the actor’s Managed Jobs (never company-global; never
-filtered by `Job.status = PUBLISHED`; never persisted as counters/KPI). Recruiter
-My Applications, Candidate My Applications, and remaining Fxx surfaces remain
-deferred by the approved slice order.
+filtered by `Job.status = PUBLISHED`; never persisted as counters/KPI). Slice 12
+adds Recruiter My Applications via `GET /api/jobs/my-applications` and
+`GET /api/jobs/my-applications/:applicationId` as a current-assignee projection
+(`assignedRecruiterCompanyMemberId` = actor CompanyMember), including
+Applications on `PUBLISHED`/`CLOSED`/`EXPIRED` Jobs, exposing Candidate/Job/
+status/Assignee/`appliedAt`/`submittedCvSnapshot` without CandidateCV library
+access, keeping terminal Applications readable but out of active workload, and
+never granting Pipeline authority from list membership alone. Candidate My
+Applications and remaining Fxx surfaces remain deferred by the approved slice
+order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -142,18 +150,34 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 11):** Slices 01–11 are complete,
-  including Managed Jobs / Pipeline Workspace / Current Workload for the current
-  Primary Recruiter. Recruiter My Applications, Candidate My Applications, and
-  related remaining read surfaces remain deferred until their owning slices
-  start. Job retention continues on the V5 lifecycle without an Application↔Job
-  delete transaction.
+- **V10 subsequent slices (after Slice 12):** Slices 01–12 are complete,
+  including Recruiter My Applications for current Assignees. Candidate My
+  Applications and related remaining read surfaces remain deferred until their
+  owning slices start. Job retention continues on the V5 lifecycle without an
+  Application↔Job delete transaction.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 12 — Recruiter My Applications (F07, F09
+  partial; BR-08, BR-18, BR-20, BR-25, BR-27, BR-30–BR-31, BR-33–BR-34, BR-40):
+  current-assignee read projections via `GET /api/jobs/my-applications` and
+  `GET /api/jobs/my-applications/:applicationId`; membership is
+  `assignedRecruiterCompanyMemberId` = actor CompanyMember (First Assign /
+  Reassign into appear; Reassign away remove; no Assignment History); not
+  limited by Job accepting lifecycle (`PUBLISHED`/`CLOSED`/`EXPIRED` retained);
+  Primary does not absorb Supporting assignments merely by managing the Job;
+  Supporting sees own assignments; terminals remain readable when still assigned
+  but are excluded from active `currentWorkloadCount`; snapshot-only Candidate CV
+  access; CM/Platform Admin/Candidate denied; reads do not mutate Application;
+  Pipeline authority still requires Slice 10 continuous eligibility. Focused
+  coverage in `test/application/v10-recruiter-my-applications.test.js` (13
+  tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 99 files / 832 tests).
 
 - **Implemented; verified:** V10 Slice 11 — Managed Jobs, Pipeline Workspace,
   and Current Workload (F06, F10; BR-03, BR-05, BR-18–BR-20, BR-25, BR-27,
