@@ -597,10 +597,12 @@ describe("V10 Final Acceptance H3 — TX-02 multi-dimension Assignee eligibility
     expect(membership.status).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
 
     const after = snapshotFields(await Application.findById(application._id));
-    expect(after).toEqual(before);
+    expect(after.status).toBe(before.status);
+    expect(after.assignee).toBeNull();
+    expect(after.version).toBe(before.version + 1);
   });
 
-  it("3b. Pipeline wins before User eligibility loss → status kept; lifecycle does not rollback Application", async () => {
+  it("3b. Pipeline wins before User eligibility loss → status kept; lifecycle Unassigns without rolling back status", async () => {
     const ctx = await setupTx02Company({ emailPrefix: "v10.h3.c3b" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -636,9 +638,7 @@ describe("V10 Final Acceptance H3 — TX-02 multi-dimension Assignee eligibility
 
     const after = await Application.findById(application._id).lean();
     expect(after.status).toBe(APPLICATION_STATUS.CONTACTED);
-    expect(String(after.assignedRecruiterCompanyMemberId)).toBe(
-      ctx.supporting.membership._id.toString(),
-    );
+    expect(after.assignedRecruiterCompanyMemberId).toBeNull();
 
     const user = await User.findById(ctx.supporting.user._id).lean();
     expect(user.status).toBe(USER_STATUS.LOCKED);

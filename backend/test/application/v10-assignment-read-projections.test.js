@@ -792,11 +792,14 @@ describe("V10 Slice 05 — Assignment read projections (F06–F10)", () => {
       actorUserId: platformAdmin.user._id,
     });
 
+    // Slice 09: Platform User LOCK automatic Unassigns non-terminal Applications.
+    // List membership follows current Assignee, so the Application leaves My
+    // Applications immediately; Pipeline remains denied.
     expect(
       applicationIds(
         await listRecruiterMyApplications({ actorUser: supporting.user }),
       ),
-    ).toEqual([application._id.toString()]);
+    ).toEqual([]);
     await expect(
       updateApplicationRecruitmentPipelineStatus({
         actorUser: supporting.user,
@@ -810,17 +813,8 @@ describe("V10 Slice 05 — Assignment read projections (F06–F10)", () => {
 
     const persistedAfterLock = await Application.findById(application._id);
     expect(persistedAfterLock.status).toBe(APPLICATION_STATUS.SCREENING);
-    expect(String(persistedAfterLock.assignedRecruiterCompanyMemberId)).toBe(
-      supporting.membership._id.toString(),
-    );
-
-    const unassigned = await unassignApplication({
-      actorUser: primary.user,
-      jobId: job._id.toString(),
-      applicationId: application._id.toString(),
-      expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
-      expectedVersion: 1,
-    });
+    expect(persistedAfterLock.assignedRecruiterCompanyMemberId).toBeNull();
+    expect(persistedAfterLock.version).toBe(2);
 
     const workspace = await getManagedJobPipelineWorkspace({
       actorUser: primary.user,
@@ -850,7 +844,7 @@ describe("V10 Slice 05 — Assignment read projections (F06–F10)", () => {
         applicationId: application._id.toString(),
         targetStatus: APPLICATION_STATUS.CONTACTED,
         expectedStatus: APPLICATION_STATUS.SCREENING,
-        expectedVersion: unassigned.application.version,
+        expectedVersion: persistedAfterLock.version,
       }),
     ).rejects.toMatchObject({ statusCode: 409 });
     await expect(
@@ -860,7 +854,7 @@ describe("V10 Slice 05 — Assignment read projections (F06–F10)", () => {
         applicationId: application._id.toString(),
         targetStatus: APPLICATION_STATUS.CONTACTED,
         expectedStatus: APPLICATION_STATUS.SCREENING,
-        expectedVersion: unassigned.application.version,
+        expectedVersion: persistedAfterLock.version,
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
   });

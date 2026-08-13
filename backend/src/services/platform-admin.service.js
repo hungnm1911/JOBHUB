@@ -483,6 +483,36 @@ const assertAccountStatusPreservesCompanyLifecycle = async ({
   );
 };
 
+// V10 Slice 09 / F11 / BR-08 / BR-48 / BR-52 / TX-05:
+// After V1 User LOCK/TERMINATE commits, system consequence is automatic
+// Unassign of current non-terminal Applications still assigned to the
+// Recruiter named by persisted CompanyMember. Not Platform Admin assignment
+// authority: no replacement, no Job-team mutation, no CompanyMember sync,
+// no final-zero guard, no global Application transaction. Partial detach
+// progress is kept; retry rereads current persisted responsibilities.
+const automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss =
+  async ({ targetUser }) => {
+    if (targetUser.role !== USER_ROLE.COMPANY_STAFF) {
+      return;
+    }
+
+    const recruiterMembership = await CompanyMember.findOne({
+      userId: targetUser._id,
+      role: COMPANY_MEMBER_ROLE.RECRUITER,
+    }).select("_id");
+
+    if (!recruiterMembership) {
+      return;
+    }
+
+    const { automaticallyUnassignCurrentResponsibilitiesOfRecruiter } =
+      await import("./application.service.js");
+
+    await automaticallyUnassignCurrentResponsibilitiesOfRecruiter({
+      outgoingRecruiterCompanyMemberId: recruiterMembership._id,
+    });
+  };
+
 const lockAccount = async ({ targetUserId, actorUserId }) => {
   if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
     throw new AppError(400, "Invalid account id", {
@@ -529,6 +559,13 @@ const lockAccount = async ({ targetUserId, actorUserId }) => {
   await targetUser.save();
 
   await AuthSession.deleteMany({ userId: targetUser._id });
+
+  // BR-47 / BR-48 / TX-05: User lifecycle already committed; Application
+  // detach follows from current responsibilities without blocking or
+  // rolling back account lifecycle / Job-team state.
+  await automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss(
+    { targetUser },
+  );
 
   return toPublicUser(targetUser);
 };
@@ -651,6 +688,13 @@ const terminateAccount = async ({ targetUserId, actorUserId }) => {
   await targetUser.save();
 
   await AuthSession.deleteMany({ userId: targetUser._id });
+
+  // BR-47 / BR-48 / TX-05: same post-commit automatic Unassign as lock.
+  // Also covers remaining Application refs when terminating an already LOCKED
+  // Recruiter User (retry/reconciliation from current persisted state).
+  await automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss(
+    { targetUser },
+  );
 
   return toPublicUser(targetUser);
 };

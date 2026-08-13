@@ -49,12 +49,14 @@ import {
 } from "../helpers/database.js";
 
 /**
- * V10 Final Acceptance H2 reconcile:
+ * V10 Final Acceptance H2 + Slice 09:
  * Platform Admin generic User account lifecycle (V1 F10/F11) remains independent
  * of Recruiter CompanyMember LOCK/TERMINATE zero-responsibility (V3/V10 BR-28 /
- * PI-24). After H3, TX-02 User ACTIVE acquires already serialize Application
- * mutations against User eligibility loss without mutating Application /
- * Job-team / CompanyMember from Platform Admin lock/terminate.
+ * PI-24). User LOCK/TERMINATE still commits without Job/Application zero guard
+ * and without mutating CompanyMember or Job-team. After eligibility loss,
+ * Slice 06 automatic Unassign detaches non-terminal Applications (A → NONE).
+ * TX-02 User ACTIVE acquires continue to serialize Assign/Pipeline against
+ * User eligibility loss.
  */
 
 const FUTURE_DEADLINE = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -320,7 +322,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     await disconnectTestDatabase();
   });
 
-  it("1. Platform Admin lock succeeds for Primary with non-terminal Application; responsibility refs remain unchanged (V1/V3)", async () => {
+  it("1. Platform Admin lock succeeds for Primary with non-terminal Application; Job/CompanyMember unchanged; Application automatic Unassign (V1/V10 F11)", async () => {
     const ctx = await setupH2Company({ emailPrefix: "v10.h2.c1" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -364,7 +366,11 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     const afterApp = snapshotApplication(
       await Application.findById(application._id).lean(),
     );
-    expect(afterApp).toEqual(beforeApp);
+    expect(afterApp.assignedRecruiterCompanyMemberId).toBeNull();
+    expect(afterApp.status).toBe(beforeApp.status);
+    expect(afterApp.snapshotStorageKey).toBe(beforeApp.snapshotStorageKey);
+    expect(afterApp.snapshotName).toBe(beforeApp.snapshotName);
+    expect(afterApp.version).toBe(beforeApp.version + 1);
 
     const afterJob = snapshotJobTeam(await Job.findById(job._id).lean());
     expect(afterJob).toEqual(beforeJob);
@@ -405,12 +411,10 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
 
     const after = await Application.findById(application._id).lean();
     expect(after.status).toBe(APPLICATION_STATUS.SCREENING);
-    expect(String(after.assignedRecruiterCompanyMemberId)).toBe(
-      ctx.supporting.membership._id.toString(),
-    );
+    expect(after.assignedRecruiterCompanyMemberId).toBeNull();
   });
 
-  it("3. Platform lock wins race with Pipeline → stale Pipeline fails (TX-02 / H3)", async () => {
+  it("3. Platform lock wins race with Pipeline → stale Pipeline fails; Application automatic Unassign (TX-02 / H3)", async () => {
     const ctx = await setupH2Company({ emailPrefix: "v10.h2.c3" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -449,10 +453,13 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     const after = snapshotApplication(
       await Application.findById(application._id).lean(),
     );
-    expect(after).toEqual(before);
+    expect(after.status).toBe(before.status);
+    expect(after.assignedRecruiterCompanyMemberId).toBeNull();
+    expect(after.snapshotStorageKey).toBe(before.snapshotStorageKey);
+    expect(after.version).toBe(before.version + 1);
   });
 
-  it("4. Pipeline wins before Platform lock → Pipeline kept; lock succeeds; subsequent Pipeline blocked", async () => {
+  it("4. Pipeline wins before Platform lock → Pipeline status kept; lock Unassigns Assignee; subsequent Pipeline blocked", async () => {
     const ctx = await setupH2Company({ emailPrefix: "v10.h2.c4" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -488,9 +495,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
 
     const afterLock = await Application.findById(application._id).lean();
     expect(afterLock.status).toBe(APPLICATION_STATUS.CONTACTED);
-    expect(String(afterLock.assignedRecruiterCompanyMemberId)).toBe(
-      ctx.supporting.membership._id.toString(),
-    );
+    expect(afterLock.assignedRecruiterCompanyMemberId).toBeNull();
 
     const user = await User.findById(ctx.supporting.user._id).lean();
     expect(user.status).toBe(USER_STATUS.LOCKED);
@@ -502,7 +507,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
         applicationId: application._id.toString(),
         targetStatus: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
         expectedStatus: APPLICATION_STATUS.CONTACTED,
-        expectedVersion: 2,
+        expectedVersion: afterLock.version,
       }),
     ).rejects.toMatchObject({ statusCode: 409 });
   });
@@ -569,7 +574,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     );
   });
 
-  it("6. Platform terminate with Application responsibility keeps V1/V3 termination; Application not rewritten", async () => {
+  it("6. Platform terminate with Application responsibility keeps V1 termination; automatic Unassign; CompanyMember/Job unchanged", async () => {
     const ctx = await setupH2Company({ emailPrefix: "v10.h2.c6" });
     const job = await createJobWithTeam({
       companyId: ctx.manager.company._id,
@@ -607,7 +612,10 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
     const afterApp = snapshotApplication(
       await Application.findById(application._id).lean(),
     );
-    expect(afterApp).toEqual(beforeApp);
+    expect(afterApp.assignedRecruiterCompanyMemberId).toBeNull();
+    expect(afterApp.status).toBe(beforeApp.status);
+    expect(afterApp.snapshotStorageKey).toBe(beforeApp.snapshotStorageKey);
+    expect(afterApp.version).toBe(beforeApp.version + 1);
 
     const afterJob = snapshotJobTeam(await Job.findById(job._id).lean());
     expect(afterJob).toEqual(beforeJob);
@@ -741,7 +749,7 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
       JOB_STATUS.CLOSED,
       JOB_STATUS.EXPIRED,
     ]) {
-      it(`9.${index}-${jobStatus}. CM recovers ${jobStatus} Application from Platform-${lifecycle} outgoing User`, async () => {
+      it(`9.${index}-${jobStatus}. CM Assigns again after Platform-${lifecycle} automatic Unassign on ${jobStatus}`, async () => {
         const ctx = await setupH2Company({
           emailPrefix: `v10.f11.app.${index}.${jobStatus.toLowerCase()}`,
         });
@@ -768,21 +776,23 @@ describe("V10 Final Acceptance H2 — Platform Admin User lifecycle vs Applicati
           actorUserId: ctx.platformAdmin.user._id,
         });
 
-        const recovered = await forceReassignApplication({
+        const afterUnassign = await Application.findById(application._id).lean();
+        expect(afterUnassign.assignedRecruiterCompanyMemberId).toBeNull();
+        expect(afterUnassign.status).toBe(before.status);
+
+        const recovered = await firstAssignApplication({
           actorUser: ctx.manager.user,
           jobId: job._id.toString(),
           applicationId: application._id.toString(),
           assigneeCompanyMemberId: ctx.supportingB.membership._id.toString(),
-          expectedAssigneeCompanyMemberId:
-            ctx.supporting.membership._id.toString(),
-          expectedVersion: 1,
+          expectedVersion: afterUnassign.version,
         });
 
         expect(recovered.application).toMatchObject({
           status: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
           assignedRecruiterCompanyMemberId:
             ctx.supportingB.membership._id.toString(),
-          version: 2,
+          version: afterUnassign.version + 1,
           isUnassigned: false,
         });
 

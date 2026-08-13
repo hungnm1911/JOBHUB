@@ -25,7 +25,7 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** Slices 01–08 of the
+**V10 — Phân công Application và Recruitment Pipeline** Slices 01–09 of the
 current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
 opened the persistence state matrix so every non-terminal Recruitment Status
 can persist `UNASSIGNED` or Assigned. Slice 02 extends Primary Assign of
@@ -55,13 +55,18 @@ Job-scoped non-terminal Applications assigned to the outgoing Recruiter become
 `A → NONE` before team-removal completion; Primary↔Supporting role changes
 while the Recruiter remains on-team and eligible do not Unassign; V6 Job-team
 invariants (exactly one Primary; no Application replacement) remain.
+Slice 09 wires the same primitive into Platform Admin Recruiter User
+LOCK/TERMINATE: V1 User lifecycle still commits without Job/Application
+zero-responsibility guard and without mutating CompanyMember or Job-team;
+after eligibility loss, current non-terminal Applications are automatic
+Unassigned (`A → NONE`) independently per Application (TX-05).
 The current Product/Data
 contracts remain approved implementation authority.
 The prior implementation and its 104-file / 893-test green baseline encoded
 the old state matrix and direct-handoff lifecycle semantics; that baseline
 remains regression history, not completion evidence for the current canonical
-revision. Remaining `ASSIGN / UNASSIGN` slice (Platform Admin User lifecycle
-integration of automatic Unassign) is not started.
+revision. Remaining `ASSIGN / UNASSIGN` slice (final race/acceptance sweep) is
+not started.
 
 Previous V10 implementation baseline (historical, not current completion
 evidence) has Slice 01 —
@@ -386,6 +391,31 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   TX-02 / F11 recovery assertions. The official backend gate passed (ESLint: 0
   errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; ARCH-001
   through ARCH-016; Vitest: 107 files / 1008 tests).
+
+- **Implemented; verified:** V10 Slice 09 — Platform Admin Recruiter User
+  LOCK/TERMINATE automatic Unassign (F11; BR-08, BR-42, BR-46–BR-53; TX-02,
+  TX-05): `lockAccount` / `terminateAccount` keep independent V1 User
+  lifecycle authority (status transition + session revoke) without
+  Job/Application zero-responsibility guard, without CompanyMember sync, and
+  without Job Primary/Supporting mutation. After User eligibility loss
+  commits, they reuse Slice 06
+  `automaticallyUnassignCurrentResponsibilitiesOfRecruiter` so every current
+  non-terminal Application assigned to the persisted Recruiter CompanyMember
+  becomes `A → NONE`. No replacement Recruiter and no Platform Admin
+  assignment/pipeline authority. Recruitment Status, Candidate, Job, source,
+  and `submittedCvSnapshot` are preserved; terminal Applications keep their
+  final Assignee. TX-05 keeps independently committed Application detaches;
+  partial progress does not roll back User lifecycle; retry continues from
+  current responsibilities (including TERMINATE of an already LOCKED User);
+  stale automatic Unassign cannot clear a newer Assignee; User lifecycle vs
+  Assign/Pipeline races obey TX-02. CompanyMember LOCK/TERMINATE, generic
+  team removal, and Company-lock freeze semantics are unchanged. Focused
+  coverage in
+  `test/application/v10-platform-admin-user-lifecycle-automatic-unassign.test.js`
+  plus updated H2 / TX-02 / Slice 05 read-projection assertions. The official
+  backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 108
+  files / 1020 tests).
 
 ## Previously completed and verified baseline
 
