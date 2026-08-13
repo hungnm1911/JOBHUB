@@ -12,12 +12,27 @@ const APPLICATION_SOURCE_VALUES = Object.values(APPLICATION_SOURCE);
 const APPLICATION_STATUS_VALUES = Object.values(APPLICATION_STATUS);
 const SNAPSHOT_SOURCE_TYPE_VALUES = Object.values(CANDIDATE_CV_SOURCE_TYPE);
 
+// Recruitment statuses that are only valid with a current Assigned Recruiter.
+// UNASSIGNED is an assignment-state derivation, never an Application.status value.
+const APPLICATION_STATUSES_REQUIRING_ASSIGNEE = Object.freeze([
+  APPLICATION_STATUS.SCREENING,
+  APPLICATION_STATUS.CONTACTED,
+  APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+  APPLICATION_STATUS.INTERVIEW_COMPLETED,
+  APPLICATION_STATUS.HIRED,
+  APPLICATION_STATUS.REJECTED,
+]);
+
 const IMMUTABLE_APPLICATION_IDENTITY_FIELDS = Object.freeze([
   "candidateUserId",
   "jobId",
   "source",
   "appliedAt",
 ]);
+
+const hasAssignedRecruiter = (application) => {
+  return application?.assignedRecruiterCompanyMemberId != null;
+};
 
 const isNonEmptyTrimmedString = (value) => {
   return typeof value === "string" && value.trim() !== "";
@@ -131,6 +146,7 @@ const assertApplicationLocalInvariants = (application) => {
   const snapshot = application.submittedCvSnapshot;
   const hasGeneratedContent = hasPresentSubdocument(snapshot?.generatedContent);
   const hasPdfFile = hasPresentSubdocument(snapshot?.pdfFile);
+  const assigned = hasAssignedRecruiter(application);
 
   if (application.status === APPLICATION_STATUS.APPLIED) {
     if (application.withdrawnAt != null) {
@@ -146,6 +162,15 @@ const assertApplicationLocalInvariants = (application) => {
     if (application.withdrawnAt == null) {
       errors.push("WITHDRAWN Application must have withdrawnAt");
     }
+  }
+
+  if (
+    APPLICATION_STATUSES_REQUIRING_ASSIGNEE.includes(application.status) &&
+    !assigned
+  ) {
+    errors.push(
+      `${application.status} Application must have assignedRecruiterCompanyMemberId`,
+    );
   }
 
   if (snapshot?.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
@@ -335,6 +360,35 @@ const APPLICATION_COLLECTION_VALIDATOR = Object.freeze({
         ],
       },
       {
+        // assignedRecruiterCompanyMemberId is optional: absent/null = Unassigned;
+        // when present it must be a CompanyMember ObjectId reference.
+        $or: [
+          {
+            $eq: [
+              { $ifNull: ["$assignedRecruiterCompanyMemberId", null] },
+              null,
+            ],
+          },
+          {
+            $eq: [{ $type: "$assignedRecruiterCompanyMemberId" }, "objectId"],
+          },
+        ],
+      },
+      {
+        // Local status × assignment matrix (Data Contract §7.1 / PI-07):
+        // pipeline and terminal recruiter-owned statuses require an Assignee.
+        $or: [
+          {
+            $not: {
+              $in: ["$status", APPLICATION_STATUSES_REQUIRING_ASSIGNEE],
+            },
+          },
+          {
+            $eq: [{ $type: "$assignedRecruiterCompanyMemberId" }, "objectId"],
+          },
+        ],
+      },
+      {
         $or: [
           {
             $ne: [
@@ -497,6 +551,12 @@ const applicationSchema = new Schema(
       default: null,
       trim: true,
     },
+    assignedRecruiterCompanyMemberId: {
+      type: Schema.Types.ObjectId,
+      ref: "CompanyMember",
+      default: null,
+      required: false,
+    },
     version: {
       type: Number,
       required: true,
@@ -629,12 +689,20 @@ applicationSchema.pre("validate", function enforceApplicationLocalInvariants() {
   const errors = assertApplicationLocalInvariants(this);
 
   // Creation-state invariant for V9 Direct Applications:
-  // - must start at APPLIED
+  // - must start at APPLIED (expanded status enum must not let Apply invent
+  //   pipeline/terminal recruiter-owned states)
+  // - must start Unassigned (absent or null assignee)
   // - must start with revision version=0
-  // - WITHDRAWN must only appear through the canonical Withdraw transition (Slice 05)
+  // - WITHDRAWN / pipeline statuses appear only through later approved workflows
   if (this.isNew && this.source === APPLICATION_SOURCE.DIRECT_APPLICATION) {
-    if (this.status === APPLICATION_STATUS.WITHDRAWN) {
+    if (this.status !== APPLICATION_STATUS.APPLIED) {
       errors.push("Direct Application creation must start with status=APPLIED");
+    }
+
+    if (hasAssignedRecruiter(this)) {
+      errors.push(
+        "Direct Application creation must start Unassigned (assignedRecruiterCompanyMemberId null)",
+      );
     }
 
     if (this.status === APPLICATION_STATUS.APPLIED) {
@@ -702,6 +770,18 @@ applicationSchema.index(
   },
 );
 
+// IDX-A02 — Job Pipeline / Kanban by Recruitment Status
+applicationSchema.index({ jobId: 1, status: 1 });
+
+// IDX-A03 — Job + current Assignee (null assignee = Unassigned of Job)
+applicationSchema.index({ jobId: 1, assignedRecruiterCompanyMemberId: 1 });
+
+// IDX-A04 — Recruiter My Applications / current workload
+applicationSchema.index({ assignedRecruiterCompanyMemberId: 1, status: 1 });
+
+// IDX-A05 — Candidate My Applications
+applicationSchema.index({ candidateUserId: 1, status: 1 });
+
 const Application = model("Application", applicationSchema);
 
 const ensureApplicationCollectionInvariants = async (
@@ -759,6 +839,7 @@ const ensureApplicationCollectionInvariants = async (
 
 export {
   APPLICATION_COLLECTION_VALIDATOR,
+  APPLICATION_STATUSES_REQUIRING_ASSIGNEE,
   assertApplicationLocalInvariants,
   applicationSchema,
   cvSnapshotPdfFileSchema,
