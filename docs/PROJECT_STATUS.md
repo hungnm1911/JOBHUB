@@ -25,7 +25,7 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** Slices 01–03 of the
+**V10 — Phân công Application và Recruitment Pipeline** Slices 01–04 of the
 current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
 opened the persistence state matrix so every non-terminal Recruitment Status
 can persist `UNASSIGNED` or Assigned. Slice 02 extends Primary Assign of
@@ -34,13 +34,15 @@ Unassigned Applications (`NONE → Recruiter`) to every non-terminal status on
 surface and TX-01/TX-02 foundation. Slice 03 extends Primary Reassign /
 Take over / Unassign (`A → B`, `A → Primary`, `A → NONE`) to every
 non-terminal status on `PUBLISHED`/`CLOSED`/`EXPIRED` Jobs, converging those
-mutations onto one current-assignee CAS foundation. The current Product/Data
-contracts remain approved implementation authority. The prior implementation
-and its 104-file / 893-test green baseline encoded the old state matrix and
-direct-handoff lifecycle semantics; that baseline remains regression history,
-not completion evidence for the current canonical revision. Remaining
-`ASSIGN / UNASSIGN` slices (Company Manager assignment management, automatic
-Unassign / lifecycle detach, read-projection compatibility) are not started.
+mutations onto one current-assignee CAS foundation. Slice 04 extends the same
+canonical Assign / Reassign / Unassign primitives to the owning-Company
+Manager, without a recovery-only restriction and without Pipeline authority.
+The current Product/Data contracts remain approved implementation authority.
+The prior implementation and its 104-file / 893-test green baseline encoded
+the old state matrix and direct-handoff lifecycle semantics; that baseline
+remains regression history, not completion evidence for the current canonical
+revision. Remaining `ASSIGN / UNASSIGN` slices (automatic Unassign /
+lifecycle detach, read-projection compatibility) are not started.
 
 Previous V10 implementation baseline (historical, not current completion
 evidence) has Slice 01 —
@@ -220,8 +222,9 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   `submittedCvSnapshot`, and Recruitment Team are unchanged. Target eligibility
   is revalidated at commit (TX-02). Supporting cannot self-claim. Terminal and
   already-Assigned Applications are rejected. Concurrent/stale Assign cannot
-  overwrite a newer state. Company Manager Assign, Unassign, Reassign/Take over
-  behavior, and automatic eligibility-loss Unassign are unchanged. Focused
+  overwrite a newer state. Company Manager Assign was later delivered in
+  Slice 04. Unassign, Reassign/Take over behavior from Slice 02's perspective,
+  and automatic eligibility-loss Unassign, remained later slices at that time. Focused
   coverage in `test/application/v10-first-assign.test.js` (1 file / 28 tests).
   The official backend gate passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 104
@@ -240,13 +243,36 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   continue Pipeline until Assign again. Terminal Applications and Supporting
   Recruiter authority are rejected. Stale expected-assignee/version operations
   cannot overwrite a newer Assignee or `NONE`. Company Manager assignment
-  management and automatic eligibility-loss Unassign remain later slices.
+  management was delivered in Slice 04. Automatic eligibility-loss Unassign
+  remains a later slice.
   Focused coverage in `test/application/v10-reassign-takeover.test.js`
   (1 file / 40 tests). Adjacent First Assign and force-reassign suites
   remained green (3 files / 85 tests together). The official backend gate
   passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 104
   files / 936 tests).
+
+- **Implemented; verified:** V10 Slice 04 — Company Manager Application
+  Assignment Management (F01, F02, F04, F09; BR-06–BR-08, BR-10–BR-11,
+  BR-15–BR-17, BR-27, BR-36–BR-38, BR-40, BR-42, BR-53; TX-01, TX-02, TX-03):
+  owning-Company Manager can Assign (`NONE → Recruiter`), change Assignee
+  (`A → B`), and Unassign (`A → NONE`) every non-terminal Direct Application
+  on `PUBLISHED`/`CLOSED`/`EXPIRED` Jobs. Actor-specific CM work is
+  authorization/scope only; mutations reuse `firstAssignApplication` /
+  `reassignApplication` / `unassignApplication` and the Slice 02–03 CAS plus
+  TX-02 eligibility-at-commit primitives. CM does not become Assignee and has
+  no Pipeline or snapshot-delivery authority. Tenant resolves from
+  authenticated CM membership → owning Company → Job → Application.
+  Historical `forceReassignApplication` remains a CM-only A→B compatibility
+  wrapper without the former recovery-only restriction. Automatic Unassign,
+  CompanyMember LOCK/TERMINATE, Recruitment Team removal, and Platform Admin
+  Unassign are unchanged. Focused coverage in
+  `test/application/v10-company-manager-assignment.test.js` (1 file / 28 tests).
+  Adjacent First Assign, Reassign/Unassign, force-reassign, Primary view, and
+  Slice 07 handoff suites remained green (6 files / 134 tests together). The
+  official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 105
+  files / 964 tests).
 
 ## Previously completed and verified baseline
 
@@ -928,7 +954,7 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
-- V10 Slice 02 Assign Unassigned Application (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after Primary Assign was extended to every non-terminal Unassigned status (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 104 files / 914 tests). Focused Assign coverage passed 1 file / 28 tests. No Unassign, Company Manager Assign, automatic lifecycle detach, field, collection, index, history, or migration was added.
+- V10 Slice 04 Company Manager Application Assignment Management (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after owning-Company Manager Assign/Reassign/Unassign reused the Slice 02–03 mutation primitives (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 105 files / 964 tests). Focused CM assignment coverage passed 1 file / 28 tests. No automatic Unassign, CompanyMember LOCK/TERMINATE change, Recruitment Team removal change, Platform Admin Unassign, field, collection, index, history, or migration was added.
 - V10 Slice 01 Persistence State Matrix (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after the local/collection status × assignment-state matrix update (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 104 files / 900 tests). Focused persistence coverage passed 2 files / 37 tests. No schema, index, migration, or backfill was added.
 - V9 Slice 01 Implementation Readiness baseline (pre-implementation): the
   official `cd backend && npm run verify:agent` gate passed after the

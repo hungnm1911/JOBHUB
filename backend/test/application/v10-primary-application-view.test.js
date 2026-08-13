@@ -530,7 +530,7 @@ describe("V10 Slice 03 — Unassigned Applications and Primary Application View 
       });
     });
 
-    it("blocks Supporting, Company Manager, Candidate, and Platform Admin", async () => {
+    it("blocks Supporting, Candidate, and Platform Admin", async () => {
       const agent = createTestAgent();
       const { manager, supporting, jobA } = await setupCompanyWithPrimary({
         emailPrefix: "v10.s03.http.deny",
@@ -575,7 +575,7 @@ describe("V10 Slice 03 — Unassigned Applications and Primary Application View 
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(supportingRes.status).toBe(403);
-      expect(managerRes.status).toBe(403);
+      expect(managerRes.status).toBe(200);
       expect(candidateRes.status).toBe(403);
       expect(adminRes.status).toBe(403);
     });

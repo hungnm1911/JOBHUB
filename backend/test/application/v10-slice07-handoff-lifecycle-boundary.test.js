@@ -295,7 +295,7 @@ describe("V10 Slice 07 — Assignment/handoff lifecycle boundary foundation", ()
     expect(membership.status).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
   });
 
-  it("3. public CM API cannot force-reassign an eligible Assignee via client input or fake reason", async () => {
+  it("3. public CM API ignores client-declared pre-lifecycle fields and may reassign an eligible Assignee", async () => {
     const agent = createTestAgent();
     const { manager, supporting, supportingB, job, candidate } =
       await setupCompanyWithTeam({ emailPrefix: "v10.s07.fakereason" });
@@ -309,21 +309,23 @@ describe("V10 Slice 07 — Assignment/handoff lifecycle boundary foundation", ()
       password: DEFAULT_PASSWORD,
     });
 
-    // Service ignores client-declared pre-lifecycle fields and stays recovery-only.
-    await expect(
-      forceReassignApplication({
-        actorUser: manager.user,
-        jobId: job._id.toString(),
-        applicationId: application._id.toString(),
-        assigneeCompanyMemberId: supportingB.membership._id.toString(),
-        expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
-        expectedVersion: 1,
-        handoffMode: "pre-lifecycle",
-        lifecycleReason: "LOCK",
-        verifiedOutgoingSubjectCompanyMemberId:
-          supporting.membership._id.toString(),
-      }),
-    ).rejects.toMatchObject({ statusCode: 409 });
+    // Service ignores client-declared pre-lifecycle fields; public CM A → B
+    // now uses canonical assignment management rather than recovery-only.
+    const ignoredFieldsResult = await forceReassignApplication({
+      actorUser: manager.user,
+      jobId: job._id.toString(),
+      applicationId: application._id.toString(),
+      assigneeCompanyMemberId: supportingB.membership._id.toString(),
+      expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+      expectedVersion: 1,
+      handoffMode: "pre-lifecycle",
+      lifecycleReason: "LOCK",
+      verifiedOutgoingSubjectCompanyMemberId:
+        supporting.membership._id.toString(),
+    });
+    expect(ignoredFieldsResult.application.assignedRecruiterCompanyMemberId).toBe(
+      supportingB.membership._id.toString(),
+    );
 
     // Unknown client "reason" fields are rejected by the public contract body.
     const fakeReasonResponse = await agent
@@ -332,9 +334,9 @@ describe("V10 Slice 07 — Assignment/handoff lifecycle boundary foundation", ()
       )
       .set("Authorization", `Bearer ${token}`)
       .send({
-        assigneeCompanyMemberId: supportingB.membership._id.toString(),
-        expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
-        expectedVersion: 1,
+        assigneeCompanyMemberId: supporting.membership._id.toString(),
+        expectedAssigneeCompanyMemberId: supportingB.membership._id.toString(),
+        expectedVersion: 2,
         handoffMode: "pre-lifecycle",
         lifecycleReason: "TERMINATE",
         verifiedOutgoingSubjectCompanyMemberId:
@@ -343,26 +345,20 @@ describe("V10 Slice 07 — Assignment/handoff lifecycle boundary foundation", ()
 
     expect(fakeReasonResponse.status).toBe(400);
 
-    // Even with a contract-valid body, still-eligible Assignees cannot be
-    // force-reassigned through the public CM recovery API.
     const eligibleResponse = await agent
       .post(
         `/api/jobs/${job._id}/applications/${application._id}/force-reassign`,
       )
       .set("Authorization", `Bearer ${token}`)
       .send({
-        assigneeCompanyMemberId: supportingB.membership._id.toString(),
-        expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
-        expectedVersion: 1,
+        assigneeCompanyMemberId: supporting.membership._id.toString(),
+        expectedAssigneeCompanyMemberId: supportingB.membership._id.toString(),
+        expectedVersion: 2,
       });
 
-    expect(eligibleResponse.status).toBe(409);
-
-    const persisted = await Application.findById(application._id).lean();
-    expect(String(persisted.assignedRecruiterCompanyMemberId)).toBe(
-      supporting.membership._id.toString(),
-    );
-    expect(persisted.version).toBe(1);
+    expect(eligibleResponse.status).toBe(200);
+    expect(eligibleResponse.body.application.assignedRecruiterCompanyMemberId)
+      .toBe(supporting.membership._id.toString());
   });
 
   it("4. pre-lifecycle handoff preserves status, snapshot, and identity fields", async () => {

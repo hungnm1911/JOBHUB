@@ -353,7 +353,7 @@ describe("V10 Slice 06 — Administrative Forced Reassignment (F04)", () => {
       );
     });
 
-    it("denies forced reassignment when current Assignee is still eligible (BR-15)", async () => {
+    it("lets Company Manager force-reassign while current Assignee remains eligible (BR-15)", async () => {
       const { manager, supporting, supportingB, job, candidate } =
         await setupCompanyWithTeam({
           emailPrefix: "v10.s06.stillok",
@@ -364,22 +364,25 @@ describe("V10 Slice 06 — Administrative Forced Reassignment (F04)", () => {
         assigneeMemberId: supporting.membership._id,
       });
 
-      await expect(
-        forceReassignApplication({
-          actorUser: manager.user,
-          jobId: job._id.toString(),
-          applicationId: application._id.toString(),
-          assigneeCompanyMemberId: supportingB.membership._id.toString(),
-          expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
-          expectedVersion: 1,
-        }),
-      ).rejects.toMatchObject({ statusCode: 409 });
+      const result = await forceReassignApplication({
+        actorUser: manager.user,
+        jobId: job._id.toString(),
+        applicationId: application._id.toString(),
+        assigneeCompanyMemberId: supportingB.membership._id.toString(),
+        expectedAssigneeCompanyMemberId: supporting.membership._id.toString(),
+        expectedVersion: 1,
+      });
+
+      expect(result.application.assignedRecruiterCompanyMemberId).toBe(
+        supportingB.membership._id.toString(),
+      );
+      expect(result.application.version).toBe(2);
 
       const persisted = await Application.findById(application._id).lean();
       expect(String(persisted.assignedRecruiterCompanyMemberId)).toBe(
-        supporting.membership._id.toString(),
+        supportingB.membership._id.toString(),
       );
-      expect(persisted.version).toBe(1);
+      expect(persisted.version).toBe(2);
     });
 
     it("rejects cross-company or non-team target (BR-07/BR-40)", async () => {

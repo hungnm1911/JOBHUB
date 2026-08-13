@@ -1528,7 +1528,7 @@ describe("V10 Slice 03 — Primary Reassign / Take over / Unassign Application (
       expect(response.status).toBe(403);
     });
 
-    it("blocks Company Manager Unassign over HTTP (F04 not in this slice)", async () => {
+    it("lets Company Manager Unassign over HTTP (F04)", async () => {
       const agent = createTestAgent();
       const { manager, supporting, job, candidate } = await setupCompanyWithTeam({
         emailPrefix: "v10.s03.http.unassign.cm",
@@ -1551,7 +1551,12 @@ describe("V10 Slice 03 — Primary Reassign / Take over / Unassign Application (
           expectedVersion: 1,
         });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(200);
+      expect(response.body.application).toMatchObject({
+        isUnassigned: true,
+        assignedRecruiterCompanyMemberId: null,
+        version: 2,
+      });
     });
   });
 });

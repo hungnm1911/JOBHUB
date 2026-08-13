@@ -109,7 +109,7 @@ router.post(
 router.get(
   "/:jobId/applications",
   authenticateAccess,
-  authorizeRecruiterBusinessAccess,
+  authorizeCompanyStaffBusinessAccess,
   listPrimaryJobApplicationsHandler,
 );
 
@@ -137,7 +137,7 @@ router.get(
 router.post(
   "/:jobId/applications/:applicationId/assign",
   authenticateAccess,
-  authorizeRecruiterBusinessAccess,
+  authorizeCompanyStaffBusinessAccess,
   validateFirstAssignApplication,
   firstAssignApplicationHandler,
 );
@@ -145,7 +145,7 @@ router.post(
 router.post(
   "/:jobId/applications/:applicationId/reassign",
   authenticateAccess,
-  authorizeRecruiterBusinessAccess,
+  authorizeCompanyStaffBusinessAccess,
   validateReassignApplication,
   reassignApplicationHandler,
 );
@@ -153,7 +153,7 @@ router.post(
 router.post(
   "/:jobId/applications/:applicationId/unassign",
   authenticateAccess,
-  authorizeRecruiterBusinessAccess,
+  authorizeCompanyStaffBusinessAccess,
   validateUnassignApplication,
   unassignApplicationHandler,
 );
