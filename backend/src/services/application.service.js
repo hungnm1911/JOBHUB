@@ -1415,8 +1415,10 @@ const commitAssignFromUnassigned = async ({
 };
 
 // Canonical assigned-state mutation (Data Contract §8.2–§8.4 / TX-01 / TX-03):
-// atomic A → B or A → NONE. Mutates only current Assignee + version; never an
-// A → NONE → B intermediate. Target NONE is a committed Unassigned state.
+// atomic A → B or A → NONE. Shared by manual Reassign/Unassign, administrative
+// A → B, and automatic Unassign. Mutates only current Assignee + version;
+// never an A → NONE → B intermediate. Target NONE is a committed Unassigned
+// state.
 const commitAssignedAssigneeMutation = async ({
   applicationId,
   jobId,
@@ -1619,7 +1621,8 @@ const rejectFailedAssignedAssigneeCas = async ({
     });
   }
 
-  const isUnassign = actionLabel === "Unassign";
+  const isUnassign =
+    actionLabel === "Unassign" || actionLabel === "Automatic Unassign";
 
   if (isApplicationTerminalStatus(latestApplication.status)) {
     throw new AppError(
@@ -1940,6 +1943,122 @@ const unassignApplication = async ({
     clientCompanyId,
     actionLabel: "Unassign",
   });
+};
+
+// F04 / F09 / F11 — canonical internal automatic Unassign (A → NONE).
+// Trusted lifecycle/team workflow owner; not a public HTTP surface and not
+// actor-authorized assignment management. Reuses commitAssignedAssigneeMutation
+// so stale expected-assignee/version writes cannot clear a newer Assignee.
+// No replacement, no synthetic A → B, no status/snapshot/identity/team mutation.
+const automaticallyUnassignApplication = async ({
+  applicationId,
+  expectedAssigneeCompanyMemberId,
+  expectedVersion,
+  session,
+} = {}) => {
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (!mongoose.isValidObjectId(expectedAssigneeCompanyMemberId)) {
+    throw new AppError(400, "Invalid expected Assignee CompanyMember id", {
+      field: "expectedAssigneeCompanyMemberId",
+    });
+  }
+
+  if (
+    typeof expectedVersion !== "number" ||
+    !Number.isInteger(expectedVersion) ||
+    expectedVersion < 0
+  ) {
+    throw new AppError(400, "expectedVersion must be a non-negative integer", {
+      field: "expectedVersion",
+    });
+  }
+
+  let applicationQuery = Application.findById(applicationId);
+  if (session) {
+    applicationQuery = applicationQuery.session(session);
+  }
+
+  const application = await applicationQuery;
+
+  if (!application) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  // BR-44: V10 assignment mutations only cover Direct Applications.
+  if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
+    throw new AppError(409, "Only Direct Applications can be unassigned", {
+      field: "source",
+    });
+  }
+
+  // BR-17 / BR-52: terminal Applications keep the final Assignee.
+  if (
+    isApplicationTerminalStatus(application.status) ||
+    !APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)
+  ) {
+    throw new AppError(409, "Terminal Applications cannot be unassigned", {
+      field: "status",
+      status: application.status,
+    });
+  }
+
+  // BR-10 / BR-52: automatic Unassign requires a current Assignee.
+  if (isApplicationUnassigned(application)) {
+    throw new AppError(409, "Application has no Assignee to unassign", {
+      field: "assignedRecruiterCompanyMemberId",
+    });
+  }
+
+  if (
+    application.assignedRecruiterCompanyMemberId.toString() !==
+    expectedAssigneeCompanyMemberId.toString()
+  ) {
+    throw new AppError(
+      409,
+      "Application Assignee has changed; refresh and retry Automatic Unassign",
+      { field: "expectedAssigneeCompanyMemberId" },
+    );
+  }
+
+  if (application.version !== expectedVersion) {
+    throw new AppError(
+      409,
+      "Application has changed; refresh and retry Automatic Unassign",
+      { field: "expectedVersion" },
+    );
+  }
+
+  // TX-01 / TX-03 / BR-10 / BR-11 / BR-31 / BR-36–BR-38:
+  // Atomic A → NONE via the shared assigned-state CAS. No target eligibility
+  // (NONE has no replacement). Non-terminal status CAS preserves a prior valid
+  // pipeline/Replace write on retry and blocks overwrite of terminals.
+  const unassignedApplication = await commitAssignedAssigneeMutation({
+    applicationId: application._id,
+    jobId: application.jobId,
+    expectedAssigneeCompanyMemberId,
+    expectedVersion,
+    nextAssignedRecruiterCompanyMemberId: null,
+    session,
+  });
+
+  if (!unassignedApplication) {
+    await rejectFailedAssignedAssigneeCas({
+      applicationId: application._id,
+      expectedVersion,
+      expectedAssigneeCompanyMemberId,
+      session,
+      actionLabel: "Automatic Unassign",
+    });
+  }
+
+  return unassignedApplication;
 };
 
 const runAdministrativeApplicationHandoffInSession = async ({
@@ -2567,6 +2686,47 @@ const findNonTerminalApplicationsAssignedToRecruiter = async ({
   }
 
   return query;
+};
+
+// TX-05: detach current non-terminal responsibilities of one Recruiter as
+// independent per-Application A → NONE commits. No global all-or-nothing
+// transaction, no persisted progress/recovery state, no replacement selection.
+// Partial success is kept; callers retry remaining current responsibilities
+// from persisted Application state. Not wired into LOCK/TERMINATE, team
+// removal, or Platform User lifecycle in this slice.
+const automaticallyUnassignCurrentResponsibilitiesOfRecruiter = async ({
+  outgoingRecruiterCompanyMemberId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(outgoingRecruiterCompanyMemberId)) {
+    throw new AppError(400, "Invalid outgoing Recruiter CompanyMember id", {
+      field: "outgoingRecruiterCompanyMemberId",
+    });
+  }
+
+  const applications = await findNonTerminalApplicationsAssignedToRecruiter({
+    assigneeCompanyMemberId: outgoingRecruiterCompanyMemberId,
+  });
+
+  const detached = [];
+  const failed = [];
+
+  for (const application of applications) {
+    try {
+      const unassignedApplication = await automaticallyUnassignApplication({
+        applicationId: application._id,
+        expectedAssigneeCompanyMemberId: outgoingRecruiterCompanyMemberId,
+        expectedVersion: application.version,
+      });
+      detached.push(unassignedApplication);
+    } catch (error) {
+      failed.push({
+        applicationId: application._id,
+        error,
+      });
+    }
+  }
+
+  return { detached, failed };
 };
 
 const countNonTerminalApplicationsAssignedToRecruiter = async ({
@@ -3520,6 +3680,8 @@ const withdrawApplication = async ({
 export {
   assertNoOutstandingRecruiterApplicationResponsibility,
   assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
+  automaticallyUnassignApplication,
+  automaticallyUnassignCurrentResponsibilitiesOfRecruiter,
   captureGeneratedSubmittedCvSnapshot,
   captureUploadedSubmittedCvSnapshot,
   countNonTerminalApplicationsAssignedToRecruiter,

@@ -25,7 +25,7 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** Slices 01–05 of the
+**V10 — Phân công Application và Recruitment Pipeline** Slices 01–06 of the
 current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
 opened the persistence state matrix so every non-terminal Recruitment Status
 can persist `UNASSIGNED` or Assigned. Slice 02 extends Primary Assign of
@@ -40,13 +40,18 @@ Manager, without a recovery-only restriction and without Pipeline authority.
 Slice 05 keeps Managed Jobs / Pipeline Workspace / Recruiter My Applications /
 Candidate My Applications / Current Workload compatible with that matrix:
 Unassigned remains assignment-state, not a pipeline group; reads use current
-Assignee; workload stays derived and unpersisted. The current Product/Data
+Assignee; workload stays derived and unpersisted. Slice 06 adds the canonical
+internal automatic-Unassign primitive (`A → NONE`) so later lifecycle/team
+operations can detach non-terminal Application responsibility of an outgoing
+Recruiter without a public HTTP surface, replacement Recruiter, or synthetic
+`A → B`. The current Product/Data
 contracts remain approved implementation authority.
 The prior implementation and its 104-file / 893-test green baseline encoded
 the old state matrix and direct-handoff lifecycle semantics; that baseline
 remains regression history, not completion evidence for the current canonical
-revision. Remaining `ASSIGN / UNASSIGN` slices (automatic Unassign /
-lifecycle detach) are not started.
+revision. Remaining `ASSIGN / UNASSIGN` slices (CompanyMember LOCK/TERMINATE,
+Recruitment Team removal, and Platform Admin User lifecycle integration of
+automatic Unassign) are not started.
 
 Previous V10 implementation baseline (historical, not current completion
 evidence) has Slice 01 —
@@ -300,6 +305,28 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   The official backend gate passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 106
   files / 972 tests).
+
+- **Implemented; verified:** V10 Slice 06 — Canonical Automatic-Unassign
+  Primitive (F04, F09, F11; BR-08, BR-10–BR-11, BR-17, BR-28, BR-31,
+  BR-33–BR-38, BR-48–BR-53; TX-01, TX-02, TX-05): trusted internal
+  `automaticallyUnassignApplication` detaches a non-terminal Application
+  (`A → NONE`) still assigned to the expected outgoing Recruiter. It reuses
+  `commitAssignedAssigneeMutation` (version + expected Assignee + non-terminal
+  status CAS) and does not create a second mutation engine. Successful writes
+  change only `assignedRecruiterCompanyMemberId → null`, `version + 1`, and
+  existing concurrency/timestamp metadata. Recruitment Status, Candidate, Job,
+  source, `submittedCvSnapshot`, and Recruitment Team are unchanged. No
+  replacement Recruiter and no synthetic `A → B`. Terminal Applications keep
+  the final Assignee. `automaticallyUnassignCurrentResponsibilitiesOfRecruiter`
+  detaches current non-terminal responsibilities independently per Application
+  (TX-05: no global all-or-nothing transaction, no persisted progress/recovery
+  state). Retry always rereads current persisted Application state. Not a
+  public HTTP surface. Not wired into CompanyMember LOCK/TERMINATE, Recruitment
+  Team removal, or Platform Admin User lifecycle. Focused coverage in
+  `test/application/v10-automatic-unassign.test.js` (1 file / 22 tests). The
+  official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 107
+  files / 994 tests).
 
 ## Previously completed and verified baseline
 
@@ -981,7 +1008,7 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
-- V10 Slice 04 Company Manager Application Assignment Management (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after owning-Company Manager Assign/Reassign/Unassign reused the Slice 02–03 mutation primitives (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 105 files / 964 tests). Focused CM assignment coverage passed 1 file / 28 tests. No automatic Unassign, CompanyMember LOCK/TERMINATE change, Recruitment Team removal change, Platform Admin Unassign, field, collection, index, history, or migration was added.
+- V10 Slice 06 Canonical Automatic-Unassign Primitive (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after the internal `A → NONE` primitive reused the existing assigned-state CAS (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 994 tests). Focused automatic-Unassign coverage passed 1 file / 22 tests. No public HTTP endpoint, CompanyMember LOCK/TERMINATE change, Recruitment Team removal change, Platform Admin User lifecycle change, field, collection, index, history, recovery state, queue, worker, or migration was added.
 - V10 Slice 01 Persistence State Matrix (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after the local/collection status × assignment-state matrix update (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 104 files / 900 tests). Focused persistence coverage passed 2 files / 37 tests. No schema, index, migration, or backfill was added.
 - V9 Slice 01 Implementation Readiness baseline (pre-implementation): the
   official `cd backend && npm run verify:agent` gate passed after the
