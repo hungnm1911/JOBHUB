@@ -1,5 +1,6 @@
 import {
   directApplyToJob,
+  firstAssignApplication,
   listPrimaryJobApplications,
   replaceSubmittedCv,
   withdrawApplication,
@@ -81,8 +82,26 @@ const listPrimaryJobApplicationsHandler = async (request, response, next) => {
   }
 };
 
+const firstAssignApplicationHandler = async (request, response, next) => {
+  try {
+    const result = await firstAssignApplication({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      assigneeCompanyMemberId: request.body.assigneeCompanyMemberId,
+      expectedVersion: request.body.expectedVersion,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   directApplyToJobHandler,
+  firstAssignApplicationHandler,
   listPrimaryJobApplicationsHandler,
   replaceSubmittedCvHandler,
   withdrawApplicationHandler,

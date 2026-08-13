@@ -27,8 +27,9 @@ V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the record
 
 **V10 — Phân công Application và Recruitment Pipeline** has Slice 01 —
 Application persistence foundation, Slice 02 — V9 compatibility +
-Job-retention compatibility, and Slice 03 — Unassigned Applications +
-Primary Application View `IMPLEMENTED AND VERIFIED`. Its approved
+Job-retention compatibility, Slice 03 — Unassigned Applications +
+Primary Application View, and Slice 04 — First Assign Application
+`IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
 and
@@ -49,9 +50,14 @@ Direct Applications of that Job (Assigned and Unassigned), deriving Unassigned
 from missing/null assignee rather than status, exposing Candidate, Job,
 Recruitment Status, current Assignee, `appliedAt`, and `submittedCvSnapshot`
 without mutating Application state or opening CandidateCV library access.
-Assign/Reassign/Take over, Recruitment Pipeline, Managed Jobs aggregates,
-My Applications, workload queries, and other remaining Fxx workflow surfaces
-remain deferred by the approved slice order.
+Slice 04 adds Primary-only First Assign via
+`POST /api/jobs/:jobId/applications/:applicationId/assign` so an Unassigned
+`APPLIED` Direct Application becomes Assigned to an eligible Primary or
+Supporting Recruiter without changing status/snapshot/identity, using
+version/Unassigned CAS (TX-01) and eligibility re-check at commit (TX-02).
+Reassign/Take over, forced reassignment, Recruitment Pipeline, Managed Jobs
+aggregates, My Applications, workload queries, and other remaining Fxx
+workflow surfaces remain deferred by the approved slice order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -90,18 +96,35 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 03):** Slices 01–03 are complete. First
-  Assign, Reassign/Take over, continuous eligibility, Recruitment Pipeline,
-  Managed Jobs aggregates/counts, Current Workload, Recruiter/Candidate My
-  Applications, and related read projections remain deferred until their
-  owning slices start. Job retention continues on the V5 lifecycle without an
-  Application↔Job delete transaction.
+- **V10 subsequent slices (after Slice 04):** Slices 01–04 are complete. Reassign/
+  Take over, continuous eligibility for pipeline processing, Recruitment
+  Pipeline, Managed Jobs aggregates/counts, Current Workload,
+  Recruiter/Candidate My Applications, and related read projections remain
+  deferred until their owning slices start. Job retention continues on the V5
+  lifecycle without an Application↔Job delete transaction.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 04 — First Assign Application (F02;
+  BR-06–BR-11, BR-17, BR-36–BR-37, BR-40, BR-42; TX-01; TX-02 eligibility-at-
+  commit): authenticated current Primary First Assigns an Unassigned
+  `APPLIED` `DIRECT_APPLICATION` via
+  `POST /api/jobs/:jobId/applications/:applicationId/assign`
+  (`firstAssignApplication`) to self or a valid Supporting Recruiter; assignee
+  eligibility is re-checked inside the commit transaction from persisted
+  Job/CompanyMember/User/Company data; mutation sets only
+  `assignedRecruiterCompanyMemberId` and increments `version` while preserving
+  status/snapshot/identity; Unassigned CAS + version prevent concurrent/
+  stale overwrite; Supporting self-claim, non-Primary, cross-company,
+  off-team, non-operational assignee, and terminal Applications are denied.
+  Focused coverage in `test/application/v10-first-assign.test.js`. The official
+  backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 91 files
+  / 698 tests).
 
 - **Implemented; verified:** V10 Slice 03 — Unassigned Applications and Primary
   Application View (F01; BR-03, BR-05, BR-31, BR-40, BR-44): authenticated

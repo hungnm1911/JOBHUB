@@ -9,6 +9,8 @@ import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
 import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
 import CANDIDATE_CV_UPLOADED_STORAGE from "../constants/candidate-cv-uploaded-storage.js";
 import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
+import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
+import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import Application from "../models/application.model.js";
@@ -24,7 +26,11 @@ import {
   resolveRecruiterBusinessContext,
 } from "./company.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
-import { isJobPubliclyEligible, toPublicJob } from "./job.service.js";
+import {
+  isJobPubliclyEligible,
+  isOwningCompanyActiveForPublicEligibility,
+  toPublicJob,
+} from "./job.service.js";
 
 const uploadApplicationSubmittedCvSnapshotFile = (buffer) => {
   return uploadFileBuffer({
@@ -315,6 +321,379 @@ const listPrimaryJobApplications = async ({
   return {
     job: toPublicJob(job),
     applications: applicationViews,
+  };
+};
+
+const APPLICATION_TERMINAL_STATUSES = Object.freeze([
+  APPLICATION_STATUS.HIRED,
+  APPLICATION_STATUS.REJECTED,
+  APPLICATION_STATUS.WITHDRAWN,
+]);
+
+const isApplicationTerminalStatus = (status) => {
+  return APPLICATION_TERMINAL_STATUSES.includes(status);
+};
+
+const assertCurrentPrimaryOfJob = ({ job, actorMembershipId }) => {
+  if (job.primaryRecruiterCompanyMemberId.toString() !== actorMembershipId.toString()) {
+    throw new AppError(
+      403,
+      "Only the current Primary Recruiter can First Assign Applications for this Job",
+      { field: "role" },
+    );
+  }
+};
+
+// BR-07 / TX-02: assignee eligibility must be derived from persisted Job/Member/User/Company.
+const assertAssigneeEligibleForFirstAssign = async ({
+  assigneeCompanyMemberId,
+  job,
+  session,
+} = {}) => {
+  if (!mongoose.isValidObjectId(assigneeCompanyMemberId)) {
+    throw new AppError(400, "Invalid assignee CompanyMember id", {
+      field: "assigneeCompanyMemberId",
+    });
+  }
+
+  let membershipQuery = CompanyMember.findById(assigneeCompanyMemberId);
+  if (session) {
+    membershipQuery = membershipQuery.session(session);
+  }
+
+  const membership = await membershipQuery;
+
+  if (!membership) {
+    throw new AppError(409, "Assignee Recruiter was not found", {
+      field: "assigneeCompanyMemberId",
+    });
+  }
+
+  // BR-40: assignee must belong to Job company.
+  if (membership.companyId.toString() !== job.companyId.toString()) {
+    throw new AppError(409, "Assignee must belong to the Job Company", {
+      field: "assigneeCompanyMemberId",
+    });
+  }
+
+  if (membership.role !== COMPANY_MEMBER_ROLE.RECRUITER) {
+    throw new AppError(409, "Assignee must be a Recruiter", {
+      field: "assigneeCompanyMemberId",
+    });
+  }
+
+  if (membership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+    throw new AppError(409, "Assignee CompanyMember must be ACTIVE", {
+      field: "assigneeCompanyMemberId",
+      status: membership.status,
+    });
+  }
+
+  const membershipIdStr = membership._id.toString();
+  const isPrimary =
+    job.primaryRecruiterCompanyMemberId.toString() === membershipIdStr;
+  const isSupporting = (job.supportingRecruiterCompanyMemberIds ?? []).some(
+    (id) => id.toString() === membershipIdStr,
+  );
+
+  if (!isPrimary && !isSupporting) {
+    throw new AppError(
+      409,
+      "Assignee must be the current Primary or Supporting Recruiter of the Job",
+      { field: "assigneeCompanyMemberId" },
+    );
+  }
+
+  let userQuery = User.findById(membership.userId).select("status fullName avatarUrl");
+  if (session) {
+    userQuery = userQuery.session(session);
+  }
+
+  const user = await userQuery;
+
+  if (!user || user.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(409, "Assignee User must be ACTIVE", {
+      field: "assigneeCompanyMemberId",
+    });
+  }
+
+  let companyQuery = Company.findById(job.companyId).select(
+    "approvalStatus operationalStatus",
+  );
+  if (session) {
+    companyQuery = companyQuery.session(session);
+  }
+
+  const company = await companyQuery;
+
+  if (!isOwningCompanyActiveForPublicEligibility(company)) {
+    throw new AppError(409, "Owning Company is not operational", {
+      field: "companyId",
+    });
+  }
+
+  return { membership, user, company };
+};
+
+const buildPrimaryApplicationViewFromDocs = async ({
+  application,
+  assigneeMembership,
+  assigneeUser,
+  session,
+} = {}) => {
+  let candidateQuery = User.findById(application.candidateUserId).select(
+    "fullName avatarUrl",
+  );
+  if (session) {
+    candidateQuery = candidateQuery.session(session);
+  }
+
+  const candidateUser = await candidateQuery;
+
+  let assignedRecruiter = null;
+  if (!isApplicationUnassigned(application)) {
+    let membership = assigneeMembership;
+    let user = assigneeUser;
+
+    if (membership == null) {
+      let membershipQuery = CompanyMember.findById(
+        application.assignedRecruiterCompanyMemberId,
+      ).select("userId jobTitle");
+      if (session) {
+        membershipQuery = membershipQuery.session(session);
+      }
+      membership = await membershipQuery;
+    }
+
+    if (membership != null && user == null) {
+      let userQuery = User.findById(membership.userId).select(
+        "fullName avatarUrl",
+      );
+      if (session) {
+        userQuery = userQuery.session(session);
+      }
+      user = await userQuery;
+    }
+
+    assignedRecruiter = toPublicAssignedRecruiterSummary({
+      membership,
+      user,
+    });
+  }
+
+  return toPrimaryJobApplicationView(application, {
+    candidate: toPublicCandidateSummary(candidateUser),
+    assignedRecruiter,
+  });
+};
+
+const rejectFailedFirstAssignCas = async ({
+  applicationId,
+  expectedVersion,
+  session,
+} = {}) => {
+  let latestQuery = Application.findById(applicationId);
+  if (session) {
+    latestQuery = latestQuery.session(session);
+  }
+
+  const latestApplication = await latestQuery;
+
+  if (!latestApplication) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (isApplicationTerminalStatus(latestApplication.status)) {
+    throw new AppError(409, "Terminal Applications cannot be assigned", {
+      field: "status",
+      status: latestApplication.status,
+    });
+  }
+
+  if (!isApplicationUnassigned(latestApplication)) {
+    throw new AppError(409, "Application already has an Assignee", {
+      field: "assignedRecruiterCompanyMemberId",
+    });
+  }
+
+  if (latestApplication.version !== expectedVersion) {
+    throw new AppError(
+      409,
+      "Application has changed; refresh and retry First Assign",
+      { field: "expectedVersion" },
+    );
+  }
+
+  throw new AppError(
+    409,
+    "Application has changed; refresh and retry First Assign",
+    { field: "expectedVersion" },
+  );
+};
+
+const firstAssignApplication = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  assigneeCompanyMemberId,
+  expectedVersion,
+  clientCompanyId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (
+    typeof expectedVersion !== "number" ||
+    !Number.isInteger(expectedVersion) ||
+    expectedVersion < 0
+  ) {
+    throw new AppError(400, "expectedVersion must be a non-negative integer", {
+      field: "expectedVersion",
+    });
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const session = await mongoose.startSession();
+  let assignedApplication = null;
+  let job = null;
+  let assigneeContext = null;
+
+  try {
+    await session.withTransaction(async () => {
+      job = await Job.findById(jobId).session(session);
+
+      if (!job) {
+        throw new AppError(404, "Job not found", {
+          field: "jobId",
+        });
+      }
+
+      assertSameCompanyTenant({
+        resourceCompanyId: job.companyId,
+        tenantCompanyId: context.companyId,
+      });
+
+      // BR-06 / BR-09 / BR-42: only current Primary may First Assign.
+      assertCurrentPrimaryOfJob({
+        job,
+        actorMembershipId: context.membership._id,
+      });
+
+      const application = await Application.findById(applicationId).session(
+        session,
+      );
+
+      if (!application) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      if (application.jobId.toString() !== job._id.toString()) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      // BR-44: V10 First Assign only covers Direct Applications.
+      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
+        throw new AppError(409, "Only Direct Applications can be First Assigned", {
+          field: "source",
+        });
+      }
+
+      // BR-17: terminal Applications cannot change Assignee.
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot be assigned", {
+          field: "status",
+          status: application.status,
+        });
+      }
+
+      // Canonical V10 Unassigned + First Assign boundary is APPLIED only
+      // (status×assignment matrix forbids Unassigned pipeline states).
+      if (application.status !== APPLICATION_STATUS.APPLIED) {
+        throw new AppError(
+          409,
+          "Only APPLIED Unassigned Applications can be First Assigned",
+          { field: "status", status: application.status },
+        );
+      }
+
+      if (!isApplicationUnassigned(application)) {
+        throw new AppError(409, "Application already has an Assignee", {
+          field: "assignedRecruiterCompanyMemberId",
+        });
+      }
+
+      // TX-02: re-validate target eligibility inside the commit transaction.
+      assigneeContext = await assertAssigneeEligibleForFirstAssign({
+        assigneeCompanyMemberId,
+        job,
+        session,
+      });
+
+      // TX-01 / BR-36 / BR-37: atomic Unassigned + version CAS; no intermediate state.
+      // MongoDB null equality matches both explicit null and missing assignee fields.
+      assignedApplication = await Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          jobId: job._id,
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          status: APPLICATION_STATUS.APPLIED,
+          version: expectedVersion,
+          assignedRecruiterCompanyMemberId: null,
+        },
+        {
+          $set: {
+            assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
+          },
+          $inc: {
+            version: 1,
+          },
+        },
+        {
+          returnDocument: "after",
+          session,
+        },
+      );
+
+      if (!assignedApplication) {
+        await rejectFailedFirstAssignCas({
+          applicationId: application._id,
+          expectedVersion,
+          session,
+        });
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  const applicationView = await buildPrimaryApplicationViewFromDocs({
+    application: assignedApplication,
+    assigneeMembership: assigneeContext.membership,
+    assigneeUser: assigneeContext.user,
+  });
+
+  return {
+    job: toPublicJob(job),
+    application: applicationView,
   };
 };
 
@@ -807,6 +1186,7 @@ export {
   captureUploadedSubmittedCvSnapshot,
   deepCopyGeneratedContent,
   directApplyToJob,
+  firstAssignApplication,
   isApplicationUnassigned,
   listPrimaryJobApplications,
   loadEligibleCandidateCvForDirectApply,
