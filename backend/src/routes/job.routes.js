@@ -16,31 +16,12 @@ import {
   submitDraftJobHandler,
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
-import {
-  downloadPrimaryJobApplicationSubmittedCvHandler,
-  downloadRecruiterMyApplicationSubmittedCvHandler,
-  firstAssignApplicationHandler,
-  forceReassignApplicationHandler,
-  getManagedJobPipelineWorkspaceHandler,
-  getRecruiterMyApplicationHandler,
-  listManagedJobsHandler,
-  listPrimaryJobApplicationsHandler,
-  listRecruiterMyApplicationsHandler,
-  previewPrimaryJobApplicationSubmittedCvHandler,
-  previewRecruiterMyApplicationSubmittedCvHandler,
-  reassignApplicationHandler,
-  updateApplicationRecruitmentPipelineStatusHandler,
-} from "../controllers/application.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-company-manager-business-access.js";
 import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-company-staff-business-access.js";
 import authorizeRecruiterBusinessAccess from "../middlewares/authorize-recruiter-business-access.js";
 import validateCreateDraftJob from "../middlewares/validate-create-draft-job.js";
 import validateAddSupportingRecruiter from "../middlewares/validate-add-supporting-recruiter.js";
-import validateFirstAssignApplication from "../middlewares/validate-first-assign-application.js";
-import validateForceReassignApplication from "../middlewares/validate-force-reassign-application.js";
-import validateReassignApplication from "../middlewares/validate-reassign-application.js";
-import validateRecruitmentPipelineStatus from "../middlewares/validate-recruitment-pipeline-status.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
 import validateReplacePrimaryRecruiter from "../middlewares/validate-replace-primary-recruiter.js";
 import validateUpdateDraftJob from "../middlewares/validate-update-draft-job.js";
@@ -52,41 +33,6 @@ router.get(
   authenticateAccess,
   authorizeCompanyStaffBusinessAccess,
   listInternalJobsHandler,
-);
-
-router.get(
-  "/managed",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  listManagedJobsHandler,
-);
-
-router.get(
-  "/my-applications",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  listRecruiterMyApplicationsHandler,
-);
-
-router.get(
-  "/my-applications/:applicationId",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  getRecruiterMyApplicationHandler,
-);
-
-router.get(
-  "/my-applications/:applicationId/submitted-cv/preview",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  previewRecruiterMyApplicationSubmittedCvHandler,
-);
-
-router.get(
-  "/my-applications/:applicationId/submitted-cv/download",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  downloadRecruiterMyApplicationSubmittedCvHandler,
 );
 
 router.get(
@@ -102,66 +48,6 @@ router.post(
   authorizeRecruiterBusinessAccess,
   validateCreateDraftJob,
   createDraftJobHandler,
-);
-
-router.get(
-  "/:jobId/applications",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  listPrimaryJobApplicationsHandler,
-);
-
-router.get(
-  "/:jobId/applications/:applicationId/submitted-cv/preview",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  previewPrimaryJobApplicationSubmittedCvHandler,
-);
-
-router.get(
-  "/:jobId/applications/:applicationId/submitted-cv/download",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  downloadPrimaryJobApplicationSubmittedCvHandler,
-);
-
-router.get(
-  "/:jobId/workspace",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  getManagedJobPipelineWorkspaceHandler,
-);
-
-router.post(
-  "/:jobId/applications/:applicationId/assign",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  validateFirstAssignApplication,
-  firstAssignApplicationHandler,
-);
-
-router.post(
-  "/:jobId/applications/:applicationId/reassign",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  validateReassignApplication,
-  reassignApplicationHandler,
-);
-
-router.post(
-  "/:jobId/applications/:applicationId/force-reassign",
-  authenticateAccess,
-  authorizeCompanyManagerBusinessAccess,
-  validateForceReassignApplication,
-  forceReassignApplicationHandler,
-);
-
-router.post(
-  "/:jobId/applications/:applicationId/pipeline",
-  authenticateAccess,
-  authorizeRecruiterBusinessAccess,
-  validateRecruitmentPipelineStatus,
-  updateApplicationRecruitmentPipelineStatusHandler,
 );
 
 router.get(

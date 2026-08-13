@@ -9,7 +9,6 @@ import config from "../config/index.js";
 import AuthSession from "../models/auth-session.model.js";
 import AuthToken from "../models/auth-token.model.js";
 import CompanyMember from "../models/company-member.model.js";
-import Job from "../models/job.model.js";
 import User from "../models/user.model.js";
 import { resolveCompanyManagerRecruiterManagementContext } from "./company.service.js";
 import { issuePasswordReset } from "./auth.service.js";
@@ -21,11 +20,6 @@ import {
   findAllUnfinishedJobsAsPrimary,
   findAllUnfinishedJobsAsSupporting,
 } from "./job.service.js";
-import {
-  assertNoOutstandingRecruiterApplicationResponsibility,
-  executeTrustedPreLifecycleApplicationHandoff,
-  findNonTerminalApplicationsAssignedToRecruiter,
-} from "./application.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
@@ -414,214 +408,6 @@ const loadSameTenantRecruiterMembership = async ({
   };
 };
 
-const buildLifecycleTransferMap = (transfers = []) => {
-  const transferMap = new Map();
-
-  for (const transfer of transfers) {
-    if (
-      !transfer.jobId ||
-      !mongoose.Types.ObjectId.isValid(transfer.jobId)
-    ) {
-      throw new AppError(400, "Each transfer must specify a valid jobId", {
-        field: "transfers",
-      });
-    }
-
-    if (
-      !transfer.replacementCompanyMemberId ||
-      !mongoose.Types.ObjectId.isValid(transfer.replacementCompanyMemberId)
-    ) {
-      throw new AppError(
-        400,
-        "Each transfer must specify a valid replacementCompanyMemberId",
-        { field: "transfers" },
-      );
-    }
-
-    transferMap.set(
-      transfer.jobId.toString(),
-      transfer.replacementCompanyMemberId.toString(),
-    );
-  }
-
-  return transferMap;
-};
-
-// Replacement context for Application handoff during LOCK/TERMINATE:
-// 1) explicit transfers[jobId] from the existing V6 lifecycle request; or
-// 2) Supporting-only departure → current Primary (Take over context).
-// Do not invent another selector when neither context exists.
-const resolveApplicationHandoffReplacementCompanyMemberId = ({
-  job,
-  outgoingCompanyMemberId,
-  transferMap,
-}) => {
-  const jobIdStr = job._id.toString();
-  const outgoingIdStr = outgoingCompanyMemberId.toString();
-
-  if (transferMap.has(jobIdStr)) {
-    return transferMap.get(jobIdStr);
-  }
-
-  const isPrimary =
-    job.primaryRecruiterCompanyMemberId.toString() === outgoingIdStr;
-  const isSupporting = (job.supportingRecruiterCompanyMemberIds ?? []).some(
-    (id) => id.toString() === outgoingIdStr,
-  );
-
-  if (isSupporting && !isPrimary) {
-    return job.primaryRecruiterCompanyMemberId.toString();
-  }
-
-  throw new AppError(
-    409,
-    "Recruiter has outstanding Application responsibility and no replacement was specified",
-    {
-      field: "transfers",
-      jobId: jobIdStr,
-      jobStatus: job.status,
-    },
-  );
-};
-
-const assertZeroActiveRecruiterResponsibility = async ({
-  companyId,
-  recruiterCompanyMemberId,
-  session,
-} = {}) => {
-  await assertNoOutstandingRecruiterTeamResponsibility({
-    companyId,
-    recruiterCompanyMemberId,
-    session,
-  });
-
-  await assertNoOutstandingRecruiterApplicationResponsibility({
-    recruiterCompanyMemberId,
-    session,
-  });
-};
-
-// V10 Slice 08 / BR-28 / TX-05: unify Job-team forced transfer and Application
-// pre-lifecycle handoff before LOCK/TERMINATE completion. Per-resource commits
-// may progress independently; final lifecycle commit still requires zero active
-// responsibility on both dimensions.
-const executeUnifiedResponsibilityHandoffBeforeLifecycleCompletion = async ({
-  companyId,
-  outgoingCompanyMemberId,
-  transferMap,
-} = {}) => {
-  const primaryJobs = await findAllUnfinishedJobsAsPrimary({
-    companyId,
-    primaryRecruiterCompanyMemberId: outgoingCompanyMemberId,
-  });
-
-  const supportingJobs = await findAllUnfinishedJobsAsSupporting({
-    companyId,
-    supportingRecruiterCompanyMemberId: outgoingCompanyMemberId,
-  });
-
-  // BR-27: unfinished Primary Jobs still require an explicit replacement.
-  for (const job of primaryJobs) {
-    const jobIdStr = job._id.toString();
-
-    if (!transferMap.has(jobIdStr)) {
-      throw new AppError(
-        409,
-        "Recruiter has outstanding Primary Job responsibility and no replacement was specified",
-        {
-          field: "primaryRecruiterCompanyMemberId",
-          jobId: jobIdStr,
-          jobStatus: job.status,
-        },
-      );
-    }
-  }
-
-  // 1) Job-team Primary transfers first so Application targets that become the
-  // new Primary are on the Recruitment Team before A→B handoff.
-  for (const job of primaryJobs) {
-    const jobIdStr = job._id.toString();
-    const replacementId = transferMap.get(jobIdStr);
-
-    await executeForcedPrimaryTransfer({
-      jobId: job._id,
-      companyId,
-      oldPrimaryCompanyMemberId: outgoingCompanyMemberId,
-      replacementCompanyMemberId: replacementId,
-    });
-  }
-
-  // 2) Application responsibility handoff for every non-terminal Application
-  // still assigned to the outgoing Recruiter (PUBLISHED/CLOSED/EXPIRED alike).
-  const assignedApplications =
-    await findNonTerminalApplicationsAssignedToRecruiter({
-      assigneeCompanyMemberId: outgoingCompanyMemberId,
-    });
-
-  const applicationsByJobId = new Map();
-
-  for (const application of assignedApplications) {
-    const jobIdStr = application.jobId.toString();
-
-    if (!applicationsByJobId.has(jobIdStr)) {
-      applicationsByJobId.set(jobIdStr, []);
-    }
-
-    applicationsByJobId.get(jobIdStr).push(application);
-  }
-
-  for (const [jobIdStr, applications] of applicationsByJobId) {
-    const job = await Job.findById(jobIdStr);
-
-    if (!job) {
-      throw new AppError(404, "Job not found", {
-        field: "jobId",
-        jobId: jobIdStr,
-      });
-    }
-
-    if (job.companyId.toString() !== companyId.toString()) {
-      throw new AppError(403, "Job does not belong to the expected Company", {
-        field: "companyId",
-      });
-    }
-
-    const replacementId = resolveApplicationHandoffReplacementCompanyMemberId({
-      job,
-      outgoingCompanyMemberId,
-      transferMap,
-    });
-
-    for (const application of applications) {
-      await executeTrustedPreLifecycleApplicationHandoff({
-        companyId,
-        jobId: application.jobId.toString(),
-        applicationId: application._id.toString(),
-        assigneeCompanyMemberId: replacementId,
-        expectedAssigneeCompanyMemberId: outgoingCompanyMemberId.toString(),
-        expectedVersion: application.version,
-        verifiedOutgoingSubjectCompanyMemberId:
-          outgoingCompanyMemberId.toString(),
-      });
-    }
-  }
-
-  // 3) Supporting removals after Application handoff so Take-over-to-Primary
-  // remains eligible while the outgoing Supporting is still on the team.
-  for (const job of supportingJobs) {
-    await executeForcedSupportingRemoval({
-      jobId: job._id,
-      companyId,
-      supportingCompanyMemberId: outgoingCompanyMemberId,
-    });
-  }
-
-  await assertZeroActiveRecruiterResponsibility({
-    companyId,
-    recruiterCompanyMemberId: outgoingCompanyMemberId,
-  });
-};
-
 const lockRecruiter = async ({
   managerUser,
   recruiterId,
@@ -650,12 +436,89 @@ const lockRecruiter = async ({
     });
   }
 
-  const transferMap = buildLifecycleTransferMap(transfers);
+  // V6 F05: forced transfer before lock completion.
+  // Build a map of jobId → replacementCompanyMemberId from caller-provided transfers.
+  const transferMap = new Map();
 
-  await executeUnifiedResponsibilityHandoffBeforeLifecycleCompletion({
+  for (const transfer of transfers) {
+    if (
+      !transfer.jobId ||
+      !mongoose.Types.ObjectId.isValid(transfer.jobId)
+    ) {
+      throw new AppError(400, "Each transfer must specify a valid jobId", {
+        field: "transfers",
+      });
+    }
+
+    if (
+      !transfer.replacementCompanyMemberId ||
+      !mongoose.Types.ObjectId.isValid(transfer.replacementCompanyMemberId)
+    ) {
+      throw new AppError(
+        400,
+        "Each transfer must specify a valid replacementCompanyMemberId",
+        { field: "transfers" },
+      );
+    }
+
+    transferMap.set(transfer.jobId.toString(), transfer.replacementCompanyMemberId.toString());
+  }
+
+  // Find all unfinished Jobs where Recruiter is Primary.
+  const primaryJobs = await findAllUnfinishedJobsAsPrimary({
     companyId: context.companyId,
-    outgoingCompanyMemberId: membership._id,
-    transferMap,
+    primaryRecruiterCompanyMemberId: membership._id,
+  });
+
+  // Find all unfinished Jobs where Recruiter is Supporting.
+  const supportingJobs = await findAllUnfinishedJobsAsSupporting({
+    companyId: context.companyId,
+    supportingRecruiterCompanyMemberId: membership._id,
+  });
+
+  // BR-27: if any Primary Job has no replacement specified, block lock.
+  for (const job of primaryJobs) {
+    const jobIdStr = job._id.toString();
+
+    if (!transferMap.has(jobIdStr)) {
+      throw new AppError(
+        409,
+        "Recruiter has outstanding Primary Job responsibility and no replacement was specified",
+        {
+          field: "primaryRecruiterCompanyMemberId",
+          jobId: jobIdStr,
+          jobStatus: job.status,
+        },
+      );
+    }
+  }
+
+  // Execute forced Primary transfers (TX-03: per-Job, not global all-or-nothing).
+  for (const job of primaryJobs) {
+    const jobIdStr = job._id.toString();
+    const replacementId = transferMap.get(jobIdStr);
+
+    await executeForcedPrimaryTransfer({
+      jobId: job._id,
+      companyId: context.companyId,
+      oldPrimaryCompanyMemberId: membership._id,
+      replacementCompanyMemberId: replacementId,
+    });
+  }
+
+  // Execute forced Supporting removals (BR-28).
+  for (const job of supportingJobs) {
+    await executeForcedSupportingRemoval({
+      jobId: job._id,
+      companyId: context.companyId,
+      supportingCompanyMemberId: membership._id,
+    });
+  }
+
+  // Final guard: confirm zero outstanding responsibility before lock.
+  await assertNoOutstandingRecruiterTeamResponsibility({
+    companyId: context.companyId,
+    recruiterCompanyMemberId: membership._id,
   });
 
   const session = await mongoose.startSession();
@@ -676,9 +539,10 @@ const lockRecruiter = async ({
         });
       }
 
-      // TX-02 / PI-24: re-evaluate zero Job-team + Application responsibility
-      // inside the terminal serialization boundary.
-      await assertZeroActiveRecruiterResponsibility({
+      // TX-02: re-evaluate zero active responsibility inside the terminal
+      // serialization boundary so concurrent assignment cannot commit between
+      // a stale pre-check and lifecycle completion.
+      await assertNoOutstandingRecruiterTeamResponsibility({
         companyId: context.companyId,
         recruiterCompanyMemberId: membership._id,
         session,
@@ -843,13 +707,88 @@ const terminateRecruiter = async ({
     );
   }
 
-  const transferMap = buildLifecycleTransferMap(transfers);
+  // V6 F05: forced transfer before terminate completion — reuses the same
+  // canonical foundation as lock (Slice 05). Build transfer map, find
+  // unfinished Jobs, execute per-Job transfers, then assert zero responsibility.
+  const transferMap = new Map();
 
-  // Same unified Job-team + Application handoff foundation as LOCK (TX-05).
-  await executeUnifiedResponsibilityHandoffBeforeLifecycleCompletion({
+  for (const transfer of transfers) {
+    if (
+      !transfer.jobId ||
+      !mongoose.Types.ObjectId.isValid(transfer.jobId)
+    ) {
+      throw new AppError(400, "Each transfer must specify a valid jobId", {
+        field: "transfers",
+      });
+    }
+
+    if (
+      !transfer.replacementCompanyMemberId ||
+      !mongoose.Types.ObjectId.isValid(transfer.replacementCompanyMemberId)
+    ) {
+      throw new AppError(
+        400,
+        "Each transfer must specify a valid replacementCompanyMemberId",
+        { field: "transfers" },
+      );
+    }
+
+    transferMap.set(transfer.jobId.toString(), transfer.replacementCompanyMemberId.toString());
+  }
+
+  const primaryJobs = await findAllUnfinishedJobsAsPrimary({
     companyId: context.companyId,
-    outgoingCompanyMemberId: membership._id,
-    transferMap,
+    primaryRecruiterCompanyMemberId: membership._id,
+  });
+
+  const supportingJobs = await findAllUnfinishedJobsAsSupporting({
+    companyId: context.companyId,
+    supportingRecruiterCompanyMemberId: membership._id,
+  });
+
+  // BR-27: block terminate when any Primary Job has no replacement specified.
+  for (const job of primaryJobs) {
+    const jobIdStr = job._id.toString();
+
+    if (!transferMap.has(jobIdStr)) {
+      throw new AppError(
+        409,
+        "Recruiter has outstanding Primary Job responsibility and no replacement was specified",
+        {
+          field: "primaryRecruiterCompanyMemberId",
+          jobId: jobIdStr,
+          jobStatus: job.status,
+        },
+      );
+    }
+  }
+
+  // TX-03: per-Job forced Primary transfers (not global all-or-nothing).
+  for (const job of primaryJobs) {
+    const jobIdStr = job._id.toString();
+    const replacementId = transferMap.get(jobIdStr);
+
+    await executeForcedPrimaryTransfer({
+      jobId: job._id,
+      companyId: context.companyId,
+      oldPrimaryCompanyMemberId: membership._id,
+      replacementCompanyMemberId: replacementId,
+    });
+  }
+
+  // BR-28: forced Supporting removals.
+  for (const job of supportingJobs) {
+    await executeForcedSupportingRemoval({
+      jobId: job._id,
+      companyId: context.companyId,
+      supportingCompanyMemberId: membership._id,
+    });
+  }
+
+  // Final guard: zero active responsibility before terminate completion.
+  await assertNoOutstandingRecruiterTeamResponsibility({
+    companyId: context.companyId,
+    recruiterCompanyMemberId: membership._id,
   });
 
   const session = await mongoose.startSession();
@@ -894,8 +833,10 @@ const terminateRecruiter = async ({
         }
       }
 
-      // TX-02 / PI-24: dual zero-responsibility guard at completion boundary.
-      await assertZeroActiveRecruiterResponsibility({
+      // TX-02: re-evaluate zero active responsibility inside the terminal
+      // serialization boundary so concurrent assignment cannot commit between
+      // a stale pre-check and lifecycle completion.
+      await assertNoOutstandingRecruiterTeamResponsibility({
         companyId: context.companyId,
         recruiterCompanyMemberId: membership._id,
         session,
