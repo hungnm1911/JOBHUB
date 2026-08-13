@@ -16,6 +16,7 @@ import {
   submitDraftJobHandler,
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
+import { listPrimaryJobApplicationsHandler } from "../controllers/application.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-company-manager-business-access.js";
 import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-company-staff-business-access.js";
@@ -48,6 +49,13 @@ router.post(
   authorizeRecruiterBusinessAccess,
   validateCreateDraftJob,
   createDraftJobHandler,
+);
+
+router.get(
+  "/:jobId/applications",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  listPrimaryJobApplicationsHandler,
 );
 
 router.get(

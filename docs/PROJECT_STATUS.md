@@ -26,8 +26,9 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
 **V10 — Phân công Application và Recruitment Pipeline** has Slice 01 —
-Application persistence foundation and Slice 02 — V9 compatibility +
-Job-retention compatibility `IMPLEMENTED AND VERIFIED`. Its approved
+Application persistence foundation, Slice 02 — V9 compatibility +
+Job-retention compatibility, and Slice 03 — Unassigned Applications +
+Primary Application View `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
 and
@@ -42,7 +43,13 @@ the V10 Application shape (Assigned APPLIED still Replace/Withdraw; Withdraw
 keeps Assignee; SCREENING locks Candidate Replace/Withdraw; CLOSED/EXPIRED
 blocks Replace but not Withdraw and does not auto-mutate Applications) and
 keeps Job retention on the V5 lifecycle without an Application↔Job delete
-transaction. Assign/Reassign/Take over, Recruitment Pipeline, Managed Jobs,
+transaction. Slice 03 adds Primary-only
+`GET /api/jobs/:jobId/applications` so the current Primary Recruiter can read
+Direct Applications of that Job (Assigned and Unassigned), deriving Unassigned
+from missing/null assignee rather than status, exposing Candidate, Job,
+Recruitment Status, current Assignee, `appliedAt`, and `submittedCvSnapshot`
+without mutating Application state or opening CandidateCV library access.
+Assign/Reassign/Take over, Recruitment Pipeline, Managed Jobs aggregates,
 My Applications, workload queries, and other remaining Fxx workflow surfaces
 remain deferred by the approved slice order.
 
@@ -83,18 +90,34 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 02):** Slices 01–02 are complete. First
+- **V10 subsequent slices (after Slice 03):** Slices 01–03 are complete. First
   Assign, Reassign/Take over, continuous eligibility, Recruitment Pipeline,
-  Managed Jobs, Current Workload, Recruiter/Candidate My Applications, and
-  related read projections remain deferred until their owning slices start.
-  Job retention continues on the V5 lifecycle without an Application↔Job delete
-  transaction.
+  Managed Jobs aggregates/counts, Current Workload, Recruiter/Candidate My
+  Applications, and related read projections remain deferred until their
+  owning slices start. Job retention continues on the V5 lifecycle without an
+  Application↔Job delete transaction.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 03 — Unassigned Applications and Primary
+  Application View (F01; BR-03, BR-05, BR-31, BR-40, BR-44): authenticated
+  Recruiter who is current Primary of a Job lists that Job's
+  `DIRECT_APPLICATION` Applications via `GET /api/jobs/:jobId/applications`
+  (`listPrimaryJobApplications`); response includes Job, Candidate summary,
+  Recruitment Status, current Assigned Recruiter when present, `appliedAt`,
+  and `submittedCvSnapshot`; Unassigned is derived from absent/null
+  `assignedRecruiterCompanyMemberId` (not status); Supporting, other-Job
+  Primary, cross-Company Recruiter, Company Manager, Platform Admin, and
+  Candidate are denied; snapshot read does not grant CandidateCV My CVs
+  access; read does not mutate status/assignee/snapshot/identity/version.
+  Focused coverage in `test/application/v10-primary-application-view.test.js`.
+  The official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 90 files
+  / 684 tests).
 
 - **Implemented; verified:** V10 Slice 02 — V9 compatibility and Job-retention
   compatibility (F01, F09; BR-01–BR-02, BR-23, BR-25–BR-26, BR-29–BR-31, BR-36,

@@ -14,11 +14,17 @@ import USER_STATUS from "../constants/user-status.js";
 import Application from "../models/application.model.js";
 import CandidateCV from "../models/candidate-cv.model.js";
 import Company from "../models/company.model.js";
+import CompanyMember from "../models/company-member.model.js";
 import Job from "../models/job.model.js";
+import User from "../models/user.model.js";
 import AppError from "../utils/app-error.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
+import {
+  assertSameCompanyTenant,
+  resolveRecruiterBusinessContext,
+} from "./company.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
-import { isJobPubliclyEligible } from "./job.service.js";
+import { isJobPubliclyEligible, toPublicJob } from "./job.service.js";
 
 const uploadApplicationSubmittedCvSnapshotFile = (buffer) => {
   return uploadFileBuffer({
@@ -114,6 +120,201 @@ const toPublicApplication = (application) => {
     version: application.version,
     createdAt: application.createdAt,
     updatedAt: application.updatedAt,
+  };
+};
+
+// BR-05 / PI-05: Unassigned is assignment-state only (absent or null), never a status.
+const isApplicationUnassigned = (application) => {
+  return application?.assignedRecruiterCompanyMemberId == null;
+};
+
+const toPublicCandidateSummary = (user) => {
+  if (user == null) {
+    return null;
+  }
+
+  return {
+    id: user._id.toString(),
+    fullName: user.fullName,
+    avatarUrl: user.avatarUrl ?? null,
+  };
+};
+
+const toPublicAssignedRecruiterSummary = ({ membership, user } = {}) => {
+  if (membership == null) {
+    return null;
+  }
+
+  return {
+    companyMemberId: membership._id.toString(),
+    jobTitle: membership.jobTitle ?? null,
+    fullName: user?.fullName ?? null,
+    avatarUrl: user?.avatarUrl ?? null,
+  };
+};
+
+const toPrimaryJobApplicationView = (
+  application,
+  { candidate, assignedRecruiter } = {},
+) => {
+  const assignedRecruiterCompanyMemberId =
+    application.assignedRecruiterCompanyMemberId == null
+      ? null
+      : application.assignedRecruiterCompanyMemberId.toString();
+
+  return {
+    id: application._id.toString(),
+    candidateUserId: application.candidateUserId.toString(),
+    jobId: application.jobId.toString(),
+    source: application.source,
+    status: application.status,
+    assignedRecruiterCompanyMemberId,
+    isUnassigned: isApplicationUnassigned(application),
+    assignedRecruiter: assignedRecruiter ?? null,
+    candidate: candidate ?? null,
+    submittedCvSnapshot: toPublicSubmittedCvSnapshot(
+      application.submittedCvSnapshot,
+    ),
+    appliedAt: application.appliedAt,
+    withdrawnAt: application.withdrawnAt,
+    withdrawReason: application.withdrawReason,
+    version: application.version,
+    createdAt: application.createdAt,
+    updatedAt: application.updatedAt,
+  };
+};
+
+const listPrimaryJobApplications = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  // BR-40: tenant from trusted membership → Job.companyId, never client companyId alone.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId: context.companyId,
+  });
+
+  if (
+    job.primaryRecruiterCompanyMemberId.toString() !==
+    context.membership._id.toString()
+  ) {
+    throw new AppError(
+      403,
+      "Only the current Primary Recruiter can view Applications for this Job",
+      { field: "role" },
+    );
+  }
+
+  // BR-44: V10 Primary Application View only covers Direct Applications.
+  const applications = await Application.find({
+    jobId: job._id,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  }).sort({ appliedAt: 1, _id: 1 });
+
+  const candidateUserIds = [
+    ...new Set(
+      applications.map((application) => application.candidateUserId.toString()),
+    ),
+  ];
+  const assigneeMemberIds = [
+    ...new Set(
+      applications
+        .filter((application) => !isApplicationUnassigned(application))
+        .map((application) =>
+          application.assignedRecruiterCompanyMemberId.toString(),
+        ),
+    ),
+  ];
+
+  const [candidates, assigneeMemberships] = await Promise.all([
+    candidateUserIds.length === 0
+      ? []
+      : User.find({ _id: { $in: candidateUserIds } }).select(
+          "fullName avatarUrl",
+        ),
+    assigneeMemberIds.length === 0
+      ? []
+      : CompanyMember.find({ _id: { $in: assigneeMemberIds } }).select(
+          "userId jobTitle",
+        ),
+  ]);
+
+  const candidateById = new Map(
+    candidates.map((candidate) => [candidate._id.toString(), candidate]),
+  );
+  const assigneeMembershipById = new Map(
+    assigneeMemberships.map((membership) => [
+      membership._id.toString(),
+      membership,
+    ]),
+  );
+
+  const assigneeUserIds = [
+    ...new Set(
+      assigneeMemberships.map((membership) => membership.userId.toString()),
+    ),
+  ];
+  const assigneeUsers =
+    assigneeUserIds.length === 0
+      ? []
+      : await User.find({ _id: { $in: assigneeUserIds } }).select(
+          "fullName avatarUrl",
+        );
+  const assigneeUserById = new Map(
+    assigneeUsers.map((user) => [user._id.toString(), user]),
+  );
+
+  const applicationViews = applications.map((application) => {
+    const candidate = toPublicCandidateSummary(
+      candidateById.get(application.candidateUserId.toString()),
+    );
+
+    let assignedRecruiter = null;
+
+    if (!isApplicationUnassigned(application)) {
+      const membership = assigneeMembershipById.get(
+        application.assignedRecruiterCompanyMemberId.toString(),
+      );
+      const assigneeUser =
+        membership == null
+          ? null
+          : assigneeUserById.get(membership.userId.toString());
+
+      assignedRecruiter = toPublicAssignedRecruiterSummary({
+        membership,
+        user: assigneeUser,
+      });
+    }
+
+    return toPrimaryJobApplicationView(application, {
+      candidate,
+      assignedRecruiter,
+    });
+  });
+
+  return {
+    job: toPublicJob(job),
+    applications: applicationViews,
   };
 };
 
@@ -606,9 +807,12 @@ export {
   captureUploadedSubmittedCvSnapshot,
   deepCopyGeneratedContent,
   directApplyToJob,
+  isApplicationUnassigned,
+  listPrimaryJobApplications,
   loadEligibleCandidateCvForDirectApply,
   loadJobAcceptingDirectApplications,
   replaceSubmittedCv,
   withdrawApplication,
+  toPrimaryJobApplicationView,
   toPublicApplication,
 };
