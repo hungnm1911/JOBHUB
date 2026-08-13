@@ -1524,6 +1524,141 @@ const assertNoOutstandingRecruiterApplicationResponsibility = async ({
   }
 };
 
+// V10 Slice 09 / PI-22: Job-scoped Application responsibility. Job.status does
+// not participate — PUBLISHED/CLOSED/EXPIRED Applications all count.
+const findNonTerminalApplicationsAssignedToRecruiterOnJob = async ({
+  assigneeCompanyMemberId,
+  jobId,
+  session,
+} = {}) => {
+  if (
+    !mongoose.isValidObjectId(assigneeCompanyMemberId) ||
+    !mongoose.isValidObjectId(jobId)
+  ) {
+    return [];
+  }
+
+  let query = Application.find({
+    jobId,
+    assignedRecruiterCompanyMemberId: assigneeCompanyMemberId,
+    status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+  }).sort({ _id: 1 });
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  return query;
+};
+
+const countNonTerminalApplicationsAssignedToRecruiterOnJob = async ({
+  assigneeCompanyMemberId,
+  jobId,
+  session,
+} = {}) => {
+  if (
+    !mongoose.isValidObjectId(assigneeCompanyMemberId) ||
+    !mongoose.isValidObjectId(jobId)
+  ) {
+    return 0;
+  }
+
+  let query = Application.countDocuments({
+    jobId,
+    assignedRecruiterCompanyMemberId: assigneeCompanyMemberId,
+    status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+  });
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  return query;
+};
+
+const assertNoOutstandingRecruiterApplicationResponsibilityOnJob = async ({
+  recruiterCompanyMemberId,
+  jobId,
+  session,
+} = {}) => {
+  const outstanding = await countNonTerminalApplicationsAssignedToRecruiterOnJob(
+    {
+      assigneeCompanyMemberId: recruiterCompanyMemberId,
+      jobId,
+      session,
+    },
+  );
+
+  if (outstanding > 0) {
+    throw new AppError(
+      409,
+      "Recruiter has outstanding non-terminal Application responsibility on this Job",
+      {
+        field: "assignedRecruiterCompanyMemberId",
+        jobId: jobId.toString(),
+        count: outstanding,
+      },
+    );
+  }
+};
+
+// V10 Slice 09 / BR-28 / TX-05: trusted pre-lifecycle A→B for every non-terminal
+// Application on one Job before team-removal completion. Replacement must come
+// from canonical V6 team-transfer context (Primary Take-over or explicit
+// successor) — this helper does not invent a selector.
+const executeTrustedTeamRemovalApplicationHandoffs = async ({
+  companyId,
+  jobId,
+  outgoingCompanyMemberId,
+  replacementCompanyMemberId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(replacementCompanyMemberId)) {
+    throw new AppError(
+      409,
+      "Recruiter has outstanding Application responsibility and no replacement was specified",
+      {
+        field: "assigneeCompanyMemberId",
+        jobId: jobId?.toString?.() ?? jobId,
+      },
+    );
+  }
+
+  const outgoingIdStr = outgoingCompanyMemberId.toString();
+  const replacementIdStr = replacementCompanyMemberId.toString();
+
+  if (outgoingIdStr === replacementIdStr) {
+    throw new AppError(
+      409,
+      "Application handoff target must differ from the outgoing Recruiter",
+      { field: "assigneeCompanyMemberId" },
+    );
+  }
+
+  const applications = await findNonTerminalApplicationsAssignedToRecruiterOnJob(
+    {
+      assigneeCompanyMemberId: outgoingCompanyMemberId,
+      jobId,
+    },
+  );
+
+  for (const application of applications) {
+    await executeTrustedPreLifecycleApplicationHandoff({
+      companyId,
+      jobId: application.jobId.toString(),
+      applicationId: application._id.toString(),
+      assigneeCompanyMemberId: replacementIdStr,
+      expectedAssigneeCompanyMemberId: outgoingIdStr,
+      expectedVersion: application.version,
+      verifiedOutgoingSubjectCompanyMemberId: outgoingIdStr,
+    });
+  }
+
+  await assertNoOutstandingRecruiterApplicationResponsibilityOnJob({
+    recruiterCompanyMemberId: outgoingCompanyMemberId,
+    jobId,
+  });
+};
+
 const loadJobAcceptingDirectApplications = async (jobId, now = new Date()) => {
   if (!mongoose.isValidObjectId(jobId)) {
     throw new AppError(404, "Job not found", {
@@ -2010,13 +2145,17 @@ const withdrawApplication = async ({
 
 export {
   assertNoOutstandingRecruiterApplicationResponsibility,
+  assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
   captureGeneratedSubmittedCvSnapshot,
   captureUploadedSubmittedCvSnapshot,
   countNonTerminalApplicationsAssignedToRecruiter,
+  countNonTerminalApplicationsAssignedToRecruiterOnJob,
   deepCopyGeneratedContent,
   directApplyToJob,
   executeTrustedPreLifecycleApplicationHandoff,
+  executeTrustedTeamRemovalApplicationHandoffs,
   findNonTerminalApplicationsAssignedToRecruiter,
+  findNonTerminalApplicationsAssignedToRecruiterOnJob,
   firstAssignApplication,
   forceReassignApplication,
   isApplicationUnassigned,

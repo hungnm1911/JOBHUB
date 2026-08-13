@@ -31,8 +31,9 @@ Job-retention compatibility, Slice 03 — Unassigned Applications +
 Primary Application View, Slice 04 — First Assign Application,
 Slice 05 — Reassign / Take over Application, Slice 06 — Company Manager
 Administrative Forced Reassignment, the Slice 07 corrective assignment/
-handoff lifecycle-boundary foundation, and Slice 08 — Recruiter LOCK /
-TERMINATE Unified Responsibility Handoff
+handoff lifecycle-boundary foundation, Slice 08 — Recruiter LOCK /
+TERMINATE Unified Responsibility Handoff, and Slice 09 — Recruitment Team
+Eligibility-Loss Application Handoff
 `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
@@ -81,10 +82,16 @@ responsibility and non-terminal Application responsibility
 (PUBLISHED/CLOSED/EXPIRED), reuses V6 forced-transfer plus Slice 07 trusted
 pre-lifecycle Application handoff before lifecycle completion, and commits
 `LOCKED`/`TERMINATED` only after the dual zero-responsibility final guard
-(TX-05 partial progress preserved). Recruitment Team removal orchestration
-(Slice 09), Recruitment Pipeline, Managed Jobs aggregates, My Applications,
-workload queries, and other remaining Fxx workflow surfaces remain deferred by
-the approved slice order.
+(TX-05 partial progress preserved). Slice 09 extends V6 Recruitment Team
+operations that remove a Recruiter from the current team
+(`removeSupportingRecruiter`, Primary leave via `replacePrimaryRecruiter`) so
+required non-terminal Application handoff completes before team-removal
+commit, reusing Slice 07 trusted A→B with canonical V6 replacement context
+(Supporting leave → current Primary; Primary leave → new Primary) while
+PRIMARY→SUPPORTING keep-eligible leaves assignments unchanged; V6 PUBLISHED-only
+team-mutation gates are preserved. Recruitment Pipeline, Managed Jobs
+aggregates, My Applications, workload queries, and other remaining Fxx workflow
+surfaces remain deferred by the approved slice order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -123,20 +130,38 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 08):** Slices 01–08 are complete,
-  including LOCK/TERMINATE unified Job-team + Application responsibility
-  handoff. Recruitment Team removal Application handoff (Slice 09), continuous
-  eligibility for pipeline processing, Recruitment Pipeline, Managed Jobs
-  aggregates/counts, Current Workload, Recruiter/Candidate My Applications, and
-  related read projections remain deferred until their owning slices start. Job
-  retention continues on the V5 lifecycle without an Application↔Job delete
-  transaction.
+- **V10 subsequent slices (after Slice 09):** Slices 01–09 are complete,
+  including LOCK/TERMINATE unified responsibility handoff and Recruitment Team
+  eligibility-loss Application handoff. Continuous eligibility for pipeline
+  processing, Recruitment Pipeline, Managed Jobs aggregates/counts, Current
+  Workload, Recruiter/Candidate My Applications, and related read projections
+  remain deferred until their owning slices start. Job retention continues on
+  the V5 lifecycle without an Application↔Job delete transaction.
 
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 09 — Recruitment Team Eligibility-Loss
+  Application Handoff (F04, F09 partial; BR-07–BR-08, BR-15–BR-17, BR-27–BR-28,
+  BR-33, BR-36–BR-38, BR-40, BR-42; TX-01; TX-02; TX-05): extends
+  `removeSupportingRecruiter` and leave-team `replacePrimaryRecruiter` so
+  non-terminal Applications assigned to the outgoing Recruiter are handed off
+  via Slice 07 trusted pre-lifecycle `A → B` before team-removal completion;
+  Supporting leave reuses current Primary Take-over context; Primary leave
+  reuses `newPrimaryCompanyMemberId`; PRIMARY→SUPPORTING keep-eligible leaves
+  assignments unchanged; terminal Applications do not block and keep final
+  Assignee; TX-02 membership acquire + Job-scoped zero-app guard serializes
+  against concurrent First Assign/Reassign; V6 PUBLISHED-only team-mutation
+  gates preserved (CLOSED/EXPIRED Application handoff covered by the shared
+  helper / Slice 08 LOCK-TERMINATE path); Company lock keeps assignment.
+  Focused coverage in
+  `test/application/v10-team-removal-application-handoff.test.js`. The official
+  backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 96 files
+  / 769 tests).
 
 - **Implemented; verified:** V10 Slice 08 — Recruiter LOCK / TERMINATE Unified
   Responsibility Handoff (F04, F09 partial; BR-07–BR-08, BR-15–BR-17, BR-27–BR-28,

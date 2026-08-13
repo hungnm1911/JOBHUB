@@ -2181,7 +2181,8 @@ const addSupportingRecruiter = async ({
   };
 };
 
-// V6 F03: Remove Supporting recruiter.
+// V6 F03 + V10 Slice 09: Remove Supporting recruiter. Required non-terminal
+// Application handoff completes before team-removal commit (BR-28 / TX-02).
 const removeSupportingRecruiter = async ({
   actorUser,
   jobId,
@@ -2244,50 +2245,108 @@ const removeSupportingRecruiter = async ({
     );
   }
 
-  // BR-12/BR-13/BR-30: effectively PUBLISHED only. Atomic conditional write
-  // with $$NOW deadline guard ensures mutation-boundary consistency.
-  // Recruiter remove also binds current Primary so concurrent F04 cannot let
-  // a former Primary mutate Supporting after losing Primary authority.
-  const removeFilter = bindActorPrimaryToJobMutationFilter({
-    filter: {
-      _id: job._id,
-      companyId: context.companyId,
-      status: JOB_STATUS.PUBLISHED,
-      ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
-      supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
-    },
-    isCompanyManager,
-    actorMembershipId: context.membership._id,
-  });
-
-  const updatedJob = await Job.findOneAndUpdate(
-    removeFilter,
-    {
-      $pull: {
-        supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
-      },
-    },
-    {
-      returnDocument: "after",
-      runValidators: true,
-    },
-  );
-
-  if (!updatedJob) {
-    if (!isCompanyManager) {
-      await assertRecruiterStillCurrentPrimaryAfterMutationMiss({
-        jobId: job._id,
-        actorMembershipId: context.membership._id,
-        unauthorizedMessage:
-          "Only Company Manager or current Primary Recruiter can remove Supporting",
-      });
-    }
-
+  // BR-12/BR-13/BR-30: V6 team-removal mutation remains effectively PUBLISHED
+  // only. Reject before Application handoff so ended Jobs cannot partially
+  // transfer Applications and then fail team removal.
+  if (!isJobEffectivelyPublished(job)) {
     throw new AppError(
       409,
       "Supporting can only be removed while the Job is effectively PUBLISHED",
       { field: "status" },
     );
+  }
+
+  const {
+    assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
+    executeTrustedTeamRemovalApplicationHandoffs,
+  } = await import("./application.service.js");
+
+  // V10 Slice 09: Supporting leave → current Primary is the canonical Take-over
+  // replacement context (same as LOCK/TERMINATE Supporting departure). Do not
+  // invent another selector. Application lookup itself does not filter Job.status.
+  await executeTrustedTeamRemovalApplicationHandoffs({
+    companyId: context.companyId,
+    jobId: job._id,
+    outgoingCompanyMemberId: supportingRecruiterCompanyMemberId,
+    replacementCompanyMemberId: job.primaryRecruiterCompanyMemberId,
+  });
+
+  const session = await mongoose.startSession();
+  let updatedJob;
+
+  try {
+    await session.withTransaction(async () => {
+      // TX-02: serialize against concurrent First Assign/Reassign onto the
+      // outgoing Supporting before team-removal completion.
+      const stillActiveOutgoing =
+        await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+          recruiterCompanyMemberId: supportingRecruiterCompanyMemberId,
+          companyId: context.companyId,
+          session,
+        });
+
+      if (!stillActiveOutgoing) {
+        throw new AppError(
+          409,
+          "Supporting Recruiter is no longer active during the operation",
+          { field: "supportingRecruiterCompanyMemberId" },
+        );
+      }
+
+      await assertNoOutstandingRecruiterApplicationResponsibilityOnJob({
+        recruiterCompanyMemberId: supportingRecruiterCompanyMemberId,
+        jobId: job._id,
+        session,
+      });
+
+      // Recruiter remove also binds current Primary so concurrent F04 cannot let
+      // a former Primary mutate Supporting after losing Primary authority.
+      const removeFilter = bindActorPrimaryToJobMutationFilter({
+        filter: {
+          _id: job._id,
+          companyId: context.companyId,
+          status: JOB_STATUS.PUBLISHED,
+          ...APPLICATION_DEADLINE_STILL_FUTURE_AT_MUTATION,
+          supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
+        },
+        isCompanyManager,
+        actorMembershipId: context.membership._id,
+      });
+
+      updatedJob = await Job.findOneAndUpdate(
+        removeFilter,
+        {
+          $pull: {
+            supportingRecruiterCompanyMemberIds: supportingRecruiterCompanyMemberId,
+          },
+        },
+        {
+          returnDocument: "after",
+          runValidators: true,
+          session,
+        },
+      );
+
+      if (!updatedJob) {
+        if (!isCompanyManager) {
+          await assertRecruiterStillCurrentPrimaryAfterMutationMiss({
+            jobId: job._id,
+            actorMembershipId: context.membership._id,
+            unauthorizedMessage:
+              "Only Company Manager or current Primary Recruiter can remove Supporting",
+            session,
+          });
+        }
+
+        throw new AppError(
+          409,
+          "Supporting can only be removed while the Job is effectively PUBLISHED",
+          { field: "status" },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
   }
 
   return {
@@ -2300,10 +2359,12 @@ const removeSupportingRecruiter = async ({
   };
 };
 
-// V6 F04: Replace Primary Recruiter. Only Company Manager may promote a
-// current Supporting to Primary. Old Primary either stays as Supporting or
-// leaves team. TX-01 atomic single-document mutation; TX-02 concurrency
-// boundary with lock/terminate via in-transaction membership lock.
+// V6 F04 + V10 Slice 09: Replace Primary Recruiter. Only Company Manager may
+// promote a current Supporting to Primary. Old Primary either stays as
+// Supporting (no Application handoff) or leaves team (required Application
+// handoff to the successor first). TX-01 atomic single-document mutation;
+// TX-02 concurrency boundary with lock/terminate via in-transaction membership
+// lock.
 const replacePrimaryRecruiter = async ({
   managerUser,
   jobId,
@@ -2363,6 +2424,25 @@ const replacePrimaryRecruiter = async ({
   if (job.primaryRecruiterCompanyMemberId.toString() === newPrimaryIdStr) {
     throw new AppError(409, "Recruiter is already the Primary of this Job", {
       field: "newPrimaryCompanyMemberId",
+    });
+  }
+
+  const oldPrimaryId = job.primaryRecruiterCompanyMemberId;
+
+  // V10 Slice 09 / BR-28: leaving the team requires Application handoff to the
+  // canonical V6 successor (new Primary) while that successor is already on
+  // the Recruitment Team as Supporting. PRIMARY→SUPPORTING keeps eligibility
+  // and does not create a handoff requirement.
+  if (!keepOldPrimaryAsSupporting) {
+    const { executeTrustedTeamRemovalApplicationHandoffs } = await import(
+      "./application.service.js"
+    );
+
+    await executeTrustedTeamRemovalApplicationHandoffs({
+      companyId: context.companyId,
+      jobId: job._id,
+      outgoingCompanyMemberId: oldPrimaryId,
+      replacementCompanyMemberId: newPrimaryCompanyMemberId,
     });
   }
 
@@ -2441,14 +2521,41 @@ const replacePrimaryRecruiter = async ({
         );
       }
 
+      if (!keepOldPrimaryAsSupporting) {
+        // Serialize against concurrent assignment onto the outgoing Primary and
+        // re-check Job-scoped Application responsibility before leave-team.
+        const stillActiveOutgoing =
+          await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+            recruiterCompanyMemberId: oldPrimaryId,
+            companyId: context.companyId,
+            session,
+          });
+
+        if (!stillActiveOutgoing) {
+          throw new AppError(
+            409,
+            "Outgoing Primary Recruiter is no longer active during the operation",
+            { field: "primaryRecruiterCompanyMemberId" },
+          );
+        }
+
+        const {
+          assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
+        } = await import("./application.service.js");
+
+        await assertNoOutstandingRecruiterApplicationResponsibilityOnJob({
+          recruiterCompanyMemberId: oldPrimaryId,
+          jobId: job._id,
+          session,
+        });
+      }
+
       // TX-01 / BR-22: atomic replacement — set new Primary, remove new from
       // Supporting, and conditionally add old Primary to Supporting.
       // MongoDB does not allow $pull and $addToSet on the same field in one
       // update. When keeping old Primary as Supporting we use a two-step
       // approach within the same transaction: first swap Primary + pull new
       // from Supporting, then addToSet old Primary.
-      const oldPrimaryId = job.primaryRecruiterCompanyMemberId;
-
       updatedJob = await Job.findOneAndUpdate(
         {
           _id: job._id,
