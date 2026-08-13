@@ -374,6 +374,8 @@ const directApplyToJob = async ({
       appliedAt: new Date(),
       withdrawnAt: null,
       withdrawReason: null,
+      // V10: Unassigned is assignment-state only; normalize on Direct Apply write.
+      assignedRecruiterCompanyMemberId: null,
       version: 0,
     });
 

@@ -26,7 +26,8 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
 **V10 — Phân công Application và Recruitment Pipeline** has Slice 01 —
-Application persistence foundation `IMPLEMENTED AND VERIFIED`. Its approved
+Application persistence foundation and Slice 02 — V9 compatibility +
+Job-retention compatibility `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
 and
@@ -36,9 +37,14 @@ Recruitment Statuses, adds nullable `assignedRecruiterCompanyMemberId`
 (legacy absent and explicit `null` both mean Unassigned; no V9 backfill),
 enforces the local status×assignment matrix, keeps `version`/CAS, and adds
 IDX-A02–A05 while preserving Candidate–Job uniqueness and V9 identity/snapshot
-invariants. Assign/Reassign/Take over, Recruitment Pipeline, Managed Jobs,
-My Applications, workload queries, and other F01–F10 workflow surfaces remain
-deferred by the approved slice order.
+invariants. Slice 02 locks V9 Direct Apply / Replace / Withdraw behavior onto
+the V10 Application shape (Assigned APPLIED still Replace/Withdraw; Withdraw
+keeps Assignee; SCREENING locks Candidate Replace/Withdraw; CLOSED/EXPIRED
+blocks Replace but not Withdraw and does not auto-mutate Applications) and
+keeps Job retention on the V5 lifecycle without an Application↔Job delete
+transaction. Assign/Reassign/Take over, Recruitment Pipeline, Managed Jobs,
+My Applications, workload queries, and other remaining Fxx workflow surfaces
+remain deferred by the approved slice order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -77,10 +83,10 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 01):** Slice 01 persistence foundation is
-  complete. Assign/Reassign/Take over, continuous eligibility, Recruitment
-  Pipeline, Managed Jobs, Current Workload, Recruiter/Candidate My Applications,
-  and related read projections remain deferred until their owning slices start.
+- **V10 subsequent slices (after Slice 02):** Slices 01–02 are complete. First
+  Assign, Reassign/Take over, continuous eligibility, Recruitment Pipeline,
+  Managed Jobs, Current Workload, Recruiter/Candidate My Applications, and
+  related read projections remain deferred until their owning slices start.
   Job retention continues on the V5 lifecycle without an Application↔Job delete
   transaction.
 
@@ -89,6 +95,25 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 02 — V9 compatibility and Job-retention
+  compatibility (F01, F09; BR-01–BR-02, BR-23, BR-25–BR-26, BR-29–BR-31, BR-36,
+  BR-39, BR-41, BR-44; TX-01 compatibility): keeps canonical V9
+  `directApplyToJob` / `replaceSubmittedCv` / `withdrawApplication` on the V10
+  Application shape — Direct Apply still creates one `APPLIED` Unassigned
+  Application per Candidate–Job (explicit
+  `assignedRecruiterCompanyMemberId: null`), legacy absent assignee remains
+  Unassigned, Replace stays owner + exact `APPLIED` + Job-accepting only and
+  preserves Assignee/identity/source, Withdraw stays owner + exact `APPLIED`
+  (Unassigned or Assigned; allowed after Job `CLOSED`/`EXPIRED`) and keeps the
+  final Assignee plus snapshot, while `SCREENING`+ locks Candidate Replace/
+  Withdraw. Job `closePublishedJob` / `expirePublishedJobIfDue` do not mutate
+  Applications; Job retention stays V5 pre-publication delete authority without
+  a new Application-existence delete guard or Apply↔Delete transaction. Focused
+  coverage in `test/application/v10-v9-compatibility.test.js`. The official
+  backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 89 files
+  / 674 tests).
 
 - **Implemented; verified:** V10 Slice 01 — Application persistence foundation
   (persistence enabler for F01–F10; BR-03–BR-05, BR-17, BR-20, BR-33, BR-35–BR-36,
