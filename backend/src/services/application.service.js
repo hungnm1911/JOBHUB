@@ -332,8 +332,10 @@ const loadDirectApplicationsForJob = async (jobId) => {
   }).sort({ appliedAt: 1, _id: 1 });
 };
 
-// PI-21 / BR-33: current workload is non-terminal + assigned only; Job.status
-// does not participate. Unassigned (null/missing) never contributes.
+// PI-21 / BR-33 / Slice 05: current workload is non-terminal + assigned only;
+// Job.status does not participate. Unassigned (null/missing) never contributes.
+// BR-03 / BR-05 / BR-43: status counts still include Unassigned Applications in
+// their Recruitment Status group; Unassigned is assignment-state, not a column.
 const deriveManagedJobApplicationProjection = (applications) => {
   const countsByStatus = createEmptyCountsByStatus();
   let unassignedCount = 0;
@@ -379,10 +381,12 @@ const buildPipelineWorkspaceFromApplicationViews = (applicationViews) => {
   const unassignedApplications = [];
 
   for (const application of applicationViews) {
+    // BR-43: group by the eight Recruitment Statuses even when Unassigned.
     if (APPLICATION_PIPELINE_STATUSES.includes(application.status)) {
       pipeline[application.status].push(application);
     }
 
+    // BR-05: Unassigned filter uses current Assignee (null/missing), not status.
     if (application.isUnassigned) {
       unassignedApplications.push(application);
     }
@@ -506,8 +510,9 @@ const listPrimaryJobApplications = async ({
   };
 };
 
-// F06 / F10: Managed Jobs + Pipeline Workspace + Current Workload projections.
+// F06 / F10 / Slice 05: Managed Jobs + Pipeline Workspace + Current Workload.
 // Read-only derived views; never persist ManagedJob/Kanban/workload counters.
+// Non-terminal Unassigned Applications remain in their Recruitment Status group.
 const listManagedJobs = async ({ actorUser, clientCompanyId } = {}) => {
   const context = await resolveRecruiterBusinessContext({
     user: actorUser,
@@ -607,8 +612,9 @@ const getManagedJobPipelineWorkspace = async ({
   };
 };
 
-// F07 / F09 partial: Recruiter My Applications — current assignee projection.
-// Read-only; never invent pipeline authority from list membership alone.
+// F07 / F09 partial / Slice 05: Recruiter My Applications — current assignee
+// only. A→NONE or A→B removes the row from A; NONE→B or A→B adds it to B.
+// Read-only; list membership never invents Pipeline authority.
 const toRecruiterMyApplicationView = (applicationView, job) => {
   return {
     ...applicationView,
@@ -793,6 +799,8 @@ const toCandidateMyApplicationJob = (job) => {
   };
 };
 
+// F08 / Slice 05: Candidate sees own Application at every Recruitment Status.
+// Unassign nulls assignee-facing fields; Assign again shows the new Assignee.
 const toCandidateMyApplicationView = (
   application,
   { job, company, assignedRecruiter } = {},

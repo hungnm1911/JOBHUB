@@ -25,7 +25,7 @@ V3 Slices 01–09 are implemented and verified under the backend gate below. Pro
 
 V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the recorded acceptance corrections are implemented; Final Acceptance / regression closure passed across F01–F12. V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33, and TX-01–TX-03. V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-**V10 — Phân công Application và Recruitment Pipeline** Slices 01–04 of the
+**V10 — Phân công Application và Recruitment Pipeline** Slices 01–05 of the
 current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
 opened the persistence state matrix so every non-terminal Recruitment Status
 can persist `UNASSIGNED` or Assigned. Slice 02 extends Primary Assign of
@@ -37,12 +37,16 @@ non-terminal status on `PUBLISHED`/`CLOSED`/`EXPIRED` Jobs, converging those
 mutations onto one current-assignee CAS foundation. Slice 04 extends the same
 canonical Assign / Reassign / Unassign primitives to the owning-Company
 Manager, without a recovery-only restriction and without Pipeline authority.
-The current Product/Data contracts remain approved implementation authority.
+Slice 05 keeps Managed Jobs / Pipeline Workspace / Recruiter My Applications /
+Candidate My Applications / Current Workload compatible with that matrix:
+Unassigned remains assignment-state, not a pipeline group; reads use current
+Assignee; workload stays derived and unpersisted. The current Product/Data
+contracts remain approved implementation authority.
 The prior implementation and its 104-file / 893-test green baseline encoded
 the old state matrix and direct-handoff lifecycle semantics; that baseline
 remains regression history, not completion evidence for the current canonical
 revision. Remaining `ASSIGN / UNASSIGN` slices (automatic Unassign /
-lifecycle detach, read-projection compatibility) are not started.
+lifecycle detach) are not started.
 
 Previous V10 implementation baseline (historical, not current completion
 evidence) has Slice 01 —
@@ -273,6 +277,29 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   official backend gate passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 105
   files / 964 tests).
+
+- **Implemented; verified:** V10 Slice 05 — Read Projections and Current
+  Workload Compatibility (F06, F07, F08, F09, F10; BR-03, BR-05, BR-18–BR-20,
+  BR-25, BR-27, BR-30–BR-35, BR-41, BR-43): existing Managed Jobs, Pipeline
+  Workspace, Recruiter My Applications, Candidate My Applications, and Current
+  Workload owners remain the canonical read projections. Every non-terminal
+  Application may be `ASSIGNED` or `UNASSIGNED`; Unassigned Applications still
+  occupy their Recruitment Status pipeline group and the independent Unassigned
+  filter, which uses current `assignedRecruiterCompanyMemberId` rather than
+  `APPLIED`. Recruiter My Applications follows current Assignee only
+  (`A → NONE` / `A → B` remove from A; `NONE → B` / `A → B` add to B) and does
+  not grant Pipeline authority from list membership. Candidate My Applications
+  keeps owner visibility at every Recruitment Status, nulls assignee-facing
+  fields after Unassign, and shows the new Assignee after Assign again without
+  history or extra recruiter data. Current Workload counts only non-terminal
+  assigned Applications, including on `CLOSED`/`EXPIRED` Jobs, and is never
+  persisted. No new field, collection, index, migration, or workload counter
+  was added. Automatic Unassign / CompanyMember LOCK/TERMINATE / team-removal /
+  Platform Admin lifecycle Unassign remain later slices. Focused coverage in
+  `test/application/v10-assignment-read-projections.test.js` (1 file / 8 tests).
+  The official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 106
+  files / 972 tests).
 
 ## Previously completed and verified baseline
 
