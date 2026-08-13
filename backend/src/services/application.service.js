@@ -143,6 +143,52 @@ const isApplicationUnassigned = (application) => {
   return application?.assignedRecruiterCompanyMemberId == null;
 };
 
+const APPLICATION_TERMINAL_STATUSES = Object.freeze([
+  APPLICATION_STATUS.HIRED,
+  APPLICATION_STATUS.REJECTED,
+  APPLICATION_STATUS.WITHDRAWN,
+]);
+
+const APPLICATION_NON_TERMINAL_STATUSES = Object.freeze([
+  APPLICATION_STATUS.APPLIED,
+  APPLICATION_STATUS.SCREENING,
+  APPLICATION_STATUS.CONTACTED,
+  APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+  APPLICATION_STATUS.INTERVIEW_COMPLETED,
+]);
+
+// BR-43: Pipeline/Kanban columns are the eight canonical Recruitment Statuses.
+const APPLICATION_PIPELINE_STATUSES = Object.freeze([
+  APPLICATION_STATUS.APPLIED,
+  APPLICATION_STATUS.SCREENING,
+  APPLICATION_STATUS.CONTACTED,
+  APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+  APPLICATION_STATUS.INTERVIEW_COMPLETED,
+  APPLICATION_STATUS.HIRED,
+  APPLICATION_STATUS.REJECTED,
+  APPLICATION_STATUS.WITHDRAWN,
+]);
+
+const createEmptyCountsByStatus = () => {
+  const counts = {};
+
+  for (const status of APPLICATION_PIPELINE_STATUSES) {
+    counts[status] = 0;
+  }
+
+  return counts;
+};
+
+const createEmptyPipelineGroups = () => {
+  const pipeline = {};
+
+  for (const status of APPLICATION_PIPELINE_STATUSES) {
+    pipeline[status] = [];
+  }
+
+  return pipeline;
+};
+
 const toPublicCandidateSummary = (user) => {
   if (user == null) {
     return null;
@@ -199,53 +245,7 @@ const toPrimaryJobApplicationView = (
   };
 };
 
-const listPrimaryJobApplications = async ({
-  actorUser,
-  jobId,
-  clientCompanyId,
-} = {}) => {
-  if (!mongoose.isValidObjectId(jobId)) {
-    throw new AppError(404, "Job not found", {
-      field: "jobId",
-    });
-  }
-
-  const context = await resolveRecruiterBusinessContext({
-    user: actorUser,
-    clientCompanyId,
-  });
-
-  const job = await Job.findById(jobId);
-
-  if (!job) {
-    throw new AppError(404, "Job not found", {
-      field: "jobId",
-    });
-  }
-
-  // BR-40: tenant from trusted membership → Job.companyId, never client companyId alone.
-  assertSameCompanyTenant({
-    resourceCompanyId: job.companyId,
-    tenantCompanyId: context.companyId,
-  });
-
-  if (
-    job.primaryRecruiterCompanyMemberId.toString() !==
-    context.membership._id.toString()
-  ) {
-    throw new AppError(
-      403,
-      "Only the current Primary Recruiter can view Applications for this Job",
-      { field: "role" },
-    );
-  }
-
-  // BR-44: V10 Primary Application View only covers Direct Applications.
-  const applications = await Application.find({
-    jobId: job._id,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
-  }).sort({ appliedAt: 1, _id: 1 });
-
+const hydratePrimaryJobApplicationViews = async (applications) => {
   const candidateUserIds = [
     ...new Set(
       applications.map((application) => application.candidateUserId.toString()),
@@ -299,7 +299,7 @@ const listPrimaryJobApplications = async ({
     assigneeUsers.map((user) => [user._id.toString(), user]),
   );
 
-  const applicationViews = applications.map((application) => {
+  return applications.map((application) => {
     const candidate = toPublicCandidateSummary(
       candidateById.get(application.candidateUserId.toString()),
     );
@@ -326,6 +326,156 @@ const listPrimaryJobApplications = async ({
       assignedRecruiter,
     });
   });
+};
+
+const loadDirectApplicationsForJob = async (jobId) => {
+  return Application.find({
+    jobId,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  }).sort({ appliedAt: 1, _id: 1 });
+};
+
+// PI-21 / BR-33: current workload is non-terminal + assigned only; Job.status
+// does not participate. Unassigned (null/missing) never contributes.
+const deriveManagedJobApplicationProjection = (applications) => {
+  const countsByStatus = createEmptyCountsByStatus();
+  let unassignedCount = 0;
+  const workloadCountByAssignee = new Map();
+
+  for (const application of applications) {
+    if (APPLICATION_PIPELINE_STATUSES.includes(application.status)) {
+      countsByStatus[application.status] += 1;
+    }
+
+    if (isApplicationUnassigned(application)) {
+      unassignedCount += 1;
+      continue;
+    }
+
+    if (!APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)) {
+      continue;
+    }
+
+    const assigneeId = application.assignedRecruiterCompanyMemberId.toString();
+    workloadCountByAssignee.set(
+      assigneeId,
+      (workloadCountByAssignee.get(assigneeId) ?? 0) + 1,
+    );
+  }
+
+  const currentWorkloadByAssignee = [...workloadCountByAssignee.entries()]
+    .map(([companyMemberId, count]) => ({ companyMemberId, count }))
+    .sort((left, right) =>
+      left.companyMemberId.localeCompare(right.companyMemberId),
+    );
+
+  return {
+    applicationCount: applications.length,
+    unassignedCount,
+    countsByStatus,
+    currentWorkloadByAssignee,
+  };
+};
+
+const buildPipelineWorkspaceFromApplicationViews = (applicationViews) => {
+  const pipeline = createEmptyPipelineGroups();
+  const unassignedApplications = [];
+
+  for (const application of applicationViews) {
+    if (APPLICATION_PIPELINE_STATUSES.includes(application.status)) {
+      pipeline[application.status].push(application);
+    }
+
+    if (application.isUnassigned) {
+      unassignedApplications.push(application);
+    }
+  }
+
+  return {
+    pipeline,
+    unassignedApplications,
+  };
+};
+
+const mergeWorkloadByAssignee = (workloadGroups) => {
+  const merged = new Map();
+
+  for (const group of workloadGroups) {
+    for (const entry of group) {
+      merged.set(
+        entry.companyMemberId,
+        (merged.get(entry.companyMemberId) ?? 0) + entry.count,
+      );
+    }
+  }
+
+  return [...merged.entries()]
+    .map(([companyMemberId, count]) => ({ companyMemberId, count }))
+    .sort((left, right) =>
+      left.companyMemberId.localeCompare(right.companyMemberId),
+    );
+};
+
+const resolvePrimaryManagedJobContext = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+  actionLabel = "view",
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  // BR-40: tenant from trusted membership → Job.companyId, never client companyId alone.
+  assertSameCompanyTenant({
+    resourceCompanyId: job.companyId,
+    tenantCompanyId: context.companyId,
+  });
+
+  if (
+    job.primaryRecruiterCompanyMemberId.toString() !==
+    context.membership._id.toString()
+  ) {
+    throw new AppError(
+      403,
+      `Only the current Primary Recruiter can ${actionLabel} Applications for this Job`,
+      { field: "role" },
+    );
+  }
+
+  return { context, job };
+};
+
+const listPrimaryJobApplications = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+} = {}) => {
+  const { job } = await resolvePrimaryManagedJobContext({
+    actorUser,
+    jobId,
+    clientCompanyId,
+    actionLabel: "view",
+  });
+
+  // BR-44: V10 Primary Application View only covers Direct Applications.
+  const applications = await loadDirectApplicationsForJob(job._id);
+  const applicationViews = await hydratePrimaryJobApplicationViews(applications);
 
   return {
     job: toPublicJob(job),
@@ -333,19 +483,106 @@ const listPrimaryJobApplications = async ({
   };
 };
 
-const APPLICATION_TERMINAL_STATUSES = Object.freeze([
-  APPLICATION_STATUS.HIRED,
-  APPLICATION_STATUS.REJECTED,
-  APPLICATION_STATUS.WITHDRAWN,
-]);
+// F06 / F10: Managed Jobs + Pipeline Workspace + Current Workload projections.
+// Read-only derived views; never persist ManagedJob/Kanban/workload counters.
+const listManagedJobs = async ({ actorUser, clientCompanyId } = {}) => {
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
 
-const APPLICATION_NON_TERMINAL_STATUSES = Object.freeze([
-  APPLICATION_STATUS.APPLIED,
-  APPLICATION_STATUS.SCREENING,
-  APPLICATION_STATUS.CONTACTED,
-  APPLICATION_STATUS.INTERVIEW_SCHEDULED,
-  APPLICATION_STATUS.INTERVIEW_COMPLETED,
-]);
+  const primaryMemberId = context.membership._id;
+
+  // F06: Managed Jobs are current-Primary Jobs; not limited to accepting Jobs.
+  // DRAFT/PENDING_APPROVAL/PUBLISHED/CLOSED/EXPIRED all qualify while Primary.
+  const managedJobs = await Job.find({
+    primaryRecruiterCompanyMemberId: primaryMemberId,
+    companyId: context.companyId,
+  }).sort({ createdAt: 1, _id: 1 });
+
+  const managedJobIds = managedJobs.map((job) => job._id);
+
+  const applicationRows =
+    managedJobIds.length === 0
+      ? []
+      : await Application.find({
+          jobId: { $in: managedJobIds },
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        })
+          .select("jobId status assignedRecruiterCompanyMemberId")
+          .lean();
+
+  const applicationsByJobId = new Map();
+
+  for (const application of applicationRows) {
+    const jobKey = application.jobId.toString();
+    const bucket = applicationsByJobId.get(jobKey);
+
+    if (bucket == null) {
+      applicationsByJobId.set(jobKey, [application]);
+    } else {
+      bucket.push(application);
+    }
+  }
+
+  const managedJobProjections = managedJobs.map((job) => {
+    const applications = applicationsByJobId.get(job._id.toString()) ?? [];
+    const aggregates = deriveManagedJobApplicationProjection(applications);
+
+    return {
+      job: toPublicJob(job),
+      supportingRecruiterCount: (
+        job.supportingRecruiterCompanyMemberIds ?? []
+      ).length,
+      applicationCount: aggregates.applicationCount,
+      unassignedCount: aggregates.unassignedCount,
+      countsByStatus: aggregates.countsByStatus,
+      currentWorkloadByAssignee: aggregates.currentWorkloadByAssignee,
+    };
+  });
+
+  return {
+    managedJobs: managedJobProjections,
+    // BR-33 / BR-40: scoped to actor Managed Jobs only — never company-global.
+    currentWorkloadByAssignee: mergeWorkloadByAssignee(
+      managedJobProjections.map((item) => item.currentWorkloadByAssignee),
+    ),
+  };
+};
+
+const getManagedJobPipelineWorkspace = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+} = {}) => {
+  const { job } = await resolvePrimaryManagedJobContext({
+    actorUser,
+    jobId,
+    clientCompanyId,
+    actionLabel: "view the Pipeline Workspace of",
+  });
+
+  const applications = await loadDirectApplicationsForJob(job._id);
+  const applicationViews =
+    await hydratePrimaryJobApplicationViews(applications);
+  const aggregates = deriveManagedJobApplicationProjection(applications);
+  const { pipeline, unassignedApplications } =
+    buildPipelineWorkspaceFromApplicationViews(applicationViews);
+
+  return {
+    job: toPublicJob(job),
+    supportingRecruiterCount: (job.supportingRecruiterCompanyMemberIds ?? [])
+      .length,
+    applications: applicationViews,
+    pipeline,
+    unassignedApplications,
+    applicationCount: aggregates.applicationCount,
+    unassignedCount: aggregates.unassignedCount,
+    countsByStatus: aggregates.countsByStatus,
+    // Job-scoped workload (F10 within one Managed Job workspace).
+    currentWorkloadByAssignee: aggregates.currentWorkloadByAssignee,
+  };
+};
 
 // BR-21 / BR-22: canonical forward chain + Reject from any non-terminal stage.
 const PIPELINE_FORWARD_TARGET_BY_SOURCE = Object.freeze({
@@ -2487,7 +2724,9 @@ export {
   findNonTerminalApplicationsAssignedToRecruiterOnJob,
   firstAssignApplication,
   forceReassignApplication,
+  getManagedJobPipelineWorkspace,
   isApplicationUnassigned,
+  listManagedJobs,
   listPrimaryJobApplications,
   loadEligibleCandidateCvForDirectApply,
   loadJobAcceptingDirectApplications,

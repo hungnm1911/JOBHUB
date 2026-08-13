@@ -2,6 +2,8 @@ import {
   directApplyToJob,
   firstAssignApplication,
   forceReassignApplication,
+  getManagedJobPipelineWorkspace,
+  listManagedJobs,
   listPrimaryJobApplications,
   reassignApplication,
   replaceSubmittedCv,
@@ -74,6 +76,37 @@ const readClientCompanyId = (request) => {
 const listPrimaryJobApplicationsHandler = async (request, response, next) => {
   try {
     const result = await listPrimaryJobApplications({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const listManagedJobsHandler = async (request, response, next) => {
+  try {
+    const result = await listManagedJobs({
+      actorUser: request.auth.user,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getManagedJobPipelineWorkspaceHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const result = await getManagedJobPipelineWorkspace({
       actorUser: request.auth.user,
       jobId: request.params.jobId,
       clientCompanyId: readClientCompanyId(request),
@@ -166,6 +199,8 @@ export {
   directApplyToJobHandler,
   firstAssignApplicationHandler,
   forceReassignApplicationHandler,
+  getManagedJobPipelineWorkspaceHandler,
+  listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
   reassignApplicationHandler,
   replaceSubmittedCvHandler,
