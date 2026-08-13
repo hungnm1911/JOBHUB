@@ -123,7 +123,7 @@ describe("V9 — Application root-field collection validator", () => {
 
   it("rejects raw insert with status outside canonical enum", async () => {
     const doc = buildValidRawDocument(new mongoose.Types.ObjectId());
-    doc.status = "UNASSIGNED";
+    doc.status = "SCREENING";
 
     await expectRawWriteRejected(() =>
       Application.collection.insertOne(doc),
@@ -179,22 +179,7 @@ describe("V9 — Application root-field collection validator", () => {
     await expectRawWriteRejected(() =>
       Application.collection.updateOne(
         { _id: doc._id },
-        { $set: { status: "UNASSIGNED" } },
-      ),
-    );
-  });
-
-  it("rejects raw update that sets SCREENING without Assignee", async () => {
-    const { user } = await createVerifiedUser({
-      email: "raw-root-validator.screening-unassigned@example.com",
-    });
-    const doc = buildValidRawDocument(user._id);
-    await Application.collection.insertOne(doc);
-
-    await expectRawWriteRejected(() =>
-      Application.collection.updateOne(
-        { _id: doc._id },
-        { $set: { status: APPLICATION_STATUS.SCREENING } },
+        { $set: { status: "SCREENING" } },
       ),
     );
   });
@@ -262,7 +247,7 @@ describe("V9 — Application root-field collection validator", () => {
     await expectRawWriteRejected(() =>
       Application.collection.updateOne(
         { _id: doc._id },
-        { $set: { status: "UNASSIGNED" } },
+        { $set: { status: "SCREENING" } },
       ),
     );
 
