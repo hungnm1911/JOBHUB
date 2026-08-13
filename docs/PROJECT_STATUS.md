@@ -28,7 +28,8 @@ V4 Slices 01–05 are implemented and verified. V5 Slices 01–12 and the record
 **V10 — Phân công Application và Recruitment Pipeline** has Slice 01 —
 Application persistence foundation, Slice 02 — V9 compatibility +
 Job-retention compatibility, Slice 03 — Unassigned Applications +
-Primary Application View, and Slice 04 — First Assign Application
+Primary Application View, Slice 04 — First Assign Application, and
+Slice 05 — Reassign / Take over Application
 `IMPLEMENTED AND VERIFIED`. Its approved
 Product/Data contracts are
 `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
@@ -55,9 +56,15 @@ Slice 04 adds Primary-only First Assign via
 `APPLIED` Direct Application becomes Assigned to an eligible Primary or
 Supporting Recruiter without changing status/snapshot/identity, using
 version/Unassigned CAS (TX-01) and eligibility re-check at commit (TX-02).
-Reassign/Take over, forced reassignment, Recruitment Pipeline, Managed Jobs
-aggregates, My Applications, workload queries, and other remaining Fxx
-workflow surfaces remain deferred by the approved slice order.
+Slice 05 adds Primary-only Reassign / Take over via
+`POST /api/jobs/:jobId/applications/:applicationId/reassign` so a non-terminal
+Assigned Application transfers responsibility atomically `A → B` (Take over =
+target is current Primary) without Unassign, status/snapshot/identity changes,
+or takeover history fields, reusing First Assign eligibility and version +
+expected-assignee CAS. Forced reassignment, automatic eligibility handoff,
+Recruitment Pipeline, Managed Jobs aggregates, My Applications, workload
+queries, and other remaining Fxx workflow surfaces remain deferred by the
+approved slice order.
 
 **V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
 documents are planning drafts only: they are intentionally held for later
@@ -96,8 +103,8 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Ready for implementation
 
-- **V10 subsequent slices (after Slice 04):** Slices 01–04 are complete. Reassign/
-  Take over, continuous eligibility for pipeline processing, Recruitment
+- **V10 subsequent slices (after Slice 05):** Slices 01–05 are complete. Forced
+  reassignment, continuous eligibility for pipeline processing, Recruitment
   Pipeline, Managed Jobs aggregates/counts, Current Workload,
   Recruiter/Candidate My Applications, and related read projections remain
   deferred until their owning slices start. Job retention continues on the V5
@@ -108,6 +115,23 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Completed and verified
+
+- **Implemented; verified:** V10 Slice 05 — Reassign and Take over Application
+  (F03; BR-10, BR-12–BR-14, BR-17–BR-19, BR-34, BR-36–BR-38, BR-40; TX-01;
+  TX-02 eligibility-at-commit): authenticated current Primary Reassigns a
+  non-terminal Assigned `DIRECT_APPLICATION` via
+  `POST /api/jobs/:jobId/applications/:applicationId/reassign`
+  (`reassignApplication`) to another eligible Primary or Supporting Recruiter,
+  including Take over onto self; mutation sets only
+  `assignedRecruiterCompanyMemberId` and increments `version` while preserving
+  status/snapshot/identity; atomic A→B CAS (expected assignee + version +
+  non-terminal) prevents Unassign intermediates and concurrent/stale overwrite;
+  Supporting self-reassign/takeover, non-Primary, cross-company, off-team,
+  non-operational target, and terminal Applications are denied. Focused
+  coverage in `test/application/v10-reassign-takeover.test.js`. The official
+  backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 92 files
+  / 716 tests).
 
 - **Implemented; verified:** V10 Slice 04 — First Assign Application (F02;
   BR-06–BR-11, BR-17, BR-36–BR-37, BR-40, BR-42; TX-01; TX-02 eligibility-at-

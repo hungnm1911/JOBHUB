@@ -2,6 +2,7 @@ import {
   directApplyToJob,
   firstAssignApplication,
   listPrimaryJobApplications,
+  reassignApplication,
   replaceSubmittedCv,
   withdrawApplication,
 } from "../services/application.service.js";
@@ -99,10 +100,30 @@ const firstAssignApplicationHandler = async (request, response, next) => {
   }
 };
 
+const reassignApplicationHandler = async (request, response, next) => {
+  try {
+    const result = await reassignApplication({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      assigneeCompanyMemberId: request.body.assigneeCompanyMemberId,
+      expectedAssigneeCompanyMemberId:
+        request.body.expectedAssigneeCompanyMemberId,
+      expectedVersion: request.body.expectedVersion,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   directApplyToJobHandler,
   firstAssignApplicationHandler,
   listPrimaryJobApplicationsHandler,
+  reassignApplicationHandler,
   replaceSubmittedCvHandler,
   withdrawApplicationHandler,
 };

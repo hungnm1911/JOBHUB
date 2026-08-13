@@ -330,22 +330,35 @@ const APPLICATION_TERMINAL_STATUSES = Object.freeze([
   APPLICATION_STATUS.WITHDRAWN,
 ]);
 
+const APPLICATION_NON_TERMINAL_STATUSES = Object.freeze([
+  APPLICATION_STATUS.APPLIED,
+  APPLICATION_STATUS.SCREENING,
+  APPLICATION_STATUS.CONTACTED,
+  APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+  APPLICATION_STATUS.INTERVIEW_COMPLETED,
+]);
+
 const isApplicationTerminalStatus = (status) => {
   return APPLICATION_TERMINAL_STATUSES.includes(status);
 };
 
-const assertCurrentPrimaryOfJob = ({ job, actorMembershipId }) => {
+const assertCurrentPrimaryOfJob = ({
+  job,
+  actorMembershipId,
+  actionLabel = "manage",
+}) => {
   if (job.primaryRecruiterCompanyMemberId.toString() !== actorMembershipId.toString()) {
     throw new AppError(
       403,
-      "Only the current Primary Recruiter can First Assign Applications for this Job",
+      `Only the current Primary Recruiter can ${actionLabel} Applications for this Job`,
       { field: "role" },
     );
   }
 };
 
-// BR-07 / TX-02: assignee eligibility must be derived from persisted Job/Member/User/Company.
-const assertAssigneeEligibleForFirstAssign = async ({
+// BR-07 / TX-02: assignee eligibility for First Assign and Reassign/Take over —
+// derived from persisted Job/Member/User/Company at commit time.
+const assertAssigneeEligibleForJobAssignment = async ({
   assigneeCompanyMemberId,
   job,
   session,
@@ -592,6 +605,7 @@ const firstAssignApplication = async ({
       assertCurrentPrimaryOfJob({
         job,
         actorMembershipId: context.membership._id,
+        actionLabel: "First Assign",
       });
 
       const application = await Application.findById(applicationId).session(
@@ -642,7 +656,7 @@ const firstAssignApplication = async ({
       }
 
       // TX-02: re-validate target eligibility inside the commit transaction.
-      assigneeContext = await assertAssigneeEligibleForFirstAssign({
+      assigneeContext = await assertAssigneeEligibleForJobAssignment({
         assigneeCompanyMemberId,
         job,
         session,
@@ -687,6 +701,281 @@ const firstAssignApplication = async ({
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
     application: assignedApplication,
+    assigneeMembership: assigneeContext.membership,
+    assigneeUser: assigneeContext.user,
+  });
+
+  return {
+    job: toPublicJob(job),
+    application: applicationView,
+  };
+};
+
+const rejectFailedReassignCas = async ({
+  applicationId,
+  expectedVersion,
+  expectedAssigneeCompanyMemberId,
+  session,
+} = {}) => {
+  let latestQuery = Application.findById(applicationId);
+  if (session) {
+    latestQuery = latestQuery.session(session);
+  }
+
+  const latestApplication = await latestQuery;
+
+  if (!latestApplication) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (isApplicationTerminalStatus(latestApplication.status)) {
+    throw new AppError(409, "Terminal Applications cannot be reassigned", {
+      field: "status",
+      status: latestApplication.status,
+    });
+  }
+
+  if (isApplicationUnassigned(latestApplication)) {
+    throw new AppError(409, "Application has no Assignee to reassign", {
+      field: "assignedRecruiterCompanyMemberId",
+    });
+  }
+
+  if (
+    latestApplication.assignedRecruiterCompanyMemberId.toString() !==
+    expectedAssigneeCompanyMemberId.toString()
+  ) {
+    throw new AppError(
+      409,
+      "Application Assignee has changed; refresh and retry Reassign",
+      { field: "expectedAssigneeCompanyMemberId" },
+    );
+  }
+
+  if (latestApplication.version !== expectedVersion) {
+    throw new AppError(
+      409,
+      "Application has changed; refresh and retry Reassign",
+      { field: "expectedVersion" },
+    );
+  }
+
+  throw new AppError(
+    409,
+    "Application has changed; refresh and retry Reassign",
+    { field: "expectedVersion" },
+  );
+};
+
+const reassignApplication = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  assigneeCompanyMemberId,
+  expectedAssigneeCompanyMemberId,
+  expectedVersion,
+  clientCompanyId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", {
+      field: "jobId",
+    });
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (!mongoose.isValidObjectId(expectedAssigneeCompanyMemberId)) {
+    throw new AppError(400, "Invalid expected Assignee CompanyMember id", {
+      field: "expectedAssigneeCompanyMemberId",
+    });
+  }
+
+  if (
+    typeof expectedVersion !== "number" ||
+    !Number.isInteger(expectedVersion) ||
+    expectedVersion < 0
+  ) {
+    throw new AppError(400, "expectedVersion must be a non-negative integer", {
+      field: "expectedVersion",
+    });
+  }
+
+  if (
+    assigneeCompanyMemberId != null &&
+    expectedAssigneeCompanyMemberId != null &&
+    assigneeCompanyMemberId.toString() ===
+      expectedAssigneeCompanyMemberId.toString()
+  ) {
+    throw new AppError(
+      409,
+      "Reassign target must differ from the current Assignee",
+      { field: "assigneeCompanyMemberId" },
+    );
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const session = await mongoose.startSession();
+  let reassignedApplication = null;
+  let job = null;
+  let assigneeContext = null;
+
+  try {
+    await session.withTransaction(async () => {
+      job = await Job.findById(jobId).session(session);
+
+      if (!job) {
+        throw new AppError(404, "Job not found", {
+          field: "jobId",
+        });
+      }
+
+      assertSameCompanyTenant({
+        resourceCompanyId: job.companyId,
+        tenantCompanyId: context.companyId,
+      });
+
+      // BR-12 / BR-19 / BR-42: only current Primary may Reassign or Take over.
+      // Supporting cannot self-reassign, self-takeover, or claim another Assignee's Application.
+      assertCurrentPrimaryOfJob({
+        job,
+        actorMembershipId: context.membership._id,
+        actionLabel: "Reassign",
+      });
+
+      const application = await Application.findById(applicationId).session(
+        session,
+      );
+
+      if (!application) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      if (application.jobId.toString() !== job._id.toString()) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      // BR-44: V10 Reassign/Take over only covers Direct Applications.
+      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
+        throw new AppError(409, "Only Direct Applications can be reassigned", {
+          field: "source",
+        });
+      }
+
+      // BR-17: terminal Applications cannot change Assignee.
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot be reassigned", {
+          field: "status",
+          status: application.status,
+        });
+      }
+
+      if (!APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot be reassigned", {
+          field: "status",
+          status: application.status,
+        });
+      }
+
+      // BR-10: no Unassign; Reassign requires an existing Assignee.
+      if (isApplicationUnassigned(application)) {
+        throw new AppError(409, "Application has no Assignee to reassign", {
+          field: "assignedRecruiterCompanyMemberId",
+        });
+      }
+
+      if (
+        application.assignedRecruiterCompanyMemberId.toString() !==
+        expectedAssigneeCompanyMemberId.toString()
+      ) {
+        throw new AppError(
+          409,
+          "Application Assignee has changed; refresh and retry Reassign",
+          { field: "expectedAssigneeCompanyMemberId" },
+        );
+      }
+
+      if (
+        assigneeCompanyMemberId.toString() ===
+        expectedAssigneeCompanyMemberId.toString()
+      ) {
+        throw new AppError(
+          409,
+          "Reassign target must differ from the current Assignee",
+          { field: "assigneeCompanyMemberId" },
+        );
+      }
+
+      if (application.version !== expectedVersion) {
+        throw new AppError(
+          409,
+          "Application has changed; refresh and retry Reassign",
+          { field: "expectedVersion" },
+        );
+      }
+
+      // TX-02: re-validate target eligibility inside the commit transaction
+      // (same canonical eligibility as First Assign).
+      assigneeContext = await assertAssigneeEligibleForJobAssignment({
+        assigneeCompanyMemberId,
+        job,
+        session,
+      });
+
+      // TX-01 / TX-03 / BR-10 / BR-14 / BR-36–BR-38:
+      // Atomic A → B transition; no intermediate Unassigned; status unbound so a
+      // prior valid status mutation is preserved on retry, never rolled back.
+      reassignedApplication = await Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          jobId: job._id,
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          version: expectedVersion,
+          assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
+          status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+        },
+        {
+          $set: {
+            assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
+          },
+          $inc: {
+            version: 1,
+          },
+        },
+        {
+          returnDocument: "after",
+          session,
+        },
+      );
+
+      if (!reassignedApplication) {
+        await rejectFailedReassignCas({
+          applicationId: application._id,
+          expectedVersion,
+          expectedAssigneeCompanyMemberId,
+          session,
+        });
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  const applicationView = await buildPrimaryApplicationViewFromDocs({
+    application: reassignedApplication,
     assigneeMembership: assigneeContext.membership,
     assigneeUser: assigneeContext.user,
   });
@@ -1191,6 +1480,7 @@ export {
   listPrimaryJobApplications,
   loadEligibleCandidateCvForDirectApply,
   loadJobAcceptingDirectApplications,
+  reassignApplication,
   replaceSubmittedCv,
   withdrawApplication,
   toPrimaryJobApplicationView,
