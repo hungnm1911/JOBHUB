@@ -1917,6 +1917,37 @@ const normalizeNormalMessageContent = (content) => {
   return normalized;
 };
 
+// TX-06 guard acquire: canonical TX-02 conditional acquire for serialization,
+// then restore updatedAt in the same transaction so write-conflict behavior is
+// unchanged while guard documents keep their pre-Send timestamp (BR-49 / F10).
+const acquireWithRestoredUpdatedAt = async ({
+  acquire,
+  model,
+  documentId,
+  session,
+} = {}) => {
+  const before =
+    documentId == null
+      ? null
+      : await model
+          .findById(documentId)
+          .select("updatedAt")
+          .session(session)
+          .lean();
+
+  const acquired = await acquire();
+
+  if (acquired && before?.updatedAt) {
+    await model.findOneAndUpdate(
+      { _id: documentId },
+      { $set: { updatedAt: before.updatedAt } },
+      { session, timestamps: false },
+    );
+  }
+
+  return acquired;
+};
+
 // TX-06: write-lock current writable Assigned Application without bumping
 // version or mutating business content. Concurrent assignment / terminal CAS
 // writers either lose on version/assignee/status predicate or WriteConflict.
@@ -1927,25 +1958,31 @@ const commitApplicationWritableStateForNormalMessageSend = async ({
   expectedAssigneeCompanyMemberId,
   session,
 } = {}) => {
-  return Application.findOneAndUpdate(
-    {
-      _id: applicationId,
-      jobId,
-      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
-      version: expectedVersion,
-      assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
-      status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
-    },
-    {
-      $set: {
-        assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
-      },
-    },
-    {
-      returnDocument: "after",
-      session,
-    },
-  );
+  return acquireWithRestoredUpdatedAt({
+    model: Application,
+    documentId: applicationId,
+    session,
+    acquire: () =>
+      Application.findOneAndUpdate(
+        {
+          _id: applicationId,
+          jobId,
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          version: expectedVersion,
+          assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
+          status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+        },
+        {
+          $set: {
+            assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
+          },
+        },
+        {
+          returnDocument: "after",
+          session,
+        },
+      ),
+  });
 };
 
 // Soft continuous-eligibility probe at Send commit (TX-06 / BR-14 / BR-43 /
@@ -1967,11 +2004,16 @@ const resolveAssigneeEligibilityFactsAtSendCommit = async ({
 
   const assigneeCompanyMemberId = application.assignedRecruiterCompanyMemberId;
 
-  const stillOperationalCompany =
-    await acquireOperationalCompanyForAssigneeEligibilityTx({
-      companyId: job.companyId,
-      session,
-    });
+  const stillOperationalCompany = await acquireWithRestoredUpdatedAt({
+    model: Company,
+    documentId: job.companyId,
+    session,
+    acquire: () =>
+      acquireOperationalCompanyForAssigneeEligibilityTx({
+        companyId: job.companyId,
+        session,
+      }),
+  });
 
   if (!stillOperationalCompany) {
     const membership = await CompanyMember.findById(
@@ -1994,12 +2036,17 @@ const resolveAssigneeEligibilityFactsAtSendCommit = async ({
     };
   }
 
-  const stillActiveMembership =
-    await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
-      recruiterCompanyMemberId: assigneeCompanyMemberId,
-      companyId: job.companyId,
-      session,
-    });
+  const stillActiveMembership = await acquireWithRestoredUpdatedAt({
+    model: CompanyMember,
+    documentId: assigneeCompanyMemberId,
+    session,
+    acquire: () =>
+      acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+        recruiterCompanyMemberId: assigneeCompanyMemberId,
+        companyId: job.companyId,
+        session,
+      }),
+  });
 
   if (!stillActiveMembership) {
     const membership = await CompanyMember.findById(
@@ -2022,9 +2069,15 @@ const resolveAssigneeEligibilityFactsAtSendCommit = async ({
     };
   }
 
-  const stillActiveUser = await acquireActiveUserForAssigneeEligibilityTx({
-    userId: stillActiveMembership.userId,
+  const stillActiveUser = await acquireWithRestoredUpdatedAt({
+    model: User,
+    documentId: stillActiveMembership.userId,
     session,
+    acquire: () =>
+      acquireActiveUserForAssigneeEligibilityTx({
+        userId: stillActiveMembership.userId,
+        session,
+      }),
   });
 
   if (!stillActiveUser) {
@@ -2041,11 +2094,17 @@ const resolveAssigneeEligibilityFactsAtSendCommit = async ({
     };
   }
 
-  const stillOnTeam = await acquireJobTeamMembershipForAssigneeEligibilityTx({
-    jobId: job._id,
-    companyId: job.companyId,
-    assigneeCompanyMemberId: stillActiveMembership._id,
+  const stillOnTeam = await acquireWithRestoredUpdatedAt({
+    model: Job,
+    documentId: job._id,
     session,
+    acquire: () =>
+      acquireJobTeamMembershipForAssigneeEligibilityTx({
+        jobId: job._id,
+        companyId: job.companyId,
+        assigneeCompanyMemberId: stillActiveMembership._id,
+        session,
+      }),
   });
 
   const membershipIdStr = stillActiveMembership._id.toString();
@@ -2101,7 +2160,7 @@ const commitNormalMessageSend = async ({
         });
       }
 
-      const application = await Application.findById(applicationId).session(
+      let application = await Application.findById(applicationId).session(
         session,
       );
 
@@ -2120,6 +2179,20 @@ const commitNormalMessageSend = async ({
 
       if (!conversation) {
         throw new AppError(404, "Conversation not found", {
+          field: "applicationId",
+        });
+      }
+
+      // TX-06 / F10 / BR-46: committed Application state at Send completion must
+      // drive authority evaluation after Conversation acquisition. Read outside
+      // the Send transaction so concurrent Assign lại / Unassign outcomes are visible.
+      application = await Application.findById(applicationId);
+
+      if (
+        !application ||
+        application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+      ) {
+        throw new AppError(404, "Application not found", {
           field: "applicationId",
         });
       }

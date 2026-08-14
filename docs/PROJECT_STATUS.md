@@ -2,24 +2,14 @@
 
 ## Current project state
 
-**V11 — Conversation và Chat thuộc Application** is `IN PROGRESS`. Slice 01 —
-Conversation & Message Foundation + First Assign (`F01`) is `IMPLEMENTED AND
-VERIFIED` (`BR-01`–`BR-06`, `BR-13` persistence foundation only, `BR-49`,
-`BR-50`, `BR-53`, `TX-01`). Slice 02 — Reassign / Take over + SYSTEM Message
-(`F03`) is `IMPLEMENTED AND VERIFIED` (`BR-15`–`BR-20`, `BR-47`, `BR-51`,
-`TX-02`). Slice 03 — Manual Unassign + Assign lại (`F04`, `F06`) is
-`IMPLEMENTED AND VERIFIED` (`BR-21`–`BR-25`, `BR-29`–`BR-30`, `BR-47`,
-`BR-51`, `TX-03`, `TX-05`). Slice 04 — Automatic Unassign Chat Consequence
-(`F05`) is `IMPLEMENTED AND VERIFIED` (`BR-23`, `BR-26`–`BR-28`, `BR-47`,
-`BR-51`, `BR-54`, `BR-55`, `TX-04`). Slice 05 — Conversation History Read +
-Authorization Modes (`F02` read, `F04`/`F05`/`F07`/`F08`/`F09` read modes) is
-`IMPLEMENTED AND VERIFIED` (`BR-07`–`BR-12`, `BR-16`–`BR-17`, `BR-22`,
-`BR-31`–`BR-40`, `BR-48`, `BR-51`–`BR-52`, `BR-54`, `BR-55`). Slice 06 —
-NORMAL Message Send + Full Chat Concurrency (`F02` send, `F07`–`F10`) is
-`IMPLEMENTED AND VERIFIED` (`BR-13`–`BR-14`, `BR-25`, `BR-32`, `BR-34`,
-`BR-39`–`BR-46`, `BR-49`–`BR-50`, `BR-54`, `TX-06`–`TX-08`). Canonical
-Product/Data contracts remain implementation authority. Remaining V11
-realtime, notification, and attachment slices are not implemented.
+**V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
+Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across
+`F01`–`F10`, `BR-01`–`BR-55`, and `TX-01`–`TX-08`. Canonical Product/Data
+contracts remain authority for the closed Conversation/Chat business scope.
+Realtime Chat, Socket.IO, notification, attachment, read receipt, typing,
+edit/delete/reaction, Direct Chat, Assignment History, Status History, and
+Application Timeline stay out of V11 by approved product boundary (deferred /
+later versions), not as remaining V11 business slices.
 
 **V7 — Candidate Profile và thư viện CV** is `COMPLETED AND VERIFIED`. Slices
 01–11 are implemented and verified
@@ -240,6 +230,49 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Current V11 Conversation revision
 
+- **Implemented; verified:** V11 Slice 07 — Final Acceptance & Regression
+  Closure (`F01`–`F10`; `BR-01`–`BR-55`; `TX-01`–`TX-08`): cross-cutting
+  acceptance suite confirms Slices 01–06 compose into one Conversation
+  lifecycle (First Assign → NORMAL exchange → Reassign → Manual Unassign →
+  Assign lại → terminal) with a single Conversation id and required SYSTEM
+  Message transcript; closes authorization-matrix gaps (Platform Admin /
+  Company Manager / foreign Candidate / Primary-not-Assignee / Take over Chat
+  handoff / BR-48 history-does-not-authorize); Company-lock freeze without
+  Unassign or SYSTEM; HIRED/REJECTED read-only with no terminal SYSTEM and no
+  Assign reopen; withdraw-before-Assign leaves no Conversation; Job
+  `CLOSED`/`EXPIRED` does not override `PAUSED_UNASSIGNED`; complementary
+  TX-06–TX-08 keep/fail races (a valid Send completed before an invalidating
+  transition is retained; a completed Reassign/Take over/Unassign/terminal/
+  Company-lock/eligibility-loss transition rejects stale Send; Assign again
+  restores current Send authority on the same Conversation); deferred-scope
+  absence; and V10 assignment/pipeline regression with Conversation side
+  effects. Focused coverage in
+  `test/application/v11-acceptance.test.js` (20 tests). Combined focused V11
+  baseline: 8 files / 104 tests. Official backend gate passed after the final
+  acceptance remediations
+  (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`;
+  architecture: ARCH-001 through ARCH-016; Vitest: 119 files / 1,140 tests).
+
+- **Resolved; verified:** V11 Final Acceptance findings (`F02`, `F06`, `F10`;
+  `BR-25`, `BR-29`, `BR-30`, `BR-43`, `BR-46`, `BR-49`, `BR-55`; `TX-05`,
+  `TX-06`): NORMAL Message Send guard acquires no longer leave guard-document
+  `updatedAt` changes; `commitNormalMessageSend` reuses canonical TX-02 acquires
+  and the Application writable CAS, then restores each touched document's
+  pre-Send timestamp inside the same MongoDB transaction via
+  `acquireWithRestoredUpdatedAt`, preserving serialization/write-conflict
+  behavior while successful Send persists only the new Message. Complementary
+  eligibility-loss ordering now verifies that a Message completed first is
+  retained through the later Automatic Unassign consequence. Actual Send ↔
+  Assign-again ordering now verifies both rejection while
+  `PAUSED_UNASSIGNED` and successful current-authority evaluation when Assign
+  again completes first, while reusing the same Conversation and preserving
+  Recruitment Status. Regressions are in
+  `test/application/v11-normal-message-send.test.js` and
+  `test/application/v11-acceptance.test.js`. The current focused V11 baseline
+  passes 8 files / 104 tests; the official backend gate passes ESLint with 0
+  errors / 2 existing warnings, ARCH-001 through ARCH-016, and Vitest with 119
+  files / 1,140 tests.
+
 - **Implemented; verified:** V11 Slice 06 — NORMAL Message Send + Full Chat
   Concurrency (`F02` send, `F07`–`F10`; `BR-13`–`BR-14`, `BR-25`, `BR-32`,
   `BR-34`, `BR-39`–`BR-46`, `BR-49`–`BR-50`, `BR-54`; `TX-06`–`TX-08`): Candidate
@@ -252,15 +285,16 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   server-owned (Candidate User only; Recruiter User + CompanyMember); client
   cannot create `SYSTEM` Message or declare sender fields. Job `CLOSED` /
   `EXPIRED` does not block Send. Deterministic races cover Send ↔
-  Reassign / Unassign / Withdraw / Company lock / Platform eligibility loss.
+  Reassign / Unassign / Withdraw / Company lock / Platform eligibility loss /
+  Assign again, including the required complementary completion orderings.
   HTTP: `POST /api/candidate/applications/:applicationId/conversation/messages`
   and `POST /api/jobs/my-applications/:applicationId/conversation/messages`
   (Recruiter business access requires Company operational). Realtime,
   notification, and attachment remain out of this slice. Focused coverage in
-  `test/application/v11-normal-message-send.test.js` (1 file / 10 tests).
-  The official backend gate passed (ESLint: 0 errors / 2 existing warnings in
-  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 118
-  files / 1,115 tests).
+  `test/application/v11-normal-message-send.test.js` (1 file / 15 tests).
+  The latest official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 119 files / 1,140 tests).
 
 - **Implemented; verified:** V11 Slice 05 — Conversation History Read +
   Authorization Modes (`F02` read portion, `F04`/`F05`/`F07`/`F08`/`F09` read
@@ -1341,6 +1375,7 @@ the current V10 revision complete.
 - V5 Slices 01–12 cover F01–F12 including the F03/F12 DRAFT privacy and delete-authority correction, plus verified acceptance corrections for submit/edit stale validation, reassign/close effective-`PUBLISHED` and mutation-boundary deadline (`$$NOW`), public-eligibility owning-Company binding, and Product/Data/Engineering documentation alignment. Final Acceptance / regression closure passed; no V5 business slice remains.
 - V6 Final Acceptance / regression closure is complete: F01–F05, BR-01–BR-33, and TX-01–TX-03 were rerun with the Slices 01–06 suites, S07 acceptance suite, and the five remediation suites. The focused baseline passed 12 files / 155 tests and the official backend gate passed. No known V6 business-blocking finding remains.
 - **V7 closure:** Final Acceptance / regression closure is complete across F01–F10, BR-01–BR-46, and TX-01. V7 is `COMPLETED AND VERIFIED`; no V7 business slice remains in the approved specification.
+- **V11 closure:** Final Acceptance / regression closure is complete across F01–F10, BR-01–BR-55, and TX-01–TX-08. V11 is `COMPLETED AND VERIFIED`; no V11 business slice remains in the approved Conversation/Chat specification. Realtime, notification, attachment, and related deferred capabilities stay outside V11 by product boundary.
 - **Resolved in S09 / acceptance:** Fixed Harvard PDF renderer (including Unicode fidelity) and owner-scoped Uploaded PDF delivery via restricted Cloudinary `authenticated` delivery are established; Preview/Download do not persist public URLs or Generated PDF state.
 - **Resolved in S08:** Generated and Uploaded CVs share one owner-scoped common metadata mutation path; `PUBLIC` remains intent-only in V7 without search/access expansion.
 - **Resolved in S07:** Uploaded PDF replacement validates before mutating current file; persistence failure keeps the prior current file; concurrent/stale replace cannot delete a newer current external artifact; reuses the S06 inspection owner.
@@ -1349,6 +1384,7 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V11 Final Acceptance & Regression Closure: after closing the Send guard-document timestamp side effect, complementary Send ↔ eligibility-loss keep ordering, and actual Send ↔ Assign-again ordering, the official `cd backend && npm run verify:agent` gate passed across F01–F10 / BR-01–BR-55 / TX-01–TX-08 (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 119 files / 1,140 tests). The focused V11 baseline passed 8 files / 104 tests, including `test/application/v11-acceptance.test.js` (20 tests) and `test/application/v11-normal-message-send.test.js` (15 tests). The remediations add no new Chat capability, field, collection, index, or migration.
 - V11 Slice 01 Conversation & Message Foundation + First Assign: the official `cd backend && npm run verify:agent` gate passed after Conversation/Message persistence and First Assign TX-01 Conversation creation (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 113 files / 1,059 tests). Focused coverage passed 2 files / 23 tests. No Chat send/read HTTP, Reassign/Unassign SYSTEM Message, authorization, freeze, notification, realtime, attachment, Application field, or migration was added.
 - V10 Slice 07 CompanyMember Recruiter LOCK/TERMINATE automatic Unassign integration (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after CompanyMember LOCK/TERMINATE switched Application resolution from trusted `A → B` handoff to Slice 06 `A → NONE` automatic Unassign while keeping V6 Job-team Primary transfer / Supporting removal and the dual current-state final zero-responsibility guard (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 998 tests). Focused LOCK/TERMINATE Unassign coverage passed 1 file / 17 tests. No generic Recruitment Team removal change, Platform Admin User lifecycle change, Application replacement heuristic, history, recovery state, queue, worker, field, collection, index, or migration was added.
 - V10 Slice 06 Canonical Automatic-Unassign Primitive (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after the internal `A → NONE` primitive reused the existing assigned-state CAS (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 994 tests). Focused automatic-Unassign coverage passed 1 file / 22 tests. No public HTTP endpoint, CompanyMember LOCK/TERMINATE change, Recruitment Team removal change, Platform Admin User lifecycle change, field, collection, index, history, recovery state, queue, worker, or migration was added.

@@ -16,9 +16,11 @@ import CANDIDATE_CV_UPLOADED_PDF from "../../src/constants/candidate-cv-uploaded
 import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
 import MESSAGE_TYPE from "../../src/constants/message-type.js";
+import SYSTEM_MESSAGE_CONTENT from "../../src/constants/system-message-content.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import Application from "../../src/models/application.model.js";
+import Company from "../../src/models/company.model.js";
 import CompanyMember from "../../src/models/company-member.model.js";
 import Conversation from "../../src/models/conversation.model.js";
 import Job from "../../src/models/job.model.js";
@@ -226,6 +228,98 @@ const createAssignedConversationFixture = async ({
   };
 };
 
+const loadNormalMessageSendGuardSnapshot = async ({
+  applicationId,
+  jobId,
+  companyId,
+  assigneeCompanyMemberId,
+  assigneeUserId,
+  conversationId,
+} = {}) => {
+  const [
+    application,
+    job,
+    company,
+    companyMember,
+    user,
+    conversation,
+  ] = await Promise.all([
+    Application.findById(applicationId).lean(),
+    Job.findById(jobId).lean(),
+    Company.findById(companyId).lean(),
+    CompanyMember.findById(assigneeCompanyMemberId).lean(),
+    User.findById(assigneeUserId).lean(),
+    Conversation.findById(conversationId).lean(),
+  ]);
+
+  return {
+    application,
+    job,
+    company,
+    companyMember,
+    user,
+    conversation,
+  };
+};
+
+const expectGuardDocumentsUnchangedAfterNormalMessageSend = (
+  before,
+  after,
+) => {
+  expect(after.application.status).toBe(before.application.status);
+  expect(after.application.version).toBe(before.application.version);
+  expect(String(after.application.assignedRecruiterCompanyMemberId)).toBe(
+    String(before.application.assignedRecruiterCompanyMemberId),
+  );
+  expect(after.application.candidateUserId.toString()).toBe(
+    before.application.candidateUserId.toString(),
+  );
+  expect(after.application.jobId.toString()).toBe(
+    before.application.jobId.toString(),
+  );
+  expect(after.application.source).toBe(before.application.source);
+  expect(after.application.submittedCvSnapshot).toEqual(
+    before.application.submittedCvSnapshot,
+  );
+  expect(after.application.updatedAt.getTime()).toBe(
+    before.application.updatedAt.getTime(),
+  );
+
+  expect(after.job.status).toBe(before.job.status);
+  expect(String(after.job.primaryRecruiterCompanyMemberId)).toBe(
+    String(before.job.primaryRecruiterCompanyMemberId),
+  );
+  expect(after.job.supportingRecruiterCompanyMemberIds).toEqual(
+    before.job.supportingRecruiterCompanyMemberIds,
+  );
+  expect(after.job.updatedAt.getTime()).toBe(before.job.updatedAt.getTime());
+
+  expect(after.company.approvalStatus).toBe(before.company.approvalStatus);
+  expect(after.company.operationalStatus).toBe(
+    before.company.operationalStatus,
+  );
+  expect(after.company.updatedAt.getTime()).toBe(
+    before.company.updatedAt.getTime(),
+  );
+
+  expect(after.companyMember.status).toBe(before.companyMember.status);
+  expect(after.companyMember.role).toBe(before.companyMember.role);
+  expect(after.companyMember.updatedAt.getTime()).toBe(
+    before.companyMember.updatedAt.getTime(),
+  );
+
+  expect(after.user.status).toBe(before.user.status);
+  expect(after.user.updatedAt.getTime()).toBe(before.user.updatedAt.getTime());
+
+  expect(after.conversation.applicationId.toString()).toBe(
+    before.conversation.applicationId.toString(),
+  );
+  expect(after.conversation.createdAt.getTime()).toBe(
+    before.conversation.createdAt.getTime(),
+  );
+  expect(after.conversation).not.toHaveProperty("updatedAt");
+};
+
 describe("V11 Slice 06 — NORMAL Message Send + Full Chat Concurrency", () => {
   beforeAll(async () => {
     await connectTestDatabase();
@@ -238,6 +332,62 @@ describe("V11 Slice 06 — NORMAL Message Send + Full Chat Concurrency", () => {
 
   afterAll(async () => {
     await disconnectTestDatabase();
+  });
+
+  it("does not mutate guard documents when Candidate or Assignee sends NORMAL Message (F02 / F10 / BR-49 / TX-06)", async () => {
+    const fixture = await createAssignedConversationFixture({
+      emailPrefix: "v11.s06.send.guard",
+    });
+    const guardIds = {
+      applicationId: fixture.application.id,
+      jobId: fixture.job._id,
+      companyId: fixture.manager.company._id,
+      assigneeCompanyMemberId: fixture.primary.membership._id,
+      assigneeUserId: fixture.primary.user._id,
+      conversationId: fixture.conversation._id,
+    };
+
+    const beforeCandidateSend =
+      await loadNormalMessageSendGuardSnapshot(guardIds);
+
+    const candidateSend =
+      await sendCandidateApplicationConversationNormalMessage({
+        candidateUserId: fixture.candidate.user._id,
+        actorUser: fixture.candidate.user,
+        applicationId: fixture.application.id,
+        content: "Guard-safe candidate send",
+      });
+    expect(candidateSend.message.type).toBe(MESSAGE_TYPE.NORMAL);
+
+    const afterCandidateSend =
+      await loadNormalMessageSendGuardSnapshot(guardIds);
+    expectGuardDocumentsUnchangedAfterNormalMessageSend(
+      beforeCandidateSend,
+      afterCandidateSend,
+    );
+
+    const beforeRecruiterSend =
+      await loadNormalMessageSendGuardSnapshot(guardIds);
+
+    const recruiterSend =
+      await sendRecruiterApplicationConversationNormalMessage({
+        actorUser: fixture.primary.user,
+        applicationId: fixture.application.id,
+        content: "Guard-safe recruiter send",
+      });
+    expect(recruiterSend.message.type).toBe(MESSAGE_TYPE.NORMAL);
+
+    const afterRecruiterSend =
+      await loadNormalMessageSendGuardSnapshot(guardIds);
+    expectGuardDocumentsUnchangedAfterNormalMessageSend(
+      beforeRecruiterSend,
+      afterRecruiterSend,
+    );
+
+    const messages = await Message.find({
+      conversationId: fixture.conversation._id,
+    }).lean();
+    expect(messages).toHaveLength(2);
   });
 
   it("lets Candidate and current Assignee send NORMAL Messages with historical sender identity (F02 / BR-13 / BR-14)", async () => {
@@ -723,6 +873,261 @@ describe("V11 Slice 06 — NORMAL Message Send + Full Chat Concurrency", () => {
         type: MESSAGE_TYPE.NORMAL,
       }),
     ).toBe(0);
+  });
+
+  it("TX-06: Send completing before Platform eligibility loss keeps Message and Automatic Unassign consequence (BR-43 / BR-55 / F10)", async () => {
+    const fixture = await createAssignedConversationFixture({
+      emailPrefix: "v11.s06.race.send.wins.elig",
+      supporting: true,
+    });
+
+    const sent = await sendRecruiterApplicationConversationNormalMessage({
+      actorUser: fixture.primary.user,
+      applicationId: fixture.application.id,
+      content: "completed before eligibility loss",
+    });
+
+    await lockAccount({
+      targetUserId: fixture.primary.user._id.toString(),
+      actorUserId: fixture.platformAdmin.user._id,
+    });
+
+    const persisted = await Message.findById(sent.message.id).lean();
+    expect(persisted.content).toBe("completed before eligibility loss");
+    expect(String(persisted.senderUserId)).toBe(
+      fixture.primary.user._id.toString(),
+    );
+    expect(String(persisted.senderCompanyMemberId)).toBe(
+      fixture.primary.membership._id.toString(),
+    );
+
+    const lockedUser = await User.findById(fixture.primary.user._id).lean();
+    expect(lockedUser.status).toBe(USER_STATUS.LOCKED);
+
+    const application = await Application.findById(fixture.application.id).lean();
+    expect(application.assignedRecruiterCompanyMemberId).toBeNull();
+    expect(application.status).toBe(APPLICATION_STATUS.APPLIED);
+
+    expect(
+      await Conversation.countDocuments({
+        applicationId: fixture.application.id,
+      }),
+    ).toBe(1);
+
+    const messages = await Message.find({
+      conversationId: fixture.conversation._id,
+    })
+      .sort({ createdAt: 1, _id: 1 })
+      .lean();
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      type: MESSAGE_TYPE.NORMAL,
+      content: "completed before eligibility loss",
+    });
+    expect(String(messages[0].senderUserId)).toBe(
+      fixture.primary.user._id.toString(),
+    );
+    expect(String(messages[0].senderCompanyMemberId)).toBe(
+      fixture.primary.membership._id.toString(),
+    );
+    expect(messages[1]).toMatchObject({
+      type: MESSAGE_TYPE.SYSTEM,
+      content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
+      senderUserId: null,
+      senderCompanyMemberId: null,
+    });
+
+    const membership = await CompanyMember.findById(
+      fixture.primary.membership._id,
+    ).lean();
+    expect(membership.status).toBe(COMPANY_MEMBER_STATUS.ACTIVE);
+  });
+
+  it("TX-06: Candidate Send completing before Platform eligibility loss keeps Message (BR-43 / BR-55)", async () => {
+    const fixture = await createAssignedConversationFixture({
+      emailPrefix: "v11.s06.race.candidate.wins.elig",
+      supporting: true,
+    });
+
+    const sent = await sendCandidateApplicationConversationNormalMessage({
+      candidateUserId: fixture.candidate.user._id,
+      actorUser: fixture.candidate.user,
+      applicationId: fixture.application.id,
+      content: "candidate before eligibility loss",
+    });
+
+    await lockAccount({
+      targetUserId: fixture.primary.user._id.toString(),
+      actorUserId: fixture.platformAdmin.user._id,
+    });
+
+    const persisted = await Message.findById(sent.message.id).lean();
+    expect(persisted.content).toBe("candidate before eligibility loss");
+    expect(String(persisted.senderUserId)).toBe(
+      fixture.candidate.user._id.toString(),
+    );
+    expect(persisted.senderCompanyMemberId).toBeNull();
+
+    expect(
+      await Application.findById(fixture.application.id).lean(),
+    ).toMatchObject({
+      assignedRecruiterCompanyMemberId: null,
+      status: APPLICATION_STATUS.APPLIED,
+    });
+
+    expect(
+      await Message.countDocuments({
+        conversationId: fixture.conversation._id,
+        type: MESSAGE_TYPE.NORMAL,
+        content: "candidate before eligibility loss",
+      }),
+    ).toBe(1);
+    expect(
+      await Message.countDocuments({
+        conversationId: fixture.conversation._id,
+        type: MESSAGE_TYPE.SYSTEM,
+        content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
+      }),
+    ).toBe(1);
+    expect(
+      await Conversation.countDocuments({
+        applicationId: fixture.application.id,
+      }),
+    ).toBe(1);
+  });
+
+  it("TX-06: rejects Send evaluated under PAUSED_UNASSIGNED before Assign again completes (F06 / F10 / BR-25 / BR-46 Send ↔ Assign lại)", async () => {
+    const fixture = await createAssignedConversationFixture({
+      emailPrefix: "v11.s06.race.assignagain.send",
+      supporting: true,
+    });
+
+    const unassigned = await unassignApplication({
+      actorUser: fixture.primary.user,
+      jobId: fixture.job._id.toString(),
+      applicationId: fixture.application.id,
+      expectedAssigneeCompanyMemberId: fixture.primary.membership._id.toString(),
+      expectedVersion: fixture.application.version,
+    });
+
+    await expect(
+      sendCandidateApplicationConversationNormalMessage({
+        candidateUserId: fixture.candidate.user._id,
+        actorUser: fixture.candidate.user,
+        applicationId: fixture.application.id,
+        content: "rejected before assign again",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      details: { mode: "PAUSED_UNASSIGNED" },
+    });
+
+    const assignedAgain = await firstAssignApplication({
+      actorUser: fixture.primary.user,
+      jobId: fixture.job._id.toString(),
+      applicationId: fixture.application.id,
+      assigneeCompanyMemberId:
+        fixture.supportingRecruiter.membership._id.toString(),
+      expectedVersion: unassigned.application.version,
+    });
+
+    expect(assignedAgain.application.assignedRecruiterCompanyMemberId).toBe(
+      fixture.supportingRecruiter.membership._id.toString(),
+    );
+    expect(assignedAgain.application.status).toBe(APPLICATION_STATUS.APPLIED);
+
+    expect(
+      await Conversation.countDocuments({
+        applicationId: fixture.application.id,
+      }),
+    ).toBe(1);
+
+    expect(
+      await Message.countDocuments({
+        conversationId: fixture.conversation._id,
+        type: MESSAGE_TYPE.NORMAL,
+        content: "rejected before assign again",
+      }),
+    ).toBe(0);
+    expect(
+      await Message.countDocuments({
+        conversationId: fixture.conversation._id,
+        type: MESSAGE_TYPE.SYSTEM,
+        content: SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
+      }),
+    ).toBe(1);
+  });
+
+  it("TX-06: Assign again completing before Send reuses Conversation and enables new authority (F06 / BR-29 / BR-30 / F10 Send ↔ Assign lại)", async () => {
+    const fixture = await createAssignedConversationFixture({
+      emailPrefix: "v11.s06.race.assignagain.keep",
+      supporting: true,
+    });
+
+    const unassigned = await unassignApplication({
+      actorUser: fixture.primary.user,
+      jobId: fixture.job._id.toString(),
+      applicationId: fixture.application.id,
+      expectedAssigneeCompanyMemberId: fixture.primary.membership._id.toString(),
+      expectedVersion: fixture.application.version,
+    });
+
+    const gate = installSendPreAcquireGate(fixture.application.id);
+    const sendPromise = sendCandidateApplicationConversationNormalMessage({
+      candidateUserId: fixture.candidate.user._id,
+      actorUser: fixture.candidate.user,
+      applicationId: fixture.application.id,
+      content: "completed after assign again",
+    });
+    await gate.reached;
+
+    const assignedAgain = await firstAssignApplication({
+      actorUser: fixture.primary.user,
+      jobId: fixture.job._id.toString(),
+      applicationId: fixture.application.id,
+      assigneeCompanyMemberId:
+        fixture.supportingRecruiter.membership._id.toString(),
+      expectedVersion: unassigned.application.version,
+    });
+
+    gate.release();
+    const sent = await sendPromise;
+
+    expect(sent.conversation.mode).toBe("ACTIVE");
+    expect(sent.message.content).toBe("completed after assign again");
+    expect(assignedAgain.application.assignedRecruiterCompanyMemberId).toBe(
+      fixture.supportingRecruiter.membership._id.toString(),
+    );
+    expect(assignedAgain.application.status).toBe(APPLICATION_STATUS.APPLIED);
+
+    expect(
+      await Conversation.countDocuments({
+        applicationId: fixture.application.id,
+      }),
+    ).toBe(1);
+
+    const persisted = await Message.findById(sent.message.id).lean();
+    expect(String(persisted.conversationId)).toBe(
+      fixture.conversation._id.toString(),
+    );
+
+    const newAssigneeSend =
+      await sendRecruiterApplicationConversationNormalMessage({
+        actorUser: fixture.supportingRecruiter.user,
+        applicationId: fixture.application.id,
+        content: "new assignee after assign again",
+      });
+    expect(newAssigneeSend.message.senderCompanyMemberId).toBe(
+      fixture.supportingRecruiter.membership._id.toString(),
+    );
+
+    await expect(
+      sendRecruiterApplicationConversationNormalMessage({
+        actorUser: fixture.primary.user,
+        applicationId: fixture.application.id,
+        content: "former assignee stale after assign again to B",
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
   });
 
   it("TX-06: Platform eligibility loss completing before Send rejects pending Message (BR-43)", async () => {
