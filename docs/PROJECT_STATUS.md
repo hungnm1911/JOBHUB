@@ -87,6 +87,19 @@ active Schedule. This does not add general Recruiter
 `CONFIRMED → CANCELLED`, change expiration, Candidate response, reproposal,
 Notification/realtime, or Conversation/Message authorization semantics.
 
+Slice 08 is implemented and verified for Assignment + Interview read
+compatibility closure (`F10`, `F11`; `BR-30`–`BR-36`): Reassign, manual
+Unassign, automatic Unassign, and Assign-again retain current Candidate
+Availability and immutable Interview Schedule history without resetting statuses
+or creator identity. Recruiter-side proposal/cancel authority follows only the
+current continuously eligible Assignee; Candidate `PROPOSED` responses remain
+available while the Application is temporarily `UNASSIGNED`. Every existing
+Application read projection continues to hydrate `NOT_SUBMITTED`, submitted
+Availability (including `[]`), and Schedule history only after its pre-existing
+Application authorization passes. Job `CLOSED`/`EXPIRED` does not cancel or
+hide Interview data for a non-terminal Application, and Interview reads do not
+expand V11 Conversation/Message authority.
+
 **V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
 Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across
 `F01`–`F10`, `BR-01`–`BR-55`, and `TX-01`–`TX-08`. Canonical Product/Data

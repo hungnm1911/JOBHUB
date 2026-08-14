@@ -2403,18 +2403,17 @@ const buildPrimaryApplicationViewFromDocs = async ({
   assigneeMembership,
   assigneeUser,
   session,
+  now = new Date(),
 } = {}) => {
-  let candidateQuery = User.findById(application.candidateUserId).select(
-    "fullName avatarUrl",
+  const [applicationView] = await hydratePrimaryJobApplicationViews(
+    [application],
+    { now },
   );
-  if (session) {
-    candidateQuery = candidateQuery.session(session);
-  }
 
-  const candidateUser = await candidateQuery;
-
-  let assignedRecruiter = null;
-  if (!isApplicationUnassigned(application)) {
+  if (
+    !isApplicationUnassigned(application) &&
+    (assigneeMembership != null || assigneeUser != null)
+  ) {
     let membership = assigneeMembership;
     let user = assigneeUser;
 
@@ -2438,16 +2437,13 @@ const buildPrimaryApplicationViewFromDocs = async ({
       user = await userQuery;
     }
 
-    assignedRecruiter = toPublicAssignedRecruiterSummary({
+    applicationView.assignedRecruiter = toPublicAssignedRecruiterSummary({
       membership,
       user,
     });
   }
 
-  return toPrimaryJobApplicationView(application, {
-    candidate: toPublicCandidateSummary(candidateUser),
-    assignedRecruiter,
-  });
+  return applicationView;
 };
 
 const rejectFailedFirstAssignCas = async ({
