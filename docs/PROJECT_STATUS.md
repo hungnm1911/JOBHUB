@@ -5,10 +5,11 @@
 **V11 — Conversation và Chat thuộc Application** is `IN PROGRESS`. Slice 01 —
 Conversation & Message Foundation + First Assign (`F01`) is `IMPLEMENTED AND
 VERIFIED` (`BR-01`–`BR-06`, `BR-13` persistence foundation only, `BR-49`,
-`BR-50`, `BR-53`, `TX-01`). Canonical Product/Data contracts remain
-implementation authority. Remaining V11 Chat send/read, Reassign/Unassign
-SYSTEM Message, authorization, freeze, and terminal read-only slices are not
-implemented.
+`BR-50`, `BR-53`, `TX-01`). Slice 02 — Reassign / Take over + SYSTEM Message
+(`F03`) is `IMPLEMENTED AND VERIFIED` (`BR-15`–`BR-20`, `BR-47`, `BR-51`,
+`TX-02`). Canonical Product/Data contracts remain implementation authority.
+Remaining V11 Chat send/read, Unassign/Assign-again SYSTEM Message,
+authorization, freeze, and terminal read-only slices are not implemented.
 
 **V7 — Candidate Profile và thư viện CV** is `COMPLETED AND VERIFIED`. Slices
 01–11 are implemented and verified
@@ -228,6 +229,26 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Current V11 Conversation revision
+
+- **Implemented; verified:** V11 Slice 02 — Reassign / Take over + SYSTEM
+  Message (`F03`; `BR-15`–`BR-20`, `BR-47`, `BR-51`; `TX-02`): successful
+  Reassign / Take over / CM force-reassign `A → B` on a non-terminal Application
+  that already has a Conversation keeps that Conversation and all Message
+  history (including historical sender identity), keeps Recruitment Status, and
+  creates exactly one SYSTEM Message (no human sender) reflecting the
+  responsibility transition in the same V10 assignment transaction. Missing
+  Conversation does not create Conversation or SYSTEM Message. Unassign does
+  not create SYSTEM Message in this slice. Failed CAS / Message-create failure
+  cannot leave assignee changed without the required SYSTEM Message, or a
+  SYSTEM Message without the corresponding assignment transition. V10
+  authority, eligibility, tenant, expected-assignee/CAS invariants are
+  unchanged. Manual/Automatic Unassign SYSTEM Message, Assign again, Send/read,
+  authorization, Company-lock freeze, terminal read-only, realtime,
+  notification, and attachment remain out of this slice. Focused coverage in
+  `test/application/v11-reassign-takeover-system-message.test.js` (1 file / 10
+  tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 114 files / 1,069 tests).
 
 - **Implemented; verified:** V11 Slice 01 — Conversation & Message Foundation +
   First Assign (`F01`; `BR-01`–`BR-06`, `BR-13` persistence foundation,

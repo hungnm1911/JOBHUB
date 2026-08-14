@@ -11,6 +11,8 @@ import CANDIDATE_CV_UPLOADED_STORAGE from "../constants/candidate-cv-uploaded-st
 import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
+import MESSAGE_TYPE from "../constants/message-type.js";
+import SYSTEM_MESSAGE_CONTENT from "../constants/system-message-content.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import Application from "../models/application.model.js";
@@ -19,6 +21,7 @@ import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import Conversation from "../models/conversation.model.js";
 import Job from "../models/job.model.js";
+import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
 import AppError from "../utils/app-error.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
@@ -1603,6 +1606,37 @@ const createConversationOnFirstAssignIfAbsent = async ({
   }
 };
 
+// V11 F03 / TX-02: SYSTEM Message consequence of a successful A → B Reassign /
+// Take over when Conversation already exists. Does not create Conversation,
+// rewrite history, or act as Assignment History / current-Assignee authority.
+const createResponsibilityChangedSystemMessageIfConversationExists = async ({
+  applicationId,
+  session,
+} = {}) => {
+  const conversation = await Conversation.findOne({
+    applicationId,
+  }).session(session);
+
+  if (!conversation) {
+    return null;
+  }
+
+  const [systemMessage] = await Message.create(
+    [
+      {
+        conversationId: conversation._id,
+        type: MESSAGE_TYPE.SYSTEM,
+        senderUserId: null,
+        senderCompanyMemberId: null,
+        content: SYSTEM_MESSAGE_CONTENT.RESPONSIBILITY_CHANGED,
+      },
+    ],
+    { session },
+  );
+
+  return systemMessage;
+};
+
 // Canonical assigned-state mutation (Data Contract §8.2–§8.4 / TX-01 / TX-03):
 // atomic A → B or A → NONE. Shared by manual Reassign/Unassign, CM force-reassign
 // A → B, and automatic Unassign. Mutates only current Assignee + version;
@@ -2114,6 +2148,16 @@ const executePrimaryCurrentAssigneeMutation = async ({
           expectedAssigneeCompanyMemberId,
           session,
           actionLabel,
+        });
+      }
+
+      // V11 F03 / BR-15–BR-20 / BR-47 / BR-51 / TX-02: A → B keeps the existing
+      // Conversation and writes the required SYSTEM Message in the same
+      // atomic outcome. Unassign Chat consequence is out of this slice.
+      if (!isUnassign) {
+        await createResponsibilityChangedSystemMessageIfConversationExists({
+          applicationId: mutatedApplication._id,
+          session,
         });
       }
     });
