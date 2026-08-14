@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import APPLICATION_SOURCE from "../constants/application-source.js";
 import APPLICATION_STATUS from "../constants/application-status.js";
 import APPLICATION_SUBMITTED_CV_STORAGE from "../constants/application-submitted-cv-storage.js";
+import AVAILABILITY_DAY_PART from "../constants/availability-day-part.js";
 import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
 import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
@@ -16,6 +17,10 @@ import SYSTEM_MESSAGE_CONTENT from "../constants/system-message-content.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import Application from "../models/application.model.js";
+import CandidateAvailability, {
+  isCalendarDate,
+  isValidTimeZone,
+} from "../models/candidate-availability.model.js";
 import CandidateCV from "../models/candidate-cv.model.js";
 import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
@@ -66,6 +71,8 @@ const deleteApplicationSubmittedCvSnapshotFile = (publicId) => {
 const isMongoDuplicateKeyError = (error) => {
   return error?.code === 11000;
 };
+
+const AVAILABILITY_DAY_PART_VALUES = Object.values(AVAILABILITY_DAY_PART);
 
 const assertCandidateActor = (user) => {
   if (!user || user.role !== USER_ROLE.CANDIDATE) {
@@ -219,9 +226,28 @@ const toPublicAssignedRecruiterSummary = ({ membership, user } = {}) => {
   };
 };
 
+const toCandidateAvailabilityProjection = (availability) => {
+  if (availability == null) {
+    return {
+      status: "NOT_SUBMITTED",
+      timezone: null,
+      slots: [],
+    };
+  }
+
+  return {
+    status: "SUBMITTED",
+    timezone: availability.timezone,
+    slots: availability.slots.map((slot) => ({
+      date: slot.date,
+      dayPart: slot.dayPart,
+    })),
+  };
+};
+
 const toPrimaryJobApplicationView = (
   application,
-  { candidate, assignedRecruiter } = {},
+  { candidate, assignedRecruiter, availability } = {},
 ) => {
   const assignedRecruiterCompanyMemberId =
     application.assignedRecruiterCompanyMemberId == null
@@ -238,6 +264,11 @@ const toPrimaryJobApplicationView = (
     isUnassigned: isApplicationUnassigned(application),
     assignedRecruiter: assignedRecruiter ?? null,
     candidate: candidate ?? null,
+    availability: availability ?? {
+      status: "NOT_SUBMITTED",
+      timezone: null,
+      slots: [],
+    },
     submittedCvSnapshot: toPublicSubmittedCvSnapshot(
       application.submittedCvSnapshot,
     ),
@@ -251,6 +282,7 @@ const toPrimaryJobApplicationView = (
 };
 
 const hydratePrimaryJobApplicationViews = async (applications) => {
+  const applicationIds = applications.map((application) => application._id);
   const candidateUserIds = [
     ...new Set(
       applications.map((application) => application.candidateUserId.toString()),
@@ -266,7 +298,7 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
     ),
   ];
 
-  const [candidates, assigneeMemberships] = await Promise.all([
+  const [candidates, assigneeMemberships, availabilities] = await Promise.all([
     candidateUserIds.length === 0
       ? []
       : User.find({ _id: { $in: candidateUserIds } }).select(
@@ -277,6 +309,11 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
       : CompanyMember.find({ _id: { $in: assigneeMemberIds } }).select(
           "userId jobTitle",
         ),
+    applicationIds.length === 0
+      ? []
+      : CandidateAvailability.find({
+          applicationId: { $in: applicationIds },
+        }).select("applicationId timezone slots"),
   ]);
 
   const candidateById = new Map(
@@ -286,6 +323,12 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
     assigneeMemberships.map((membership) => [
       membership._id.toString(),
       membership,
+    ]),
+  );
+  const availabilityByApplicationId = new Map(
+    availabilities.map((availability) => [
+      availability.applicationId.toString(),
+      availability,
     ]),
   );
 
@@ -329,6 +372,9 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
     return toPrimaryJobApplicationView(application, {
       candidate,
       assignedRecruiter,
+      availability: toCandidateAvailabilityProjection(
+        availabilityByApplicationId.get(application._id.toString()),
+      ),
     });
   });
 };
@@ -811,7 +857,7 @@ const toCandidateMyApplicationJob = (job) => {
 // Unassign nulls assignee-facing fields; Assign again shows the new Assignee.
 const toCandidateMyApplicationView = (
   application,
-  { job, company, assignedRecruiter } = {},
+  { job, company, assignedRecruiter, availability } = {},
 ) => {
   return {
     id: application._id.toString(),
@@ -820,6 +866,11 @@ const toCandidateMyApplicationView = (
     status: application.status,
     isUnassigned: isApplicationUnassigned(application),
     assignedRecruiter: assignedRecruiter ?? null,
+    availability: availability ?? {
+      status: "NOT_SUBMITTED",
+      timezone: null,
+      slots: [],
+    },
     job: job == null ? null : toCandidateMyApplicationJob(job),
     company: toCandidateVisibleCompany(company),
     submittedCvSnapshot: toPublicSubmittedCvSnapshot(
@@ -842,6 +893,7 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
   const jobIds = [
     ...new Set(applications.map((application) => application.jobId.toString())),
   ];
+  const applicationIds = applications.map((application) => application._id);
   const jobs = await Job.find({ _id: { $in: jobIds } });
   const jobById = new Map(jobs.map((job) => [job._id.toString(), job]));
 
@@ -865,16 +917,26 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
         ),
     ),
   ];
-  const assigneeMemberships =
+  const [assigneeMemberships, availabilities] = await Promise.all([
     assigneeMemberIds.length === 0
       ? []
-      : await CompanyMember.find({ _id: { $in: assigneeMemberIds } }).select(
+      : CompanyMember.find({ _id: { $in: assigneeMemberIds } }).select(
           "userId jobTitle",
-        );
+        ),
+    CandidateAvailability.find({
+      applicationId: { $in: applicationIds },
+    }).select("applicationId timezone slots"),
+  ]);
   const assigneeMembershipById = new Map(
     assigneeMemberships.map((membership) => [
       membership._id.toString(),
       membership,
+    ]),
+  );
+  const availabilityByApplicationId = new Map(
+    availabilities.map((availability) => [
+      availability.applicationId.toString(),
+      availability,
     ]),
   );
 
@@ -919,6 +981,9 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
       job,
       company,
       assignedRecruiter,
+      availability: toCandidateAvailabilityProjection(
+        availabilityByApplicationId.get(application._id.toString()),
+      ),
     });
   });
 };
@@ -953,6 +1018,153 @@ const normalizeCandidateMyApplicationsSearch = (search) => {
 
   const trimmed = search.trim();
   return trimmed === "" ? null : trimmed.toLowerCase();
+};
+
+const getCalendarDateInTimeZone = (instant, timeZone) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => ["year", "month", "day"].includes(part.type))
+      .map((part) => [part.type, part.value]),
+  );
+
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+const normalizeFirstAvailabilitySubmission = ({ timezone, slots, now }) => {
+  if (!isValidTimeZone(timezone)) {
+    throw new AppError(400, "timezone must be a valid IANA time zone identifier", {
+      field: "timezone",
+    });
+  }
+
+  if (!Array.isArray(slots)) {
+    throw new AppError(400, "slots must be an array", { field: "slots" });
+  }
+
+  const today = getCalendarDateInTimeZone(now, timezone);
+  const normalizedSlots = [];
+  const seenSlots = new Set();
+
+  for (const [index, slot] of slots.entries()) {
+    if (!isCalendarDate(slot?.date)) {
+      throw new AppError(400, "slots[].date must use YYYY-MM-DD", {
+        field: `slots.${index}.date`,
+      });
+    }
+
+    if (!AVAILABILITY_DAY_PART_VALUES.includes(slot.dayPart)) {
+      throw new AppError(400, "slots[].dayPart must be MORNING or AFTERNOON", {
+        field: `slots.${index}.dayPart`,
+      });
+    }
+
+    if (slot.date < today) {
+      throw new AppError(
+        409,
+        "Availability slots must not be before today in the submitted timezone",
+        { field: `slots.${index}.date` },
+      );
+    }
+
+    const key = `${slot.date}:${slot.dayPart}`;
+
+    if (seenSlots.has(key)) {
+      throw new AppError(
+        400,
+        "slots must not contain duplicate (date, dayPart) values",
+        { field: `slots.${index}` },
+      );
+    }
+
+    seenSlots.add(key);
+    normalizedSlots.push({ date: slot.date, dayPart: slot.dayPart });
+  }
+
+  return {
+    timezone,
+    slots: normalizedSlots,
+  };
+};
+
+// V12 F02 Slice 01: first submit creates the sole current Availability only.
+// It intentionally does not create a Schedule or mutate Application status/version.
+const submitCandidateAvailabilityFirstTime = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  timezone,
+  slots,
+  now = new Date(),
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only submit Availability for their own Applications",
+    );
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const application = await Application.findOne({
+    _id: applicationId,
+    candidateUserId,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  });
+
+  if (!application) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  // Slice 01 opens scheduling only from the current CONTACTED state. Legacy
+  // pre-V12 downstream Applications are never backfilled with inferred data.
+  if (application.status !== APPLICATION_STATUS.CONTACTED) {
+    throw new AppError(
+      409,
+      "Availability can first be submitted only while Application is CONTACTED",
+      { field: "status" },
+    );
+  }
+
+  const submission = normalizeFirstAvailabilitySubmission({
+    timezone,
+    slots,
+    now,
+  });
+
+  try {
+    const availability = await CandidateAvailability.create({
+      applicationId: application._id,
+      timezone: submission.timezone,
+      slots: submission.slots,
+      revision: 0,
+    });
+
+    return toCandidateAvailabilityProjection(availability);
+  } catch (error) {
+    if (isMongoDuplicateKeyError(error)) {
+      throw new AppError(
+        409,
+        "Availability has already been submitted; editing is not available yet",
+        { field: "applicationId" },
+      );
+    }
+
+    throw error;
+  }
 };
 
 const listCandidateMyApplications = async ({
@@ -3289,6 +3501,20 @@ const updateApplicationRecruitmentPipelineStatus = async ({
     });
   }
 
+  // V12 BR-18: this transition is no longer an independent Pipeline mutation.
+  // Slice 01 intentionally has no proposal workflow to perform the coupled
+  // Schedule creation and transition.
+  if (
+    expectedStatus === APPLICATION_STATUS.CONTACTED &&
+    targetStatus === APPLICATION_STATUS.INTERVIEW_SCHEDULED
+  ) {
+    throw new AppError(
+      409,
+      "CONTACTED to INTERVIEW_SCHEDULED requires the first Interview Schedule proposal",
+      { field: "targetStatus" },
+    );
+  }
+
   const context = await resolveRecruiterBusinessContext({
     user: actorUser,
     clientCompanyId,
@@ -4500,6 +4726,7 @@ export {
   isApplicationUnassigned,
   sendCandidateApplicationConversationNormalMessage,
   sendRecruiterApplicationConversationNormalMessage,
+  submitCandidateAvailabilityFirstTime,
   listCandidateMyApplications,
   listManagedJobs,
   listPrimaryJobApplications,

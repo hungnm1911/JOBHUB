@@ -2,7 +2,14 @@
 
 ## Current project state
 
-**V12 — Interview Schedule** is `READY FOR IMPLEMENTATION`. Its approved
+**V12 — Interview Schedule** is `IN PROGRESS`. Slice 01 is implemented and
+verified for first Candidate Availability submit and Application-read projection
+(`F01`, `F02`, `F04`, `F11` partial; `BR-01`–`BR-10`, `BR-33`, `BR-35`).
+It opens Availability at `CONTACTED` without creating a document; first submit
+creates one current document with an empty or non-empty slot set, and existing
+Application read authority exposes the `NOT_SUBMITTED` / `SUBMITTED` distinction.
+No Schedule/proposal/pipeline transition, Availability edit/CAS, notification,
+realtime, or Conversation/Message authority change is included. Its approved
 Product/Data contracts are tracked at
 `docs/product/versions/v12-interview-schedule.md` and
 `docs/data/versions/v12-interview-schedule-data-model.md`. Gate 00 closes the
@@ -11,10 +18,9 @@ V10 compatibility boundary: from V12 onward,
 the first `InterviewSchedule(PROPOSED)` creation. Pre-V12 Applications already
 at `INTERVIEW_SCHEDULED` or later retain their historical state without
 synthetic Availability/Schedule backfill, rollback, or inferred proposal
-history; no new legacy state may be created after cutover. No V12 Fxx behavior
-or Slice 01 implementation has started. Slice 01 is the next implementation
-unit. The runtime owner for automatic proposal expiration remains an
-engineering gate for Slice 06 only and does not block Slice 01.
+history; no new legacy state may be created after cutover. The runtime owner for
+automatic proposal expiration remains an engineering gate for Slice 06 only and
+does not block Slice 01.
 
 **V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
 Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across
@@ -1377,9 +1383,10 @@ the current V10 revision complete.
 
 ## Deferred / not started
 
-- **V12 implementation:** V12 is `READY FOR IMPLEMENTATION`; Slices 01–09 have
-  not started. The expiration runtime owner is intentionally deferred to the
-  Slice 06 engineering gate and is not a Slice 01 prerequisite.
+- **V12 implementation:** Slice 01 is complete and verified. Slices 02–09
+  remain unstarted; Availability edit/CAS starts no earlier than Slice 03, and
+  InterviewSchedule/proposal lifecycle remains deferred. The expiration runtime
+  owner is intentionally deferred to the Slice 06 engineering gate.
 - **V8 remains `PENDING`:** its Product/Data planning drafts are not approved
   implementation authority.
 - **V9 deferred scope:** downstream pipeline states, My Applications,
@@ -1409,6 +1416,13 @@ the current V10 revision complete.
   infrastructure supports the collection/index and transaction invariants
   required by the approved V12 slices; no verification rule was changed or
   relaxed.
+- V12 Slice 01 Current Availability First Submit + Read: focused Availability
+  and Pipeline regression tests passed (2 files / 40 tests), then
+  `cd backend && npm run verify:agent` passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 120 files / 1,145 tests). No InterviewSchedule, proposal,
+  Availability edit/CAS, notification, realtime, scheduler/worker/queue, or
+  Conversation/Message authorization behavior was added.
 - V11 Final Acceptance & Regression Closure: after closing the Send guard-document timestamp side effect, complementary Send ↔ eligibility-loss keep ordering, and actual Send ↔ Assign-again ordering, the official `cd backend && npm run verify:agent` gate passed across F01–F10 / BR-01–BR-55 / TX-01–TX-08 (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 119 files / 1,140 tests). The focused V11 baseline passed 8 files / 104 tests, including `test/application/v11-acceptance.test.js` (20 tests) and `test/application/v11-normal-message-send.test.js` (15 tests). The remediations add no new Chat capability, field, collection, index, or migration.
 - V11 Slice 01 Conversation & Message Foundation + First Assign: the official `cd backend && npm run verify:agent` gate passed after Conversation/Message persistence and First Assign TX-01 Conversation creation (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 113 files / 1,059 tests). Focused coverage passed 2 files / 23 tests. No Chat send/read HTTP, Reassign/Unassign SYSTEM Message, authorization, freeze, notification, realtime, attachment, Application field, or migration was added.
 - V10 Slice 07 CompanyMember Recruiter LOCK/TERMINATE automatic Unassign integration (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after CompanyMember LOCK/TERMINATE switched Application resolution from trusted `A → B` handoff to Slice 06 `A → NONE` automatic Unassign while keeping V6 Job-team Primary transfer / Supporting removal and the dual current-state final zero-responsibility guard (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 998 tests). Focused LOCK/TERMINATE Unassign coverage passed 1 file / 17 tests. No generic Recruitment Team removal change, Platform Admin User lifecycle change, Application replacement heuristic, history, recovery state, queue, worker, field, collection, index, or migration was added.

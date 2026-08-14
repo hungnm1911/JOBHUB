@@ -21,6 +21,7 @@ import {
   replaceSubmittedCv,
   sendCandidateApplicationConversationNormalMessage,
   sendRecruiterApplicationConversationNormalMessage,
+  submitCandidateAvailabilityFirstTime,
   unassignApplication,
   updateApplicationRecruitmentPipelineStatus,
   withdrawApplication,
@@ -116,6 +117,26 @@ const getCandidateMyApplicationHandler = async (request, response, next) => {
     });
 
     return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const submitCandidateAvailabilityFirstTimeHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const availability = await submitCandidateAvailabilityFirstTime({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      timezone: request.body.timezone,
+      slots: request.body.slots,
+    });
+
+    return response.status(201).json({ availability });
   } catch (error) {
     return next(error);
   }
@@ -504,6 +525,7 @@ export {
   replaceSubmittedCvHandler,
   sendCandidateApplicationConversationNormalMessageHandler,
   sendRecruiterApplicationConversationNormalMessageHandler,
+  submitCandidateAvailabilityFirstTimeHandler,
   unassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
   withdrawApplicationHandler,

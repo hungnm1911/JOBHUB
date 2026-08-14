@@ -9,6 +9,7 @@ import {
   previewCandidateApplicationSubmittedCvHandler,
   replaceSubmittedCvHandler,
   sendCandidateApplicationConversationNormalMessageHandler,
+  submitCandidateAvailabilityFirstTimeHandler,
   withdrawApplicationHandler,
 } from "../controllers/application.controller.js";
 import {
@@ -39,6 +40,7 @@ import validateDirectApply from "../middlewares/validate-direct-apply.js";
 import validateCreateUploadedCv from "../middlewares/validate-create-uploaded-cv.js";
 import validateReplaceSubmittedCv from "../middlewares/validate-replace-submitted-cv.js";
 import validateSendConversationNormalMessage from "../middlewares/validate-send-conversation-normal-message.js";
+import validateSubmitCandidateAvailability from "../middlewares/validate-submit-candidate-availability.js";
 import validateWithdrawApplication from "../middlewares/validate-withdraw-application.js";
 import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
 import validateUpdateCandidateCvMetadata from "../middlewares/validate-update-candidate-cv-metadata.js";
@@ -177,6 +179,14 @@ router.get(
   authenticateAccess,
   authorizeCandidate,
   getCandidateMyApplicationHandler,
+);
+
+router.post(
+  "/applications/:applicationId/availability",
+  authenticateAccess,
+  authorizeCandidate,
+  validateSubmitCandidateAvailability,
+  submitCandidateAvailabilityFirstTimeHandler,
 );
 
 router.get(

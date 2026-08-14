@@ -4,6 +4,7 @@ import request from "supertest";
 
 import app from "../../src/app.js";
 import { ensureApplicationCollectionInvariants } from "../../src/models/application.model.js";
+import { ensureCandidateAvailabilityCollection } from "../../src/models/candidate-availability.model.js";
 import { ensureCandidateCvCollectionInvariants } from "../../src/models/candidate-cv.model.js";
 import { ensureCompanyCollectionInvariants } from "../../src/models/company.model.js";
 import { ensureConversationCollection } from "../../src/models/conversation.model.js";
@@ -33,6 +34,7 @@ const connectTestDatabase = async () => {
   await ensureJobCollectionInvariants(mongoose.connection);
   await ensureCandidateCvCollectionInvariants(mongoose.connection);
   await ensureApplicationCollectionInvariants(mongoose.connection);
+  await ensureCandidateAvailabilityCollection(mongoose.connection);
   await ensureConversationCollection(mongoose.connection);
   await ensureMessageCollection(mongoose.connection);
 };
