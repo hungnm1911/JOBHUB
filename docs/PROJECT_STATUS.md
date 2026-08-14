@@ -9,10 +9,11 @@ VERIFIED` (`BR-01`–`BR-06`, `BR-13` persistence foundation only, `BR-49`,
 (`F03`) is `IMPLEMENTED AND VERIFIED` (`BR-15`–`BR-20`, `BR-47`, `BR-51`,
 `TX-02`). Slice 03 — Manual Unassign + Assign lại (`F04`, `F06`) is
 `IMPLEMENTED AND VERIFIED` (`BR-21`–`BR-25`, `BR-29`–`BR-30`, `BR-47`,
-`BR-51`, `TX-03`, `TX-05`). Canonical Product/Data contracts remain
-implementation authority. Remaining V11 Chat send/read, Automatic Unassign
-Chat consequence, authorization, freeze, and terminal read-only slices are
-not implemented.
+`BR-51`, `TX-03`, `TX-05`). Slice 04 — Automatic Unassign Chat Consequence
+(`F05`) is `IMPLEMENTED AND VERIFIED` (`BR-23`, `BR-26`–`BR-28`, `BR-47`,
+`BR-51`, `BR-54`, `BR-55`, `TX-04`). Canonical Product/Data contracts remain
+implementation authority. Remaining V11 Chat send/read, authorization HTTP,
+Company-lock freeze, and terminal read-only slices are not implemented.
 
 **V7 — Candidate Profile và thư viện CV** is `COMPLETED AND VERIFIED`. Slices
 01–11 are implemented and verified
@@ -233,6 +234,30 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Current V11 Conversation revision
 
+- **Implemented; verified:** V11 Slice 04 — Automatic Unassign Chat Consequence
+  (`F05`; `BR-23`, `BR-26`–`BR-28`, `BR-47`, `BR-51`, `BR-54`, `BR-55`; `TX-04`):
+  extends canonical `automaticallyUnassignApplication` so each non-terminal
+  Application Automatic Unassign `A → NONE` that already has a Conversation
+  keeps that Conversation and Message history, keeps Recruitment Status, and
+  creates exactly one awaiting-assignee SYSTEM Message (no human sender; no
+  lifecycle/team-removal reason exposure) in the same per-Application
+  transaction. Missing Conversation keeps V10 behavior (`A → NONE` only; no
+  Conversation or SYSTEM Message created for V11). Failed CAS / Message-create
+  failure cannot leave Automatic Unassign without the required SYSTEM Message,
+  or a SYSTEM Message without the corresponding `A → NONE`. Batch lifecycle /
+  team callers remain independent per Application (no global all-or-nothing).
+  CompanyMember LOCK/TERMINATE, Recruitment Team removal, and Platform Admin
+  User LOCK/TERMINATE reuse the same consequence. Adds pure
+  `evaluateApplicationConversationChatAuthority` so eligibility-loss window
+  denies Send immediately (Candidate read-only; outgoing Recruiter neither
+  reads nor sends) and BR-54 denies LOCKED/TERMINATED Recruiter Chat access
+  despite historical association — without implementing Send/read HTTP,
+  Company-lock freeze, or terminal read-only surfaces. Focused coverage in
+  `test/application/v11-automatic-unassign-chat-consequence.test.js` (1 file /
+  12 tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 116 files / 1,092 tests).
+
 - **Implemented; verified:** V11 Slice 03 — Manual Unassign + Assign lại
   (`F04`, `F06`; `BR-21`–`BR-25`, `BR-29`–`BR-30`, `BR-47`, `BR-51`; `TX-03`,
   `TX-05`): successful Manual Unassign `A → NONE` on a non-terminal Application
@@ -247,9 +272,9 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   create Conversation or SYSTEM Message. Failed CAS / Message-create failure
   cannot leave Unassign or Assign again without the required SYSTEM Message, or
   a SYSTEM Message without the corresponding assignment transition. Automatic
-  Unassign Chat consequence, eligibility-loss immediate Chat exclusion,
-  Send/read, authorization, Company-lock freeze, terminal read-only, realtime,
-  notification, and attachment remain out of this slice. Focused coverage in
+  Unassign Chat consequence is Slice 04. Send/read, authorization HTTP,
+  Company-lock freeze, terminal read-only, realtime, notification, and
+  attachment remain out of this slice. Focused coverage in
   `test/application/v11-unassign-assign-again-system-message.test.js` (1 file /
   11 tests). The official backend gate passed (ESLint: 0 errors / 2 existing
   warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;

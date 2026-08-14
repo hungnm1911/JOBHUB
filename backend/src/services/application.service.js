@@ -32,6 +32,7 @@ import {
   resolveRecruiterBusinessContext,
 } from "./company.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
+import { evaluateApplicationConversationChatAuthority } from "./application-chat-authority.service.js";
 import {
   acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
@@ -1606,9 +1607,9 @@ const createConversationOnFirstAssignIfAbsent = async ({
   }
 };
 
-// V11 F03/F04/F06 SYSTEM Message consequence when Conversation already exists.
-// Does not create Conversation, rewrite history, or act as Assignment History /
-// current-Assignee authority.
+// V11 F03/F04/F05/F06 SYSTEM Message consequence when Conversation already
+// exists. Does not create Conversation, rewrite history, or act as Assignment
+// History / current-Assignee authority.
 const createSystemMessageIfConversationExists = async ({
   applicationId,
   content,
@@ -2172,8 +2173,8 @@ const executePrimaryCurrentAssigneeMutation = async ({
       // V11 F03 / F04 / BR-15–BR-23 / BR-47 / BR-51 / TX-02 / TX-03:
       // A → B or A → NONE keeps the existing Conversation and writes the
       // required SYSTEM Message in the same atomic outcome when Conversation
-      // already exists. Automatic Unassign Chat consequence stays out of this
-      // manual owner.
+      // already exists. Automatic Unassign Chat consequence is owned by
+      // automaticallyUnassignApplication (F05 / TX-04).
       if (isUnassign) {
         await createSystemMessageIfConversationExists({
           applicationId: mutatedApplication._id,
@@ -2250,6 +2251,11 @@ const unassignApplication = async ({
 // actor-authorized assignment management. Reuses commitAssignedAssigneeMutation
 // so stale expected-assignee/version writes cannot clear a newer Assignee.
 // No replacement, no synthetic A → B, no status/snapshot/identity/team mutation.
+//
+// V11 F05 / TX-04: when Conversation already exists, A → NONE and the required
+// awaiting-assignee SYSTEM Message are one per-Application atomic outcome.
+// Missing Conversation keeps V10 behavior (A → NONE only; no Conversation or
+// Message created for V11). Lifecycle reasons are never written into content.
 const automaticallyUnassignApplication = async ({
   applicationId,
   expectedAssigneeCompanyMemberId,
@@ -2278,84 +2284,116 @@ const automaticallyUnassignApplication = async ({
     });
   }
 
-  let applicationQuery = Application.findById(applicationId);
-  if (session) {
-    applicationQuery = applicationQuery.session(session);
-  }
+  const commitAutomaticUnassign = async (activeSession) => {
+    let applicationQuery = Application.findById(applicationId);
+    if (activeSession) {
+      applicationQuery = applicationQuery.session(activeSession);
+    }
 
-  const application = await applicationQuery;
+    const application = await applicationQuery;
 
-  if (!application) {
-    throw new AppError(404, "Application not found", {
-      field: "applicationId",
-    });
-  }
+    if (!application) {
+      throw new AppError(404, "Application not found", {
+        field: "applicationId",
+      });
+    }
 
-  // BR-44: V10 assignment mutations only cover Direct Applications.
-  if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-    throw new AppError(409, "Only Direct Applications can be unassigned", {
-      field: "source",
-    });
-  }
+    // BR-44: V10 assignment mutations only cover Direct Applications.
+    if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
+      throw new AppError(409, "Only Direct Applications can be unassigned", {
+        field: "source",
+      });
+    }
 
-  // BR-17 / BR-52: terminal Applications keep the final Assignee.
-  if (
-    isApplicationTerminalStatus(application.status) ||
-    !APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)
-  ) {
-    throw new AppError(409, "Terminal Applications cannot be unassigned", {
-      field: "status",
-      status: application.status,
-    });
-  }
+    // BR-17 / BR-52: terminal Applications keep the final Assignee.
+    if (
+      isApplicationTerminalStatus(application.status) ||
+      !APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)
+    ) {
+      throw new AppError(409, "Terminal Applications cannot be unassigned", {
+        field: "status",
+        status: application.status,
+      });
+    }
 
-  // BR-10 / BR-52: automatic Unassign requires a current Assignee.
-  if (isApplicationUnassigned(application)) {
-    throw new AppError(409, "Application has no Assignee to unassign", {
-      field: "assignedRecruiterCompanyMemberId",
-    });
-  }
+    // BR-10 / BR-52: automatic Unassign requires a current Assignee.
+    if (isApplicationUnassigned(application)) {
+      throw new AppError(409, "Application has no Assignee to unassign", {
+        field: "assignedRecruiterCompanyMemberId",
+      });
+    }
 
-  if (
-    application.assignedRecruiterCompanyMemberId.toString() !==
-    expectedAssigneeCompanyMemberId.toString()
-  ) {
-    throw new AppError(
-      409,
-      "Application Assignee has changed; refresh and retry Automatic Unassign",
-      { field: "expectedAssigneeCompanyMemberId" },
-    );
-  }
+    if (
+      application.assignedRecruiterCompanyMemberId.toString() !==
+      expectedAssigneeCompanyMemberId.toString()
+    ) {
+      throw new AppError(
+        409,
+        "Application Assignee has changed; refresh and retry Automatic Unassign",
+        { field: "expectedAssigneeCompanyMemberId" },
+      );
+    }
 
-  if (application.version !== expectedVersion) {
-    throw new AppError(
-      409,
-      "Application has changed; refresh and retry Automatic Unassign",
-      { field: "expectedVersion" },
-    );
-  }
+    if (application.version !== expectedVersion) {
+      throw new AppError(
+        409,
+        "Application has changed; refresh and retry Automatic Unassign",
+        { field: "expectedVersion" },
+      );
+    }
 
-  // TX-01 / TX-03 / BR-10 / BR-11 / BR-31 / BR-36–BR-38:
-  // Atomic A → NONE via the shared assigned-state CAS. No target eligibility
-  // (NONE has no replacement). Non-terminal status CAS preserves a prior valid
-  // pipeline/Replace write on retry and blocks overwrite of terminals.
-  const unassignedApplication = await commitAssignedAssigneeMutation({
-    applicationId: application._id,
-    jobId: application.jobId,
-    expectedAssigneeCompanyMemberId,
-    expectedVersion,
-    nextAssignedRecruiterCompanyMemberId: null,
-    session,
-  });
-
-  if (!unassignedApplication) {
-    await rejectFailedAssignedAssigneeCas({
+    // TX-01 / TX-03 / BR-10 / BR-11 / BR-31 / BR-36–BR-38:
+    // Atomic A → NONE via the shared assigned-state CAS. No target eligibility
+    // (NONE has no replacement). Non-terminal status CAS preserves a prior valid
+    // pipeline/Replace write on retry and blocks overwrite of terminals.
+    const unassignedApplication = await commitAssignedAssigneeMutation({
       applicationId: application._id,
-      expectedVersion,
+      jobId: application.jobId,
       expectedAssigneeCompanyMemberId,
-      session,
-      actionLabel: "Automatic Unassign",
+      expectedVersion,
+      nextAssignedRecruiterCompanyMemberId: null,
+      session: activeSession,
     });
+
+    if (!unassignedApplication) {
+      await rejectFailedAssignedAssigneeCas({
+        applicationId: application._id,
+        expectedVersion,
+        expectedAssigneeCompanyMemberId,
+        session: activeSession,
+        actionLabel: "Automatic Unassign",
+      });
+    }
+
+    // V11 F05 / BR-23 / BR-27 / BR-28 / BR-47 / BR-51 / TX-04:
+    // Same atomic outcome as Manual Unassign when Conversation exists. Content
+    // only announces awaiting a new responsible recruiter — never LOCK /
+    // TERMINATE / membership / team-removal reasons.
+    await createSystemMessageIfConversationExists({
+      applicationId: unassignedApplication._id,
+      content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
+      session: activeSession,
+    });
+
+    return unassignedApplication;
+  };
+
+  if (session) {
+    return commitAutomaticUnassign(session);
+  }
+
+  // Per-Application transaction only (TX-04). Callers that detach many
+  // Applications keep independent commits — no global all-or-nothing lifecycle
+  // transaction beyond canonical V10 orchestration.
+  const ownedSession = await mongoose.startSession();
+  let unassignedApplication = null;
+
+  try {
+    await ownedSession.withTransaction(async () => {
+      unassignedApplication = await commitAutomaticUnassign(ownedSession);
+    });
+  } finally {
+    await ownedSession.endSession();
   }
 
   return unassignedApplication;
@@ -3733,6 +3771,7 @@ export {
   downloadCandidateApplicationSubmittedCv,
   downloadPrimaryJobApplicationSubmittedCv,
   downloadRecruiterMyApplicationSubmittedCv,
+  evaluateApplicationConversationChatAuthority,
   findNonTerminalApplicationsAssignedToRecruiter,
   findNonTerminalApplicationsAssignedToRecruiterOnJob,
   firstAssignApplication,
