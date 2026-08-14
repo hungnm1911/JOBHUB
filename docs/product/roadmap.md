@@ -100,7 +100,8 @@ those remediations; V11 is therefore `COMPLETED AND VERIFIED` against the
 approved Conversation/Chat Product/Data contracts. Realtime, notification,
 attachment, and related deferred capabilities remain outside V11 by product
 boundary. V12 now has approved Product/Data contracts and is `IN PROGRESS`;
-Slices 01 and 02 are implemented and verified. V13 through
+Slices 01–08 are implemented and verified, while Slice 09 Final Acceptance is
+resolving recorded acceptance findings. V13 through
 V17 must not be implemented merely from their roadmap titles.
 
 V12 canonical specification:

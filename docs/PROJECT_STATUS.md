@@ -2,8 +2,9 @@
 
 ## Current project state
 
-**V12 — Interview Schedule** is `IN PROGRESS`. Slice 01 is implemented and
-verified for first Candidate Availability submit and Application-read projection
+**V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
+verified, while Slice 09 Final Acceptance is resolving recorded acceptance
+findings. Slice 01 covers first Candidate Availability submit and Application-read projection
 (`F01`, `F02`, `F04`, `F11` partial; `BR-01`–`BR-10`, `BR-33`, `BR-35`).
 Slice 02 is implemented and verified for the first Interview Proposal and
 pipeline cutover (`F05`; `BR-11`, `BR-12`, `BR-15`–`BR-18`, `BR-25`–`BR-26`,
@@ -99,6 +100,12 @@ Availability (including `[]`), and Schedule history only after its pre-existing
 Application authorization passes. Job `CLOSED`/`EXPIRED` does not cancel or
 hide Interview data for a non-terminal Application, and Interview reads do not
 expand V11 Conversation/Message authority.
+
+Acceptance remediation: production startup now awaits
+`ensureCandidateAvailabilityCollection()` before opening the HTTP listener,
+matching the test harness and Interview Schedule readiness path, so PI-01's
+unique `applicationId` index is established (or startup fails) before traffic
+is accepted. First-submit/edit/proposal business behavior is unchanged.
 
 **V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
 Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across
@@ -1461,9 +1468,10 @@ the current V10 revision complete.
 
 ## Deferred / not started
 
-- **V12 implementation:** Slice 01 is complete and verified. Slices 02–05 are
-  implemented; Slice 06 automatic proposal expiration is implemented. Remaining
-  V12 slices stay deferred until their approved scope begins.
+- **V12 Final Acceptance:** Slices 01–08 are implemented and verified. Slice 09
+  Final Acceptance remains in progress only for recorded acceptance findings;
+  Slice 07 terminal cancellation and Slice 08 Assignment/Interview-read
+  compatibility are not deferred.
 - **V8 remains `PENDING`:** its Product/Data planning drafts are not approved
   implementation authority.
 - **V9 deferred scope:** downstream pipeline states, My Applications,
@@ -1500,6 +1508,25 @@ the current V10 revision complete.
   ARCH-016; Vitest: 120 files / 1,145 tests). No InterviewSchedule, proposal,
   Availability edit/CAS, notification, realtime, scheduler/worker/queue, or
   Conversation/Message authorization behavior was added.
+- V12 Slices 07–08 Final Acceptance baseline: focused terminal-cancellation and
+  Assignment/Interview-read compatibility regressions passed (2 files / 16
+  tests): `test/application/v12-slice07-terminal-interview-cancellation.test.js`
+  and `test/application/v12-slice08-assignment-interview-compatibility.test.js`;
+  then `cd backend && npm run verify:agent` passed (ESLint: 0 errors / 2
+  existing warnings in `test/job/v6-acceptance.test.js`; architecture:
+  ARCH-001 through ARCH-016; Vitest: 124 files / 1,194 tests).
+- V12 acceptance finding — Candidate Availability unique-index startup
+  readiness: production `backend/index.js` now awaits
+  `ensureCandidateAvailabilityCollection()` before `startHttpServer`, so PI-01
+  index initialization failure aborts startup without opening the HTTP listener;
+  test harness and production share the same minimum readiness guarantee.
+  Focused regressions in
+  `test/application/v12-candidate-availability-startup-readiness.test.js`
+  (plus existing Slice 01 Availability suite) passed, then
+  `cd backend && npm run verify:agent` passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 124 files / 1,194 tests). No Availability/proposal/Schedule
+  business-behavior change and no generic index manager were added.
 - V12 Slice 06 Automatic Interview Proposal Expiration: focused expiration
   lifecycle tests passed (`test/application/v12-slice06-interview-proposal-expiration.test.js`,
   1 file / 12 tests), then `cd backend && npm run verify:agent` passed (ESLint:
