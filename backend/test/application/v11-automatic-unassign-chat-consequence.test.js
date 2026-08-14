@@ -711,7 +711,7 @@ describe("V11 Slice 04 — Automatic Unassign Chat Consequence (F05)", () => {
       ).toEqual({
         canRead: false,
         canSendNormal: false,
-        mode: "ELIGIBILITY_LOSS_WINDOW",
+        mode: "FROZEN_COMPANY",
       });
     });
 

@@ -342,6 +342,76 @@ const resolveRecruiterBusinessContext = async ({
   return context;
 };
 
+// V11 Slice 05 / BR-33 / BR-37 / BR-54: historical Conversation read may remain
+// available when Company is LOCKED (FROZEN_COMPANY) or Application is terminal.
+// Reuses tenant + ACTIVE User/membership gates, but does not require Company
+// operational business access. Company Manager still has no Chat authority.
+const resolveRecruiterChatHistoryContext = async ({
+  user,
+  session,
+  clientCompanyId,
+} = {}) => {
+  if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+    throw new AppError(403, "Recruiter access required", {
+      field: "role",
+    });
+  }
+
+  if (user.status === USER_STATUS.LOCKED) {
+    throw new AppError(403, "Account is locked", {
+      field: "status",
+    });
+  }
+
+  if (user.status === USER_STATUS.TERMINATED) {
+    throw new AppError(403, "Account is terminated", {
+      field: "status",
+    });
+  }
+
+  if (user.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(403, "Account is not active", {
+      field: "status",
+    });
+  }
+
+  if (user.mustChangePassword) {
+    throw new AppError(
+      403,
+      "Password setup is required before business access",
+      {
+        field: "mustChangePassword",
+      },
+    );
+  }
+
+  const { membership, company, companyId } = await resolveCompanyStaffTenant({
+    userId: user._id,
+    session,
+    clientCompanyId,
+  });
+
+  if (membership.role !== COMPANY_MEMBER_ROLE.RECRUITER) {
+    throw new AppError(403, "Recruiter access required", {
+      field: "role",
+    });
+  }
+
+  if (membership.status !== COMPANY_MEMBER_STATUS.ACTIVE) {
+    throw new AppError(403, "Company membership is not active", {
+      field: "membershipStatus",
+    });
+  }
+
+  return {
+    user,
+    membership,
+    company,
+    companyId,
+    companyRole: membership.role,
+  };
+};
+
 const assertCompanyDraftEditable = (company) => {
   if (
     company.approvalStatus !== COMPANY_APPROVAL_STATUS.NOT_SUBMITTED ||
@@ -863,6 +933,7 @@ export {
   resolveCompanyStaffTenant,
   resolveOwnedCompany,
   resolveRecruiterBusinessContext,
+  resolveRecruiterChatHistoryContext,
   submitOwnedCompany,
   toPublicCompany,
   updateOwnedCompanyActiveProfile,

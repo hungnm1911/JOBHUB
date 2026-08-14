@@ -30,6 +30,7 @@ import {
   resolveCompanyManagerRecruiterManagementContext,
   resolveCompanyStaffBusinessContext,
   resolveRecruiterBusinessContext,
+  resolveRecruiterChatHistoryContext,
 } from "./company.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
 import { evaluateApplicationConversationChatAuthority } from "./application-chat-authority.service.js";
@@ -1637,6 +1638,265 @@ const createSystemMessageIfConversationExists = async ({
   );
 
   return systemMessage;
+};
+
+const toPublicConversationMessage = (message) => {
+  return {
+    id: message._id.toString(),
+    type: message.type,
+    senderUserId: message.senderUserId ? message.senderUserId.toString() : null,
+    senderCompanyMemberId: message.senderCompanyMemberId
+      ? message.senderCompanyMemberId.toString()
+      : null,
+    content: message.content,
+    createdAt: message.createdAt,
+  };
+};
+
+const toPublicConversationHistory = ({
+  conversation,
+  messages,
+  authority,
+} = {}) => {
+  return {
+    conversation: {
+      id: conversation._id.toString(),
+      applicationId: conversation.applicationId.toString(),
+      createdAt: conversation.createdAt,
+      mode: authority.mode,
+    },
+    messages: messages.map(toPublicConversationMessage),
+    authority: {
+      canRead: authority.canRead,
+      canSendNormal: authority.canSendNormal,
+    },
+  };
+};
+
+// Soft continuous-eligibility facts for Chat authority (BR-08). Does not throw;
+// Callers must not treat stored Assignee alone as authorization.
+const buildCurrentAssigneeChatFacts = async ({
+  application,
+  job,
+  company,
+} = {}) => {
+  if (isApplicationUnassigned(application)) {
+    return {
+      currentAssignee: null,
+      isUnassigned: true,
+    };
+  }
+
+  const assigneeCompanyMemberId = application.assignedRecruiterCompanyMemberId;
+  const membership = await CompanyMember.findById(assigneeCompanyMemberId);
+
+  if (!membership) {
+    return {
+      currentAssignee: {
+        companyMemberId: assigneeCompanyMemberId.toString(),
+        userId: null,
+        membershipStatus: null,
+        userStatus: null,
+        isContinuouslyEligible: false,
+      },
+      isUnassigned: false,
+    };
+  }
+
+  const user = await User.findById(membership.userId).select("status");
+  const membershipIdStr = membership._id.toString();
+  const isPrimary =
+    job.primaryRecruiterCompanyMemberId.toString() === membershipIdStr;
+  const isSupporting = (job.supportingRecruiterCompanyMemberIds ?? []).some(
+    (id) => id.toString() === membershipIdStr,
+  );
+  const sameCompany =
+    membership.companyId.toString() === job.companyId.toString();
+  const companyIsOperational = isOwningCompanyActiveForPublicEligibility(company);
+  const isContinuouslyEligible =
+    membership.role === COMPANY_MEMBER_ROLE.RECRUITER &&
+    membership.status === COMPANY_MEMBER_STATUS.ACTIVE &&
+    user?.status === USER_STATUS.ACTIVE &&
+    sameCompany &&
+    (isPrimary || isSupporting) &&
+    companyIsOperational;
+
+  return {
+    currentAssignee: {
+      companyMemberId: membershipIdStr,
+      userId: membership.userId.toString(),
+      membershipStatus: membership.status,
+      userStatus: user?.status ?? null,
+      isContinuouslyEligible,
+    },
+    isUnassigned: false,
+  };
+};
+
+const loadApplicationConversationHistoryContext = async ({
+  applicationId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const application = await Application.findById(applicationId);
+
+  if (
+    !application ||
+    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+  ) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const conversation = await Conversation.findOne({
+    applicationId: application._id,
+  });
+
+  if (!conversation) {
+    throw new AppError(404, "Conversation not found", {
+      field: "applicationId",
+    });
+  }
+
+  const job = await Job.findById(application.jobId);
+
+  if (!job) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const company = await Company.findById(job.companyId).select(
+    "approvalStatus operationalStatus",
+  );
+
+  const companyIsOperational =
+    isOwningCompanyActiveForPublicEligibility(company);
+  const { currentAssignee, isUnassigned } = await buildCurrentAssigneeChatFacts({
+    application,
+    job,
+    company,
+  });
+
+  return {
+    application,
+    conversation,
+    job,
+    company,
+    companyIsOperational,
+    currentAssignee,
+    isUnassigned,
+  };
+};
+
+const readAuthorizedConversationHistory = async ({
+  context,
+  actor,
+} = {}) => {
+  const authority = evaluateApplicationConversationChatAuthority({
+    conversationExists: true,
+    applicationStatus: context.application.status,
+    isUnassigned: context.isUnassigned,
+    companyIsOperational: context.companyIsOperational,
+    currentAssignee: context.currentAssignee,
+    actor,
+  });
+
+  if (!authority.canRead) {
+    throw new AppError(403, "Conversation access is not allowed", {
+      field: "conversationId",
+      mode: authority.mode,
+    });
+  }
+
+  const messages = await Message.find({
+    conversationId: context.conversation._id,
+  }).sort({ createdAt: 1, _id: 1 });
+
+  return toPublicConversationHistory({
+    conversation: context.conversation,
+    messages,
+    authority,
+  });
+};
+
+// V11 Slice 05 / F02 / F04 / F05 / F07 / F08 / F09: Candidate Conversation
+// history read. Authorization derives from Application ownership + current
+// lifecycle state; Message history never grants authority (BR-07 / BR-48).
+const getCandidateApplicationConversation = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only access their own Applications",
+    );
+  }
+
+  const context = await loadApplicationConversationHistoryContext({
+    applicationId,
+  });
+
+  // BR-07 / BR-41: foreign Applications are not readable as Conversation.
+  if (context.application.candidateUserId.toString() !== candidateUserId.toString()) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  return readAuthorizedConversationHistory({
+    context,
+    actor: {
+      kind: "CANDIDATE",
+      userId: candidateUserId.toString(),
+    },
+  });
+};
+
+// V11 Slice 05: Recruiter Conversation history read for current/persisted/
+// final Assignee. Uses Chat-history context so Company lock does not block
+// FROZEN_COMPANY / terminal historical read (BR-33 / BR-37). Primary,
+// Supporting, Company Manager, Former Assignee, and cross-tenant actors do
+// not gain authority from Job membership or Message history (BR-09–BR-12,
+// BR-17, BR-48).
+const getRecruiterApplicationConversation = async ({
+  actorUser,
+  applicationId,
+  clientCompanyId,
+} = {}) => {
+  const recruiterContext = await resolveRecruiterChatHistoryContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const context = await loadApplicationConversationHistoryContext({
+    applicationId,
+  });
+
+  assertSameCompanyTenant({
+    resourceCompanyId: context.job.companyId,
+    tenantCompanyId: recruiterContext.companyId,
+  });
+
+  return readAuthorizedConversationHistory({
+    context,
+    actor: {
+      kind: "RECRUITER",
+      userId: actorUser._id.toString(),
+      companyMemberId: recruiterContext.membership._id.toString(),
+      membershipStatus: recruiterContext.membership.status,
+      userStatus: actorUser.status,
+    },
+  });
 };
 
 // Canonical assigned-state mutation (Data Contract §8.2–§8.4 / TX-01 / TX-03):
@@ -3776,8 +4036,10 @@ export {
   findNonTerminalApplicationsAssignedToRecruiterOnJob,
   firstAssignApplication,
   forceReassignApplication,
+  getCandidateApplicationConversation,
   getCandidateMyApplication,
   getManagedJobPipelineWorkspace,
+  getRecruiterApplicationConversation,
   getRecruiterMyApplication,
   isApplicationUnassigned,
   listCandidateMyApplications,

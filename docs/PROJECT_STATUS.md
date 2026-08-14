@@ -11,9 +11,13 @@ VERIFIED` (`BR-01`–`BR-06`, `BR-13` persistence foundation only, `BR-49`,
 `IMPLEMENTED AND VERIFIED` (`BR-21`–`BR-25`, `BR-29`–`BR-30`, `BR-47`,
 `BR-51`, `TX-03`, `TX-05`). Slice 04 — Automatic Unassign Chat Consequence
 (`F05`) is `IMPLEMENTED AND VERIFIED` (`BR-23`, `BR-26`–`BR-28`, `BR-47`,
-`BR-51`, `BR-54`, `BR-55`, `TX-04`). Canonical Product/Data contracts remain
-implementation authority. Remaining V11 Chat send/read, authorization HTTP,
-Company-lock freeze, and terminal read-only slices are not implemented.
+`BR-51`, `BR-54`, `BR-55`, `TX-04`). Slice 05 — Conversation History Read +
+Authorization Modes (`F02` read, `F04`/`F05`/`F07`/`F08`/`F09` read modes) is
+`IMPLEMENTED AND VERIFIED` (`BR-07`–`BR-12`, `BR-16`–`BR-17`, `BR-22`,
+`BR-31`–`BR-40`, `BR-48`, `BR-51`–`BR-52`, `BR-54`, `BR-55`). Canonical
+Product/Data contracts remain implementation authority. Remaining V11 Chat
+send, Send concurrency, realtime, notification, and attachment slices are not
+implemented.
 
 **V7 — Candidate Profile và thư viện CV** is `COMPLETED AND VERIFIED`. Slices
 01–11 are implemented and verified
@@ -233,6 +237,32 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Current V11 Conversation revision
+
+- **Implemented; verified:** V11 Slice 05 — Conversation History Read +
+  Authorization Modes (`F02` read portion, `F04`/`F05`/`F07`/`F08`/`F09` read
+  modes; `BR-07`–`BR-12`, `BR-16`–`BR-17`, `BR-22`, `BR-31`–`BR-40`, `BR-48`,
+  `BR-51`–`BR-52`, `BR-54`, `BR-55`): extends
+  `evaluateApplicationConversationChatAuthority` so derived modes
+  `ACTIVE` / `PAUSED_UNASSIGNED` / `ELIGIBILITY_LOSS_WINDOW` /
+  `FROZEN_COMPANY` / `READ_ONLY` authorize Conversation history from current
+  Application/lifecycle facts only (never Message history, participant lists,
+  or duplicated Conversation state). Candidate owner reads in every mode where
+  Conversation exists; current continuously eligible Assignee reads ACTIVE;
+  no Recruiter reads while `UNASSIGNED` or in the eligibility-loss window;
+  Company-lock freeze and terminal history allow persisted/final Assignee read
+  only when `User` and `CompanyMember` are both `ACTIVE`, without requiring
+  Company operational or current Recruitment Team membership; Job
+  `CLOSED`/`EXPIRED` does not revoke ACTIVE read; new Assignee after
+  Reassign/Assign again reads full history with preserved sender identity.
+  HTTP surfaces: `GET /api/candidate/applications/:applicationId/conversation`
+  and `GET /api/jobs/my-applications/:applicationId/conversation` (Recruiter
+  Chat-history context permits frozen/terminal read when Company is LOCKED).
+  NORMAL Message Send, TX-06–TX-08, realtime, notification, and attachment
+  remain out of this slice. Focused coverage in
+  `test/application/v11-conversation-history-read.test.js` (1 file / 13
+  tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 117 files / 1,105 tests).
 
 - **Implemented; verified:** V11 Slice 04 — Automatic Unassign Chat Consequence
   (`F05`; `BR-23`, `BR-26`–`BR-28`, `BR-47`, `BR-51`, `BR-54`, `BR-55`; `TX-04`):

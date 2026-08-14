@@ -22,6 +22,7 @@ import {
   firstAssignApplicationHandler,
   forceReassignApplicationHandler,
   getManagedJobPipelineWorkspaceHandler,
+  getRecruiterApplicationConversationHandler,
   getRecruiterMyApplicationHandler,
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
@@ -36,6 +37,7 @@ import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-company-manager-business-access.js";
 import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-company-staff-business-access.js";
 import authorizeRecruiterBusinessAccess from "../middlewares/authorize-recruiter-business-access.js";
+import authorizeRecruiterChatHistoryAccess from "../middlewares/authorize-recruiter-chat-history-access.js";
 import validateCreateDraftJob from "../middlewares/validate-create-draft-job.js";
 import validateAddSupportingRecruiter from "../middlewares/validate-add-supporting-recruiter.js";
 import validateFirstAssignApplication from "../middlewares/validate-first-assign-application.js";
@@ -75,6 +77,13 @@ router.get(
   authenticateAccess,
   authorizeRecruiterBusinessAccess,
   getRecruiterMyApplicationHandler,
+);
+
+router.get(
+  "/my-applications/:applicationId/conversation",
+  authenticateAccess,
+  authorizeRecruiterChatHistoryAccess,
+  getRecruiterApplicationConversationHandler,
 );
 
 router.get(

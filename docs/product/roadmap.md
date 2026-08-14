@@ -91,9 +91,12 @@ lifecycle refactor; Slices 01–10 of that revision are implemented and verified
 including Concurrency Closure / Final Acceptance (TX-01/TX-02/TX-05 race
 closure, Platform LOCK partial-progress retry, and stale trusted A→B cleanup).
 V10 is therefore `COMPLETED AND VERIFIED` against the current canonical
-revision. V11 is `IN PROGRESS`: Slice 01 (Conversation & Message foundation +
-First Assign / `F01`) is implemented and verified against the approved
-Product/Data contracts. Later V11 Chat slices remain unimplemented. V12 through
+revision. V11 is `IN PROGRESS`: Slices 01–05 (Conversation & Message foundation
++ First Assign; Reassign/Take over SYSTEM Message; Manual Unassign + Assign
+again; Automatic Unassign Chat consequence; Conversation History Read +
+Authorization Modes) are implemented and verified against the approved
+Product/Data contracts. Later V11 Chat send and related slices remain
+unimplemented. V12 through
 V17 must not be implemented merely from their roadmap titles.
 
 V10 canonical specification:

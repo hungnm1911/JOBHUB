@@ -21,15 +21,38 @@ const isAccountLifecycleRestricted = ({ userStatus, membershipStatus } = {}) => 
   );
 };
 
+const isActiveAccountPair = ({ userStatus, membershipStatus } = {}) => {
+  return (
+    userStatus === USER_STATUS.ACTIVE &&
+    membershipStatus === COMPANY_MEMBER_STATUS.ACTIVE
+  );
+};
+
+const isPersistedAssigneeActor = ({ actor, currentAssignee } = {}) => {
+  return (
+    actor?.kind === "RECRUITER" &&
+    currentAssignee != null &&
+    actor.companyMemberId != null &&
+    String(actor.companyMemberId) === String(currentAssignee.companyMemberId) &&
+    isActiveAccountPair({
+      userStatus: actor.userStatus,
+      membershipStatus: actor.membershipStatus,
+    })
+  );
+};
+
 /**
- * Pure Application Conversation Chat authority evaluation (V11 F05 foundation).
+ * Pure Application Conversation Chat authority evaluation (V11 F05 foundation +
+ * Slice 05 historical read modes).
  *
  * Encodes eligibility-loss window (BR-26 / BR-55), post-Automatic-Unassign
- * PAUSED_UNASSIGNED behavior (BR-22 / BR-27), and BR-54 denial when User or
- * CompanyMember is LOCKED/TERMINATED. Does not implement Send/read HTTP,
- * Company-lock freeze surfaces, or terminal read-only workflows — later Chat
- * slices must call this with current Application / eligibility facts and must
- * not wait for Automatic Unassign persistence before applying eligibility loss.
+ * PAUSED_UNASSIGNED behavior (BR-22 / BR-27), Company-lock freeze historical
+ * read (BR-31–BR-33 / BR-54), terminal historical read (BR-34–BR-38 / BR-54),
+ * and BR-54 denial when User or CompanyMember is LOCKED/TERMINATED.
+ *
+ * Authorization is derived from current Application / lifecycle facts only —
+ * never from Message history, participant lists, or duplicated Conversation
+ * state. Does not implement NORMAL Message Send race protection (TX-06–TX-08).
  *
  * @param {object} input
  * @param {boolean} input.conversationExists
@@ -82,47 +105,30 @@ const evaluateApplicationConversationChatAuthority = ({
         ? "READ_ONLY"
         : isUnassigned
           ? "PAUSED_UNASSIGNED"
-          : "ELIGIBILITY_LOSS_WINDOW",
+          : companyIsOperational
+            ? "ELIGIBILITY_LOSS_WINDOW"
+            : "FROZEN_COMPANY",
     };
   }
 
   if (applicationIsTerminal) {
-    // Terminal read-only surfaces are outside Slice 04; deny Send here and leave
-    // full historical read authorization to the terminal slice.
+    // F08 / BR-34–BR-38 / BR-54: terminal history. Candidate always reads when
+    // Conversation exists. Final Assignee reads only with ACTIVE User +
+    // ACTIVE CompanyMember; team membership and Company operational are not
+    // required. WITHDRAWN + UNASSIGNED grants no Recruiter historical authority.
+    if (actor.kind === "CANDIDATE") {
+      return { canRead: true, canSendNormal: false, mode: "READ_ONLY" };
+    }
+
+    if (!isUnassigned && isPersistedAssigneeActor({ actor, currentAssignee })) {
+      return { canRead: true, canSendNormal: false, mode: "READ_ONLY" };
+    }
+
     return { canRead: false, canSendNormal: false, mode: "READ_ONLY" };
   }
 
-  if (!companyIsOperational) {
-    // Company-lock freeze Send is owned by a later slice; deny Send immediately
-    // so eligibility/Company-loss cannot wait on Assignment State alone.
-    return { canRead: false, canSendNormal: false, mode: "FROZEN_COMPANY" };
-  }
-
-  // Eligibility-loss window: Assignee still persisted, but continuous
-  // eligibility is already lost. Authority must not wait for A → NONE (BR-26 /
-  // BR-55). Candidate may read history only; outgoing Recruiter may not read
-  // or send; no actor may send NORMAL Message.
-  if (
-    !isUnassigned &&
-    currentAssignee &&
-    currentAssignee.isContinuouslyEligible !== true
-  ) {
-    if (actor.kind === "CANDIDATE") {
-      return {
-        canRead: true,
-        canSendNormal: false,
-        mode: "ELIGIBILITY_LOSS_WINDOW",
-      };
-    }
-
-    return {
-      canRead: false,
-      canSendNormal: false,
-      mode: "ELIGIBILITY_LOSS_WINDOW",
-    };
-  }
-
-  // PAUSED_UNASSIGNED after Manual / Automatic Unassign (BR-22 / BR-27).
+  // BR-22 / BR-27: UNASSIGNED pause outranks Company-lock mode labeling when
+  // Assignment State is already NONE (FROZEN_COMPANY requires ASSIGNED).
   if (isUnassigned) {
     if (actor.kind === "CANDIDATE") {
       return {
@@ -139,8 +145,57 @@ const evaluateApplicationConversationChatAuthority = ({
     };
   }
 
+  if (!companyIsOperational) {
+    // F07 / BR-31–BR-33 / BR-54: Company-lock freeze. Candidate and persisted
+    // Assignee with ACTIVE accounts may read; no actor may send. Team
+    // membership and Company operational are not required for this historical
+    // read. Company lock does not invent Chat authority for other actors.
+    if (actor.kind === "CANDIDATE") {
+      return {
+        canRead: true,
+        canSendNormal: false,
+        mode: "FROZEN_COMPANY",
+      };
+    }
+
+    if (isPersistedAssigneeActor({ actor, currentAssignee })) {
+      return {
+        canRead: true,
+        canSendNormal: false,
+        mode: "FROZEN_COMPANY",
+      };
+    }
+
+    return {
+      canRead: false,
+      canSendNormal: false,
+      mode: "FROZEN_COMPANY",
+    };
+  }
+
+  // Eligibility-loss window: Assignee still persisted, but continuous
+  // eligibility is already lost. Authority must not wait for A → NONE (BR-26 /
+  // BR-55). Candidate may read history only; outgoing Recruiter may not read
+  // or send; no actor may send NORMAL Message.
+  if (currentAssignee && currentAssignee.isContinuouslyEligible !== true) {
+    if (actor.kind === "CANDIDATE") {
+      return {
+        canRead: true,
+        canSendNormal: false,
+        mode: "ELIGIBILITY_LOSS_WINDOW",
+      };
+    }
+
+    return {
+      canRead: false,
+      canSendNormal: false,
+      mode: "ELIGIBILITY_LOSS_WINDOW",
+    };
+  }
+
   // ACTIVE Conversation: Candidate and current continuously eligible Assignee
   // may read and send. Full Send race protection remains a later slice.
+  // Job CLOSED / EXPIRED is intentionally not an input (F09 / BR-39 / BR-40).
   if (actor.kind === "CANDIDATE") {
     return { canRead: true, canSendNormal: true, mode: "ACTIVE" };
   }

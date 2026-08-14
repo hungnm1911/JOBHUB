@@ -3,6 +3,7 @@ import express from "express";
 import {
   directApplyToJobHandler,
   downloadCandidateApplicationSubmittedCvHandler,
+  getCandidateApplicationConversationHandler,
   getCandidateMyApplicationHandler,
   listCandidateMyApplicationsHandler,
   previewCandidateApplicationSubmittedCvHandler,
@@ -174,6 +175,13 @@ router.get(
   authenticateAccess,
   authorizeCandidate,
   getCandidateMyApplicationHandler,
+);
+
+router.get(
+  "/applications/:applicationId/conversation",
+  authenticateAccess,
+  authorizeCandidate,
+  getCandidateApplicationConversationHandler,
 );
 
 router.get(
