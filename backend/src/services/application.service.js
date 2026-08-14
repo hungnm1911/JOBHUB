@@ -17,6 +17,7 @@ import Application from "../models/application.model.js";
 import CandidateCV from "../models/candidate-cv.model.js";
 import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
+import Conversation from "../models/conversation.model.js";
 import Job from "../models/job.model.js";
 import User from "../models/user.model.js";
 import AppError from "../utils/app-error.js";
@@ -1564,6 +1565,44 @@ const commitAssignFromUnassigned = async ({
   );
 };
 
+// V11 F01 / TX-01: Conversation consequence of a successful First Assign.
+// Absence of Conversation distinguishes First Assign from Assign again; this
+// slice creates Conversation only when none exists and never writes a Message.
+const createConversationOnFirstAssignIfAbsent = async ({
+  applicationId,
+  session,
+} = {}) => {
+  const existingConversation = await Conversation.findOne({
+    applicationId,
+  }).session(session);
+
+  if (existingConversation) {
+    return existingConversation;
+  }
+
+  try {
+    const [createdConversation] = await Conversation.create(
+      [{ applicationId }],
+      { session },
+    );
+    return createdConversation;
+  } catch (error) {
+    if (!isMongoDuplicateKeyError(error)) {
+      throw error;
+    }
+
+    const concurrentConversation = await Conversation.findOne({
+      applicationId,
+    }).session(session);
+
+    if (concurrentConversation) {
+      return concurrentConversation;
+    }
+
+    throw error;
+  }
+};
+
 // Canonical assigned-state mutation (Data Contract §8.2–§8.4 / TX-01 / TX-03):
 // atomic A → B or A → NONE. Shared by manual Reassign/Unassign, CM force-reassign
 // A → B, and automatic Unassign. Mutates only current Assignee + version;
@@ -1751,6 +1790,13 @@ const firstAssignApplication = async ({
           session,
         });
       }
+
+      // V11 F01 / BR-05 / BR-06 / TX-01: First Assign and Conversation
+      // creation are one atomic outcome. No SYSTEM Message on First Assign.
+      await createConversationOnFirstAssignIfAbsent({
+        applicationId: assignedApplication._id,
+        session,
+      });
     });
   } finally {
     await session.endSession();

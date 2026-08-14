@@ -30,7 +30,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V8 | Job Discovery | PENDING |
 | V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
 | V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
-| V11 | Conversation và Chat thuộc Application | PLANNED |
+| V11 | Conversation và Chat thuộc Application | IN PROGRESS |
 | V12 | Interview Schedule | PLANNED |
 | V13 | Notification và phân phối realtime | PLANNED |
 | V14 | Candidate Search trên CV PUBLIC | PLANNED |
@@ -91,8 +91,10 @@ lifecycle refactor; Slices 01–10 of that revision are implemented and verified
 including Concurrency Closure / Final Acceptance (TX-01/TX-02/TX-05 race
 closure, Platform LOCK partial-progress retry, and stale trusted A→B cleanup).
 V10 is therefore `COMPLETED AND VERIFIED` against the current canonical
-revision. V11 through V17 must not be implemented merely from their
-roadmap titles.
+revision. V11 is `IN PROGRESS`: Slice 01 (Conversation & Message foundation +
+First Assign / `F01`) is implemented and verified against the approved
+Product/Data contracts. Later V11 Chat slices remain unimplemented. V12 through
+V17 must not be implemented merely from their roadmap titles.
 
 V10 canonical specification:
 
@@ -101,6 +103,14 @@ V10 canonical specification:
 V10 canonical persistence contract:
 
 `docs/data/versions/v10-application-assignment-recruitment-pipeline-data-model.md`
+
+V11 canonical specification:
+
+`docs/product/versions/v11-application-conversation-chat.md`
+
+V11 canonical persistence contract:
+
+`docs/data/versions/v11-application-conversation-chat-data-model.md`
 
 V9 canonical specification:
 

@@ -6,7 +6,9 @@ import app from "../../src/app.js";
 import { ensureApplicationCollectionInvariants } from "../../src/models/application.model.js";
 import { ensureCandidateCvCollectionInvariants } from "../../src/models/candidate-cv.model.js";
 import { ensureCompanyCollectionInvariants } from "../../src/models/company.model.js";
+import { ensureConversationCollection } from "../../src/models/conversation.model.js";
 import { ensureJobCollectionInvariants } from "../../src/models/job.model.js";
+import { ensureMessageCollection } from "../../src/models/message.model.js";
 
 let mongoMemoryReplicaSet = null;
 
@@ -31,6 +33,8 @@ const connectTestDatabase = async () => {
   await ensureJobCollectionInvariants(mongoose.connection);
   await ensureCandidateCvCollectionInvariants(mongoose.connection);
   await ensureApplicationCollectionInvariants(mongoose.connection);
+  await ensureConversationCollection(mongoose.connection);
+  await ensureMessageCollection(mongoose.connection);
 };
 
 const disconnectTestDatabase = async () => {

@@ -2,6 +2,14 @@
 
 ## Current project state
 
+**V11 — Conversation và Chat thuộc Application** is `IN PROGRESS`. Slice 01 —
+Conversation & Message Foundation + First Assign (`F01`) is `IMPLEMENTED AND
+VERIFIED` (`BR-01`–`BR-06`, `BR-13` persistence foundation only, `BR-49`,
+`BR-50`, `BR-53`, `TX-01`). Canonical Product/Data contracts remain
+implementation authority. Remaining V11 Chat send/read, Reassign/Unassign
+SYSTEM Message, authorization, freeze, and terminal read-only slices are not
+implemented.
+
 **V7 — Candidate Profile và thư viện CV** is `COMPLETED AND VERIFIED`. Slices
 01–11 are implemented and verified
 (Candidate Profile / F01; CandidateCV foundation + My CVs read / F02; Generated
@@ -218,6 +226,29 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
+
+## Current V11 Conversation revision
+
+- **Implemented; verified:** V11 Slice 01 — Conversation & Message Foundation +
+  First Assign (`F01`; `BR-01`–`BR-06`, `BR-13` persistence foundation,
+  `BR-49`, `BR-50`, `BR-53`; `TX-01`): adds canonical `conversations` and
+  `messages` persistence (`Conversation.applicationId` unique/immutable;
+  Message `NORMAL`/`SYSTEM` with historical sender matrix; no Candidate,
+  current Assignee, Job, Company, participant list, or Chat-state duplication).
+  Successful First Assign of a non-terminal Unassigned Application that has
+  never had a Conversation keeps Recruitment Status, creates exactly one
+  Conversation, and creates no SYSTEM Message (`0` Messages is valid). Assign
+  and Conversation creation commit in the same V10 First Assign transaction;
+  Conversation-create failure rolls back Assign. V10 authority, eligibility,
+  tenant, Assignment State, and CAS invariants are unchanged. Reassign/Take
+  over/Unassign SYSTEM Message, Assign again Chat consequence, Send/read,
+  authorization, Company-lock freeze, terminal read-only, realtime,
+  notification, and attachment remain out of this slice. Focused coverage in
+  `test/application/v11-conversation-message-foundation.test.js` and
+  `test/application/v11-first-assign-conversation.test.js` (2 files / 23
+  tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 113 files / 1,059 tests).
 
 ## Current V10 ASSIGN / UNASSIGN revision
 
@@ -1192,6 +1223,7 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V11 Slice 01 Conversation & Message Foundation + First Assign: the official `cd backend && npm run verify:agent` gate passed after Conversation/Message persistence and First Assign TX-01 Conversation creation (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 113 files / 1,059 tests). Focused coverage passed 2 files / 23 tests. No Chat send/read HTTP, Reassign/Unassign SYSTEM Message, authorization, freeze, notification, realtime, attachment, Application field, or migration was added.
 - V10 Slice 07 CompanyMember Recruiter LOCK/TERMINATE automatic Unassign integration (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after CompanyMember LOCK/TERMINATE switched Application resolution from trusted `A → B` handoff to Slice 06 `A → NONE` automatic Unassign while keeping V6 Job-team Primary transfer / Supporting removal and the dual current-state final zero-responsibility guard (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 998 tests). Focused LOCK/TERMINATE Unassign coverage passed 1 file / 17 tests. No generic Recruitment Team removal change, Platform Admin User lifecycle change, Application replacement heuristic, history, recovery state, queue, worker, field, collection, index, or migration was added.
 - V10 Slice 06 Canonical Automatic-Unassign Primitive (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after the internal `A → NONE` primitive reused the existing assigned-state CAS (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 994 tests). Focused automatic-Unassign coverage passed 1 file / 22 tests. No public HTTP endpoint, CompanyMember LOCK/TERMINATE change, Recruitment Team removal change, Platform Admin User lifecycle change, field, collection, index, history, recovery state, queue, worker, or migration was added.
 - V10 Slice 01 Persistence State Matrix (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after the local/collection status × assignment-state matrix update (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 104 files / 900 tests). Focused persistence coverage passed 2 files / 37 tests. No schema, index, migration, or backfill was added.
