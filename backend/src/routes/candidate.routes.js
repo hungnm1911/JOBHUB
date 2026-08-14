@@ -3,6 +3,7 @@ import express from "express";
 import {
   directApplyToJobHandler,
   downloadCandidateApplicationSubmittedCvHandler,
+  editCandidateAvailabilityHandler,
   getCandidateApplicationConversationHandler,
   getCandidateMyApplicationHandler,
   listCandidateMyApplicationsHandler,
@@ -37,6 +38,7 @@ import uploadCandidateCvPdf from "../middlewares/upload-candidate-cv-pdf.js";
 import validateCandidateProfileUpdate from "../middlewares/validate-candidate-profile-update.js";
 import validateCreateGeneratedDraftCv from "../middlewares/validate-create-generated-draft-cv.js";
 import validateDirectApply from "../middlewares/validate-direct-apply.js";
+import validateEditCandidateAvailability from "../middlewares/validate-edit-candidate-availability.js";
 import validateCreateUploadedCv from "../middlewares/validate-create-uploaded-cv.js";
 import validateReplaceSubmittedCv from "../middlewares/validate-replace-submitted-cv.js";
 import validateSendConversationNormalMessage from "../middlewares/validate-send-conversation-normal-message.js";
@@ -181,12 +183,21 @@ router.get(
   getCandidateMyApplicationHandler,
 );
 
+
 router.post(
   "/applications/:applicationId/availability",
   authenticateAccess,
   authorizeCandidate,
   validateSubmitCandidateAvailability,
   submitCandidateAvailabilityFirstTimeHandler,
+);
+
+router.put(
+  "/applications/:applicationId/availability",
+  authenticateAccess,
+  authorizeCandidate,
+  validateEditCandidateAvailability,
+  editCandidateAvailabilityHandler,
 );
 
 router.get(

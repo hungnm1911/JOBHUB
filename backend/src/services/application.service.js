@@ -1211,13 +1211,113 @@ const submitCandidateAvailabilityFirstTime = async ({
     if (isMongoDuplicateKeyError(error)) {
       throw new AppError(
         409,
-        "Availability has already been submitted; editing is not available yet",
+        "Availability has already been submitted; use the edit workflow",
         { field: "applicationId" },
       );
     }
 
     throw error;
   }
+};
+
+// V12 F03: replace the one current Availability set, guarded by its revision.
+// This shares the Availability write with proposal creation so transactions
+// serialize either the edit or the proposal; neither can commit on stale slots.
+const editCandidateAvailability = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  timezone,
+  slots,
+  expectedRevision,
+  now = new Date(),
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only edit Availability for their own Applications",
+    );
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
+    throw new AppError(
+      400,
+      "expectedRevision must be a non-negative integer",
+      { field: "expectedRevision" },
+    );
+  }
+
+  const submission = normalizeFirstAvailabilitySubmission({
+    timezone,
+    slots,
+    now,
+  });
+  const session = await mongoose.startSession();
+  let updatedAvailability = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const application = await Application.findOne({
+        _id: applicationId,
+        candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
+      if (!application) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      const availability = await CandidateAvailability.findOne({
+        applicationId: application._id,
+      }).session(session);
+      if (!availability) {
+        throw new AppError(
+          409,
+          "Availability has not been submitted; submit it before editing",
+          { field: "applicationId" },
+        );
+      }
+
+      const proposedSchedule = await InterviewSchedule.exists({
+        applicationId: application._id,
+        status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      }).session(session);
+      if (proposedSchedule) {
+        throw new AppError(
+          409,
+          "Availability cannot be edited while an Interview Schedule is proposed",
+          { field: "applicationId" },
+        );
+      }
+
+      if (availability.revision !== expectedRevision) {
+        throw new AppError(
+          409,
+          "Availability has changed; refresh and retry the edit",
+          { field: "expectedRevision" },
+        );
+      }
+
+      availability.timezone = submission.timezone;
+      availability.slots = submission.slots;
+      availability.revision += 1;
+      await availability.save({ session });
+      updatedAvailability = availability;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return toCandidateAvailabilityProjection(updatedAvailability);
 };
 
 const createFirstInterviewProposal = async ({
@@ -5018,6 +5118,7 @@ export {
   isApplicationUnassigned,
   sendCandidateApplicationConversationNormalMessage,
   sendRecruiterApplicationConversationNormalMessage,
+  editCandidateAvailability,
   submitCandidateAvailabilityFirstTime,
   listCandidateMyApplications,
   listManagedJobs,

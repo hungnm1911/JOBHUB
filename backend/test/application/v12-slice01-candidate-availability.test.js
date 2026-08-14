@@ -12,6 +12,7 @@ import InterviewSchedule from "../../src/models/interview-schedule.model.js";
 import Job from "../../src/models/job.model.js";
 import {
   createFirstInterviewProposal,
+  editCandidateAvailability,
   getCandidateMyApplication,
   getRecruiterMyApplication,
   listPrimaryJobApplications,
@@ -439,5 +440,183 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
 
     expect(response.status).toBe(201);
     expect(response.body.interviewSchedule.status).toBe("PROPOSED");
+  });
+
+  it("replaces the current Availability set, advances revision, and preserves Application and Schedule state", async () => {
+    const { application, candidate } = await setup({ jobStatus: JOB_STATUS.EXPIRED });
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [{ date: "2026-08-20", dayPart: "MORNING" }],
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    const availability = await editCandidateAvailability({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "America/Los_Angeles",
+      slots: [
+        { date: "2026-08-14", dayPart: "AFTERNOON" },
+        { date: "2026-08-20", dayPart: "AFTERNOON" },
+      ],
+      expectedRevision: 0,
+      now: new Date("2026-08-15T06:30:00.000Z"),
+    });
+
+    expect(availability).toEqual({
+      status: "SUBMITTED",
+      timezone: "America/Los_Angeles",
+      slots: [
+        { date: "2026-08-14", dayPart: "AFTERNOON" },
+        { date: "2026-08-20", dayPart: "AFTERNOON" },
+      ],
+      revision: 1,
+    });
+    expect((await Application.findById(application._id)).status).toBe(
+      APPLICATION_STATUS.CONTACTED,
+    );
+    expect(await InterviewSchedule.countDocuments({ applicationId: application._id })).toBe(0);
+  });
+
+  it("provides the authenticated Candidate HTTP edit surface", async () => {
+    const { application, candidate } = await setup();
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [{ date: "2026-08-20", dayPart: "MORNING" }],
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+    const agent = createTestAgent();
+    const token = await loginAndGetAccessToken(agent, {
+      email: candidate.user.email,
+    });
+
+    const response = await agent
+      .put(`/api/candidate/applications/${application._id}/availability`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        timezone: "UTC",
+        slots: [],
+        expectedRevision: 0,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.availability).toMatchObject({
+      status: "SUBMITTED",
+      slots: [],
+      revision: 1,
+    });
+  });
+
+  it("deterministically rejects a stale proposal after Availability edit wins", async () => {
+    const { application, candidate, job, recruiter } = await setup();
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [{ date: "2026-08-20", dayPart: "MORNING" }],
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    await editCandidateAvailability({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [],
+      expectedRevision: 0,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    await expect(
+      createFirstInterviewProposal({
+        actorUser: recruiter.user,
+        jobId: job._id,
+        applicationId: application._id,
+        date: "2026-08-20",
+        dayPart: "MORNING",
+        expectedAvailabilityRevision: 0,
+        now: new Date("2026-08-14T00:00:00.000Z"),
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(await InterviewSchedule.countDocuments({ applicationId: application._id })).toBe(0);
+  });
+
+  it("deterministically rejects a stale Availability edit after proposal wins", async () => {
+    const { application, candidate, job, recruiter } = await setup();
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [{ date: "2026-08-20", dayPart: "MORNING" }],
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+    await createFirstInterviewProposal({
+      actorUser: recruiter.user,
+      jobId: job._id,
+      applicationId: application._id,
+      date: "2026-08-20",
+      dayPart: "MORNING",
+      expectedAvailabilityRevision: 0,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    await expect(
+      editCandidateAvailability({
+        candidateUserId: candidate.user._id,
+        actorUser: candidate.user,
+        applicationId: application._id,
+        timezone: "UTC",
+        slots: [],
+        expectedRevision: 0,
+        now: new Date("2026-08-14T00:00:00.000Z"),
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(
+      (await CandidateAvailability.findOne({ applicationId: application._id })).revision,
+    ).toBe(1);
+  });
+
+  it("does not allow a stale Availability revision to overwrite newer slots", async () => {
+    const { application, candidate } = await setup();
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [{ date: "2026-08-20", dayPart: "MORNING" }],
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+    await editCandidateAvailability({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [{ date: "2026-08-21", dayPart: "AFTERNOON" }],
+      expectedRevision: 0,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    await expect(
+      editCandidateAvailability({
+        candidateUserId: candidate.user._id,
+        actorUser: candidate.user,
+        applicationId: application._id,
+        timezone: "UTC",
+        slots: [],
+        expectedRevision: 0,
+        now: new Date("2026-08-14T00:00:00.000Z"),
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(
+      (await CandidateAvailability.findOne({ applicationId: application._id }).lean()).slots,
+    ).toEqual([{ date: "2026-08-21", dayPart: "AFTERNOON" }]);
   });
 });

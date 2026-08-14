@@ -11,9 +11,9 @@ pipeline cutover (`F05`; `BR-11`, `BR-12`, `BR-15`–`BR-18`, `BR-25`–`BR-26`,
 Recruiter can create one `PROPOSED` Schedule from a current Availability slot,
 atomically move `CONTACTED → INTERVIEW_SCHEDULED`, and advance Availability
 revision. Schedule identity snapshots the selected slot and creator; partial
-active-Schedule uniqueness is persisted. No Availability edit/replace, Candidate
-Confirm/Decline, Recruiter Cancel, reproposal, expiration runtime, notification,
-realtime, or Conversation/Message authority change is included. Its approved
+active-Schedule uniqueness is persisted. Candidate Confirm/Decline, Recruiter
+Cancel, reproposal, expiration runtime, notification, realtime, or
+Conversation/Message authority change are not included. Its approved
 Product/Data contracts are tracked at
 `docs/product/versions/v12-interview-schedule.md` and
 `docs/data/versions/v12-interview-schedule-data-model.md`. Gate 00 closes the
@@ -25,6 +25,19 @@ synthetic Availability/Schedule backfill, rollback, or inferred proposal
 history; no new legacy state may be created after cutover. The runtime owner for
 automatic proposal expiration remains an engineering gate for Slice 06 only and
 does not block Slice 01.
+
+Slice 03 is implemented for Candidate current Availability edit (`F03`;
+`BR-06`, `BR-08`, `BR-17`; `TX-02` and the Availability↔proposal completion
+of `TX-01`): an owner replaces the existing current set through
+`PUT /api/candidate/applications/:applicationId/availability` using
+`expectedRevision`. The edit permits `[]`, validates timezone-relative
+non-past unique date/day-part slots, preserves Application and Schedule
+history, and advances only the current Availability revision. It shares the
+Availability transactional write with proposal creation, so an edit that wins
+invalidates a stale proposal and a winning proposal prevents the stale edit
+and locks further edits while `PROPOSED` exists. Slice 03 does not add
+Confirm/Decline/Cancel, reproposal, history expansion, expiration runtime,
+notification, realtime, or Chat authorization changes.
 
 **V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
 Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across
