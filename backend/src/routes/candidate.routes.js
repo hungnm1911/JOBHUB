@@ -1,6 +1,8 @@
 import express from "express";
 
 import {
+  confirmCandidateInterviewProposalHandler,
+  declineCandidateInterviewProposalHandler,
   directApplyToJobHandler,
   downloadCandidateApplicationSubmittedCvHandler,
   editCandidateAvailabilityHandler,
@@ -198,6 +200,20 @@ router.put(
   authorizeCandidate,
   validateEditCandidateAvailability,
   editCandidateAvailabilityHandler,
+);
+
+router.post(
+  "/applications/:applicationId/interview-proposals/:interviewScheduleId/confirm",
+  authenticateAccess,
+  authorizeCandidate,
+  confirmCandidateInterviewProposalHandler,
+);
+
+router.post(
+  "/applications/:applicationId/interview-proposals/:interviewScheduleId/decline",
+  authenticateAccess,
+  authorizeCandidate,
+  declineCandidateInterviewProposalHandler,
 );
 
 router.get(

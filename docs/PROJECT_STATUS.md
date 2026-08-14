@@ -11,9 +11,9 @@ pipeline cutover (`F05`; `BR-11`, `BR-12`, `BR-15`–`BR-18`, `BR-25`–`BR-26`,
 Recruiter can create one `PROPOSED` Schedule from a current Availability slot,
 atomically move `CONTACTED → INTERVIEW_SCHEDULED`, and advance Availability
 revision. Schedule identity snapshots the selected slot and creator; partial
-active-Schedule uniqueness is persisted. Candidate Confirm/Decline, Recruiter
-Cancel, reproposal, expiration runtime, notification, realtime, or
-Conversation/Message authority change are not included. Its approved
+active-Schedule uniqueness is persisted. Recruiter Cancel, reproposal,
+expiration runtime, notification, realtime, or Conversation/Message authority
+change are not included. Its approved
 Product/Data contracts are tracked at
 `docs/product/versions/v12-interview-schedule.md` and
 `docs/data/versions/v12-interview-schedule-data-model.md`. Gate 00 closes the
@@ -38,6 +38,18 @@ invalidates a stale proposal and a winning proposal prevents the stale edit
 and locks further edits while `PROPOSED` exists. Slice 03 does not add
 Confirm/Decline/Cancel, reproposal, history expansion, expiration runtime,
 notification, realtime, or Chat authorization changes.
+
+Slice 04 is implemented for Candidate Confirm / Decline (`F06`, `F07`;
+`BR-13`, `BR-19`, `BR-21`–`BR-22`, `BR-24`, `BR-26`–`BR-27`, `BR-38`):
+Candidate ownership resolves only through the canonical Application, including
+when temporarily `UNASSIGNED`. A live `PROPOSED` Schedule has one guarded
+outcome only—`CONFIRMED` or `DECLINED`; an expired, terminal, non-`PROPOSED`,
+or cross-Application proposal is rejected. The transition keeps Application
+at `INTERVIEW_SCHEDULED`, leaves Availability untouched, and retains immutable
+proposal identity; `DECLINED` is therefore persisted history for the existing
+same-Application declined-slot exclusion. Slice 04 does not add cancellation,
+expiration mutation, reproposal, Schedule-history reads, Notification,
+realtime, or Chat authorization changes.
 
 **V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
 Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across

@@ -1,5 +1,7 @@
 import {
+  confirmCandidateInterviewProposal,
   createFirstInterviewProposal,
+  declineCandidateInterviewProposal,
   directApplyToJob,
   downloadCandidateApplicationSubmittedCv,
   downloadPrimaryJobApplicationSubmittedCv,
@@ -174,6 +176,36 @@ const createFirstInterviewProposalHandler = async (request, response, next) => {
     });
 
     return response.status(201).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const confirmCandidateInterviewProposalHandler = async (request, response, next) => {
+  try {
+    const interviewSchedule = await confirmCandidateInterviewProposal({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      interviewScheduleId: request.params.interviewScheduleId,
+    });
+
+    return response.status(200).json({ interviewSchedule });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const declineCandidateInterviewProposalHandler = async (request, response, next) => {
+  try {
+    const interviewSchedule = await declineCandidateInterviewProposal({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      interviewScheduleId: request.params.interviewScheduleId,
+    });
+
+    return response.status(200).json({ interviewSchedule });
   } catch (error) {
     return next(error);
   }
@@ -540,7 +572,9 @@ const updateApplicationRecruitmentPipelineStatusHandler = async (
 };
 
 export {
+  confirmCandidateInterviewProposalHandler,
   createFirstInterviewProposalHandler,
+  declineCandidateInterviewProposalHandler,
   directApplyToJobHandler,
   downloadCandidateApplicationSubmittedCvHandler,
   downloadPrimaryJobApplicationSubmittedCvHandler,

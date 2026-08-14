@@ -1558,6 +1558,101 @@ const createFirstInterviewProposal = async ({
   };
 };
 
+const toInterviewScheduleProjection = (schedule) => {
+  return {
+    id: schedule._id.toString(),
+    applicationId: schedule.applicationId.toString(),
+    status: schedule.status,
+    date: schedule.date,
+    dayPart: schedule.dayPart,
+    timezone: schedule.timezone,
+    expiresAt: schedule.expiresAt,
+    createdByUserId: schedule.createdByUserId.toString(),
+    createdByCompanyMemberId: schedule.createdByCompanyMemberId.toString(),
+    createdAt: schedule.createdAt,
+    updatedAt: schedule.updatedAt,
+  };
+};
+
+// V12 F06/F07: Candidate ownership is resolved only through the Application.
+// The guarded update lets exactly one concurrent PROPOSED response commit.
+const respondToCandidateInterviewProposal = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  interviewScheduleId,
+  targetStatus,
+  now = new Date(),
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only respond to Interview Schedules for their own Applications",
+    );
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", { field: "applicationId" });
+  }
+
+  if (!mongoose.isValidObjectId(interviewScheduleId)) {
+    throw new AppError(404, "Interview Schedule not found", {
+      field: "interviewScheduleId",
+    });
+  }
+
+  const application = await Application.findOne({
+    _id: applicationId,
+    candidateUserId,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  }).lean();
+  if (!application) {
+    throw new AppError(404, "Application not found", { field: "applicationId" });
+  }
+
+  if (isApplicationTerminalStatus(application.status)) {
+    throw new AppError(409, "Terminal Applications cannot receive Schedule responses", {
+      field: "status",
+    });
+  }
+
+  const schedule = await InterviewSchedule.findOneAndUpdate(
+    {
+      _id: interviewScheduleId,
+      applicationId: application._id,
+      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      expiresAt: { $gt: now },
+    },
+    { $set: { status: targetStatus } },
+    { returnDocument: "after", runValidators: true },
+  );
+  if (!schedule) {
+    throw new AppError(
+      409,
+      "Interview Schedule is no longer a live proposed proposal",
+      { field: "interviewScheduleId" },
+    );
+  }
+
+  return toInterviewScheduleProjection(schedule);
+};
+
+const confirmCandidateInterviewProposal = async (input = {}) => {
+  return respondToCandidateInterviewProposal({
+    ...input,
+    targetStatus: INTERVIEW_SCHEDULE_STATUS.CONFIRMED,
+  });
+};
+
+const declineCandidateInterviewProposal = async (input = {}) => {
+  return respondToCandidateInterviewProposal({
+    ...input,
+    targetStatus: INTERVIEW_SCHEDULE_STATUS.DECLINED,
+  });
+};
+
 const listCandidateMyApplications = async ({
   candidateUserId,
   actorUser,
@@ -5097,10 +5192,12 @@ export {
   automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval,
   captureGeneratedSubmittedCvSnapshot,
   captureUploadedSubmittedCvSnapshot,
+  confirmCandidateInterviewProposal,
   countNonTerminalApplicationsAssignedToRecruiter,
   countNonTerminalApplicationsAssignedToRecruiterOnJob,
   createFirstInterviewProposal,
   deepCopyGeneratedContent,
+  declineCandidateInterviewProposal,
   directApplyToJob,
   downloadCandidateApplicationSubmittedCv,
   downloadPrimaryJobApplicationSubmittedCv,

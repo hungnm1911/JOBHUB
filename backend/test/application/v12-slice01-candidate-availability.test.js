@@ -11,7 +11,9 @@ import CandidateAvailability from "../../src/models/candidate-availability.model
 import InterviewSchedule from "../../src/models/interview-schedule.model.js";
 import Job from "../../src/models/job.model.js";
 import {
+  confirmCandidateInterviewProposal,
   createFirstInterviewProposal,
+  declineCandidateInterviewProposal,
   editCandidateAvailability,
   getCandidateMyApplication,
   getRecruiterMyApplication,
@@ -618,5 +620,184 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
     expect(
       (await CandidateAvailability.findOne({ applicationId: application._id }).lean()).slots,
     ).toEqual([{ date: "2026-08-21", dayPart: "AFTERNOON" }]);
+  });
+});
+
+describe("V12 Slice 04 — Candidate Confirm / Decline Interview Proposal", () => {
+  beforeAll(connectTestDatabase);
+  afterEach(clearDatabase);
+  afterAll(disconnectTestDatabase);
+
+  const createProposal = async ({ application, candidate, job, recruiter }) => {
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [{ date: "2030-08-20", dayPart: "MORNING" }],
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    return createFirstInterviewProposal({
+      actorUser: recruiter.user,
+      jobId: job._id,
+      applicationId: application._id,
+      date: "2030-08-20",
+      dayPart: "MORNING",
+      expectedAvailabilityRevision: 0,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+  };
+
+  it("confirms an owner proposal without changing the Application or Availability, including while UNASSIGNED", async () => {
+    const context = await setup();
+    const proposal = await createProposal(context);
+    await Application.updateOne(
+      { _id: context.application._id },
+      { $set: { assignedRecruiterCompanyMemberId: null } },
+    );
+
+    const interviewSchedule = await confirmCandidateInterviewProposal({
+      candidateUserId: context.candidate.user._id,
+      actorUser: context.candidate.user,
+      applicationId: context.application._id,
+      interviewScheduleId: proposal.interviewSchedule.id,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    expect(interviewSchedule.status).toBe("CONFIRMED");
+    expect((await Application.findById(context.application._id)).status).toBe(
+      APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+    );
+    expect(
+      (await CandidateAvailability.findOne({ applicationId: context.application._id })).revision,
+    ).toBe(1);
+    expect(await InterviewSchedule.countDocuments({ applicationId: context.application._id })).toBe(
+      1,
+    );
+  });
+
+  it("declines an owner proposal while preserving Availability and immutable proposal history", async () => {
+    const context = await setup();
+    const proposal = await createProposal(context);
+    const before = await InterviewSchedule.findById(proposal.interviewSchedule.id).lean();
+    const availabilityBefore = await CandidateAvailability.findOne({
+      applicationId: context.application._id,
+    }).lean();
+
+    const interviewSchedule = await declineCandidateInterviewProposal({
+      candidateUserId: context.candidate.user._id,
+      actorUser: context.candidate.user,
+      applicationId: context.application._id,
+      interviewScheduleId: proposal.interviewSchedule.id,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+    const [persisted, availabilityAfter, application] = await Promise.all([
+      InterviewSchedule.findById(proposal.interviewSchedule.id).lean(),
+      CandidateAvailability.findOne({ applicationId: context.application._id }).lean(),
+      Application.findById(context.application._id).lean(),
+    ]);
+
+    expect(interviewSchedule.status).toBe("DECLINED");
+    expect(application.status).toBe(APPLICATION_STATUS.INTERVIEW_SCHEDULED);
+    expect(availabilityAfter).toMatchObject({
+      timezone: availabilityBefore.timezone,
+      slots: availabilityBefore.slots,
+      revision: availabilityBefore.revision,
+    });
+    expect(persisted).toMatchObject({
+      applicationId: before.applicationId,
+      date: before.date,
+      dayPart: before.dayPart,
+      timezone: before.timezone,
+      createdByUserId: before.createdByUserId,
+      createdByCompanyMemberId: before.createdByCompanyMemberId,
+      status: "DECLINED",
+    });
+  });
+
+  it("exposes the authenticated Candidate confirm HTTP surface", async () => {
+    const context = await setup();
+    const proposal = await createProposal(context);
+    const agent = createTestAgent();
+    const token = await loginAndGetAccessToken(agent, {
+      email: context.candidate.user.email,
+    });
+
+    const response = await agent
+      .post(
+        `/api/candidate/applications/${context.application._id}/interview-proposals/${proposal.interviewSchedule.id}/confirm`,
+      )
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.interviewSchedule.status).toBe("CONFIRMED");
+  });
+
+  it("rejects a non-owner, a non-PROPOSED Schedule, expired proposals, and terminal Applications", async () => {
+    const context = await setup();
+    const proposal = await createProposal(context);
+    const foreignCandidate = await createVerifiedUser({
+      email: "v12.s04.foreign@example.com",
+    });
+    const respond = (overrides = {}) =>
+      confirmCandidateInterviewProposal({
+        candidateUserId: context.candidate.user._id,
+        actorUser: context.candidate.user,
+        applicationId: context.application._id,
+        interviewScheduleId: proposal.interviewSchedule.id,
+        now: new Date("2026-08-14T00:00:00.000Z"),
+        ...overrides,
+      });
+
+    await expect(
+      respond({
+        candidateUserId: foreignCandidate.user._id,
+        actorUser: foreignCandidate.user,
+      }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    await InterviewSchedule.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(proposal.interviewSchedule.id) },
+      { $set: { status: "CANCELLED" } },
+    );
+    await expect(respond()).rejects.toMatchObject({ statusCode: 409 });
+
+    await InterviewSchedule.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(proposal.interviewSchedule.id) },
+      { $set: { status: "PROPOSED", expiresAt: new Date("2026-08-14T00:00:00.000Z") } },
+    );
+    await expect(respond()).rejects.toMatchObject({ statusCode: 409 });
+
+    await Application.updateOne(
+      { _id: context.application._id },
+      { $set: { status: APPLICATION_STATUS.REJECTED } },
+    );
+    await expect(respond({ now: new Date("2026-08-13T00:00:00.000Z") })).rejects.toMatchObject({
+      statusCode: 409,
+    });
+  });
+
+  it("allows only one concurrent Confirm or Decline transition to win", async () => {
+    const context = await setup();
+    const proposal = await createProposal(context);
+    const input = {
+      candidateUserId: context.candidate.user._id,
+      actorUser: context.candidate.user,
+      applicationId: context.application._id,
+      interviewScheduleId: proposal.interviewSchedule.id,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    };
+
+    const results = await Promise.allSettled([
+      confirmCandidateInterviewProposal(input),
+      declineCandidateInterviewProposal(input),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const persisted = await InterviewSchedule.findById(proposal.interviewSchedule.id).lean();
+    expect(["CONFIRMED", "DECLINED"]).toContain(persisted.status);
   });
 });
