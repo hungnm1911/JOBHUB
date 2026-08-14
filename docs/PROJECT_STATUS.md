@@ -11,8 +11,8 @@ pipeline cutover (`F05`; `BR-11`, `BR-12`, `BR-15`–`BR-18`, `BR-25`–`BR-26`,
 Recruiter can create one `PROPOSED` Schedule from a current Availability slot,
 atomically move `CONTACTED → INTERVIEW_SCHEDULED`, and advance Availability
 revision. Schedule identity snapshots the selected slot and creator; partial
-active-Schedule uniqueness is persisted. Expiration runtime, notification,
-realtime, or Conversation/Message authority change are not included. Its approved
+active-Schedule uniqueness is persisted. Notification, realtime, or
+Conversation/Message authority change are not included. Its approved
 Product/Data contracts are tracked at
 `docs/product/versions/v12-interview-schedule.md` and
 `docs/data/versions/v12-interview-schedule-data-model.md`. Gate 00 closes the
@@ -21,9 +21,7 @@ V10 compatibility boundary: from V12 onward,
 the first `InterviewSchedule(PROPOSED)` creation. Pre-V12 Applications already
 at `INTERVIEW_SCHEDULED` or later retain their historical state without
 synthetic Availability/Schedule backfill, rollback, or inferred proposal
-history; no new legacy state may be created after cutover. The runtime owner for
-automatic proposal expiration remains an engineering gate for Slice 06 only and
-does not block Slice 01.
+history; no new legacy state may be created after cutover.
 
 Slice 03 is implemented for Candidate current Availability edit (`F03`;
 `BR-06`, `BR-08`, `BR-17`; `TX-02` and the Availability↔proposal completion
@@ -61,8 +59,21 @@ remain excluded while cancelled-only slots can be proposed again. Existing
 Application reads now expose current Availability and each immutable Schedule
 history record under their pre-existing Application read authority, without
 expanding Conversation/Message authority. Recruiter manual
-`CONFIRMED → CANCELLED`, expiration runtime, terminal coupled cancellation,
-Notification, realtime, and Availability history remain out of this slice.
+`CONFIRMED → CANCELLED`, terminal coupled cancellation, Notification, realtime,
+and Availability history remain out of this slice.
+
+Slice 06 is implemented for automatic Interview Proposal expiration
+(`F08` partial; `BR-14`, `BR-20`, `BR-25`, `BR-28`, `BR-38`): when
+`now >= expiresAt`, a guarded System lifecycle persists `PROPOSED → CANCELLED`
+without mutating Application status, Candidate Availability, or Schedule
+history identity; MORNING and AFTERNOON remain valid through the full
+proposed calendar day; repeated expiration execution is idempotent; expired
+proposals cannot be Confirmed or Declined; reproposal remains available for
+cancelled-only slots. Runtime execution reuses the V12 scheduling service
+owner with operation-boundary invocation (mutations and Application reads),
+not a general-purpose scheduler. Recruiter manual
+`CONFIRMED → CANCELLED`, terminal Application coupled cancellation,
+Notification, and realtime remain out of this slice.
 
 **V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
 Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across
@@ -1425,10 +1436,9 @@ the current V10 revision complete.
 
 ## Deferred / not started
 
-- **V12 implementation:** Slice 01 is complete and verified. Slices 02–09
-  remain unstarted; Availability edit/CAS starts no earlier than Slice 03, and
-  InterviewSchedule/proposal lifecycle remains deferred. The expiration runtime
-  owner is intentionally deferred to the Slice 06 engineering gate.
+- **V12 implementation:** Slice 01 is complete and verified. Slices 02–05 are
+  implemented; Slice 06 automatic proposal expiration is implemented. Remaining
+  V12 slices stay deferred until their approved scope begins.
 - **V8 remains `PENDING`:** its Product/Data planning drafts are not approved
   implementation authority.
 - **V9 deferred scope:** downstream pipeline states, My Applications,
@@ -1465,6 +1475,15 @@ the current V10 revision complete.
   ARCH-016; Vitest: 120 files / 1,145 tests). No InterviewSchedule, proposal,
   Availability edit/CAS, notification, realtime, scheduler/worker/queue, or
   Conversation/Message authorization behavior was added.
+- V12 Slice 06 Automatic Interview Proposal Expiration: focused expiration
+  lifecycle tests passed (`test/application/v12-slice06-interview-proposal-expiration.test.js`,
+  1 file / 12 tests), then `cd backend && npm run verify:agent` passed (ESLint:
+  0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`;
+  architecture: ARCH-001 through ARCH-016; Vitest: 121 files / 1,173 tests).
+  No general-purpose scheduler/cron/TTL, status `EXPIRED`, Schedule hard-delete,
+  terminal Application coupled cancellation, Recruiter `CONFIRMED → CANCELLED`,
+  notification, realtime, or Conversation/Message authorization behavior was
+  added.
 - V11 Final Acceptance & Regression Closure: after closing the Send guard-document timestamp side effect, complementary Send ↔ eligibility-loss keep ordering, and actual Send ↔ Assign-again ordering, the official `cd backend && npm run verify:agent` gate passed across F01–F10 / BR-01–BR-55 / TX-01–TX-08 (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 119 files / 1,140 tests). The focused V11 baseline passed 8 files / 104 tests, including `test/application/v11-acceptance.test.js` (20 tests) and `test/application/v11-normal-message-send.test.js` (15 tests). The remediations add no new Chat capability, field, collection, index, or migration.
 - V11 Slice 01 Conversation & Message Foundation + First Assign: the official `cd backend && npm run verify:agent` gate passed after Conversation/Message persistence and First Assign TX-01 Conversation creation (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 113 files / 1,059 tests). Focused coverage passed 2 files / 23 tests. No Chat send/read HTTP, Reassign/Unassign SYSTEM Message, authorization, freeze, notification, realtime, attachment, Application field, or migration was added.
 - V10 Slice 07 CompanyMember Recruiter LOCK/TERMINATE automatic Unassign integration (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after CompanyMember LOCK/TERMINATE switched Application resolution from trusted `A → B` handoff to Slice 06 `A → NONE` automatic Unassign while keeping V6 Job-team Primary transfer / Supporting removal and the dual current-state final zero-responsibility guard (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 998 tests). Focused LOCK/TERMINATE Unassign coverage passed 1 file / 17 tests. No generic Recruitment Team removal change, Platform Admin User lifecycle change, Application replacement heuristic, history, recovery state, queue, worker, field, collection, index, or migration was added.

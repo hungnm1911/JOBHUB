@@ -303,8 +303,12 @@ const toPrimaryJobApplicationView = (
   };
 };
 
-const hydratePrimaryJobApplicationViews = async (applications) => {
+const hydratePrimaryJobApplicationViews = async (
+  applications,
+  { now = new Date() } = {},
+) => {
   const applicationIds = applications.map((application) => application._id);
+  await expireDueInterviewProposalsForApplications({ applicationIds, now });
   const candidateUserIds = [
     ...new Set(
       applications.map((application) => application.candidateUserId.toString()),
@@ -924,7 +928,10 @@ const toCandidateMyApplicationView = (
   };
 };
 
-const hydrateCandidateMyApplicationViews = async (applications) => {
+const hydrateCandidateMyApplicationViews = async (
+  applications,
+  { now = new Date() } = {},
+) => {
   if (applications.length === 0) {
     return [];
   }
@@ -933,6 +940,7 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
     ...new Set(applications.map((application) => application.jobId.toString())),
   ];
   const applicationIds = applications.map((application) => application._id);
+  await expireDueInterviewProposalsForApplications({ applicationIds, now });
   const jobs = await Job.find({ _id: { $in: jobIds } });
   const jobById = new Map(jobs.map((job) => [job._id.toString(), job]));
 
@@ -1135,6 +1143,72 @@ const deriveProposalExpiresAt = ({ date, timezone }) => {
   return new Date(instant);
 };
 
+// V12 F08 Slice 06 / BR-25: System lifecycle persists PROPOSED → CANCELLED when
+// now >= expiresAt. Guarded Schedule writes only; Application and Availability
+// stay unchanged. Invoked at scheduling operation boundaries (V5-style), not via
+// a general-purpose scheduler.
+const expireDueInterviewProposalsForApplications = async ({
+  applicationIds = [],
+  now = new Date(),
+  session = null,
+} = {}) => {
+  if (applicationIds.length === 0) {
+    return { modifiedCount: 0 };
+  }
+
+  const normalizedApplicationIds = applicationIds.map((applicationId) =>
+    applicationId instanceof mongoose.Types.ObjectId
+      ? applicationId
+      : new mongoose.Types.ObjectId(applicationId),
+  );
+
+  let updateQuery = InterviewSchedule.updateMany(
+    {
+      applicationId: { $in: normalizedApplicationIds },
+      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      expiresAt: { $lte: now },
+    },
+    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+    { runValidators: true },
+  );
+
+  if (session) {
+    updateQuery = updateQuery.session(session);
+  }
+
+  const result = await updateQuery;
+
+  return {
+    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+  };
+};
+
+const expireDueInterviewProposalsForApplication = async ({
+  applicationId,
+  now = new Date(),
+  session = null,
+} = {}) =>
+  expireDueInterviewProposalsForApplications({
+    applicationIds: [applicationId],
+    now,
+    session,
+  });
+
+const expireDueInterviewProposals = async ({ now = new Date() } = {}) => {
+  const result = await InterviewSchedule.updateMany(
+    {
+      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      expiresAt: { $lte: now },
+    },
+    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+    { runValidators: true },
+  );
+
+  return {
+    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+  };
+};
+
 const normalizeFirstAvailabilitySubmission = ({ timezone, slots, now }) => {
   if (!isValidTimeZone(timezone)) {
     throw new AppError(400, "timezone must be a valid IANA time zone identifier", {
@@ -1333,6 +1407,12 @@ const editCandidateAvailability = async ({
         );
       }
 
+      await expireDueInterviewProposalsForApplication({
+        applicationId: application._id,
+        now,
+        session,
+      });
+
       const proposedSchedule = await InterviewSchedule.exists({
         applicationId: application._id,
         status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
@@ -1505,6 +1585,12 @@ const createInterviewProposal = async ({
         throw new AppError(409, "Selected slot is in the past", { field: "date" });
       }
 
+      await expireDueInterviewProposalsForApplication({
+        applicationId: application._id,
+        now,
+        session,
+      });
+
       const [activeSchedule, declinedSchedule] = await Promise.all([
         InterviewSchedule.exists({
           applicationId: application._id,
@@ -1658,6 +1744,11 @@ const respondToCandidateInterviewProposal = async ({
       field: "status",
     });
   }
+
+  await expireDueInterviewProposalsForApplication({
+    applicationId: application._id,
+    now,
+  });
 
   const schedule = await InterviewSchedule.findOneAndUpdate(
     {
@@ -1842,6 +1933,7 @@ const getCandidateMyApplication = async ({
   candidateUserId,
   actorUser,
   applicationId,
+  now = new Date(),
 } = {}) => {
   assertCandidateActor(actorUser);
 
@@ -1871,7 +1963,7 @@ const getCandidateMyApplication = async ({
     });
   }
 
-  const [view] = await hydrateCandidateMyApplicationViews([application]);
+  const [view] = await hydrateCandidateMyApplicationViews([application], { now });
 
   return {
     application: view,
@@ -5339,6 +5431,9 @@ export {
   downloadCandidateApplicationSubmittedCv,
   downloadPrimaryJobApplicationSubmittedCv,
   downloadRecruiterMyApplicationSubmittedCv,
+  expireDueInterviewProposals,
+  expireDueInterviewProposalsForApplication,
+  expireDueInterviewProposalsForApplications,
   evaluateApplicationConversationChatAuthority,
   findNonTerminalApplicationsAssignedToRecruiter,
   findNonTerminalApplicationsAssignedToRecruiterOnJob,
