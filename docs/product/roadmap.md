@@ -30,7 +30,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V8 | Job Discovery | PENDING |
 | V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
 | V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
-| V11 | Conversation và Chat thuộc Application | PLANNED |
+| V11 | Conversation và Chat thuộc Application | COMPLETED AND VERIFIED |
 | V12 | Interview Schedule | PLANNED |
 | V13 | Notification và phân phối realtime | PLANNED |
 | V14 | Candidate Search trên CV PUBLIC | PLANNED |
@@ -91,8 +91,16 @@ lifecycle refactor; Slices 01–10 of that revision are implemented and verified
 including Concurrency Closure / Final Acceptance (TX-01/TX-02/TX-05 race
 closure, Platform LOCK partial-progress retry, and stale trusted A→B cleanup).
 V10 is therefore `COMPLETED AND VERIFIED` against the current canonical
-revision. V11 through V17 must not be implemented merely from their
-roadmap titles.
+revision. V11 Final Acceptance / regression closure passed across F01–F10,
+BR-01–BR-55, and TX-01–TX-08 after Slices 01–06 and the Slice 07 acceptance
+suite, including the recorded final remediations for Send guard-document
+timestamps, complementary Send ↔ eligibility-loss ordering, and actual Send ↔
+Assign-again ordering. The required backend verification gate passed after
+those remediations; V11 is therefore `COMPLETED AND VERIFIED` against the
+approved Conversation/Chat Product/Data contracts. Realtime, notification,
+attachment, and related deferred capabilities remain outside V11 by product
+boundary. V12 through V17 must not be implemented merely from their roadmap
+titles.
 
 V10 canonical specification:
 
@@ -101,6 +109,14 @@ V10 canonical specification:
 V10 canonical persistence contract:
 
 `docs/data/versions/v10-application-assignment-recruitment-pipeline-data-model.md`
+
+V11 canonical specification:
+
+`docs/product/versions/v11-application-conversation-chat.md`
+
+V11 canonical persistence contract:
+
+`docs/data/versions/v11-application-conversation-chat-data-model.md`
 
 V9 canonical specification:
 

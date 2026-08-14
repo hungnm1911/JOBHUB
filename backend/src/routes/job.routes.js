@@ -22,6 +22,7 @@ import {
   firstAssignApplicationHandler,
   forceReassignApplicationHandler,
   getManagedJobPipelineWorkspaceHandler,
+  getRecruiterApplicationConversationHandler,
   getRecruiterMyApplicationHandler,
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
@@ -29,6 +30,7 @@ import {
   previewPrimaryJobApplicationSubmittedCvHandler,
   previewRecruiterMyApplicationSubmittedCvHandler,
   reassignApplicationHandler,
+  sendRecruiterApplicationConversationNormalMessageHandler,
   unassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
 } from "../controllers/application.controller.js";
@@ -36,11 +38,13 @@ import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-company-manager-business-access.js";
 import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-company-staff-business-access.js";
 import authorizeRecruiterBusinessAccess from "../middlewares/authorize-recruiter-business-access.js";
+import authorizeRecruiterChatHistoryAccess from "../middlewares/authorize-recruiter-chat-history-access.js";
 import validateCreateDraftJob from "../middlewares/validate-create-draft-job.js";
 import validateAddSupportingRecruiter from "../middlewares/validate-add-supporting-recruiter.js";
 import validateFirstAssignApplication from "../middlewares/validate-first-assign-application.js";
 import validateForceReassignApplication from "../middlewares/validate-force-reassign-application.js";
 import validateReassignApplication from "../middlewares/validate-reassign-application.js";
+import validateSendConversationNormalMessage from "../middlewares/validate-send-conversation-normal-message.js";
 import validateUnassignApplication from "../middlewares/validate-unassign-application.js";
 import validateRecruitmentPipelineStatus from "../middlewares/validate-recruitment-pipeline-status.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
@@ -75,6 +79,21 @@ router.get(
   authenticateAccess,
   authorizeRecruiterBusinessAccess,
   getRecruiterMyApplicationHandler,
+);
+
+router.get(
+  "/my-applications/:applicationId/conversation",
+  authenticateAccess,
+  authorizeRecruiterChatHistoryAccess,
+  getRecruiterApplicationConversationHandler,
+);
+
+router.post(
+  "/my-applications/:applicationId/conversation/messages",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  validateSendConversationNormalMessage,
+  sendRecruiterApplicationConversationNormalMessageHandler,
 );
 
 router.get(

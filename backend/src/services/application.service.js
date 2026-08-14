@@ -11,13 +11,17 @@ import CANDIDATE_CV_UPLOADED_STORAGE from "../constants/candidate-cv-uploaded-st
 import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
+import MESSAGE_TYPE from "../constants/message-type.js";
+import SYSTEM_MESSAGE_CONTENT from "../constants/system-message-content.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import Application from "../models/application.model.js";
 import CandidateCV from "../models/candidate-cv.model.js";
 import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
+import Conversation from "../models/conversation.model.js";
 import Job from "../models/job.model.js";
+import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
 import AppError from "../utils/app-error.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
@@ -26,8 +30,10 @@ import {
   resolveCompanyManagerRecruiterManagementContext,
   resolveCompanyStaffBusinessContext,
   resolveRecruiterBusinessContext,
+  resolveRecruiterChatHistoryContext,
 } from "./company.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
+import { evaluateApplicationConversationChatAuthority } from "./application-chat-authority.service.js";
 import {
   acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
@@ -1564,6 +1570,791 @@ const commitAssignFromUnassigned = async ({
   );
 };
 
+// V11 F01 / TX-01: Conversation consequence of a successful First Assign.
+// Absence of Conversation distinguishes First Assign from Assign again; this
+// helper creates Conversation only when none exists.
+const createConversationOnFirstAssignIfAbsent = async ({
+  applicationId,
+  session,
+} = {}) => {
+  const existingConversation = await Conversation.findOne({
+    applicationId,
+  }).session(session);
+
+  if (existingConversation) {
+    return { conversation: existingConversation, created: false };
+  }
+
+  try {
+    const [createdConversation] = await Conversation.create(
+      [{ applicationId }],
+      { session },
+    );
+    return { conversation: createdConversation, created: true };
+  } catch (error) {
+    if (!isMongoDuplicateKeyError(error)) {
+      throw error;
+    }
+
+    const concurrentConversation = await Conversation.findOne({
+      applicationId,
+    }).session(session);
+
+    if (concurrentConversation) {
+      return { conversation: concurrentConversation, created: false };
+    }
+
+    throw error;
+  }
+};
+
+// V11 F03/F04/F05/F06 SYSTEM Message consequence when Conversation already
+// exists. Does not create Conversation, rewrite history, or act as Assignment
+// History / current-Assignee authority.
+const createSystemMessageIfConversationExists = async ({
+  applicationId,
+  content,
+  session,
+} = {}) => {
+  const conversation = await Conversation.findOne({
+    applicationId,
+  }).session(session);
+
+  if (!conversation) {
+    return null;
+  }
+
+  const [systemMessage] = await Message.create(
+    [
+      {
+        conversationId: conversation._id,
+        type: MESSAGE_TYPE.SYSTEM,
+        senderUserId: null,
+        senderCompanyMemberId: null,
+        content,
+      },
+    ],
+    { session },
+  );
+
+  return systemMessage;
+};
+
+const toPublicConversationMessage = (message) => {
+  return {
+    id: message._id.toString(),
+    type: message.type,
+    senderUserId: message.senderUserId ? message.senderUserId.toString() : null,
+    senderCompanyMemberId: message.senderCompanyMemberId
+      ? message.senderCompanyMemberId.toString()
+      : null,
+    content: message.content,
+    createdAt: message.createdAt,
+  };
+};
+
+const toPublicConversationHistory = ({
+  conversation,
+  messages,
+  authority,
+} = {}) => {
+  return {
+    conversation: {
+      id: conversation._id.toString(),
+      applicationId: conversation.applicationId.toString(),
+      createdAt: conversation.createdAt,
+      mode: authority.mode,
+    },
+    messages: messages.map(toPublicConversationMessage),
+    authority: {
+      canRead: authority.canRead,
+      canSendNormal: authority.canSendNormal,
+    },
+  };
+};
+
+// Soft continuous-eligibility facts for Chat authority (BR-08). Does not throw;
+// Callers must not treat stored Assignee alone as authorization.
+const buildCurrentAssigneeChatFacts = async ({
+  application,
+  job,
+  company,
+} = {}) => {
+  if (isApplicationUnassigned(application)) {
+    return {
+      currentAssignee: null,
+      isUnassigned: true,
+    };
+  }
+
+  const assigneeCompanyMemberId = application.assignedRecruiterCompanyMemberId;
+  const membership = await CompanyMember.findById(assigneeCompanyMemberId);
+
+  if (!membership) {
+    return {
+      currentAssignee: {
+        companyMemberId: assigneeCompanyMemberId.toString(),
+        userId: null,
+        membershipStatus: null,
+        userStatus: null,
+        isContinuouslyEligible: false,
+      },
+      isUnassigned: false,
+    };
+  }
+
+  const user = await User.findById(membership.userId).select("status");
+  const membershipIdStr = membership._id.toString();
+  const isPrimary =
+    job.primaryRecruiterCompanyMemberId.toString() === membershipIdStr;
+  const isSupporting = (job.supportingRecruiterCompanyMemberIds ?? []).some(
+    (id) => id.toString() === membershipIdStr,
+  );
+  const sameCompany =
+    membership.companyId.toString() === job.companyId.toString();
+  const companyIsOperational = isOwningCompanyActiveForPublicEligibility(company);
+  const isContinuouslyEligible =
+    membership.role === COMPANY_MEMBER_ROLE.RECRUITER &&
+    membership.status === COMPANY_MEMBER_STATUS.ACTIVE &&
+    user?.status === USER_STATUS.ACTIVE &&
+    sameCompany &&
+    (isPrimary || isSupporting) &&
+    companyIsOperational;
+
+  return {
+    currentAssignee: {
+      companyMemberId: membershipIdStr,
+      userId: membership.userId.toString(),
+      membershipStatus: membership.status,
+      userStatus: user?.status ?? null,
+      isContinuouslyEligible,
+    },
+    isUnassigned: false,
+  };
+};
+
+const loadApplicationConversationHistoryContext = async ({
+  applicationId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const application = await Application.findById(applicationId);
+
+  if (
+    !application ||
+    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+  ) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const conversation = await Conversation.findOne({
+    applicationId: application._id,
+  });
+
+  if (!conversation) {
+    throw new AppError(404, "Conversation not found", {
+      field: "applicationId",
+    });
+  }
+
+  const job = await Job.findById(application.jobId);
+
+  if (!job) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const company = await Company.findById(job.companyId).select(
+    "approvalStatus operationalStatus",
+  );
+
+  const companyIsOperational =
+    isOwningCompanyActiveForPublicEligibility(company);
+  const { currentAssignee, isUnassigned } = await buildCurrentAssigneeChatFacts({
+    application,
+    job,
+    company,
+  });
+
+  return {
+    application,
+    conversation,
+    job,
+    company,
+    companyIsOperational,
+    currentAssignee,
+    isUnassigned,
+  };
+};
+
+const readAuthorizedConversationHistory = async ({
+  context,
+  actor,
+} = {}) => {
+  const authority = evaluateApplicationConversationChatAuthority({
+    conversationExists: true,
+    applicationStatus: context.application.status,
+    isUnassigned: context.isUnassigned,
+    companyIsOperational: context.companyIsOperational,
+    currentAssignee: context.currentAssignee,
+    actor,
+  });
+
+  if (!authority.canRead) {
+    throw new AppError(403, "Conversation access is not allowed", {
+      field: "conversationId",
+      mode: authority.mode,
+    });
+  }
+
+  const messages = await Message.find({
+    conversationId: context.conversation._id,
+  }).sort({ createdAt: 1, _id: 1 });
+
+  return toPublicConversationHistory({
+    conversation: context.conversation,
+    messages,
+    authority,
+  });
+};
+
+// V11 Slice 05 / F02 / F04 / F05 / F07 / F08 / F09: Candidate Conversation
+// history read. Authorization derives from Application ownership + current
+// lifecycle state; Message history never grants authority (BR-07 / BR-48).
+const getCandidateApplicationConversation = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only access their own Applications",
+    );
+  }
+
+  const context = await loadApplicationConversationHistoryContext({
+    applicationId,
+  });
+
+  // BR-07 / BR-41: foreign Applications are not readable as Conversation.
+  if (context.application.candidateUserId.toString() !== candidateUserId.toString()) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  return readAuthorizedConversationHistory({
+    context,
+    actor: {
+      kind: "CANDIDATE",
+      userId: candidateUserId.toString(),
+    },
+  });
+};
+
+// V11 Slice 05: Recruiter Conversation history read for current/persisted/
+// final Assignee. Uses Chat-history context so Company lock does not block
+// FROZEN_COMPANY / terminal historical read (BR-33 / BR-37). Primary,
+// Supporting, Company Manager, Former Assignee, and cross-tenant actors do
+// not gain authority from Job membership or Message history (BR-09–BR-12,
+// BR-17, BR-48).
+const getRecruiterApplicationConversation = async ({
+  actorUser,
+  applicationId,
+  clientCompanyId,
+} = {}) => {
+  const recruiterContext = await resolveRecruiterChatHistoryContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  const context = await loadApplicationConversationHistoryContext({
+    applicationId,
+  });
+
+  assertSameCompanyTenant({
+    resourceCompanyId: context.job.companyId,
+    tenantCompanyId: recruiterContext.companyId,
+  });
+
+  return readAuthorizedConversationHistory({
+    context,
+    actor: {
+      kind: "RECRUITER",
+      userId: actorUser._id.toString(),
+      companyMemberId: recruiterContext.membership._id.toString(),
+      membershipStatus: recruiterContext.membership.status,
+      userStatus: actorUser.status,
+    },
+  });
+};
+
+const normalizeNormalMessageContent = (content) => {
+  if (typeof content !== "string") {
+    throw new AppError(400, "content must be a non-empty string", {
+      field: "content",
+    });
+  }
+
+  const normalized = content.trim();
+
+  if (normalized === "") {
+    throw new AppError(400, "content must be a non-empty string", {
+      field: "content",
+    });
+  }
+
+  return normalized;
+};
+
+// TX-06 guard acquire: canonical TX-02 conditional acquire for serialization,
+// then restore updatedAt in the same transaction so write-conflict behavior is
+// unchanged while guard documents keep their pre-Send timestamp (BR-49 / F10).
+const acquireWithRestoredUpdatedAt = async ({
+  acquire,
+  model,
+  documentId,
+  session,
+} = {}) => {
+  const before =
+    documentId == null
+      ? null
+      : await model
+          .findById(documentId)
+          .select("updatedAt")
+          .session(session)
+          .lean();
+
+  const acquired = await acquire();
+
+  if (acquired && before?.updatedAt) {
+    await model.findOneAndUpdate(
+      { _id: documentId },
+      { $set: { updatedAt: before.updatedAt } },
+      { session, timestamps: false },
+    );
+  }
+
+  return acquired;
+};
+
+// TX-06: write-lock current writable Assigned Application without bumping
+// version or mutating business content. Concurrent assignment / terminal CAS
+// writers either lose on version/assignee/status predicate or WriteConflict.
+const commitApplicationWritableStateForNormalMessageSend = async ({
+  applicationId,
+  jobId,
+  expectedVersion,
+  expectedAssigneeCompanyMemberId,
+  session,
+} = {}) => {
+  return acquireWithRestoredUpdatedAt({
+    model: Application,
+    documentId: applicationId,
+    session,
+    acquire: () =>
+      Application.findOneAndUpdate(
+        {
+          _id: applicationId,
+          jobId,
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          version: expectedVersion,
+          assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
+          status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+        },
+        {
+          $set: {
+            assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
+          },
+        },
+        {
+          returnDocument: "after",
+          session,
+        },
+      ),
+  });
+};
+
+// Soft continuous-eligibility probe at Send commit (TX-06 / BR-14 / BR-43 /
+// BR-55). Reuses V10 lock order Company → CompanyMember → User → Job team.
+// Returns facts for evaluateApplicationConversationChatAuthority; does not
+// throw on expected eligibility loss.
+const resolveAssigneeEligibilityFactsAtSendCommit = async ({
+  application,
+  job,
+  session,
+} = {}) => {
+  if (isApplicationUnassigned(application)) {
+    return {
+      companyIsOperational: false,
+      currentAssignee: null,
+      isUnassigned: true,
+    };
+  }
+
+  const assigneeCompanyMemberId = application.assignedRecruiterCompanyMemberId;
+
+  const stillOperationalCompany = await acquireWithRestoredUpdatedAt({
+    model: Company,
+    documentId: job.companyId,
+    session,
+    acquire: () =>
+      acquireOperationalCompanyForAssigneeEligibilityTx({
+        companyId: job.companyId,
+        session,
+      }),
+  });
+
+  if (!stillOperationalCompany) {
+    const membership = await CompanyMember.findById(
+      assigneeCompanyMemberId,
+    ).session(session);
+    const user = membership
+      ? await User.findById(membership.userId).select("status").session(session)
+      : null;
+
+    return {
+      companyIsOperational: false,
+      currentAssignee: {
+        companyMemberId: assigneeCompanyMemberId.toString(),
+        userId: membership ? membership.userId.toString() : null,
+        membershipStatus: membership?.status ?? null,
+        userStatus: user?.status ?? null,
+        isContinuouslyEligible: false,
+      },
+      isUnassigned: false,
+    };
+  }
+
+  const stillActiveMembership = await acquireWithRestoredUpdatedAt({
+    model: CompanyMember,
+    documentId: assigneeCompanyMemberId,
+    session,
+    acquire: () =>
+      acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+        recruiterCompanyMemberId: assigneeCompanyMemberId,
+        companyId: job.companyId,
+        session,
+      }),
+  });
+
+  if (!stillActiveMembership) {
+    const membership = await CompanyMember.findById(
+      assigneeCompanyMemberId,
+    ).session(session);
+    const user = membership
+      ? await User.findById(membership.userId).select("status").session(session)
+      : null;
+
+    return {
+      companyIsOperational: true,
+      currentAssignee: {
+        companyMemberId: assigneeCompanyMemberId.toString(),
+        userId: membership ? membership.userId.toString() : null,
+        membershipStatus: membership?.status ?? COMPANY_MEMBER_STATUS.LOCKED,
+        userStatus: user?.status ?? null,
+        isContinuouslyEligible: false,
+      },
+      isUnassigned: false,
+    };
+  }
+
+  const stillActiveUser = await acquireWithRestoredUpdatedAt({
+    model: User,
+    documentId: stillActiveMembership.userId,
+    session,
+    acquire: () =>
+      acquireActiveUserForAssigneeEligibilityTx({
+        userId: stillActiveMembership.userId,
+        session,
+      }),
+  });
+
+  if (!stillActiveUser) {
+    return {
+      companyIsOperational: true,
+      currentAssignee: {
+        companyMemberId: stillActiveMembership._id.toString(),
+        userId: stillActiveMembership.userId.toString(),
+        membershipStatus: stillActiveMembership.status,
+        userStatus: USER_STATUS.LOCKED,
+        isContinuouslyEligible: false,
+      },
+      isUnassigned: false,
+    };
+  }
+
+  const stillOnTeam = await acquireWithRestoredUpdatedAt({
+    model: Job,
+    documentId: job._id,
+    session,
+    acquire: () =>
+      acquireJobTeamMembershipForAssigneeEligibilityTx({
+        jobId: job._id,
+        companyId: job.companyId,
+        assigneeCompanyMemberId: stillActiveMembership._id,
+        session,
+      }),
+  });
+
+  const membershipIdStr = stillActiveMembership._id.toString();
+  const isPrimary =
+    job.primaryRecruiterCompanyMemberId.toString() === membershipIdStr;
+  const isSupporting = (job.supportingRecruiterCompanyMemberIds ?? []).some(
+    (id) => id.toString() === membershipIdStr,
+  );
+  const sameCompany =
+    stillActiveMembership.companyId.toString() === job.companyId.toString();
+  const isContinuouslyEligible =
+    stillOnTeam != null &&
+    stillActiveMembership.role === COMPANY_MEMBER_ROLE.RECRUITER &&
+    stillActiveMembership.status === COMPANY_MEMBER_STATUS.ACTIVE &&
+    stillActiveUser.status === USER_STATUS.ACTIVE &&
+    sameCompany &&
+    (isPrimary || isSupporting);
+
+  return {
+    companyIsOperational: true,
+    currentAssignee: {
+      companyMemberId: membershipIdStr,
+      userId: stillActiveMembership.userId.toString(),
+      membershipStatus: stillActiveMembership.status,
+      userStatus: stillActiveUser.status,
+      isContinuouslyEligible,
+    },
+    isUnassigned: false,
+  };
+};
+
+// V11 Slice 06 / F02 / F10 / TX-06–TX-08: persist NORMAL Message only when
+// commit-time Chat authority remains ACTIVE. Does not mutate Conversation
+// ownership, Recruitment Status, Assignment State, Candidate, Job, source, or
+// submittedCvSnapshot (BR-49 / BR-50). Sender identity is server-owned (BR-13).
+const commitNormalMessageSend = async ({
+  applicationId,
+  actor,
+  content,
+  assertActorAccess,
+} = {}) => {
+  const normalizedContent = normalizeNormalMessageContent(content);
+  const session = await mongoose.startSession();
+  let createdMessage = null;
+  let authority = null;
+  let conversation = null;
+
+  try {
+    await session.withTransaction(async () => {
+      if (!mongoose.isValidObjectId(applicationId)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      let application = await Application.findById(applicationId).session(
+        session,
+      );
+
+      if (
+        !application ||
+        application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+      ) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      conversation = await Conversation.findOne({
+        applicationId: application._id,
+      }).session(session);
+
+      if (!conversation) {
+        throw new AppError(404, "Conversation not found", {
+          field: "applicationId",
+        });
+      }
+
+      // TX-06 / F10 / BR-46: committed Application state at Send completion must
+      // drive authority evaluation after Conversation acquisition. Read outside
+      // the Send transaction so concurrent Assign lại / Unassign outcomes are visible.
+      application = await Application.findById(applicationId);
+
+      if (
+        !application ||
+        application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+      ) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      const job = await Job.findById(application.jobId).session(session);
+
+      if (!job) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      await assertActorAccess({ application, job, session });
+
+      const eligibility = await resolveAssigneeEligibilityFactsAtSendCommit({
+        application,
+        job,
+        session,
+      });
+
+      authority = evaluateApplicationConversationChatAuthority({
+        conversationExists: true,
+        applicationStatus: application.status,
+        isUnassigned: eligibility.isUnassigned,
+        companyIsOperational: eligibility.companyIsOperational,
+        currentAssignee: eligibility.currentAssignee,
+        actor,
+      });
+
+      if (!authority.canSendNormal) {
+        throw new AppError(403, "NORMAL Message send is not allowed", {
+          field: "conversationId",
+          mode: authority.mode,
+        });
+      }
+
+      const lockedApplication =
+        await commitApplicationWritableStateForNormalMessageSend({
+          applicationId: application._id,
+          jobId: job._id,
+          expectedVersion: application.version,
+          expectedAssigneeCompanyMemberId:
+            application.assignedRecruiterCompanyMemberId,
+          session,
+        });
+
+      if (!lockedApplication) {
+        throw new AppError(
+          409,
+          "Application conversation is no longer writable; refresh and retry",
+          {
+            field: "applicationId",
+          },
+        );
+      }
+
+      const senderUserId = actor.userId;
+      const senderCompanyMemberId =
+        actor.kind === "RECRUITER" ? actor.companyMemberId : null;
+
+      const [message] = await Message.create(
+        [
+          {
+            conversationId: conversation._id,
+            type: MESSAGE_TYPE.NORMAL,
+            senderUserId,
+            senderCompanyMemberId,
+            content: normalizedContent,
+          },
+        ],
+        { session },
+      );
+
+      createdMessage = message;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    message: toPublicConversationMessage(createdMessage),
+    conversation: {
+      id: conversation._id.toString(),
+      applicationId: conversation.applicationId.toString(),
+      createdAt: conversation.createdAt,
+      mode: authority.mode,
+    },
+    authority: {
+      canRead: authority.canRead,
+      canSendNormal: authority.canSendNormal,
+    },
+  };
+};
+
+// V11 Slice 06: Candidate owner NORMAL Message send (F02 / BR-07 / BR-13–BR-14).
+const sendCandidateApplicationConversationNormalMessage = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  content,
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only access their own Applications",
+    );
+  }
+
+  return commitNormalMessageSend({
+    applicationId,
+    content,
+    actor: {
+      kind: "CANDIDATE",
+      userId: candidateUserId.toString(),
+    },
+    assertActorAccess: async ({ application }) => {
+      if (
+        application.candidateUserId.toString() !== candidateUserId.toString()
+      ) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+    },
+  });
+};
+
+// V11 Slice 06: current Assigned Recruiter NORMAL Message send (F02 / BR-08 /
+// BR-13–BR-14). Uses operational Recruiter business context so Company lock
+// cannot pass the HTTP gate; TX-08 still re-acquires Company at commit.
+const sendRecruiterApplicationConversationNormalMessage = async ({
+  actorUser,
+  applicationId,
+  content,
+  clientCompanyId,
+} = {}) => {
+  const recruiterContext = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  return commitNormalMessageSend({
+    applicationId,
+    content,
+    actor: {
+      kind: "RECRUITER",
+      userId: actorUser._id.toString(),
+      companyMemberId: recruiterContext.membership._id.toString(),
+      membershipStatus: recruiterContext.membership.status,
+      userStatus: actorUser.status,
+    },
+    assertActorAccess: async ({ job }) => {
+      assertSameCompanyTenant({
+        resourceCompanyId: job.companyId,
+        tenantCompanyId: recruiterContext.companyId,
+      });
+    },
+  });
+};
+
 // Canonical assigned-state mutation (Data Contract §8.2–§8.4 / TX-01 / TX-03):
 // atomic A → B or A → NONE. Shared by manual Reassign/Unassign, CM force-reassign
 // A → B, and automatic Unassign. Mutates only current Assignee + version;
@@ -1750,6 +2541,30 @@ const firstAssignApplication = async ({
           expectedVersion,
           session,
         });
+      }
+
+      // V11 F01 / F06 / BR-05 / BR-06 / BR-29 / BR-30 / TX-01 / TX-05:
+      // First Assign (no Conversation) creates Conversation with no SYSTEM
+      // Message. Assign again (Conversation already exists) keeps that
+      // Conversation and writes the required new-assignee SYSTEM Message.
+      const conversationOutcome = await createConversationOnFirstAssignIfAbsent({
+        applicationId: assignedApplication._id,
+        session,
+      });
+
+      if (!conversationOutcome.created) {
+        await Message.create(
+          [
+            {
+              conversationId: conversationOutcome.conversation._id,
+              type: MESSAGE_TYPE.SYSTEM,
+              senderUserId: null,
+              senderCompanyMemberId: null,
+              content: SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
+            },
+          ],
+          { session },
+        );
       }
     });
   } finally {
@@ -2070,6 +2885,25 @@ const executePrimaryCurrentAssigneeMutation = async ({
           actionLabel,
         });
       }
+
+      // V11 F03 / F04 / BR-15–BR-23 / BR-47 / BR-51 / TX-02 / TX-03:
+      // A → B or A → NONE keeps the existing Conversation and writes the
+      // required SYSTEM Message in the same atomic outcome when Conversation
+      // already exists. Automatic Unassign Chat consequence is owned by
+      // automaticallyUnassignApplication (F05 / TX-04).
+      if (isUnassign) {
+        await createSystemMessageIfConversationExists({
+          applicationId: mutatedApplication._id,
+          content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
+          session,
+        });
+      } else {
+        await createSystemMessageIfConversationExists({
+          applicationId: mutatedApplication._id,
+          content: SYSTEM_MESSAGE_CONTENT.RESPONSIBILITY_CHANGED,
+          session,
+        });
+      }
     });
   } finally {
     await session.endSession();
@@ -2133,6 +2967,11 @@ const unassignApplication = async ({
 // actor-authorized assignment management. Reuses commitAssignedAssigneeMutation
 // so stale expected-assignee/version writes cannot clear a newer Assignee.
 // No replacement, no synthetic A → B, no status/snapshot/identity/team mutation.
+//
+// V11 F05 / TX-04: when Conversation already exists, A → NONE and the required
+// awaiting-assignee SYSTEM Message are one per-Application atomic outcome.
+// Missing Conversation keeps V10 behavior (A → NONE only; no Conversation or
+// Message created for V11). Lifecycle reasons are never written into content.
 const automaticallyUnassignApplication = async ({
   applicationId,
   expectedAssigneeCompanyMemberId,
@@ -2161,84 +3000,116 @@ const automaticallyUnassignApplication = async ({
     });
   }
 
-  let applicationQuery = Application.findById(applicationId);
-  if (session) {
-    applicationQuery = applicationQuery.session(session);
-  }
+  const commitAutomaticUnassign = async (activeSession) => {
+    let applicationQuery = Application.findById(applicationId);
+    if (activeSession) {
+      applicationQuery = applicationQuery.session(activeSession);
+    }
 
-  const application = await applicationQuery;
+    const application = await applicationQuery;
 
-  if (!application) {
-    throw new AppError(404, "Application not found", {
-      field: "applicationId",
-    });
-  }
+    if (!application) {
+      throw new AppError(404, "Application not found", {
+        field: "applicationId",
+      });
+    }
 
-  // BR-44: V10 assignment mutations only cover Direct Applications.
-  if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-    throw new AppError(409, "Only Direct Applications can be unassigned", {
-      field: "source",
-    });
-  }
+    // BR-44: V10 assignment mutations only cover Direct Applications.
+    if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
+      throw new AppError(409, "Only Direct Applications can be unassigned", {
+        field: "source",
+      });
+    }
 
-  // BR-17 / BR-52: terminal Applications keep the final Assignee.
-  if (
-    isApplicationTerminalStatus(application.status) ||
-    !APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)
-  ) {
-    throw new AppError(409, "Terminal Applications cannot be unassigned", {
-      field: "status",
-      status: application.status,
-    });
-  }
+    // BR-17 / BR-52: terminal Applications keep the final Assignee.
+    if (
+      isApplicationTerminalStatus(application.status) ||
+      !APPLICATION_NON_TERMINAL_STATUSES.includes(application.status)
+    ) {
+      throw new AppError(409, "Terminal Applications cannot be unassigned", {
+        field: "status",
+        status: application.status,
+      });
+    }
 
-  // BR-10 / BR-52: automatic Unassign requires a current Assignee.
-  if (isApplicationUnassigned(application)) {
-    throw new AppError(409, "Application has no Assignee to unassign", {
-      field: "assignedRecruiterCompanyMemberId",
-    });
-  }
+    // BR-10 / BR-52: automatic Unassign requires a current Assignee.
+    if (isApplicationUnassigned(application)) {
+      throw new AppError(409, "Application has no Assignee to unassign", {
+        field: "assignedRecruiterCompanyMemberId",
+      });
+    }
 
-  if (
-    application.assignedRecruiterCompanyMemberId.toString() !==
-    expectedAssigneeCompanyMemberId.toString()
-  ) {
-    throw new AppError(
-      409,
-      "Application Assignee has changed; refresh and retry Automatic Unassign",
-      { field: "expectedAssigneeCompanyMemberId" },
-    );
-  }
+    if (
+      application.assignedRecruiterCompanyMemberId.toString() !==
+      expectedAssigneeCompanyMemberId.toString()
+    ) {
+      throw new AppError(
+        409,
+        "Application Assignee has changed; refresh and retry Automatic Unassign",
+        { field: "expectedAssigneeCompanyMemberId" },
+      );
+    }
 
-  if (application.version !== expectedVersion) {
-    throw new AppError(
-      409,
-      "Application has changed; refresh and retry Automatic Unassign",
-      { field: "expectedVersion" },
-    );
-  }
+    if (application.version !== expectedVersion) {
+      throw new AppError(
+        409,
+        "Application has changed; refresh and retry Automatic Unassign",
+        { field: "expectedVersion" },
+      );
+    }
 
-  // TX-01 / TX-03 / BR-10 / BR-11 / BR-31 / BR-36–BR-38:
-  // Atomic A → NONE via the shared assigned-state CAS. No target eligibility
-  // (NONE has no replacement). Non-terminal status CAS preserves a prior valid
-  // pipeline/Replace write on retry and blocks overwrite of terminals.
-  const unassignedApplication = await commitAssignedAssigneeMutation({
-    applicationId: application._id,
-    jobId: application.jobId,
-    expectedAssigneeCompanyMemberId,
-    expectedVersion,
-    nextAssignedRecruiterCompanyMemberId: null,
-    session,
-  });
-
-  if (!unassignedApplication) {
-    await rejectFailedAssignedAssigneeCas({
+    // TX-01 / TX-03 / BR-10 / BR-11 / BR-31 / BR-36–BR-38:
+    // Atomic A → NONE via the shared assigned-state CAS. No target eligibility
+    // (NONE has no replacement). Non-terminal status CAS preserves a prior valid
+    // pipeline/Replace write on retry and blocks overwrite of terminals.
+    const unassignedApplication = await commitAssignedAssigneeMutation({
       applicationId: application._id,
-      expectedVersion,
+      jobId: application.jobId,
       expectedAssigneeCompanyMemberId,
-      session,
-      actionLabel: "Automatic Unassign",
+      expectedVersion,
+      nextAssignedRecruiterCompanyMemberId: null,
+      session: activeSession,
     });
+
+    if (!unassignedApplication) {
+      await rejectFailedAssignedAssigneeCas({
+        applicationId: application._id,
+        expectedVersion,
+        expectedAssigneeCompanyMemberId,
+        session: activeSession,
+        actionLabel: "Automatic Unassign",
+      });
+    }
+
+    // V11 F05 / BR-23 / BR-27 / BR-28 / BR-47 / BR-51 / TX-04:
+    // Same atomic outcome as Manual Unassign when Conversation exists. Content
+    // only announces awaiting a new responsible recruiter — never LOCK /
+    // TERMINATE / membership / team-removal reasons.
+    await createSystemMessageIfConversationExists({
+      applicationId: unassignedApplication._id,
+      content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
+      session: activeSession,
+    });
+
+    return unassignedApplication;
+  };
+
+  if (session) {
+    return commitAutomaticUnassign(session);
+  }
+
+  // Per-Application transaction only (TX-04). Callers that detach many
+  // Applications keep independent commits — no global all-or-nothing lifecycle
+  // transaction beyond canonical V10 orchestration.
+  const ownedSession = await mongoose.startSession();
+  let unassignedApplication = null;
+
+  try {
+    await ownedSession.withTransaction(async () => {
+      unassignedApplication = await commitAutomaticUnassign(ownedSession);
+    });
+  } finally {
+    await ownedSession.endSession();
   }
 
   return unassignedApplication;
@@ -3616,14 +4487,19 @@ export {
   downloadCandidateApplicationSubmittedCv,
   downloadPrimaryJobApplicationSubmittedCv,
   downloadRecruiterMyApplicationSubmittedCv,
+  evaluateApplicationConversationChatAuthority,
   findNonTerminalApplicationsAssignedToRecruiter,
   findNonTerminalApplicationsAssignedToRecruiterOnJob,
   firstAssignApplication,
   forceReassignApplication,
+  getCandidateApplicationConversation,
   getCandidateMyApplication,
   getManagedJobPipelineWorkspace,
+  getRecruiterApplicationConversation,
   getRecruiterMyApplication,
   isApplicationUnassigned,
+  sendCandidateApplicationConversationNormalMessage,
+  sendRecruiterApplicationConversationNormalMessage,
   listCandidateMyApplications,
   listManagedJobs,
   listPrimaryJobApplications,

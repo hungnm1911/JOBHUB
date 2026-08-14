@@ -3,10 +3,12 @@ import express from "express";
 import {
   directApplyToJobHandler,
   downloadCandidateApplicationSubmittedCvHandler,
+  getCandidateApplicationConversationHandler,
   getCandidateMyApplicationHandler,
   listCandidateMyApplicationsHandler,
   previewCandidateApplicationSubmittedCvHandler,
   replaceSubmittedCvHandler,
+  sendCandidateApplicationConversationNormalMessageHandler,
   withdrawApplicationHandler,
 } from "../controllers/application.controller.js";
 import {
@@ -36,6 +38,7 @@ import validateCreateGeneratedDraftCv from "../middlewares/validate-create-gener
 import validateDirectApply from "../middlewares/validate-direct-apply.js";
 import validateCreateUploadedCv from "../middlewares/validate-create-uploaded-cv.js";
 import validateReplaceSubmittedCv from "../middlewares/validate-replace-submitted-cv.js";
+import validateSendConversationNormalMessage from "../middlewares/validate-send-conversation-normal-message.js";
 import validateWithdrawApplication from "../middlewares/validate-withdraw-application.js";
 import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
 import validateUpdateCandidateCvMetadata from "../middlewares/validate-update-candidate-cv-metadata.js";
@@ -174,6 +177,21 @@ router.get(
   authenticateAccess,
   authorizeCandidate,
   getCandidateMyApplicationHandler,
+);
+
+router.get(
+  "/applications/:applicationId/conversation",
+  authenticateAccess,
+  authorizeCandidate,
+  getCandidateApplicationConversationHandler,
+);
+
+router.post(
+  "/applications/:applicationId/conversation/messages",
+  authenticateAccess,
+  authorizeCandidate,
+  validateSendConversationNormalMessage,
+  sendCandidateApplicationConversationNormalMessageHandler,
 );
 
 router.get(
