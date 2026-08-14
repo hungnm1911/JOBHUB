@@ -1,14 +1,18 @@
 import express from "express";
 
 import {
+  confirmCandidateInterviewProposalHandler,
+  declineCandidateInterviewProposalHandler,
   directApplyToJobHandler,
   downloadCandidateApplicationSubmittedCvHandler,
+  editCandidateAvailabilityHandler,
   getCandidateApplicationConversationHandler,
   getCandidateMyApplicationHandler,
   listCandidateMyApplicationsHandler,
   previewCandidateApplicationSubmittedCvHandler,
   replaceSubmittedCvHandler,
   sendCandidateApplicationConversationNormalMessageHandler,
+  submitCandidateAvailabilityFirstTimeHandler,
   withdrawApplicationHandler,
 } from "../controllers/application.controller.js";
 import {
@@ -36,9 +40,11 @@ import uploadCandidateCvPdf from "../middlewares/upload-candidate-cv-pdf.js";
 import validateCandidateProfileUpdate from "../middlewares/validate-candidate-profile-update.js";
 import validateCreateGeneratedDraftCv from "../middlewares/validate-create-generated-draft-cv.js";
 import validateDirectApply from "../middlewares/validate-direct-apply.js";
+import validateEditCandidateAvailability from "../middlewares/validate-edit-candidate-availability.js";
 import validateCreateUploadedCv from "../middlewares/validate-create-uploaded-cv.js";
 import validateReplaceSubmittedCv from "../middlewares/validate-replace-submitted-cv.js";
 import validateSendConversationNormalMessage from "../middlewares/validate-send-conversation-normal-message.js";
+import validateSubmitCandidateAvailability from "../middlewares/validate-submit-candidate-availability.js";
 import validateWithdrawApplication from "../middlewares/validate-withdraw-application.js";
 import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
 import validateUpdateCandidateCvMetadata from "../middlewares/validate-update-candidate-cv-metadata.js";
@@ -177,6 +183,37 @@ router.get(
   authenticateAccess,
   authorizeCandidate,
   getCandidateMyApplicationHandler,
+);
+
+
+router.post(
+  "/applications/:applicationId/availability",
+  authenticateAccess,
+  authorizeCandidate,
+  validateSubmitCandidateAvailability,
+  submitCandidateAvailabilityFirstTimeHandler,
+);
+
+router.put(
+  "/applications/:applicationId/availability",
+  authenticateAccess,
+  authorizeCandidate,
+  validateEditCandidateAvailability,
+  editCandidateAvailabilityHandler,
+);
+
+router.post(
+  "/applications/:applicationId/interview-proposals/:interviewScheduleId/confirm",
+  authenticateAccess,
+  authorizeCandidate,
+  confirmCandidateInterviewProposalHandler,
+);
+
+router.post(
+  "/applications/:applicationId/interview-proposals/:interviewScheduleId/decline",
+  authenticateAccess,
+  authorizeCandidate,
+  declineCandidateInterviewProposalHandler,
 );
 
 router.get(

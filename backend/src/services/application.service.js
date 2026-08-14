@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import APPLICATION_SOURCE from "../constants/application-source.js";
 import APPLICATION_STATUS from "../constants/application-status.js";
 import APPLICATION_SUBMITTED_CV_STORAGE from "../constants/application-submitted-cv-storage.js";
+import AVAILABILITY_DAY_PART from "../constants/availability-day-part.js";
 import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
 import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
@@ -16,13 +17,19 @@ import SYSTEM_MESSAGE_CONTENT from "../constants/system-message-content.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import Application from "../models/application.model.js";
+import CandidateAvailability, {
+  isCalendarDate,
+  isValidTimeZone,
+} from "../models/candidate-availability.model.js";
 import CandidateCV from "../models/candidate-cv.model.js";
 import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import Conversation from "../models/conversation.model.js";
+import InterviewSchedule from "../models/interview-schedule.model.js";
 import Job from "../models/job.model.js";
 import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
+import INTERVIEW_SCHEDULE_STATUS from "../constants/interview-schedule-status.js";
 import AppError from "../utils/app-error.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
 import {
@@ -66,6 +73,8 @@ const deleteApplicationSubmittedCvSnapshotFile = (publicId) => {
 const isMongoDuplicateKeyError = (error) => {
   return error?.code === 11000;
 };
+
+const AVAILABILITY_DAY_PART_VALUES = Object.values(AVAILABILITY_DAY_PART);
 
 const assertCandidateActor = (user) => {
   if (!user || user.role !== USER_ROLE.CANDIDATE) {
@@ -219,9 +228,46 @@ const toPublicAssignedRecruiterSummary = ({ membership, user } = {}) => {
   };
 };
 
+const toCandidateAvailabilityProjection = (availability) => {
+  if (availability == null) {
+    return {
+      status: "NOT_SUBMITTED",
+      timezone: null,
+      slots: [],
+      revision: null,
+    };
+  }
+
+  return {
+    status: "SUBMITTED",
+    timezone: availability.timezone,
+    slots: availability.slots.map((slot) => ({
+      date: slot.date,
+      dayPart: slot.dayPart,
+    })),
+    revision: availability.revision,
+  };
+};
+
+const toInterviewScheduleProjection = (schedule) => {
+  return {
+    id: schedule._id.toString(),
+    applicationId: schedule.applicationId.toString(),
+    status: schedule.status,
+    date: schedule.date,
+    dayPart: schedule.dayPart,
+    timezone: schedule.timezone,
+    expiresAt: schedule.expiresAt,
+    createdByUserId: schedule.createdByUserId.toString(),
+    createdByCompanyMemberId: schedule.createdByCompanyMemberId.toString(),
+    createdAt: schedule.createdAt,
+    updatedAt: schedule.updatedAt,
+  };
+};
+
 const toPrimaryJobApplicationView = (
   application,
-  { candidate, assignedRecruiter } = {},
+  { candidate, assignedRecruiter, availability, interviewSchedules } = {},
 ) => {
   const assignedRecruiterCompanyMemberId =
     application.assignedRecruiterCompanyMemberId == null
@@ -238,6 +284,13 @@ const toPrimaryJobApplicationView = (
     isUnassigned: isApplicationUnassigned(application),
     assignedRecruiter: assignedRecruiter ?? null,
     candidate: candidate ?? null,
+    availability: availability ?? {
+      status: "NOT_SUBMITTED",
+      timezone: null,
+      slots: [],
+      revision: null,
+    },
+    interviewSchedules: interviewSchedules ?? [],
     submittedCvSnapshot: toPublicSubmittedCvSnapshot(
       application.submittedCvSnapshot,
     ),
@@ -250,7 +303,12 @@ const toPrimaryJobApplicationView = (
   };
 };
 
-const hydratePrimaryJobApplicationViews = async (applications) => {
+const hydratePrimaryJobApplicationViews = async (
+  applications,
+  { now = new Date() } = {},
+) => {
+  const applicationIds = applications.map((application) => application._id);
+  await expireDueInterviewProposalsForApplications({ applicationIds, now });
   const candidateUserIds = [
     ...new Set(
       applications.map((application) => application.candidateUserId.toString()),
@@ -266,7 +324,8 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
     ),
   ];
 
-  const [candidates, assigneeMemberships] = await Promise.all([
+  const [candidates, assigneeMemberships, availabilities, interviewSchedules] =
+    await Promise.all([
     candidateUserIds.length === 0
       ? []
       : User.find({ _id: { $in: candidateUserIds } }).select(
@@ -277,6 +336,16 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
       : CompanyMember.find({ _id: { $in: assigneeMemberIds } }).select(
           "userId jobTitle",
         ),
+    applicationIds.length === 0
+      ? []
+      : CandidateAvailability.find({
+          applicationId: { $in: applicationIds },
+        }).select("applicationId timezone slots revision"),
+    applicationIds.length === 0
+      ? []
+      : InterviewSchedule.find({
+          applicationId: { $in: applicationIds },
+        }).sort({ createdAt: -1, _id: -1 }),
   ]);
 
   const candidateById = new Map(
@@ -288,6 +357,19 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
       membership,
     ]),
   );
+  const availabilityByApplicationId = new Map(
+    availabilities.map((availability) => [
+      availability.applicationId.toString(),
+      availability,
+    ]),
+  );
+  const interviewSchedulesByApplicationId = new Map();
+  for (const schedule of interviewSchedules) {
+    const key = schedule.applicationId.toString();
+    const schedules = interviewSchedulesByApplicationId.get(key) ?? [];
+    schedules.push(toInterviewScheduleProjection(schedule));
+    interviewSchedulesByApplicationId.set(key, schedules);
+  }
 
   const assigneeUserIds = [
     ...new Set(
@@ -329,6 +411,11 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
     return toPrimaryJobApplicationView(application, {
       candidate,
       assignedRecruiter,
+      availability: toCandidateAvailabilityProjection(
+        availabilityByApplicationId.get(application._id.toString()),
+      ),
+      interviewSchedules:
+        interviewSchedulesByApplicationId.get(application._id.toString()) ?? [],
     });
   });
 };
@@ -811,7 +898,7 @@ const toCandidateMyApplicationJob = (job) => {
 // Unassign nulls assignee-facing fields; Assign again shows the new Assignee.
 const toCandidateMyApplicationView = (
   application,
-  { job, company, assignedRecruiter } = {},
+  { job, company, assignedRecruiter, availability, interviewSchedules } = {},
 ) => {
   return {
     id: application._id.toString(),
@@ -820,6 +907,13 @@ const toCandidateMyApplicationView = (
     status: application.status,
     isUnassigned: isApplicationUnassigned(application),
     assignedRecruiter: assignedRecruiter ?? null,
+    availability: availability ?? {
+      status: "NOT_SUBMITTED",
+      timezone: null,
+      slots: [],
+      revision: null,
+    },
+    interviewSchedules: interviewSchedules ?? [],
     job: job == null ? null : toCandidateMyApplicationJob(job),
     company: toCandidateVisibleCompany(company),
     submittedCvSnapshot: toPublicSubmittedCvSnapshot(
@@ -834,7 +928,10 @@ const toCandidateMyApplicationView = (
   };
 };
 
-const hydrateCandidateMyApplicationViews = async (applications) => {
+const hydrateCandidateMyApplicationViews = async (
+  applications,
+  { now = new Date() } = {},
+) => {
   if (applications.length === 0) {
     return [];
   }
@@ -842,6 +939,8 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
   const jobIds = [
     ...new Set(applications.map((application) => application.jobId.toString())),
   ];
+  const applicationIds = applications.map((application) => application._id);
+  await expireDueInterviewProposalsForApplications({ applicationIds, now });
   const jobs = await Job.find({ _id: { $in: jobIds } });
   const jobById = new Map(jobs.map((job) => [job._id.toString(), job]));
 
@@ -865,18 +964,39 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
         ),
     ),
   ];
-  const assigneeMemberships =
+  const [assigneeMemberships, availabilities, interviewSchedules] =
+    await Promise.all([
     assigneeMemberIds.length === 0
       ? []
-      : await CompanyMember.find({ _id: { $in: assigneeMemberIds } }).select(
+      : CompanyMember.find({ _id: { $in: assigneeMemberIds } }).select(
           "userId jobTitle",
-        );
+        ),
+    CandidateAvailability.find({
+      applicationId: { $in: applicationIds },
+    }).select("applicationId timezone slots revision"),
+    InterviewSchedule.find({
+      applicationId: { $in: applicationIds },
+    }).sort({ createdAt: -1, _id: -1 }),
+  ]);
   const assigneeMembershipById = new Map(
     assigneeMemberships.map((membership) => [
       membership._id.toString(),
       membership,
     ]),
   );
+  const availabilityByApplicationId = new Map(
+    availabilities.map((availability) => [
+      availability.applicationId.toString(),
+      availability,
+    ]),
+  );
+  const interviewSchedulesByApplicationId = new Map();
+  for (const schedule of interviewSchedules) {
+    const key = schedule.applicationId.toString();
+    const schedules = interviewSchedulesByApplicationId.get(key) ?? [];
+    schedules.push(toInterviewScheduleProjection(schedule));
+    interviewSchedulesByApplicationId.set(key, schedules);
+  }
 
   const assigneeUserIds = [
     ...new Set(
@@ -919,6 +1039,11 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
       job,
       company,
       assignedRecruiter,
+      availability: toCandidateAvailabilityProjection(
+        availabilityByApplicationId.get(application._id.toString()),
+      ),
+      interviewSchedules:
+        interviewSchedulesByApplicationId.get(application._id.toString()) ?? [],
     });
   });
 };
@@ -953,6 +1078,840 @@ const normalizeCandidateMyApplicationsSearch = (search) => {
 
   const trimmed = search.trim();
   return trimmed === "" ? null : trimmed.toLowerCase();
+};
+
+const getCalendarDateInTimeZone = (instant, timeZone) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => ["year", "month", "day"].includes(part.type))
+      .map((part) => [part.type, part.value]),
+  );
+
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+const getTimeZoneParts = (instant, timeZone) => {
+  const values = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(instant)
+      .filter((part) =>
+        ["year", "month", "day", "hour", "minute", "second"].includes(
+          part.type,
+        ),
+      )
+      .map((part) => [part.type, Number(part.value)]),
+  );
+
+  return values;
+};
+
+// `expiresAt` is midnight of the next calendar day in the Availability timezone.
+// Iteration accounts for offsets that change across DST boundaries.
+const deriveProposalExpiresAt = ({ date, timezone }) => {
+  const [year, month, day] = date.split("-").map(Number);
+  const localNextMidnight = Date.UTC(year, month - 1, day + 1);
+  let instant = localNextMidnight;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = getTimeZoneParts(new Date(instant), timezone);
+    const representedAsUtc = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second,
+    );
+    instant = localNextMidnight - (representedAsUtc - instant);
+  }
+
+  return new Date(instant);
+};
+
+// V12 F08 Slice 06 / BR-25: System lifecycle persists PROPOSED → CANCELLED when
+// now >= expiresAt. Guarded Schedule writes only; Application and Availability
+// stay unchanged. Invoked at scheduling operation boundaries (V5-style), not via
+// a general-purpose scheduler.
+const expireDueInterviewProposalsForApplications = async ({
+  applicationIds = [],
+  now = new Date(),
+  session = null,
+} = {}) => {
+  if (applicationIds.length === 0) {
+    return { modifiedCount: 0 };
+  }
+
+  const normalizedApplicationIds = applicationIds.map((applicationId) =>
+    applicationId instanceof mongoose.Types.ObjectId
+      ? applicationId
+      : new mongoose.Types.ObjectId(applicationId),
+  );
+
+  let updateQuery = InterviewSchedule.updateMany(
+    {
+      applicationId: { $in: normalizedApplicationIds },
+      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      expiresAt: { $lte: now },
+    },
+    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+    { runValidators: true },
+  );
+
+  if (session) {
+    updateQuery = updateQuery.session(session);
+  }
+
+  const result = await updateQuery;
+
+  return {
+    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+  };
+};
+
+const expireDueInterviewProposalsForApplication = async ({
+  applicationId,
+  now = new Date(),
+  session = null,
+} = {}) =>
+  expireDueInterviewProposalsForApplications({
+    applicationIds: [applicationId],
+    now,
+    session,
+  });
+
+const expireDueInterviewProposals = async ({ now = new Date() } = {}) => {
+  const result = await InterviewSchedule.updateMany(
+    {
+      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      expiresAt: { $lte: now },
+    },
+    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+    { runValidators: true },
+  );
+
+  return {
+    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+  };
+};
+
+// V12 F08 Slice 07 / TX-03: this is intentionally callable only by canonical
+// Application terminal-transition workflows. It preserves proposal identity,
+// Availability, and terminal Schedule history while invalidating the one active
+// Schedule, if any, in the same transaction as its parent Application.
+const cancelActiveInterviewScheduleForTerminalApplication = async ({
+  applicationId,
+  session,
+} = {}) => {
+  let updateQuery = InterviewSchedule.updateOne(
+    {
+      applicationId,
+      status: {
+        $in: [
+          INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+          INTERVIEW_SCHEDULE_STATUS.CONFIRMED,
+        ],
+      },
+    },
+    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+    { runValidators: true },
+  );
+
+  if (session) {
+    updateQuery = updateQuery.session(session);
+  }
+
+  const result = await updateQuery;
+  return {
+    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+  };
+};
+
+const normalizeFirstAvailabilitySubmission = ({ timezone, slots, now }) => {
+  if (!isValidTimeZone(timezone)) {
+    throw new AppError(400, "timezone must be a valid IANA time zone identifier", {
+      field: "timezone",
+    });
+  }
+
+  if (!Array.isArray(slots)) {
+    throw new AppError(400, "slots must be an array", { field: "slots" });
+  }
+
+  const today = getCalendarDateInTimeZone(now, timezone);
+  const normalizedSlots = [];
+  const seenSlots = new Set();
+
+  for (const [index, slot] of slots.entries()) {
+    if (!isCalendarDate(slot?.date)) {
+      throw new AppError(400, "slots[].date must use YYYY-MM-DD", {
+        field: `slots.${index}.date`,
+      });
+    }
+
+    if (!AVAILABILITY_DAY_PART_VALUES.includes(slot.dayPart)) {
+      throw new AppError(400, "slots[].dayPart must be MORNING or AFTERNOON", {
+        field: `slots.${index}.dayPart`,
+      });
+    }
+
+    if (slot.date < today) {
+      throw new AppError(
+        409,
+        "Availability slots must not be before today in the submitted timezone",
+        { field: `slots.${index}.date` },
+      );
+    }
+
+    const key = `${slot.date}:${slot.dayPart}`;
+
+    if (seenSlots.has(key)) {
+      throw new AppError(
+        400,
+        "slots must not contain duplicate (date, dayPart) values",
+        { field: `slots.${index}` },
+      );
+    }
+
+    seenSlots.add(key);
+    normalizedSlots.push({ date: slot.date, dayPart: slot.dayPart });
+  }
+
+  return {
+    timezone,
+    slots: normalizedSlots,
+  };
+};
+
+// V12 F02 Slice 01: first submit creates the sole current Availability only.
+// It intentionally does not create a Schedule or mutate Application status/version.
+const submitCandidateAvailabilityFirstTime = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  timezone,
+  slots,
+  now = new Date(),
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only submit Availability for their own Applications",
+    );
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  const application = await Application.findOne({
+    _id: applicationId,
+    candidateUserId,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  });
+
+  if (!application) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  // Slice 01 opens scheduling only from the current CONTACTED state. Legacy
+  // pre-V12 downstream Applications are never backfilled with inferred data.
+  if (application.status !== APPLICATION_STATUS.CONTACTED) {
+    throw new AppError(
+      409,
+      "Availability can first be submitted only while Application is CONTACTED",
+      { field: "status" },
+    );
+  }
+
+  const submission = normalizeFirstAvailabilitySubmission({
+    timezone,
+    slots,
+    now,
+  });
+
+  try {
+    const availability = await CandidateAvailability.create({
+      applicationId: application._id,
+      timezone: submission.timezone,
+      slots: submission.slots,
+      revision: 0,
+    });
+
+    return toCandidateAvailabilityProjection(availability);
+  } catch (error) {
+    if (isMongoDuplicateKeyError(error)) {
+      throw new AppError(
+        409,
+        "Availability has already been submitted; use the edit workflow",
+        { field: "applicationId" },
+      );
+    }
+
+    throw error;
+  }
+};
+
+// V12 F03: replace the one current Availability set, guarded by its revision.
+// This shares the Availability write with proposal creation so transactions
+// serialize either the edit or the proposal; neither can commit on stale slots.
+const editCandidateAvailability = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  timezone,
+  slots,
+  expectedRevision,
+  now = new Date(),
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only edit Availability for their own Applications",
+    );
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
+    });
+  }
+
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
+    throw new AppError(
+      400,
+      "expectedRevision must be a non-negative integer",
+      { field: "expectedRevision" },
+    );
+  }
+
+  const submission = normalizeFirstAvailabilitySubmission({
+    timezone,
+    slots,
+    now,
+  });
+  const session = await mongoose.startSession();
+  let updatedAvailability = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const application = await Application.findOne({
+        _id: applicationId,
+        candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
+      if (!application) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      const availability = await CandidateAvailability.findOne({
+        applicationId: application._id,
+      }).session(session);
+      if (!availability) {
+        throw new AppError(
+          409,
+          "Availability has not been submitted; submit it before editing",
+          { field: "applicationId" },
+        );
+      }
+
+      await expireDueInterviewProposalsForApplication({
+        applicationId: application._id,
+        now,
+        session,
+      });
+
+      const proposedSchedule = await InterviewSchedule.exists({
+        applicationId: application._id,
+        status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      }).session(session);
+      if (proposedSchedule) {
+        throw new AppError(
+          409,
+          "Availability cannot be edited while an Interview Schedule is proposed",
+          { field: "applicationId" },
+        );
+      }
+
+      if (availability.revision !== expectedRevision) {
+        throw new AppError(
+          409,
+          "Availability has changed; refresh and retry the edit",
+          { field: "expectedRevision" },
+        );
+      }
+
+      availability.timezone = submission.timezone;
+      availability.slots = submission.slots;
+      availability.revision += 1;
+      await availability.save({ session });
+      updatedAvailability = availability;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return toCandidateAvailabilityProjection(updatedAvailability);
+};
+
+const createInterviewProposal = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  date,
+  dayPart,
+  expectedAvailabilityRevision,
+  clientCompanyId,
+  now = new Date(),
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", { field: "applicationId" });
+  }
+
+  if (!isCalendarDate(date)) {
+    throw new AppError(400, "date must use YYYY-MM-DD", { field: "date" });
+  }
+
+  if (!AVAILABILITY_DAY_PART_VALUES.includes(dayPart)) {
+    throw new AppError(400, "dayPart must be MORNING or AFTERNOON", {
+      field: "dayPart",
+    });
+  }
+
+  if (
+    !Number.isInteger(expectedAvailabilityRevision) ||
+    expectedAvailabilityRevision < 0
+  ) {
+    throw new AppError(
+      400,
+      "expectedAvailabilityRevision must be a non-negative integer",
+      { field: "expectedAvailabilityRevision" },
+    );
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+  const session = await mongoose.startSession();
+  let schedule = null;
+  let job = null;
+  let updatedApplication = null;
+  let updatedAvailability = null;
+
+  try {
+    await session.withTransaction(async () => {
+      job = await Job.findById(jobId).session(session);
+      if (!job) {
+        throw new AppError(404, "Job not found", { field: "jobId" });
+      }
+
+      assertSameCompanyTenant({
+        resourceCompanyId: job.companyId,
+        tenantCompanyId: context.companyId,
+      });
+
+      const application = await Application.findById(applicationId).session(session);
+      if (!application || application.jobId.toString() !== job._id.toString()) {
+        throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+
+      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
+        throw new AppError(409, "Only Direct Applications can receive proposals", {
+          field: "source",
+        });
+      }
+
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot receive proposals", {
+          field: "status",
+        });
+      }
+
+      const isFirstProposal =
+        application.status === APPLICATION_STATUS.CONTACTED;
+      if (
+        !isFirstProposal &&
+        application.status !== APPLICATION_STATUS.INTERVIEW_SCHEDULED
+      ) {
+        throw new AppError(
+          409,
+          "Interview proposals can only be created while Application is CONTACTED or INTERVIEW_SCHEDULED",
+          { field: "status" },
+        );
+      }
+
+      if (
+        isApplicationUnassigned(application) ||
+        application.assignedRecruiterCompanyMemberId.toString() !==
+          context.membership._id.toString()
+      ) {
+        throw new AppError(
+          403,
+          "Only the current Assigned Recruiter can create an Interview proposal",
+          { field: "role" },
+        );
+      }
+
+      const assigneeContext = await assertAssigneeEligibleAtAssignmentCommit({
+        assigneeCompanyMemberId: context.membership._id,
+        job,
+        session,
+      });
+
+      const availability = await CandidateAvailability.findOne({
+        applicationId: application._id,
+      }).session(session);
+      if (!availability) {
+        throw new AppError(409, "Candidate Availability has not been submitted", {
+          field: "applicationId",
+        });
+      }
+
+      if (availability.revision !== expectedAvailabilityRevision) {
+        throw new AppError(
+          409,
+          "Availability has changed; refresh and retry Interview proposal",
+          { field: "expectedAvailabilityRevision" },
+        );
+      }
+
+      const selectedSlot = availability.slots.find(
+        (slot) => slot.date === date && slot.dayPart === dayPart,
+      );
+      if (!selectedSlot) {
+        throw new AppError(409, "Selected slot is not in current Availability", {
+          field: "date",
+        });
+      }
+
+      if (date < getCalendarDateInTimeZone(now, availability.timezone)) {
+        throw new AppError(409, "Selected slot is in the past", { field: "date" });
+      }
+
+      await expireDueInterviewProposalsForApplication({
+        applicationId: application._id,
+        now,
+        session,
+      });
+
+      const [activeSchedule, declinedSchedule] = await Promise.all([
+        InterviewSchedule.exists({
+          applicationId: application._id,
+          status: {
+            $in: [
+              INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+              INTERVIEW_SCHEDULE_STATUS.CONFIRMED,
+            ],
+          },
+        }).session(session),
+        InterviewSchedule.exists({
+          applicationId: application._id,
+          date,
+          dayPart,
+          status: INTERVIEW_SCHEDULE_STATUS.DECLINED,
+        }).session(session),
+      ]);
+      if (activeSchedule) {
+        throw new AppError(409, "Application already has an active Interview Schedule", {
+          field: "applicationId",
+        });
+      }
+      if (declinedSchedule) {
+        throw new AppError(409, "Selected slot was previously declined", {
+          field: "date",
+        });
+      }
+
+      const expiresAt = deriveProposalExpiresAt({
+        date,
+        timezone: availability.timezone,
+      });
+      schedule = new InterviewSchedule({
+        applicationId: application._id,
+        status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+        date,
+        dayPart,
+        timezone: availability.timezone,
+        expiresAt,
+        createdByUserId: assigneeContext.user._id,
+        createdByCompanyMemberId: assigneeContext.membership._id,
+      });
+      await schedule.save({ session });
+
+      // Every proposal claims the current Application revision. For a
+      // reproposal this is a concurrency-only write: it serializes proposal
+      // creation with a terminal transition without changing the Application
+      // business status. If terminal wins, the Schedule insert rolls back with
+      // this transaction instead of leaving terminal + PROPOSED committed.
+      updatedApplication = await Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          status: application.status,
+          version: application.version,
+          assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
+        },
+        {
+          ...(isFirstProposal
+            ? { $set: { status: APPLICATION_STATUS.INTERVIEW_SCHEDULED } }
+            : {}),
+          $inc: { version: 1 },
+        },
+        { returnDocument: "after", session },
+      );
+      if (!updatedApplication) {
+        throw new AppError(
+          409,
+          "Application has changed; refresh and retry Interview proposal",
+          { field: "applicationId" },
+        );
+      }
+
+      availability.revision += 1;
+      await availability.save({ session });
+      updatedAvailability = availability;
+    });
+  } catch (error) {
+    if (isMongoDuplicateKeyError(error)) {
+      throw new AppError(409, "Application already has an active Interview Schedule", {
+        field: "applicationId",
+      });
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    job: toPublicJob(job),
+    application: {
+      id: updatedApplication._id.toString(),
+      status: updatedApplication.status,
+      version: updatedApplication.version,
+    },
+    availability: toCandidateAvailabilityProjection(updatedAvailability),
+    interviewSchedule: {
+      id: schedule._id.toString(),
+      applicationId: schedule.applicationId.toString(),
+      status: schedule.status,
+      date: schedule.date,
+      dayPart: schedule.dayPart,
+      timezone: schedule.timezone,
+      expiresAt: schedule.expiresAt,
+      createdByUserId: schedule.createdByUserId.toString(),
+      createdByCompanyMemberId: schedule.createdByCompanyMemberId.toString(),
+      createdAt: schedule.createdAt,
+      updatedAt: schedule.updatedAt,
+    },
+  };
+};
+
+const createFirstInterviewProposal = createInterviewProposal;
+
+// V12 F06/F07: Candidate ownership is resolved only through the Application.
+// The guarded update lets exactly one concurrent PROPOSED response commit.
+const respondToCandidateInterviewProposal = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  interviewScheduleId,
+  targetStatus,
+  now = new Date(),
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only respond to Interview Schedules for their own Applications",
+    );
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", { field: "applicationId" });
+  }
+
+  if (!mongoose.isValidObjectId(interviewScheduleId)) {
+    throw new AppError(404, "Interview Schedule not found", {
+      field: "interviewScheduleId",
+    });
+  }
+
+  const application = await Application.findOne({
+    _id: applicationId,
+    candidateUserId,
+    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+  }).lean();
+  if (!application) {
+    throw new AppError(404, "Application not found", { field: "applicationId" });
+  }
+
+  if (isApplicationTerminalStatus(application.status)) {
+    throw new AppError(409, "Terminal Applications cannot receive Schedule responses", {
+      field: "status",
+    });
+  }
+
+  await expireDueInterviewProposalsForApplication({
+    applicationId: application._id,
+    now,
+  });
+
+  const schedule = await InterviewSchedule.findOneAndUpdate(
+    {
+      _id: interviewScheduleId,
+      applicationId: application._id,
+      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      expiresAt: { $gt: now },
+    },
+    { $set: { status: targetStatus } },
+    { returnDocument: "after", runValidators: true },
+  );
+  if (!schedule) {
+    throw new AppError(
+      409,
+      "Interview Schedule is no longer a live proposed proposal",
+      { field: "interviewScheduleId" },
+    );
+  }
+
+  return toInterviewScheduleProjection(schedule);
+};
+
+const confirmCandidateInterviewProposal = async (input = {}) => {
+  return respondToCandidateInterviewProposal({
+    ...input,
+    targetStatus: INTERVIEW_SCHEDULE_STATUS.CONFIRMED,
+  });
+};
+
+const declineCandidateInterviewProposal = async (input = {}) => {
+  return respondToCandidateInterviewProposal({
+    ...input,
+    targetStatus: INTERVIEW_SCHEDULE_STATUS.DECLINED,
+  });
+};
+
+// V12 F08 Slice 05: cancellation authority follows the current eligible
+// Assignee, never the Schedule's immutable historical creator identity.
+const cancelRecruiterInterviewProposal = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  interviewScheduleId,
+  clientCompanyId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", { field: "applicationId" });
+  }
+  if (!mongoose.isValidObjectId(interviewScheduleId)) {
+    throw new AppError(404, "Interview Schedule not found", {
+      field: "interviewScheduleId",
+    });
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+  const session = await mongoose.startSession();
+  let cancelledSchedule = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const job = await Job.findById(jobId).session(session);
+      if (!job) {
+        throw new AppError(404, "Job not found", { field: "jobId" });
+      }
+      assertSameCompanyTenant({
+        resourceCompanyId: job.companyId,
+        tenantCompanyId: context.companyId,
+      });
+
+      const application = await Application.findOne({
+        _id: applicationId,
+        jobId: job._id,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
+      if (!application) {
+        throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot cancel Schedules", {
+          field: "status",
+        });
+      }
+      if (
+        isApplicationUnassigned(application) ||
+        application.assignedRecruiterCompanyMemberId.toString() !==
+          context.membership._id.toString()
+      ) {
+        throw new AppError(
+          403,
+          "Only the current Assigned Recruiter can cancel an Interview proposal",
+          { field: "role" },
+        );
+      }
+
+      await assertAssigneeEligibleAtAssignmentCommit({
+        assigneeCompanyMemberId: context.membership._id,
+        job,
+        session,
+      });
+
+      cancelledSchedule = await InterviewSchedule.findOneAndUpdate(
+        {
+          _id: interviewScheduleId,
+          applicationId: application._id,
+          status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+        },
+        { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+        { returnDocument: "after", runValidators: true, session },
+      );
+      if (!cancelledSchedule) {
+        throw new AppError(
+          409,
+          "Interview Schedule is not a proposed proposal for this Application",
+          { field: "interviewScheduleId" },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return toInterviewScheduleProjection(cancelledSchedule);
 };
 
 const listCandidateMyApplications = async ({
@@ -1009,6 +1968,7 @@ const getCandidateMyApplication = async ({
   candidateUserId,
   actorUser,
   applicationId,
+  now = new Date(),
 } = {}) => {
   assertCandidateActor(actorUser);
 
@@ -1038,7 +1998,7 @@ const getCandidateMyApplication = async ({
     });
   }
 
-  const [view] = await hydrateCandidateMyApplicationViews([application]);
+  const [view] = await hydrateCandidateMyApplicationViews([application], { now });
 
   return {
     application: view,
@@ -1443,18 +2403,17 @@ const buildPrimaryApplicationViewFromDocs = async ({
   assigneeMembership,
   assigneeUser,
   session,
+  now = new Date(),
 } = {}) => {
-  let candidateQuery = User.findById(application.candidateUserId).select(
-    "fullName avatarUrl",
+  const [applicationView] = await hydratePrimaryJobApplicationViews(
+    [application],
+    { now },
   );
-  if (session) {
-    candidateQuery = candidateQuery.session(session);
-  }
 
-  const candidateUser = await candidateQuery;
-
-  let assignedRecruiter = null;
-  if (!isApplicationUnassigned(application)) {
+  if (
+    !isApplicationUnassigned(application) &&
+    (assigneeMembership != null || assigneeUser != null)
+  ) {
     let membership = assigneeMembership;
     let user = assigneeUser;
 
@@ -1478,16 +2437,13 @@ const buildPrimaryApplicationViewFromDocs = async ({
       user = await userQuery;
     }
 
-    assignedRecruiter = toPublicAssignedRecruiterSummary({
+    applicationView.assignedRecruiter = toPublicAssignedRecruiterSummary({
       membership,
       user,
     });
   }
 
-  return toPrimaryJobApplicationView(application, {
-    candidate: toPublicCandidateSummary(candidateUser),
-    assignedRecruiter,
-  });
+  return applicationView;
 };
 
 const rejectFailedFirstAssignCas = async ({
@@ -3289,6 +4245,20 @@ const updateApplicationRecruitmentPipelineStatus = async ({
     });
   }
 
+  // V12 BR-18: this transition is no longer an independent Pipeline mutation.
+  // Slice 01 intentionally has no proposal workflow to perform the coupled
+  // Schedule creation and transition.
+  if (
+    expectedStatus === APPLICATION_STATUS.CONTACTED &&
+    targetStatus === APPLICATION_STATUS.INTERVIEW_SCHEDULED
+  ) {
+    throw new AppError(
+      409,
+      "CONTACTED to INTERVIEW_SCHEDULED requires the first Interview Schedule proposal",
+      { field: "targetStatus" },
+    );
+  }
+
   const context = await resolveRecruiterBusinessContext({
     user: actorUser,
     clientCompanyId,
@@ -3432,6 +4402,13 @@ const updateApplicationRecruitmentPipelineStatus = async ({
           expectedStatus,
           expectedVersion,
           actorMembershipId: context.membership._id,
+          session,
+        });
+      }
+
+      if (isApplicationTerminalStatus(targetStatus)) {
+        await cancelActiveInterviewScheduleForTerminalApplication({
+          applicationId: application._id,
           session,
         });
       }
@@ -4417,55 +5394,76 @@ const withdrawApplication = async ({
       field: "expectedVersion",
     });
   }
-
-  const application = await loadOwnedApplicationForReplace({
-    candidateUserId,
-    applicationId,
-  });
-
-  if (application.status !== APPLICATION_STATUS.APPLIED) {
-    throw new AppError(409, "Only APPLIED Applications can be withdrawn", {
-      field: "status",
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
     });
   }
 
   const normalizedWithdrawReason =
     typeof withdrawReason === "string" ? withdrawReason.trim() || null : null;
   const withdrawnAt = new Date();
-  const withdrawnApplication = await Application.findOneAndUpdate(
-    {
-      _id: application._id,
-      candidateUserId,
-      status: APPLICATION_STATUS.APPLIED,
-      version: expectedVersion,
-    },
-    {
-      $set: {
-        status: APPLICATION_STATUS.WITHDRAWN,
-        withdrawnAt,
-        withdrawReason: normalizedWithdrawReason,
-      },
-      $inc: {
-        version: 1,
-      },
-    },
-    {
-      returnDocument: "after",
-    },
-  );
+  const session = await mongoose.startSession();
+  let withdrawnApplication = null;
 
-  if (!withdrawnApplication) {
-    const latestApplication = await Application.findById(application._id);
+  try {
+    await session.withTransaction(async () => {
+      const application = await Application.findOne({
+        _id: applicationId,
+        candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
 
-    if (latestApplication?.status !== APPLICATION_STATUS.APPLIED) {
-      throw new AppError(409, "Application is no longer APPLIED and cannot be withdrawn", {
-        field: "status",
+      if (!application) {
+        throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+      if (application.status !== APPLICATION_STATUS.APPLIED) {
+        throw new AppError(409, "Only APPLIED Applications can be withdrawn", {
+          field: "status",
+        });
+      }
+      if (application.version !== expectedVersion) {
+        throw new AppError(409, "Application has changed; refresh and retry withdraw", {
+          field: "expectedVersion",
+        });
+      }
+
+      withdrawnApplication = await Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          candidateUserId,
+          status: APPLICATION_STATUS.APPLIED,
+          version: expectedVersion,
+        },
+        {
+          $set: {
+            status: APPLICATION_STATUS.WITHDRAWN,
+            withdrawnAt,
+            withdrawReason: normalizedWithdrawReason,
+          },
+          $inc: {
+            version: 1,
+          },
+        },
+        {
+          returnDocument: "after",
+          session,
+        },
+      );
+
+      if (!withdrawnApplication) {
+        throw new AppError(409, "Application has changed; refresh and retry withdraw", {
+          field: "expectedVersion",
+        });
+      }
+
+      await cancelActiveInterviewScheduleForTerminalApplication({
+        applicationId: application._id,
+        session,
       });
-    }
-
-    throw new AppError(409, "Application has changed; refresh and retry withdraw", {
-      field: "expectedVersion",
     });
+  } finally {
+    await session.endSession();
   }
 
   return toPublicApplication(withdrawnApplication);
@@ -4480,13 +5478,21 @@ export {
   automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval,
   captureGeneratedSubmittedCvSnapshot,
   captureUploadedSubmittedCvSnapshot,
+  cancelRecruiterInterviewProposal,
+  confirmCandidateInterviewProposal,
   countNonTerminalApplicationsAssignedToRecruiter,
   countNonTerminalApplicationsAssignedToRecruiterOnJob,
+  createFirstInterviewProposal,
+  createInterviewProposal,
   deepCopyGeneratedContent,
+  declineCandidateInterviewProposal,
   directApplyToJob,
   downloadCandidateApplicationSubmittedCv,
   downloadPrimaryJobApplicationSubmittedCv,
   downloadRecruiterMyApplicationSubmittedCv,
+  expireDueInterviewProposals,
+  expireDueInterviewProposalsForApplication,
+  expireDueInterviewProposalsForApplications,
   evaluateApplicationConversationChatAuthority,
   findNonTerminalApplicationsAssignedToRecruiter,
   findNonTerminalApplicationsAssignedToRecruiterOnJob,
@@ -4500,6 +5506,8 @@ export {
   isApplicationUnassigned,
   sendCandidateApplicationConversationNormalMessage,
   sendRecruiterApplicationConversationNormalMessage,
+  editCandidateAvailability,
+  submitCandidateAvailabilityFirstTime,
   listCandidateMyApplications,
   listManagedJobs,
   listPrimaryJobApplications,

@@ -56,7 +56,6 @@ const CAPTURED_AT = new Date("2026-08-13T07:00:00.000Z");
 const FORWARD_TRANSITIONS = Object.freeze([
   [APPLICATION_STATUS.APPLIED, APPLICATION_STATUS.SCREENING],
   [APPLICATION_STATUS.SCREENING, APPLICATION_STATUS.CONTACTED],
-  [APPLICATION_STATUS.CONTACTED, APPLICATION_STATUS.INTERVIEW_SCHEDULED],
   [
     APPLICATION_STATUS.INTERVIEW_SCHEDULED,
     APPLICATION_STATUS.INTERVIEW_COMPLETED,
@@ -705,20 +704,20 @@ describe("V10 Slice 10 — Recruitment Pipeline (F05, F09 partial)", () => {
           candidateUserId: candidate.user._id,
           jobId: job._id,
           assigneeMemberId: supporting.membership._id,
-          status: APPLICATION_STATUS.CONTACTED,
+          status: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
         });
 
         const result = await updateApplicationRecruitmentPipelineStatus({
           actorUser: supporting.user,
           jobId: job._id.toString(),
           applicationId: application._id.toString(),
-          targetStatus: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
-          expectedStatus: APPLICATION_STATUS.CONTACTED,
+          targetStatus: APPLICATION_STATUS.INTERVIEW_COMPLETED,
+          expectedStatus: APPLICATION_STATUS.INTERVIEW_SCHEDULED,
           expectedVersion: 1,
         });
 
         expect(result.application.status).toBe(
-          APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+          APPLICATION_STATUS.INTERVIEW_COMPLETED,
         );
         expect(result.job.status).toBe(jobStatus);
       },

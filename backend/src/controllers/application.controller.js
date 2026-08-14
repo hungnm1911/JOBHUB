@@ -1,4 +1,8 @@
 import {
+  cancelRecruiterInterviewProposal,
+  confirmCandidateInterviewProposal,
+  createInterviewProposal,
+  declineCandidateInterviewProposal,
   directApplyToJob,
   downloadCandidateApplicationSubmittedCv,
   downloadPrimaryJobApplicationSubmittedCv,
@@ -20,7 +24,9 @@ import {
   reassignApplication,
   replaceSubmittedCv,
   sendCandidateApplicationConversationNormalMessage,
+  editCandidateAvailability,
   sendRecruiterApplicationConversationNormalMessage,
+  submitCandidateAvailabilityFirstTime,
   unassignApplication,
   updateApplicationRecruitmentPipelineStatus,
   withdrawApplication,
@@ -116,6 +122,111 @@ const getCandidateMyApplicationHandler = async (request, response, next) => {
     });
 
     return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const submitCandidateAvailabilityFirstTimeHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const availability = await submitCandidateAvailabilityFirstTime({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      timezone: request.body.timezone,
+      slots: request.body.slots,
+    });
+
+    return response.status(201).json({ availability });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const editCandidateAvailabilityHandler = async (request, response, next) => {
+  try {
+    const availability = await editCandidateAvailability({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      timezone: request.body.timezone,
+      slots: request.body.slots,
+      expectedRevision: request.body.expectedRevision,
+    });
+
+    return response.status(200).json({ availability });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const createInterviewProposalHandler = async (request, response, next) => {
+  try {
+    const result = await createInterviewProposal({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      date: request.body.date,
+      dayPart: request.body.dayPart,
+      expectedAvailabilityRevision: request.body.expectedAvailabilityRevision,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(201).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const cancelRecruiterInterviewProposalHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const interviewSchedule = await cancelRecruiterInterviewProposal({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      interviewScheduleId: request.params.interviewScheduleId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({ interviewSchedule });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const confirmCandidateInterviewProposalHandler = async (request, response, next) => {
+  try {
+    const interviewSchedule = await confirmCandidateInterviewProposal({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      interviewScheduleId: request.params.interviewScheduleId,
+    });
+
+    return response.status(200).json({ interviewSchedule });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const declineCandidateInterviewProposalHandler = async (request, response, next) => {
+  try {
+    const interviewSchedule = await declineCandidateInterviewProposal({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      interviewScheduleId: request.params.interviewScheduleId,
+    });
+
+    return response.status(200).json({ interviewSchedule });
   } catch (error) {
     return next(error);
   }
@@ -482,10 +593,15 @@ const updateApplicationRecruitmentPipelineStatusHandler = async (
 };
 
 export {
+  cancelRecruiterInterviewProposalHandler,
+  confirmCandidateInterviewProposalHandler,
+  createInterviewProposalHandler,
+  declineCandidateInterviewProposalHandler,
   directApplyToJobHandler,
   downloadCandidateApplicationSubmittedCvHandler,
   downloadPrimaryJobApplicationSubmittedCvHandler,
   downloadRecruiterMyApplicationSubmittedCvHandler,
+  editCandidateAvailabilityHandler,
   firstAssignApplicationHandler,
   forceReassignApplicationHandler,
   getCandidateApplicationConversationHandler,
@@ -504,6 +620,7 @@ export {
   replaceSubmittedCvHandler,
   sendCandidateApplicationConversationNormalMessageHandler,
   sendRecruiterApplicationConversationNormalMessageHandler,
+  submitCandidateAvailabilityFirstTimeHandler,
   unassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
   withdrawApplicationHandler,

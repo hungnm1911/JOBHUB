@@ -31,7 +31,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
 | V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
 | V11 | Conversation và Chat thuộc Application | COMPLETED AND VERIFIED |
-| V12 | Interview Schedule | PLANNED |
+| V12 | Interview Schedule | IN PROGRESS |
 | V13 | Notification và phân phối realtime | PLANNED |
 | V14 | Candidate Search trên CV PUBLIC | PLANNED |
 | V15 | Job Invitation và nhánh Recruiter săn ứng viên | PLANNED |
@@ -99,8 +99,18 @@ Assign-again ordering. The required backend verification gate passed after
 those remediations; V11 is therefore `COMPLETED AND VERIFIED` against the
 approved Conversation/Chat Product/Data contracts. Realtime, notification,
 attachment, and related deferred capabilities remain outside V11 by product
-boundary. V12 through V17 must not be implemented merely from their roadmap
-titles.
+boundary. V12 now has approved Product/Data contracts and is `IN PROGRESS`;
+Slices 01–08 are implemented and verified, while Slice 09 Final Acceptance is
+resolving recorded acceptance findings. V13 through
+V17 must not be implemented merely from their roadmap titles.
+
+V12 canonical specification:
+
+`docs/product/versions/v12-interview-schedule.md`
+
+V12 canonical persistence contract:
+
+`docs/data/versions/v12-interview-schedule-data-model.md`
 
 V10 canonical specification:
 

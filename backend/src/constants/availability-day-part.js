@@ -1,0 +1,6 @@
+const AVAILABILITY_DAY_PART = Object.freeze({
+  MORNING: "MORNING",
+  AFTERNOON: "AFTERNOON",
+});
+
+export default AVAILABILITY_DAY_PART;
