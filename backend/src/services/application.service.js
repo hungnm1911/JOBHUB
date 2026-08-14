@@ -1209,6 +1209,38 @@ const expireDueInterviewProposals = async ({ now = new Date() } = {}) => {
   };
 };
 
+// V12 F08 Slice 07 / TX-03: this is intentionally callable only by canonical
+// Application terminal-transition workflows. It preserves proposal identity,
+// Availability, and terminal Schedule history while invalidating the one active
+// Schedule, if any, in the same transaction as its parent Application.
+const cancelActiveInterviewScheduleForTerminalApplication = async ({
+  applicationId,
+  session,
+} = {}) => {
+  let updateQuery = InterviewSchedule.updateOne(
+    {
+      applicationId,
+      status: {
+        $in: [
+          INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+          INTERVIEW_SCHEDULE_STATUS.CONFIRMED,
+        ],
+      },
+    },
+    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+    { runValidators: true },
+  );
+
+  if (session) {
+    updateQuery = updateQuery.session(session);
+  }
+
+  const result = await updateQuery;
+  return {
+    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+  };
+};
+
 const normalizeFirstAvailabilitySubmission = ({ timezone, slots, now }) => {
   if (!isValidTimeZone(timezone)) {
     throw new AppError(400, "timezone must be a valid IANA time zone identifier", {
@@ -1635,29 +1667,32 @@ const createInterviewProposal = async ({
       });
       await schedule.save({ session });
 
-      if (isFirstProposal) {
-        updatedApplication = await Application.findOneAndUpdate(
-          {
-            _id: application._id,
-            status: APPLICATION_STATUS.CONTACTED,
-            version: application.version,
-            assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
-          },
-          {
-            $set: { status: APPLICATION_STATUS.INTERVIEW_SCHEDULED },
-            $inc: { version: 1 },
-          },
-          { returnDocument: "after", session },
+      // Every proposal claims the current Application revision. For a
+      // reproposal this is a concurrency-only write: it serializes proposal
+      // creation with a terminal transition without changing the Application
+      // business status. If terminal wins, the Schedule insert rolls back with
+      // this transaction instead of leaving terminal + PROPOSED committed.
+      updatedApplication = await Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          status: application.status,
+          version: application.version,
+          assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
+        },
+        {
+          ...(isFirstProposal
+            ? { $set: { status: APPLICATION_STATUS.INTERVIEW_SCHEDULED } }
+            : {}),
+          $inc: { version: 1 },
+        },
+        { returnDocument: "after", session },
+      );
+      if (!updatedApplication) {
+        throw new AppError(
+          409,
+          "Application has changed; refresh and retry Interview proposal",
+          { field: "applicationId" },
         );
-        if (!updatedApplication) {
-          throw new AppError(
-            409,
-            "Application has changed; refresh and retry Interview proposal",
-            { field: "applicationId" },
-          );
-        }
-      } else {
-        updatedApplication = application;
       }
 
       availability.revision += 1;
@@ -4374,6 +4409,13 @@ const updateApplicationRecruitmentPipelineStatus = async ({
           session,
         });
       }
+
+      if (isApplicationTerminalStatus(targetStatus)) {
+        await cancelActiveInterviewScheduleForTerminalApplication({
+          applicationId: application._id,
+          session,
+        });
+      }
     });
   } finally {
     await session.endSession();
@@ -5356,55 +5398,76 @@ const withdrawApplication = async ({
       field: "expectedVersion",
     });
   }
-
-  const application = await loadOwnedApplicationForReplace({
-    candidateUserId,
-    applicationId,
-  });
-
-  if (application.status !== APPLICATION_STATUS.APPLIED) {
-    throw new AppError(409, "Only APPLIED Applications can be withdrawn", {
-      field: "status",
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", {
+      field: "applicationId",
     });
   }
 
   const normalizedWithdrawReason =
     typeof withdrawReason === "string" ? withdrawReason.trim() || null : null;
   const withdrawnAt = new Date();
-  const withdrawnApplication = await Application.findOneAndUpdate(
-    {
-      _id: application._id,
-      candidateUserId,
-      status: APPLICATION_STATUS.APPLIED,
-      version: expectedVersion,
-    },
-    {
-      $set: {
-        status: APPLICATION_STATUS.WITHDRAWN,
-        withdrawnAt,
-        withdrawReason: normalizedWithdrawReason,
-      },
-      $inc: {
-        version: 1,
-      },
-    },
-    {
-      returnDocument: "after",
-    },
-  );
+  const session = await mongoose.startSession();
+  let withdrawnApplication = null;
 
-  if (!withdrawnApplication) {
-    const latestApplication = await Application.findById(application._id);
+  try {
+    await session.withTransaction(async () => {
+      const application = await Application.findOne({
+        _id: applicationId,
+        candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
 
-    if (latestApplication?.status !== APPLICATION_STATUS.APPLIED) {
-      throw new AppError(409, "Application is no longer APPLIED and cannot be withdrawn", {
-        field: "status",
+      if (!application) {
+        throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+      if (application.status !== APPLICATION_STATUS.APPLIED) {
+        throw new AppError(409, "Only APPLIED Applications can be withdrawn", {
+          field: "status",
+        });
+      }
+      if (application.version !== expectedVersion) {
+        throw new AppError(409, "Application has changed; refresh and retry withdraw", {
+          field: "expectedVersion",
+        });
+      }
+
+      withdrawnApplication = await Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          candidateUserId,
+          status: APPLICATION_STATUS.APPLIED,
+          version: expectedVersion,
+        },
+        {
+          $set: {
+            status: APPLICATION_STATUS.WITHDRAWN,
+            withdrawnAt,
+            withdrawReason: normalizedWithdrawReason,
+          },
+          $inc: {
+            version: 1,
+          },
+        },
+        {
+          returnDocument: "after",
+          session,
+        },
+      );
+
+      if (!withdrawnApplication) {
+        throw new AppError(409, "Application has changed; refresh and retry withdraw", {
+          field: "expectedVersion",
+        });
+      }
+
+      await cancelActiveInterviewScheduleForTerminalApplication({
+        applicationId: application._id,
+        session,
       });
-    }
-
-    throw new AppError(409, "Application has changed; refresh and retry withdraw", {
-      field: "expectedVersion",
     });
+  } finally {
+    await session.endSession();
   }
 
   return toPublicApplication(withdrawnApplication);

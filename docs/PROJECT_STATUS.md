@@ -75,6 +75,18 @@ not a general-purpose scheduler. Recruiter manual
 `CONFIRMED → CANCELLED`, terminal Application coupled cancellation,
 Notification, and realtime remain out of this slice.
 
+Slice 07 is implemented and verified for terminal Application atomic Interview
+Schedule cancellation (`F08` partial; `BR-29`, `BR-38`, `BR-39`, `TX-03`):
+every canonical terminal Application transition now atomically cancels only its
+active `PROPOSED` or `CONFIRMED` Schedule, preserving Schedule identity/history
+and Candidate Availability. Terminal transitions without an active Schedule
+remain valid and create none; historical `DECLINED`/`CANCELLED` records are not
+rewritten. Proposal creation now serializes through the Application concurrency
+token with terminal transitions, so no terminal Application can commit with an
+active Schedule. This does not add general Recruiter
+`CONFIRMED → CANCELLED`, change expiration, Candidate response, reproposal,
+Notification/realtime, or Conversation/Message authorization semantics.
+
 **V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
 Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across
 `F01`–`F10`, `BR-01`–`BR-55`, and `TX-01`–`TX-08`. Canonical Product/Data
