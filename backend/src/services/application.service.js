@@ -1899,6 +1899,389 @@ const getRecruiterApplicationConversation = async ({
   });
 };
 
+const normalizeNormalMessageContent = (content) => {
+  if (typeof content !== "string") {
+    throw new AppError(400, "content must be a non-empty string", {
+      field: "content",
+    });
+  }
+
+  const normalized = content.trim();
+
+  if (normalized === "") {
+    throw new AppError(400, "content must be a non-empty string", {
+      field: "content",
+    });
+  }
+
+  return normalized;
+};
+
+// TX-06: write-lock current writable Assigned Application without bumping
+// version or mutating business content. Concurrent assignment / terminal CAS
+// writers either lose on version/assignee/status predicate or WriteConflict.
+const commitApplicationWritableStateForNormalMessageSend = async ({
+  applicationId,
+  jobId,
+  expectedVersion,
+  expectedAssigneeCompanyMemberId,
+  session,
+} = {}) => {
+  return Application.findOneAndUpdate(
+    {
+      _id: applicationId,
+      jobId,
+      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      version: expectedVersion,
+      assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
+      status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
+    },
+    {
+      $set: {
+        assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
+      },
+    },
+    {
+      returnDocument: "after",
+      session,
+    },
+  );
+};
+
+// Soft continuous-eligibility probe at Send commit (TX-06 / BR-14 / BR-43 /
+// BR-55). Reuses V10 lock order Company → CompanyMember → User → Job team.
+// Returns facts for evaluateApplicationConversationChatAuthority; does not
+// throw on expected eligibility loss.
+const resolveAssigneeEligibilityFactsAtSendCommit = async ({
+  application,
+  job,
+  session,
+} = {}) => {
+  if (isApplicationUnassigned(application)) {
+    return {
+      companyIsOperational: false,
+      currentAssignee: null,
+      isUnassigned: true,
+    };
+  }
+
+  const assigneeCompanyMemberId = application.assignedRecruiterCompanyMemberId;
+
+  const stillOperationalCompany =
+    await acquireOperationalCompanyForAssigneeEligibilityTx({
+      companyId: job.companyId,
+      session,
+    });
+
+  if (!stillOperationalCompany) {
+    const membership = await CompanyMember.findById(
+      assigneeCompanyMemberId,
+    ).session(session);
+    const user = membership
+      ? await User.findById(membership.userId).select("status").session(session)
+      : null;
+
+    return {
+      companyIsOperational: false,
+      currentAssignee: {
+        companyMemberId: assigneeCompanyMemberId.toString(),
+        userId: membership ? membership.userId.toString() : null,
+        membershipStatus: membership?.status ?? null,
+        userStatus: user?.status ?? null,
+        isContinuouslyEligible: false,
+      },
+      isUnassigned: false,
+    };
+  }
+
+  const stillActiveMembership =
+    await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+      recruiterCompanyMemberId: assigneeCompanyMemberId,
+      companyId: job.companyId,
+      session,
+    });
+
+  if (!stillActiveMembership) {
+    const membership = await CompanyMember.findById(
+      assigneeCompanyMemberId,
+    ).session(session);
+    const user = membership
+      ? await User.findById(membership.userId).select("status").session(session)
+      : null;
+
+    return {
+      companyIsOperational: true,
+      currentAssignee: {
+        companyMemberId: assigneeCompanyMemberId.toString(),
+        userId: membership ? membership.userId.toString() : null,
+        membershipStatus: membership?.status ?? COMPANY_MEMBER_STATUS.LOCKED,
+        userStatus: user?.status ?? null,
+        isContinuouslyEligible: false,
+      },
+      isUnassigned: false,
+    };
+  }
+
+  const stillActiveUser = await acquireActiveUserForAssigneeEligibilityTx({
+    userId: stillActiveMembership.userId,
+    session,
+  });
+
+  if (!stillActiveUser) {
+    return {
+      companyIsOperational: true,
+      currentAssignee: {
+        companyMemberId: stillActiveMembership._id.toString(),
+        userId: stillActiveMembership.userId.toString(),
+        membershipStatus: stillActiveMembership.status,
+        userStatus: USER_STATUS.LOCKED,
+        isContinuouslyEligible: false,
+      },
+      isUnassigned: false,
+    };
+  }
+
+  const stillOnTeam = await acquireJobTeamMembershipForAssigneeEligibilityTx({
+    jobId: job._id,
+    companyId: job.companyId,
+    assigneeCompanyMemberId: stillActiveMembership._id,
+    session,
+  });
+
+  const membershipIdStr = stillActiveMembership._id.toString();
+  const isPrimary =
+    job.primaryRecruiterCompanyMemberId.toString() === membershipIdStr;
+  const isSupporting = (job.supportingRecruiterCompanyMemberIds ?? []).some(
+    (id) => id.toString() === membershipIdStr,
+  );
+  const sameCompany =
+    stillActiveMembership.companyId.toString() === job.companyId.toString();
+  const isContinuouslyEligible =
+    stillOnTeam != null &&
+    stillActiveMembership.role === COMPANY_MEMBER_ROLE.RECRUITER &&
+    stillActiveMembership.status === COMPANY_MEMBER_STATUS.ACTIVE &&
+    stillActiveUser.status === USER_STATUS.ACTIVE &&
+    sameCompany &&
+    (isPrimary || isSupporting);
+
+  return {
+    companyIsOperational: true,
+    currentAssignee: {
+      companyMemberId: membershipIdStr,
+      userId: stillActiveMembership.userId.toString(),
+      membershipStatus: stillActiveMembership.status,
+      userStatus: stillActiveUser.status,
+      isContinuouslyEligible,
+    },
+    isUnassigned: false,
+  };
+};
+
+// V11 Slice 06 / F02 / F10 / TX-06–TX-08: persist NORMAL Message only when
+// commit-time Chat authority remains ACTIVE. Does not mutate Conversation
+// ownership, Recruitment Status, Assignment State, Candidate, Job, source, or
+// submittedCvSnapshot (BR-49 / BR-50). Sender identity is server-owned (BR-13).
+const commitNormalMessageSend = async ({
+  applicationId,
+  actor,
+  content,
+  assertActorAccess,
+} = {}) => {
+  const normalizedContent = normalizeNormalMessageContent(content);
+  const session = await mongoose.startSession();
+  let createdMessage = null;
+  let authority = null;
+  let conversation = null;
+
+  try {
+    await session.withTransaction(async () => {
+      if (!mongoose.isValidObjectId(applicationId)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      const application = await Application.findById(applicationId).session(
+        session,
+      );
+
+      if (
+        !application ||
+        application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+      ) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      conversation = await Conversation.findOne({
+        applicationId: application._id,
+      }).session(session);
+
+      if (!conversation) {
+        throw new AppError(404, "Conversation not found", {
+          field: "applicationId",
+        });
+      }
+
+      const job = await Job.findById(application.jobId).session(session);
+
+      if (!job) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      await assertActorAccess({ application, job, session });
+
+      const eligibility = await resolveAssigneeEligibilityFactsAtSendCommit({
+        application,
+        job,
+        session,
+      });
+
+      authority = evaluateApplicationConversationChatAuthority({
+        conversationExists: true,
+        applicationStatus: application.status,
+        isUnassigned: eligibility.isUnassigned,
+        companyIsOperational: eligibility.companyIsOperational,
+        currentAssignee: eligibility.currentAssignee,
+        actor,
+      });
+
+      if (!authority.canSendNormal) {
+        throw new AppError(403, "NORMAL Message send is not allowed", {
+          field: "conversationId",
+          mode: authority.mode,
+        });
+      }
+
+      const lockedApplication =
+        await commitApplicationWritableStateForNormalMessageSend({
+          applicationId: application._id,
+          jobId: job._id,
+          expectedVersion: application.version,
+          expectedAssigneeCompanyMemberId:
+            application.assignedRecruiterCompanyMemberId,
+          session,
+        });
+
+      if (!lockedApplication) {
+        throw new AppError(
+          409,
+          "Application conversation is no longer writable; refresh and retry",
+          {
+            field: "applicationId",
+          },
+        );
+      }
+
+      const senderUserId = actor.userId;
+      const senderCompanyMemberId =
+        actor.kind === "RECRUITER" ? actor.companyMemberId : null;
+
+      const [message] = await Message.create(
+        [
+          {
+            conversationId: conversation._id,
+            type: MESSAGE_TYPE.NORMAL,
+            senderUserId,
+            senderCompanyMemberId,
+            content: normalizedContent,
+          },
+        ],
+        { session },
+      );
+
+      createdMessage = message;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    message: toPublicConversationMessage(createdMessage),
+    conversation: {
+      id: conversation._id.toString(),
+      applicationId: conversation.applicationId.toString(),
+      createdAt: conversation.createdAt,
+      mode: authority.mode,
+    },
+    authority: {
+      canRead: authority.canRead,
+      canSendNormal: authority.canSendNormal,
+    },
+  };
+};
+
+// V11 Slice 06: Candidate owner NORMAL Message send (F02 / BR-07 / BR-13–BR-14).
+const sendCandidateApplicationConversationNormalMessage = async ({
+  candidateUserId,
+  actorUser,
+  applicationId,
+  content,
+} = {}) => {
+  assertCandidateActor(actorUser);
+
+  if (!candidateUserId.equals(actorUser._id)) {
+    throw new AppError(
+      403,
+      "Candidates may only access their own Applications",
+    );
+  }
+
+  return commitNormalMessageSend({
+    applicationId,
+    content,
+    actor: {
+      kind: "CANDIDATE",
+      userId: candidateUserId.toString(),
+    },
+    assertActorAccess: async ({ application }) => {
+      if (
+        application.candidateUserId.toString() !== candidateUserId.toString()
+      ) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+    },
+  });
+};
+
+// V11 Slice 06: current Assigned Recruiter NORMAL Message send (F02 / BR-08 /
+// BR-13–BR-14). Uses operational Recruiter business context so Company lock
+// cannot pass the HTTP gate; TX-08 still re-acquires Company at commit.
+const sendRecruiterApplicationConversationNormalMessage = async ({
+  actorUser,
+  applicationId,
+  content,
+  clientCompanyId,
+} = {}) => {
+  const recruiterContext = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+
+  return commitNormalMessageSend({
+    applicationId,
+    content,
+    actor: {
+      kind: "RECRUITER",
+      userId: actorUser._id.toString(),
+      companyMemberId: recruiterContext.membership._id.toString(),
+      membershipStatus: recruiterContext.membership.status,
+      userStatus: actorUser.status,
+    },
+    assertActorAccess: async ({ job }) => {
+      assertSameCompanyTenant({
+        resourceCompanyId: job.companyId,
+        tenantCompanyId: recruiterContext.companyId,
+      });
+    },
+  });
+};
+
 // Canonical assigned-state mutation (Data Contract §8.2–§8.4 / TX-01 / TX-03):
 // atomic A → B or A → NONE. Shared by manual Reassign/Unassign, CM force-reassign
 // A → B, and automatic Unassign. Mutates only current Assignee + version;
@@ -4042,6 +4425,8 @@ export {
   getRecruiterApplicationConversation,
   getRecruiterMyApplication,
   isApplicationUnassigned,
+  sendCandidateApplicationConversationNormalMessage,
+  sendRecruiterApplicationConversationNormalMessage,
   listCandidateMyApplications,
   listManagedJobs,
   listPrimaryJobApplications,

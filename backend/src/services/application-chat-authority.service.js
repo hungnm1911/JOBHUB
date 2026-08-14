@@ -52,7 +52,8 @@ const isPersistedAssigneeActor = ({ actor, currentAssignee } = {}) => {
  *
  * Authorization is derived from current Application / lifecycle facts only —
  * never from Message history, participant lists, or duplicated Conversation
- * state. Does not implement NORMAL Message Send race protection (TX-06–TX-08).
+ * state. NORMAL Message Send reuses this evaluator inside TX-06–TX-08 commit
+ * coordination in application.service (no parallel Chat-authority source).
  *
  * @param {object} input
  * @param {boolean} input.conversationExists
@@ -194,8 +195,9 @@ const evaluateApplicationConversationChatAuthority = ({
   }
 
   // ACTIVE Conversation: Candidate and current continuously eligible Assignee
-  // may read and send. Full Send race protection remains a later slice.
-  // Job CLOSED / EXPIRED is intentionally not an input (F09 / BR-39 / BR-40).
+  // may read and send. Send commit-time races are coordinated in
+  // application.service (TX-06–TX-08). Job CLOSED / EXPIRED is intentionally
+  // not an input (F09 / BR-39 / BR-40).
   if (actor.kind === "CANDIDATE") {
     return { canRead: true, canSendNormal: true, mode: "ACTIVE" };
   }

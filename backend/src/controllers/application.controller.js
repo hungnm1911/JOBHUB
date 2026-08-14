@@ -19,6 +19,8 @@ import {
   previewRecruiterMyApplicationSubmittedCv,
   reassignApplication,
   replaceSubmittedCv,
+  sendCandidateApplicationConversationNormalMessage,
+  sendRecruiterApplicationConversationNormalMessage,
   unassignApplication,
   updateApplicationRecruitmentPipelineStatus,
   withdrawApplication,
@@ -132,6 +134,25 @@ const getCandidateApplicationConversationHandler = async (
     });
 
     return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const sendCandidateApplicationConversationNormalMessageHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const result = await sendCandidateApplicationConversationNormalMessage({
+      candidateUserId: request.auth.user._id,
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      content: request.body.content,
+    });
+
+    return response.status(201).json(result);
   } catch (error) {
     return next(error);
   }
@@ -267,6 +288,25 @@ const getRecruiterApplicationConversationHandler = async (
     });
 
     return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const sendRecruiterApplicationConversationNormalMessageHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const result = await sendRecruiterApplicationConversationNormalMessage({
+      actorUser: request.auth.user,
+      applicationId: request.params.applicationId,
+      content: request.body.content,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(201).json(result);
   } catch (error) {
     return next(error);
   }
@@ -462,6 +502,8 @@ export {
   previewRecruiterMyApplicationSubmittedCvHandler,
   reassignApplicationHandler,
   replaceSubmittedCvHandler,
+  sendCandidateApplicationConversationNormalMessageHandler,
+  sendRecruiterApplicationConversationNormalMessageHandler,
   unassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
   withdrawApplicationHandler,

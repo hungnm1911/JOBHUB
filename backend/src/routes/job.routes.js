@@ -30,6 +30,7 @@ import {
   previewPrimaryJobApplicationSubmittedCvHandler,
   previewRecruiterMyApplicationSubmittedCvHandler,
   reassignApplicationHandler,
+  sendRecruiterApplicationConversationNormalMessageHandler,
   unassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
 } from "../controllers/application.controller.js";
@@ -43,6 +44,7 @@ import validateAddSupportingRecruiter from "../middlewares/validate-add-supporti
 import validateFirstAssignApplication from "../middlewares/validate-first-assign-application.js";
 import validateForceReassignApplication from "../middlewares/validate-force-reassign-application.js";
 import validateReassignApplication from "../middlewares/validate-reassign-application.js";
+import validateSendConversationNormalMessage from "../middlewares/validate-send-conversation-normal-message.js";
 import validateUnassignApplication from "../middlewares/validate-unassign-application.js";
 import validateRecruitmentPipelineStatus from "../middlewares/validate-recruitment-pipeline-status.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
@@ -84,6 +86,14 @@ router.get(
   authenticateAccess,
   authorizeRecruiterChatHistoryAccess,
   getRecruiterApplicationConversationHandler,
+);
+
+router.post(
+  "/my-applications/:applicationId/conversation/messages",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  validateSendConversationNormalMessage,
+  sendRecruiterApplicationConversationNormalMessageHandler,
 );
 
 router.get(

@@ -14,10 +14,12 @@ VERIFIED` (`BR-01`–`BR-06`, `BR-13` persistence foundation only, `BR-49`,
 `BR-51`, `BR-54`, `BR-55`, `TX-04`). Slice 05 — Conversation History Read +
 Authorization Modes (`F02` read, `F04`/`F05`/`F07`/`F08`/`F09` read modes) is
 `IMPLEMENTED AND VERIFIED` (`BR-07`–`BR-12`, `BR-16`–`BR-17`, `BR-22`,
-`BR-31`–`BR-40`, `BR-48`, `BR-51`–`BR-52`, `BR-54`, `BR-55`). Canonical
-Product/Data contracts remain implementation authority. Remaining V11 Chat
-send, Send concurrency, realtime, notification, and attachment slices are not
-implemented.
+`BR-31`–`BR-40`, `BR-48`, `BR-51`–`BR-52`, `BR-54`, `BR-55`). Slice 06 —
+NORMAL Message Send + Full Chat Concurrency (`F02` send, `F07`–`F10`) is
+`IMPLEMENTED AND VERIFIED` (`BR-13`–`BR-14`, `BR-25`, `BR-32`, `BR-34`,
+`BR-39`–`BR-46`, `BR-49`–`BR-50`, `BR-54`, `TX-06`–`TX-08`). Canonical
+Product/Data contracts remain implementation authority. Remaining V11
+realtime, notification, and attachment slices are not implemented.
 
 **V7 — Candidate Profile và thư viện CV** is `COMPLETED AND VERIFIED`. Slices
 01–11 are implemented and verified
@@ -237,6 +239,28 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Current V11 Conversation revision
+
+- **Implemented; verified:** V11 Slice 06 — NORMAL Message Send + Full Chat
+  Concurrency (`F02` send, `F07`–`F10`; `BR-13`–`BR-14`, `BR-25`, `BR-32`,
+  `BR-34`, `BR-39`–`BR-46`, `BR-49`–`BR-50`, `BR-54`; `TX-06`–`TX-08`): Candidate
+  owner and current continuously eligible Assigned Recruiter may send `NORMAL`
+  Message only while Conversation is writable (`ACTIVE`), reusing
+  `evaluateApplicationConversationChatAuthority` and V10 TX-02 commit acquires
+  (Company → CompanyMember → User → Job team) plus Application writable CAS that
+  does not bump `version` or mutate Recruitment Status, Assignment State,
+  Candidate, Job, source, or `submittedCvSnapshot`. Sender identity is
+  server-owned (Candidate User only; Recruiter User + CompanyMember); client
+  cannot create `SYSTEM` Message or declare sender fields. Job `CLOSED` /
+  `EXPIRED` does not block Send. Deterministic races cover Send ↔
+  Reassign / Unassign / Withdraw / Company lock / Platform eligibility loss.
+  HTTP: `POST /api/candidate/applications/:applicationId/conversation/messages`
+  and `POST /api/jobs/my-applications/:applicationId/conversation/messages`
+  (Recruiter business access requires Company operational). Realtime,
+  notification, and attachment remain out of this slice. Focused coverage in
+  `test/application/v11-normal-message-send.test.js` (1 file / 10 tests).
+  The official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 118
+  files / 1,115 tests).
 
 - **Implemented; verified:** V11 Slice 05 — Conversation History Read +
   Authorization Modes (`F02` read portion, `F04`/`F05`/`F07`/`F08`/`F09` read
