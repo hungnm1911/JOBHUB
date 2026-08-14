@@ -7,9 +7,12 @@ Conversation & Message Foundation + First Assign (`F01`) is `IMPLEMENTED AND
 VERIFIED` (`BR-01`–`BR-06`, `BR-13` persistence foundation only, `BR-49`,
 `BR-50`, `BR-53`, `TX-01`). Slice 02 — Reassign / Take over + SYSTEM Message
 (`F03`) is `IMPLEMENTED AND VERIFIED` (`BR-15`–`BR-20`, `BR-47`, `BR-51`,
-`TX-02`). Canonical Product/Data contracts remain implementation authority.
-Remaining V11 Chat send/read, Unassign/Assign-again SYSTEM Message,
-authorization, freeze, and terminal read-only slices are not implemented.
+`TX-02`). Slice 03 — Manual Unassign + Assign lại (`F04`, `F06`) is
+`IMPLEMENTED AND VERIFIED` (`BR-21`–`BR-25`, `BR-29`–`BR-30`, `BR-47`,
+`BR-51`, `TX-03`, `TX-05`). Canonical Product/Data contracts remain
+implementation authority. Remaining V11 Chat send/read, Automatic Unassign
+Chat consequence, authorization, freeze, and terminal read-only slices are
+not implemented.
 
 **V7 — Candidate Profile và thư viện CV** is `COMPLETED AND VERIFIED`. Slices
 01–11 are implemented and verified
@@ -230,6 +233,28 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 
 ## Current V11 Conversation revision
 
+- **Implemented; verified:** V11 Slice 03 — Manual Unassign + Assign lại
+  (`F04`, `F06`; `BR-21`–`BR-25`, `BR-29`–`BR-30`, `BR-47`, `BR-51`; `TX-03`,
+  `TX-05`): successful Manual Unassign `A → NONE` on a non-terminal Application
+  that already has a Conversation keeps that Conversation and Message history,
+  keeps Recruitment Status, and creates exactly one awaiting-assignee SYSTEM
+  Message in the same V10 Unassign transaction. Successful Assign again
+  `NONE → B` when Conversation already exists reuses that Conversation (no
+  second Conversation), keeps Recruitment Status/history, and creates exactly
+  one new-assignee SYSTEM Message in the same Assign transaction. Unassigned
+  Applications with no Conversation continue First Assign behavior (create
+  Conversation, no SYSTEM Message). Missing Conversation on Unassign does not
+  create Conversation or SYSTEM Message. Failed CAS / Message-create failure
+  cannot leave Unassign or Assign again without the required SYSTEM Message, or
+  a SYSTEM Message without the corresponding assignment transition. Automatic
+  Unassign Chat consequence, eligibility-loss immediate Chat exclusion,
+  Send/read, authorization, Company-lock freeze, terminal read-only, realtime,
+  notification, and attachment remain out of this slice. Focused coverage in
+  `test/application/v11-unassign-assign-again-system-message.test.js` (1 file /
+  11 tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 115 files / 1,080 tests).
+
 - **Implemented; verified:** V11 Slice 02 — Reassign / Take over + SYSTEM
   Message (`F03`; `BR-15`–`BR-20`, `BR-47`, `BR-51`; `TX-02`): successful
   Reassign / Take over / CM force-reassign `A → B` on a non-terminal Application
@@ -242,9 +267,10 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   cannot leave assignee changed without the required SYSTEM Message, or a
   SYSTEM Message without the corresponding assignment transition. V10
   authority, eligibility, tenant, expected-assignee/CAS invariants are
-  unchanged. Manual/Automatic Unassign SYSTEM Message, Assign again, Send/read,
-  authorization, Company-lock freeze, terminal read-only, realtime,
-  notification, and attachment remain out of this slice. Focused coverage in
+  unchanged. Automatic Unassign Chat consequence, Send/read, authorization,
+  Company-lock freeze, terminal read-only, realtime, notification, and
+  attachment remained out of this slice (Manual Unassign / Assign again Chat
+  consequences are Slice 03). Focused coverage in
   `test/application/v11-reassign-takeover-system-message.test.js` (1 file / 10
   tests). The official backend gate passed (ESLint: 0 errors / 2 existing
   warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;

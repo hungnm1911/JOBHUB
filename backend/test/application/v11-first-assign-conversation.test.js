@@ -417,7 +417,7 @@ describe("V11 Slice 01 — First Assign Conversation creation (F01)", () => {
       );
     });
 
-    it("does not create a second Conversation or Message when Conversation already exists", async () => {
+    it("keeps existing Conversation and creates Assign-again SYSTEM Message (F06)", async () => {
       const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
         emailPrefix: "v11.s01.existing",
       });
@@ -442,9 +442,16 @@ describe("V11 Slice 01 — First Assign Conversation creation (F01)", () => {
       }).lean();
       expect(conversations).toHaveLength(1);
       expect(String(conversations[0]._id)).toBe(existing._id.toString());
-      await expect(
-        Message.countDocuments({ conversationId: existing._id }),
-      ).resolves.toBe(0);
+
+      const messages = await Message.find({
+        conversationId: existing._id,
+      }).lean();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        type: "SYSTEM",
+        senderUserId: null,
+        senderCompanyMemberId: null,
+      });
     });
   });
 

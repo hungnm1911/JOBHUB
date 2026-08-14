@@ -1570,7 +1570,7 @@ const commitAssignFromUnassigned = async ({
 
 // V11 F01 / TX-01: Conversation consequence of a successful First Assign.
 // Absence of Conversation distinguishes First Assign from Assign again; this
-// slice creates Conversation only when none exists and never writes a Message.
+// helper creates Conversation only when none exists.
 const createConversationOnFirstAssignIfAbsent = async ({
   applicationId,
   session,
@@ -1580,7 +1580,7 @@ const createConversationOnFirstAssignIfAbsent = async ({
   }).session(session);
 
   if (existingConversation) {
-    return existingConversation;
+    return { conversation: existingConversation, created: false };
   }
 
   try {
@@ -1588,7 +1588,7 @@ const createConversationOnFirstAssignIfAbsent = async ({
       [{ applicationId }],
       { session },
     );
-    return createdConversation;
+    return { conversation: createdConversation, created: true };
   } catch (error) {
     if (!isMongoDuplicateKeyError(error)) {
       throw error;
@@ -1599,18 +1599,19 @@ const createConversationOnFirstAssignIfAbsent = async ({
     }).session(session);
 
     if (concurrentConversation) {
-      return concurrentConversation;
+      return { conversation: concurrentConversation, created: false };
     }
 
     throw error;
   }
 };
 
-// V11 F03 / TX-02: SYSTEM Message consequence of a successful A → B Reassign /
-// Take over when Conversation already exists. Does not create Conversation,
-// rewrite history, or act as Assignment History / current-Assignee authority.
-const createResponsibilityChangedSystemMessageIfConversationExists = async ({
+// V11 F03/F04/F06 SYSTEM Message consequence when Conversation already exists.
+// Does not create Conversation, rewrite history, or act as Assignment History /
+// current-Assignee authority.
+const createSystemMessageIfConversationExists = async ({
   applicationId,
+  content,
   session,
 } = {}) => {
   const conversation = await Conversation.findOne({
@@ -1628,7 +1629,7 @@ const createResponsibilityChangedSystemMessageIfConversationExists = async ({
         type: MESSAGE_TYPE.SYSTEM,
         senderUserId: null,
         senderCompanyMemberId: null,
-        content: SYSTEM_MESSAGE_CONTENT.RESPONSIBILITY_CHANGED,
+        content,
       },
     ],
     { session },
@@ -1825,12 +1826,29 @@ const firstAssignApplication = async ({
         });
       }
 
-      // V11 F01 / BR-05 / BR-06 / TX-01: First Assign and Conversation
-      // creation are one atomic outcome. No SYSTEM Message on First Assign.
-      await createConversationOnFirstAssignIfAbsent({
+      // V11 F01 / F06 / BR-05 / BR-06 / BR-29 / BR-30 / TX-01 / TX-05:
+      // First Assign (no Conversation) creates Conversation with no SYSTEM
+      // Message. Assign again (Conversation already exists) keeps that
+      // Conversation and writes the required new-assignee SYSTEM Message.
+      const conversationOutcome = await createConversationOnFirstAssignIfAbsent({
         applicationId: assignedApplication._id,
         session,
       });
+
+      if (!conversationOutcome.created) {
+        await Message.create(
+          [
+            {
+              conversationId: conversationOutcome.conversation._id,
+              type: MESSAGE_TYPE.SYSTEM,
+              senderUserId: null,
+              senderCompanyMemberId: null,
+              content: SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
+            },
+          ],
+          { session },
+        );
+      }
     });
   } finally {
     await session.endSession();
@@ -2151,12 +2169,21 @@ const executePrimaryCurrentAssigneeMutation = async ({
         });
       }
 
-      // V11 F03 / BR-15–BR-20 / BR-47 / BR-51 / TX-02: A → B keeps the existing
-      // Conversation and writes the required SYSTEM Message in the same
-      // atomic outcome. Unassign Chat consequence is out of this slice.
-      if (!isUnassign) {
-        await createResponsibilityChangedSystemMessageIfConversationExists({
+      // V11 F03 / F04 / BR-15–BR-23 / BR-47 / BR-51 / TX-02 / TX-03:
+      // A → B or A → NONE keeps the existing Conversation and writes the
+      // required SYSTEM Message in the same atomic outcome when Conversation
+      // already exists. Automatic Unassign Chat consequence stays out of this
+      // manual owner.
+      if (isUnassign) {
+        await createSystemMessageIfConversationExists({
           applicationId: mutatedApplication._id,
+          content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
+          session,
+        });
+      } else {
+        await createSystemMessageIfConversationExists({
+          applicationId: mutatedApplication._id,
+          content: SYSTEM_MESSAGE_CONTENT.RESPONSIBILITY_CHANGED,
           session,
         });
       }
