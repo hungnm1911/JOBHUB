@@ -11,13 +11,16 @@ import CandidateAvailability from "../../src/models/candidate-availability.model
 import InterviewSchedule from "../../src/models/interview-schedule.model.js";
 import Job from "../../src/models/job.model.js";
 import {
+  cancelRecruiterInterviewProposal,
   confirmCandidateInterviewProposal,
   createFirstInterviewProposal,
+  createInterviewProposal,
   declineCandidateInterviewProposal,
   editCandidateAvailability,
   getCandidateMyApplication,
   getRecruiterMyApplication,
   listPrimaryJobApplications,
+  reassignApplication,
   submitCandidateAvailabilityFirstTime,
   updateApplicationRecruitmentPipelineStatus,
 } from "../../src/services/application.service.js";
@@ -799,5 +802,191 @@ describe("V12 Slice 04 — Candidate Confirm / Decline Interview Proposal", () =
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
     const persisted = await InterviewSchedule.findById(proposal.interviewSchedule.id).lean();
     expect(["CONFIRMED", "DECLINED"]).toContain(persisted.status);
+  });
+});
+
+describe("V12 Slice 05 — Recruiter Cancel, Reproposal, and Schedule History", () => {
+  beforeAll(connectTestDatabase);
+  afterEach(clearDatabase);
+  afterAll(disconnectTestDatabase);
+
+  const createProposal = async (
+    context,
+    slots = [
+      { date: "2030-08-20", dayPart: "MORNING" },
+      { date: "2030-08-21", dayPart: "AFTERNOON" },
+    ],
+  ) => {
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: context.candidate.user._id,
+      actorUser: context.candidate.user,
+      applicationId: context.application._id,
+      timezone: "UTC",
+      slots,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+    return createFirstInterviewProposal({
+      actorUser: context.recruiter.user,
+      jobId: context.job._id,
+      applicationId: context.application._id,
+      date: slots[0].date,
+      dayPart: slots[0].dayPart,
+      expectedAvailabilityRevision: 0,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+  };
+
+  it("lets only the current eligible Assignee cancel PROPOSED after Reassign", async () => {
+    const context = await setup();
+    const proposal = await createProposal(context);
+    const replacement = await createActiveRecruiterContext({
+      email: "v12.s05.replacement@example.com",
+      company: context.manager.company,
+      employeeCode: "V12-S05-R",
+    });
+    await Job.updateOne(
+      { _id: context.job._id },
+      { $set: { supportingRecruiterCompanyMemberIds: [replacement.membership._id] } },
+    );
+    await reassignApplication({
+      actorUser: context.recruiter.user,
+      jobId: context.job._id,
+      applicationId: context.application._id,
+      assigneeCompanyMemberId: replacement.membership._id,
+      expectedAssigneeCompanyMemberId: context.recruiter.membership._id,
+      expectedVersion: 2,
+    });
+
+    const input = {
+      jobId: context.job._id,
+      applicationId: context.application._id,
+      interviewScheduleId: proposal.interviewSchedule.id,
+    };
+    await expect(
+      cancelRecruiterInterviewProposal({ ...input, actorUser: context.recruiter.user }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    const availabilityBefore = await CandidateAvailability.findOne({
+      applicationId: context.application._id,
+    }).lean();
+    const agent = createTestAgent();
+    const token = await loginAndGetAccessToken(agent, {
+      email: replacement.user.email,
+    });
+    const response = await agent
+      .post(
+        `/api/jobs/${context.job._id}/applications/${context.application._id}/interview-proposals/${proposal.interviewSchedule.id}/cancel`,
+      )
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    const [application, availability, persisted] = await Promise.all([
+      Application.findById(context.application._id).lean(),
+      CandidateAvailability.findOne({ applicationId: context.application._id }).lean(),
+      InterviewSchedule.findById(proposal.interviewSchedule.id).lean(),
+    ]);
+
+    expect(response.status).toBe(200);
+    expect(response.body.interviewSchedule.status).toBe("CANCELLED");
+    expect(application.status).toBe(APPLICATION_STATUS.INTERVIEW_SCHEDULED);
+    expect(availability).toMatchObject({
+      slots: availabilityBefore.slots,
+      timezone: availabilityBefore.timezone,
+      revision: availabilityBefore.revision,
+    });
+    expect(persisted).toMatchObject({
+      status: "CANCELLED",
+      date: "2030-08-20",
+      dayPart: "MORNING",
+      createdByCompanyMemberId: context.recruiter.membership._id,
+    });
+  });
+
+  it("creates a new proposal after DECLINED, but never reuses the declined slot", async () => {
+    const context = await setup();
+    const first = await createProposal(context);
+    await declineCandidateInterviewProposal({
+      candidateUserId: context.candidate.user._id,
+      actorUser: context.candidate.user,
+      applicationId: context.application._id,
+      interviewScheduleId: first.interviewSchedule.id,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    await expect(
+      createInterviewProposal({
+        actorUser: context.recruiter.user,
+        jobId: context.job._id,
+        applicationId: context.application._id,
+        date: "2030-08-20",
+        dayPart: "MORNING",
+        expectedAvailabilityRevision: 1,
+        now: new Date("2026-08-14T00:00:00.000Z"),
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    const next = await createInterviewProposal({
+      actorUser: context.recruiter.user,
+      jobId: context.job._id,
+      applicationId: context.application._id,
+      date: "2030-08-21",
+      dayPart: "AFTERNOON",
+      expectedAvailabilityRevision: 1,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+    const schedules = await InterviewSchedule.find({
+      applicationId: context.application._id,
+    }).sort({ createdAt: 1 });
+
+    expect(next.application.status).toBe(APPLICATION_STATUS.INTERVIEW_SCHEDULED);
+    expect(schedules).toHaveLength(2);
+    expect(schedules.map((schedule) => schedule.status)).toEqual(["DECLINED", "PROPOSED"]);
+    expect(schedules[0]._id.toString()).toBe(first.interviewSchedule.id);
+  });
+
+  it("permits a still-valid CANCELLED slot to be proposed again and projects history only through Application reads", async () => {
+    const context = await setup();
+    const first = await createProposal(context, [
+      { date: "2030-08-20", dayPart: "MORNING" },
+    ]);
+    await cancelRecruiterInterviewProposal({
+      actorUser: context.recruiter.user,
+      jobId: context.job._id,
+      applicationId: context.application._id,
+      interviewScheduleId: first.interviewSchedule.id,
+    });
+
+    const next = await createInterviewProposal({
+      actorUser: context.recruiter.user,
+      jobId: context.job._id,
+      applicationId: context.application._id,
+      date: "2030-08-20",
+      dayPart: "MORNING",
+      expectedAvailabilityRevision: 1,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+    const candidateRead = await getCandidateMyApplication({
+      candidateUserId: context.candidate.user._id,
+      actorUser: context.candidate.user,
+      applicationId: context.application._id,
+    });
+    const managerRead = await listPrimaryJobApplications({
+      actorUser: context.manager.user,
+      jobId: context.job._id,
+    });
+    const agent = createTestAgent();
+    const managerToken = await loginAndGetAccessToken(agent, {
+      email: context.manager.user.email,
+    });
+    const chatRead = await agent
+      .get(`/api/jobs/my-applications/${context.application._id}/conversation`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    expect(next.interviewSchedule.id).not.toBe(first.interviewSchedule.id);
+    expect(candidateRead.application.interviewSchedules.map(({ status }) => status)).toEqual([
+      "PROPOSED",
+      "CANCELLED",
+    ]);
+    expect(managerRead.applications[0].interviewSchedules).toHaveLength(2);
+    expect(chatRead.status).toBe(403);
   });
 });

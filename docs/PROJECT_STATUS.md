@@ -11,9 +11,8 @@ pipeline cutover (`F05`; `BR-11`, `BR-12`, `BR-15`–`BR-18`, `BR-25`–`BR-26`,
 Recruiter can create one `PROPOSED` Schedule from a current Availability slot,
 atomically move `CONTACTED → INTERVIEW_SCHEDULED`, and advance Availability
 revision. Schedule identity snapshots the selected slot and creator; partial
-active-Schedule uniqueness is persisted. Recruiter Cancel, reproposal,
-expiration runtime, notification, realtime, or Conversation/Message authority
-change are not included. Its approved
+active-Schedule uniqueness is persisted. Expiration runtime, notification,
+realtime, or Conversation/Message authority change are not included. Its approved
 Product/Data contracts are tracked at
 `docs/product/versions/v12-interview-schedule.md` and
 `docs/data/versions/v12-interview-schedule-data-model.md`. Gate 00 closes the
@@ -50,6 +49,20 @@ proposal identity; `DECLINED` is therefore persisted history for the existing
 same-Application declined-slot exclusion. Slice 04 does not add cancellation,
 expiration mutation, reproposal, Schedule-history reads, Notification,
 realtime, or Chat authorization changes.
+
+Slice 05 is implemented for Recruiter Cancel, reproposal, and Schedule History
+(`F08` partial, `F09`, `F11`; `BR-13`–`BR-15`, `BR-20`, `BR-28`,
+`BR-33`–`BR-37`): only the current continuously eligible Assigned Recruiter
+can atomically cancel a `PROPOSED` Schedule, including after Reassign; cancel
+preserves Application and Availability. A new `PROPOSED` document can be
+created while the Application remains `INTERVIEW_SCHEDULED` after `DECLINED`
+or `CANCELLED`, with the existing Availability revision guard. Declined slots
+remain excluded while cancelled-only slots can be proposed again. Existing
+Application reads now expose current Availability and each immutable Schedule
+history record under their pre-existing Application read authority, without
+expanding Conversation/Message authority. Recruiter manual
+`CONFIRMED → CANCELLED`, expiration runtime, terminal coupled cancellation,
+Notification, realtime, and Availability history remain out of this slice.
 
 **V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
 Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across

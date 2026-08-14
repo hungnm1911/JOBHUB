@@ -1,6 +1,7 @@
 import {
+  cancelRecruiterInterviewProposal,
   confirmCandidateInterviewProposal,
-  createFirstInterviewProposal,
+  createInterviewProposal,
   declineCandidateInterviewProposal,
   directApplyToJob,
   downloadCandidateApplicationSubmittedCv,
@@ -163,9 +164,9 @@ const editCandidateAvailabilityHandler = async (request, response, next) => {
   }
 };
 
-const createFirstInterviewProposalHandler = async (request, response, next) => {
+const createInterviewProposalHandler = async (request, response, next) => {
   try {
-    const result = await createFirstInterviewProposal({
+    const result = await createInterviewProposal({
       actorUser: request.auth.user,
       jobId: request.params.jobId,
       applicationId: request.params.applicationId,
@@ -176,6 +177,26 @@ const createFirstInterviewProposalHandler = async (request, response, next) => {
     });
 
     return response.status(201).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const cancelRecruiterInterviewProposalHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const interviewSchedule = await cancelRecruiterInterviewProposal({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      interviewScheduleId: request.params.interviewScheduleId,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(200).json({ interviewSchedule });
   } catch (error) {
     return next(error);
   }
@@ -572,8 +593,9 @@ const updateApplicationRecruitmentPipelineStatusHandler = async (
 };
 
 export {
+  cancelRecruiterInterviewProposalHandler,
   confirmCandidateInterviewProposalHandler,
-  createFirstInterviewProposalHandler,
+  createInterviewProposalHandler,
   declineCandidateInterviewProposalHandler,
   directApplyToJobHandler,
   downloadCandidateApplicationSubmittedCvHandler,

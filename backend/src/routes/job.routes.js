@@ -17,7 +17,8 @@ import {
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
 import {
-  createFirstInterviewProposalHandler,
+  cancelRecruiterInterviewProposalHandler,
+  createInterviewProposalHandler,
   downloadPrimaryJobApplicationSubmittedCvHandler,
   downloadRecruiterMyApplicationSubmittedCvHandler,
   firstAssignApplicationHandler,
@@ -200,7 +201,14 @@ router.post(
   authenticateAccess,
   authorizeRecruiterBusinessAccess,
   validateCreateFirstInterviewProposal,
-  createFirstInterviewProposalHandler,
+  createInterviewProposalHandler,
+);
+
+router.post(
+  "/:jobId/applications/:applicationId/interview-proposals/:interviewScheduleId/cancel",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  cancelRecruiterInterviewProposalHandler,
 );
 
 router.get(

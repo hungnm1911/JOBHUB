@@ -249,9 +249,25 @@ const toCandidateAvailabilityProjection = (availability) => {
   };
 };
 
+const toInterviewScheduleProjection = (schedule) => {
+  return {
+    id: schedule._id.toString(),
+    applicationId: schedule.applicationId.toString(),
+    status: schedule.status,
+    date: schedule.date,
+    dayPart: schedule.dayPart,
+    timezone: schedule.timezone,
+    expiresAt: schedule.expiresAt,
+    createdByUserId: schedule.createdByUserId.toString(),
+    createdByCompanyMemberId: schedule.createdByCompanyMemberId.toString(),
+    createdAt: schedule.createdAt,
+    updatedAt: schedule.updatedAt,
+  };
+};
+
 const toPrimaryJobApplicationView = (
   application,
-  { candidate, assignedRecruiter, availability } = {},
+  { candidate, assignedRecruiter, availability, interviewSchedules } = {},
 ) => {
   const assignedRecruiterCompanyMemberId =
     application.assignedRecruiterCompanyMemberId == null
@@ -274,6 +290,7 @@ const toPrimaryJobApplicationView = (
       slots: [],
       revision: null,
     },
+    interviewSchedules: interviewSchedules ?? [],
     submittedCvSnapshot: toPublicSubmittedCvSnapshot(
       application.submittedCvSnapshot,
     ),
@@ -303,7 +320,8 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
     ),
   ];
 
-  const [candidates, assigneeMemberships, availabilities] = await Promise.all([
+  const [candidates, assigneeMemberships, availabilities, interviewSchedules] =
+    await Promise.all([
     candidateUserIds.length === 0
       ? []
       : User.find({ _id: { $in: candidateUserIds } }).select(
@@ -319,6 +337,11 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
       : CandidateAvailability.find({
           applicationId: { $in: applicationIds },
         }).select("applicationId timezone slots revision"),
+    applicationIds.length === 0
+      ? []
+      : InterviewSchedule.find({
+          applicationId: { $in: applicationIds },
+        }).sort({ createdAt: -1, _id: -1 }),
   ]);
 
   const candidateById = new Map(
@@ -336,6 +359,13 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
       availability,
     ]),
   );
+  const interviewSchedulesByApplicationId = new Map();
+  for (const schedule of interviewSchedules) {
+    const key = schedule.applicationId.toString();
+    const schedules = interviewSchedulesByApplicationId.get(key) ?? [];
+    schedules.push(toInterviewScheduleProjection(schedule));
+    interviewSchedulesByApplicationId.set(key, schedules);
+  }
 
   const assigneeUserIds = [
     ...new Set(
@@ -380,6 +410,8 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
       availability: toCandidateAvailabilityProjection(
         availabilityByApplicationId.get(application._id.toString()),
       ),
+      interviewSchedules:
+        interviewSchedulesByApplicationId.get(application._id.toString()) ?? [],
     });
   });
 };
@@ -862,7 +894,7 @@ const toCandidateMyApplicationJob = (job) => {
 // Unassign nulls assignee-facing fields; Assign again shows the new Assignee.
 const toCandidateMyApplicationView = (
   application,
-  { job, company, assignedRecruiter, availability } = {},
+  { job, company, assignedRecruiter, availability, interviewSchedules } = {},
 ) => {
   return {
     id: application._id.toString(),
@@ -877,6 +909,7 @@ const toCandidateMyApplicationView = (
       slots: [],
       revision: null,
     },
+    interviewSchedules: interviewSchedules ?? [],
     job: job == null ? null : toCandidateMyApplicationJob(job),
     company: toCandidateVisibleCompany(company),
     submittedCvSnapshot: toPublicSubmittedCvSnapshot(
@@ -923,7 +956,8 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
         ),
     ),
   ];
-  const [assigneeMemberships, availabilities] = await Promise.all([
+  const [assigneeMemberships, availabilities, interviewSchedules] =
+    await Promise.all([
     assigneeMemberIds.length === 0
       ? []
       : CompanyMember.find({ _id: { $in: assigneeMemberIds } }).select(
@@ -932,6 +966,9 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
     CandidateAvailability.find({
       applicationId: { $in: applicationIds },
     }).select("applicationId timezone slots revision"),
+    InterviewSchedule.find({
+      applicationId: { $in: applicationIds },
+    }).sort({ createdAt: -1, _id: -1 }),
   ]);
   const assigneeMembershipById = new Map(
     assigneeMemberships.map((membership) => [
@@ -945,6 +982,13 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
       availability,
     ]),
   );
+  const interviewSchedulesByApplicationId = new Map();
+  for (const schedule of interviewSchedules) {
+    const key = schedule.applicationId.toString();
+    const schedules = interviewSchedulesByApplicationId.get(key) ?? [];
+    schedules.push(toInterviewScheduleProjection(schedule));
+    interviewSchedulesByApplicationId.set(key, schedules);
+  }
 
   const assigneeUserIds = [
     ...new Set(
@@ -990,6 +1034,8 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
       availability: toCandidateAvailabilityProjection(
         availabilityByApplicationId.get(application._id.toString()),
       ),
+      interviewSchedules:
+        interviewSchedulesByApplicationId.get(application._id.toString()) ?? [],
     });
   });
 };
@@ -1320,7 +1366,7 @@ const editCandidateAvailability = async ({
   return toCandidateAvailabilityProjection(updatedAvailability);
 };
 
-const createFirstInterviewProposal = async ({
+const createInterviewProposal = async ({
   actorUser,
   jobId,
   applicationId,
@@ -1398,10 +1444,15 @@ const createFirstInterviewProposal = async ({
         });
       }
 
-      if (application.status !== APPLICATION_STATUS.CONTACTED) {
+      const isFirstProposal =
+        application.status === APPLICATION_STATUS.CONTACTED;
+      if (
+        !isFirstProposal &&
+        application.status !== APPLICATION_STATUS.INTERVIEW_SCHEDULED
+      ) {
         throw new AppError(
           409,
-          "First Interview proposals can only be created while Application is CONTACTED",
+          "Interview proposals can only be created while Application is CONTACTED or INTERVIEW_SCHEDULED",
           { field: "status" },
         );
       }
@@ -1498,25 +1549,29 @@ const createFirstInterviewProposal = async ({
       });
       await schedule.save({ session });
 
-      updatedApplication = await Application.findOneAndUpdate(
-        {
-          _id: application._id,
-          status: APPLICATION_STATUS.CONTACTED,
-          version: application.version,
-          assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
-        },
-        {
-          $set: { status: APPLICATION_STATUS.INTERVIEW_SCHEDULED },
-          $inc: { version: 1 },
-        },
-        { returnDocument: "after", session },
-      );
-      if (!updatedApplication) {
-        throw new AppError(
-          409,
-          "Application has changed; refresh and retry Interview proposal",
-          { field: "applicationId" },
+      if (isFirstProposal) {
+        updatedApplication = await Application.findOneAndUpdate(
+          {
+            _id: application._id,
+            status: APPLICATION_STATUS.CONTACTED,
+            version: application.version,
+            assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
+          },
+          {
+            $set: { status: APPLICATION_STATUS.INTERVIEW_SCHEDULED },
+            $inc: { version: 1 },
+          },
+          { returnDocument: "after", session },
         );
+        if (!updatedApplication) {
+          throw new AppError(
+            409,
+            "Application has changed; refresh and retry Interview proposal",
+            { field: "applicationId" },
+          );
+        }
+      } else {
+        updatedApplication = application;
       }
 
       availability.revision += 1;
@@ -1558,21 +1613,7 @@ const createFirstInterviewProposal = async ({
   };
 };
 
-const toInterviewScheduleProjection = (schedule) => {
-  return {
-    id: schedule._id.toString(),
-    applicationId: schedule.applicationId.toString(),
-    status: schedule.status,
-    date: schedule.date,
-    dayPart: schedule.dayPart,
-    timezone: schedule.timezone,
-    expiresAt: schedule.expiresAt,
-    createdByUserId: schedule.createdByUserId.toString(),
-    createdByCompanyMemberId: schedule.createdByCompanyMemberId.toString(),
-    createdAt: schedule.createdAt,
-    updatedAt: schedule.updatedAt,
-  };
-};
+const createFirstInterviewProposal = createInterviewProposal;
 
 // V12 F06/F07: Candidate ownership is resolved only through the Application.
 // The guarded update lets exactly one concurrent PROPOSED response commit.
@@ -1651,6 +1692,100 @@ const declineCandidateInterviewProposal = async (input = {}) => {
     ...input,
     targetStatus: INTERVIEW_SCHEDULE_STATUS.DECLINED,
   });
+};
+
+// V12 F08 Slice 05: cancellation authority follows the current eligible
+// Assignee, never the Schedule's immutable historical creator identity.
+const cancelRecruiterInterviewProposal = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  interviewScheduleId,
+  clientCompanyId,
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", { field: "applicationId" });
+  }
+  if (!mongoose.isValidObjectId(interviewScheduleId)) {
+    throw new AppError(404, "Interview Schedule not found", {
+      field: "interviewScheduleId",
+    });
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+  const session = await mongoose.startSession();
+  let cancelledSchedule = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const job = await Job.findById(jobId).session(session);
+      if (!job) {
+        throw new AppError(404, "Job not found", { field: "jobId" });
+      }
+      assertSameCompanyTenant({
+        resourceCompanyId: job.companyId,
+        tenantCompanyId: context.companyId,
+      });
+
+      const application = await Application.findOne({
+        _id: applicationId,
+        jobId: job._id,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
+      if (!application) {
+        throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot cancel Schedules", {
+          field: "status",
+        });
+      }
+      if (
+        isApplicationUnassigned(application) ||
+        application.assignedRecruiterCompanyMemberId.toString() !==
+          context.membership._id.toString()
+      ) {
+        throw new AppError(
+          403,
+          "Only the current Assigned Recruiter can cancel an Interview proposal",
+          { field: "role" },
+        );
+      }
+
+      await assertAssigneeEligibleAtAssignmentCommit({
+        assigneeCompanyMemberId: context.membership._id,
+        job,
+        session,
+      });
+
+      cancelledSchedule = await InterviewSchedule.findOneAndUpdate(
+        {
+          _id: interviewScheduleId,
+          applicationId: application._id,
+          status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+        },
+        { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+        { returnDocument: "after", runValidators: true, session },
+      );
+      if (!cancelledSchedule) {
+        throw new AppError(
+          409,
+          "Interview Schedule is not a proposed proposal for this Application",
+          { field: "interviewScheduleId" },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return toInterviewScheduleProjection(cancelledSchedule);
 };
 
 const listCandidateMyApplications = async ({
@@ -5192,10 +5327,12 @@ export {
   automaticallyUnassignRecruiterApplicationsOnJobForTeamRemoval,
   captureGeneratedSubmittedCvSnapshot,
   captureUploadedSubmittedCvSnapshot,
+  cancelRecruiterInterviewProposal,
   confirmCandidateInterviewProposal,
   countNonTerminalApplicationsAssignedToRecruiter,
   countNonTerminalApplicationsAssignedToRecruiterOnJob,
   createFirstInterviewProposal,
+  createInterviewProposal,
   deepCopyGeneratedContent,
   declineCandidateInterviewProposal,
   directApplyToJob,
