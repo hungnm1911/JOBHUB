@@ -5,10 +5,14 @@
 **V12 — Interview Schedule** is `IN PROGRESS`. Slice 01 is implemented and
 verified for first Candidate Availability submit and Application-read projection
 (`F01`, `F02`, `F04`, `F11` partial; `BR-01`–`BR-10`, `BR-33`, `BR-35`).
-It opens Availability at `CONTACTED` without creating a document; first submit
-creates one current document with an empty or non-empty slot set, and existing
-Application read authority exposes the `NOT_SUBMITTED` / `SUBMITTED` distinction.
-No Schedule/proposal/pipeline transition, Availability edit/CAS, notification,
+Slice 02 is implemented and verified for the first Interview Proposal and
+pipeline cutover (`F05`; `BR-11`, `BR-12`, `BR-15`–`BR-18`, `BR-25`–`BR-26`,
+`BR-35`–`BR-36`, `BR-39`; `TX-01` foundation): the current eligible Assigned
+Recruiter can create one `PROPOSED` Schedule from a current Availability slot,
+atomically move `CONTACTED → INTERVIEW_SCHEDULED`, and advance Availability
+revision. Schedule identity snapshots the selected slot and creator; partial
+active-Schedule uniqueness is persisted. No Availability edit/replace, Candidate
+Confirm/Decline, Recruiter Cancel, reproposal, expiration runtime, notification,
 realtime, or Conversation/Message authority change is included. Its approved
 Product/Data contracts are tracked at
 `docs/product/versions/v12-interview-schedule.md` and

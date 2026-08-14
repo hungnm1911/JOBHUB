@@ -12,6 +12,7 @@ import {
 import { ensureApplicationCollectionInvariants } from "./src/models/application.model.js";
 import { ensureCandidateCvCollectionInvariants } from "./src/models/candidate-cv.model.js";
 import { ensureCompanyCollectionInvariants } from "./src/models/company.model.js";
+import { ensureInterviewScheduleCollection } from "./src/models/interview-schedule.model.js";
 import { ensureJobCollectionInvariants } from "./src/models/job.model.js";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -125,6 +126,7 @@ const startServer = async () => {
   await ensureJobCollectionInvariants();
   await ensureCandidateCvCollectionInvariants();
   await ensureApplicationCollectionInvariants();
+  await ensureInterviewScheduleCollection();
 
   await verifyCloudinaryConnection();
 

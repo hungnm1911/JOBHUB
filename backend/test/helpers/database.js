@@ -8,6 +8,7 @@ import { ensureCandidateAvailabilityCollection } from "../../src/models/candidat
 import { ensureCandidateCvCollectionInvariants } from "../../src/models/candidate-cv.model.js";
 import { ensureCompanyCollectionInvariants } from "../../src/models/company.model.js";
 import { ensureConversationCollection } from "../../src/models/conversation.model.js";
+import { ensureInterviewScheduleCollection } from "../../src/models/interview-schedule.model.js";
 import { ensureJobCollectionInvariants } from "../../src/models/job.model.js";
 import { ensureMessageCollection } from "../../src/models/message.model.js";
 
@@ -35,6 +36,7 @@ const connectTestDatabase = async () => {
   await ensureCandidateCvCollectionInvariants(mongoose.connection);
   await ensureApplicationCollectionInvariants(mongoose.connection);
   await ensureCandidateAvailabilityCollection(mongoose.connection);
+  await ensureInterviewScheduleCollection(mongoose.connection);
   await ensureConversationCollection(mongoose.connection);
   await ensureMessageCollection(mongoose.connection);
 };

@@ -17,6 +17,7 @@ import {
   updateDraftJobHandler,
 } from "../controllers/job.controller.js";
 import {
+  createFirstInterviewProposalHandler,
   downloadPrimaryJobApplicationSubmittedCvHandler,
   downloadRecruiterMyApplicationSubmittedCvHandler,
   firstAssignApplicationHandler,
@@ -40,6 +41,7 @@ import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-compan
 import authorizeRecruiterBusinessAccess from "../middlewares/authorize-recruiter-business-access.js";
 import authorizeRecruiterChatHistoryAccess from "../middlewares/authorize-recruiter-chat-history-access.js";
 import validateCreateDraftJob from "../middlewares/validate-create-draft-job.js";
+import validateCreateFirstInterviewProposal from "../middlewares/validate-create-first-interview-proposal.js";
 import validateAddSupportingRecruiter from "../middlewares/validate-add-supporting-recruiter.js";
 import validateFirstAssignApplication from "../middlewares/validate-first-assign-application.js";
 import validateForceReassignApplication from "../middlewares/validate-force-reassign-application.js";
@@ -191,6 +193,14 @@ router.post(
   authorizeRecruiterBusinessAccess,
   validateRecruitmentPipelineStatus,
   updateApplicationRecruitmentPipelineStatusHandler,
+);
+
+router.post(
+  "/:jobId/applications/:applicationId/interview-proposals",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  validateCreateFirstInterviewProposal,
+  createFirstInterviewProposalHandler,
 );
 
 router.get(

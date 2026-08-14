@@ -8,8 +8,10 @@ import CANDIDATE_CV_UPLOADED_PDF from "../../src/constants/candidate-cv-uploaded
 import JOB_STATUS from "../../src/constants/job-status.js";
 import Application from "../../src/models/application.model.js";
 import CandidateAvailability from "../../src/models/candidate-availability.model.js";
+import InterviewSchedule from "../../src/models/interview-schedule.model.js";
 import Job from "../../src/models/job.model.js";
 import {
+  createFirstInterviewProposal,
   getCandidateMyApplication,
   getRecruiterMyApplication,
   listPrimaryJobApplications,
@@ -140,6 +142,7 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
       status: "NOT_SUBMITTED",
       timezone: null,
       slots: [],
+      revision: null,
     });
 
     const availability = await submitCandidateAvailabilityFirstTime({
@@ -155,6 +158,7 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
       status: "SUBMITTED",
       timezone: "Asia/Ho_Chi_Minh",
       slots: [],
+      revision: 0,
     });
     const persistedApplication = await Application.findById(application._id).lean();
     expect(persistedApplication.status).toBe(APPLICATION_STATUS.CONTACTED);
@@ -190,6 +194,7 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
         { date: "2026-08-14", dayPart: "MORNING" },
         { date: "2026-08-14", dayPart: "AFTERNOON" },
       ],
+      revision: 0,
     });
   });
 
@@ -311,5 +316,128 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
         expectedVersion: 1,
       }),
     ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it("creates the first proposal atomically with the CONTACTED pipeline cutover and Availability revision advance", async () => {
+    const { application, candidate, job, recruiter } = await setup();
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "America/Los_Angeles",
+      slots: [{ date: "2026-08-20", dayPart: "AFTERNOON" }],
+      now: new Date("2026-08-14T12:00:00.000Z"),
+    });
+
+    const result = await createFirstInterviewProposal({
+      actorUser: recruiter.user,
+      jobId: job._id,
+      applicationId: application._id,
+      date: "2026-08-20",
+      dayPart: "AFTERNOON",
+      expectedAvailabilityRevision: 0,
+      now: new Date("2026-08-14T12:00:00.000Z"),
+    });
+
+    expect(result.interviewSchedule).toMatchObject({
+      applicationId: application._id.toString(),
+      status: "PROPOSED",
+      date: "2026-08-20",
+      dayPart: "AFTERNOON",
+      timezone: "America/Los_Angeles",
+      createdByUserId: recruiter.user._id.toString(),
+      createdByCompanyMemberId: recruiter.membership._id.toString(),
+    });
+    expect(result.interviewSchedule.expiresAt.toISOString()).toBe(
+      "2026-08-21T07:00:00.000Z",
+    );
+
+    const [persistedApplication, availability, schedule] = await Promise.all([
+      Application.findById(application._id).lean(),
+      CandidateAvailability.findOne({ applicationId: application._id }).lean(),
+      InterviewSchedule.findOne({ applicationId: application._id }).lean(),
+    ]);
+    expect(persistedApplication.status).toBe(APPLICATION_STATUS.INTERVIEW_SCHEDULED);
+    expect(persistedApplication.version).toBe(2);
+    expect(availability.revision).toBe(1);
+    expect(schedule.status).toBe("PROPOSED");
+  });
+
+  it("rejects non-assignees, stale Availability, missing slots, and a second active proposal", async () => {
+    const { application, candidate, job, manager, recruiter } = await setup();
+    const otherRecruiter = await createActiveRecruiterContext({
+      email: "v12.s02.other@example.com",
+      company: manager.company,
+      employeeCode: "V12-S02-OTHER",
+    });
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [{ date: "2026-08-20", dayPart: "MORNING" }],
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    const proposal = {
+      jobId: job._id,
+      applicationId: application._id,
+      date: "2026-08-20",
+      dayPart: "MORNING",
+      expectedAvailabilityRevision: 0,
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    };
+    await expect(
+      createFirstInterviewProposal({ ...proposal, actorUser: otherRecruiter.user }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    await expect(
+      createFirstInterviewProposal({
+        ...proposal,
+        actorUser: recruiter.user,
+        expectedAvailabilityRevision: 1,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    await expect(
+      createFirstInterviewProposal({
+        ...proposal,
+        actorUser: recruiter.user,
+        date: "2026-08-21",
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    await createFirstInterviewProposal({ ...proposal, actorUser: recruiter.user });
+    await expect(
+      createFirstInterviewProposal({ ...proposal, actorUser: recruiter.user }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it("exposes the authenticated Recruiter proposal HTTP surface", async () => {
+    const { application, candidate, job, recruiter } = await setup({
+      jobStatus: JOB_STATUS.CLOSED,
+    });
+    await submitCandidateAvailabilityFirstTime({
+      candidateUserId: candidate.user._id,
+      actorUser: candidate.user,
+      applicationId: application._id,
+      timezone: "UTC",
+      slots: [{ date: "2026-08-20", dayPart: "MORNING" }],
+      now: new Date("2026-08-14T00:00:00.000Z"),
+    });
+    const agent = createTestAgent();
+    const token = await loginAndGetAccessToken(agent, {
+      email: recruiter.user.email,
+    });
+
+    const response = await agent
+      .post(`/api/jobs/${job._id}/applications/${application._id}/interview-proposals`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        date: "2026-08-20",
+        dayPart: "MORNING",
+        expectedAvailabilityRevision: 0,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.interviewSchedule.status).toBe("PROPOSED");
   });
 });

@@ -25,9 +25,11 @@ import CandidateCV from "../models/candidate-cv.model.js";
 import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import Conversation from "../models/conversation.model.js";
+import InterviewSchedule from "../models/interview-schedule.model.js";
 import Job from "../models/job.model.js";
 import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
+import INTERVIEW_SCHEDULE_STATUS from "../constants/interview-schedule-status.js";
 import AppError from "../utils/app-error.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
 import {
@@ -232,6 +234,7 @@ const toCandidateAvailabilityProjection = (availability) => {
       status: "NOT_SUBMITTED",
       timezone: null,
       slots: [],
+      revision: null,
     };
   }
 
@@ -242,6 +245,7 @@ const toCandidateAvailabilityProjection = (availability) => {
       date: slot.date,
       dayPart: slot.dayPart,
     })),
+    revision: availability.revision,
   };
 };
 
@@ -268,6 +272,7 @@ const toPrimaryJobApplicationView = (
       status: "NOT_SUBMITTED",
       timezone: null,
       slots: [],
+      revision: null,
     },
     submittedCvSnapshot: toPublicSubmittedCvSnapshot(
       application.submittedCvSnapshot,
@@ -313,7 +318,7 @@ const hydratePrimaryJobApplicationViews = async (applications) => {
       ? []
       : CandidateAvailability.find({
           applicationId: { $in: applicationIds },
-        }).select("applicationId timezone slots"),
+        }).select("applicationId timezone slots revision"),
   ]);
 
   const candidateById = new Map(
@@ -870,6 +875,7 @@ const toCandidateMyApplicationView = (
       status: "NOT_SUBMITTED",
       timezone: null,
       slots: [],
+      revision: null,
     },
     job: job == null ? null : toCandidateMyApplicationJob(job),
     company: toCandidateVisibleCompany(company),
@@ -925,7 +931,7 @@ const hydrateCandidateMyApplicationViews = async (applications) => {
         ),
     CandidateAvailability.find({
       applicationId: { $in: applicationIds },
-    }).select("applicationId timezone slots"),
+    }).select("applicationId timezone slots revision"),
   ]);
   const assigneeMembershipById = new Map(
     assigneeMemberships.map((membership) => [
@@ -1034,6 +1040,53 @@ const getCalendarDateInTimeZone = (instant, timeZone) => {
   );
 
   return `${values.year}-${values.month}-${values.day}`;
+};
+
+const getTimeZoneParts = (instant, timeZone) => {
+  const values = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(instant)
+      .filter((part) =>
+        ["year", "month", "day", "hour", "minute", "second"].includes(
+          part.type,
+        ),
+      )
+      .map((part) => [part.type, Number(part.value)]),
+  );
+
+  return values;
+};
+
+// `expiresAt` is midnight of the next calendar day in the Availability timezone.
+// Iteration accounts for offsets that change across DST boundaries.
+const deriveProposalExpiresAt = ({ date, timezone }) => {
+  const [year, month, day] = date.split("-").map(Number);
+  const localNextMidnight = Date.UTC(year, month - 1, day + 1);
+  let instant = localNextMidnight;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = getTimeZoneParts(new Date(instant), timezone);
+    const representedAsUtc = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second,
+    );
+    instant = localNextMidnight - (representedAsUtc - instant);
+  }
+
+  return new Date(instant);
 };
 
 const normalizeFirstAvailabilitySubmission = ({ timezone, slots, now }) => {
@@ -1165,6 +1218,244 @@ const submitCandidateAvailabilityFirstTime = async ({
 
     throw error;
   }
+};
+
+const createFirstInterviewProposal = async ({
+  actorUser,
+  jobId,
+  applicationId,
+  date,
+  dayPart,
+  expectedAvailabilityRevision,
+  clientCompanyId,
+  now = new Date(),
+} = {}) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  if (!mongoose.isValidObjectId(applicationId)) {
+    throw new AppError(404, "Application not found", { field: "applicationId" });
+  }
+
+  if (!isCalendarDate(date)) {
+    throw new AppError(400, "date must use YYYY-MM-DD", { field: "date" });
+  }
+
+  if (!AVAILABILITY_DAY_PART_VALUES.includes(dayPart)) {
+    throw new AppError(400, "dayPart must be MORNING or AFTERNOON", {
+      field: "dayPart",
+    });
+  }
+
+  if (
+    !Number.isInteger(expectedAvailabilityRevision) ||
+    expectedAvailabilityRevision < 0
+  ) {
+    throw new AppError(
+      400,
+      "expectedAvailabilityRevision must be a non-negative integer",
+      { field: "expectedAvailabilityRevision" },
+    );
+  }
+
+  const context = await resolveRecruiterBusinessContext({
+    user: actorUser,
+    clientCompanyId,
+  });
+  const session = await mongoose.startSession();
+  let schedule = null;
+  let job = null;
+  let updatedApplication = null;
+  let updatedAvailability = null;
+
+  try {
+    await session.withTransaction(async () => {
+      job = await Job.findById(jobId).session(session);
+      if (!job) {
+        throw new AppError(404, "Job not found", { field: "jobId" });
+      }
+
+      assertSameCompanyTenant({
+        resourceCompanyId: job.companyId,
+        tenantCompanyId: context.companyId,
+      });
+
+      const application = await Application.findById(applicationId).session(session);
+      if (!application || application.jobId.toString() !== job._id.toString()) {
+        throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+
+      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
+        throw new AppError(409, "Only Direct Applications can receive proposals", {
+          field: "source",
+        });
+      }
+
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot receive proposals", {
+          field: "status",
+        });
+      }
+
+      if (application.status !== APPLICATION_STATUS.CONTACTED) {
+        throw new AppError(
+          409,
+          "First Interview proposals can only be created while Application is CONTACTED",
+          { field: "status" },
+        );
+      }
+
+      if (
+        isApplicationUnassigned(application) ||
+        application.assignedRecruiterCompanyMemberId.toString() !==
+          context.membership._id.toString()
+      ) {
+        throw new AppError(
+          403,
+          "Only the current Assigned Recruiter can create an Interview proposal",
+          { field: "role" },
+        );
+      }
+
+      const assigneeContext = await assertAssigneeEligibleAtAssignmentCommit({
+        assigneeCompanyMemberId: context.membership._id,
+        job,
+        session,
+      });
+
+      const availability = await CandidateAvailability.findOne({
+        applicationId: application._id,
+      }).session(session);
+      if (!availability) {
+        throw new AppError(409, "Candidate Availability has not been submitted", {
+          field: "applicationId",
+        });
+      }
+
+      if (availability.revision !== expectedAvailabilityRevision) {
+        throw new AppError(
+          409,
+          "Availability has changed; refresh and retry Interview proposal",
+          { field: "expectedAvailabilityRevision" },
+        );
+      }
+
+      const selectedSlot = availability.slots.find(
+        (slot) => slot.date === date && slot.dayPart === dayPart,
+      );
+      if (!selectedSlot) {
+        throw new AppError(409, "Selected slot is not in current Availability", {
+          field: "date",
+        });
+      }
+
+      if (date < getCalendarDateInTimeZone(now, availability.timezone)) {
+        throw new AppError(409, "Selected slot is in the past", { field: "date" });
+      }
+
+      const [activeSchedule, declinedSchedule] = await Promise.all([
+        InterviewSchedule.exists({
+          applicationId: application._id,
+          status: {
+            $in: [
+              INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+              INTERVIEW_SCHEDULE_STATUS.CONFIRMED,
+            ],
+          },
+        }).session(session),
+        InterviewSchedule.exists({
+          applicationId: application._id,
+          date,
+          dayPart,
+          status: INTERVIEW_SCHEDULE_STATUS.DECLINED,
+        }).session(session),
+      ]);
+      if (activeSchedule) {
+        throw new AppError(409, "Application already has an active Interview Schedule", {
+          field: "applicationId",
+        });
+      }
+      if (declinedSchedule) {
+        throw new AppError(409, "Selected slot was previously declined", {
+          field: "date",
+        });
+      }
+
+      const expiresAt = deriveProposalExpiresAt({
+        date,
+        timezone: availability.timezone,
+      });
+      schedule = new InterviewSchedule({
+        applicationId: application._id,
+        status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+        date,
+        dayPart,
+        timezone: availability.timezone,
+        expiresAt,
+        createdByUserId: assigneeContext.user._id,
+        createdByCompanyMemberId: assigneeContext.membership._id,
+      });
+      await schedule.save({ session });
+
+      updatedApplication = await Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          status: APPLICATION_STATUS.CONTACTED,
+          version: application.version,
+          assignedRecruiterCompanyMemberId: assigneeContext.membership._id,
+        },
+        {
+          $set: { status: APPLICATION_STATUS.INTERVIEW_SCHEDULED },
+          $inc: { version: 1 },
+        },
+        { returnDocument: "after", session },
+      );
+      if (!updatedApplication) {
+        throw new AppError(
+          409,
+          "Application has changed; refresh and retry Interview proposal",
+          { field: "applicationId" },
+        );
+      }
+
+      availability.revision += 1;
+      await availability.save({ session });
+      updatedAvailability = availability;
+    });
+  } catch (error) {
+    if (isMongoDuplicateKeyError(error)) {
+      throw new AppError(409, "Application already has an active Interview Schedule", {
+        field: "applicationId",
+      });
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    job: toPublicJob(job),
+    application: {
+      id: updatedApplication._id.toString(),
+      status: updatedApplication.status,
+      version: updatedApplication.version,
+    },
+    availability: toCandidateAvailabilityProjection(updatedAvailability),
+    interviewSchedule: {
+      id: schedule._id.toString(),
+      applicationId: schedule.applicationId.toString(),
+      status: schedule.status,
+      date: schedule.date,
+      dayPart: schedule.dayPart,
+      timezone: schedule.timezone,
+      expiresAt: schedule.expiresAt,
+      createdByUserId: schedule.createdByUserId.toString(),
+      createdByCompanyMemberId: schedule.createdByCompanyMemberId.toString(),
+      createdAt: schedule.createdAt,
+      updatedAt: schedule.updatedAt,
+    },
+  };
 };
 
 const listCandidateMyApplications = async ({
@@ -4708,6 +4999,7 @@ export {
   captureUploadedSubmittedCvSnapshot,
   countNonTerminalApplicationsAssignedToRecruiter,
   countNonTerminalApplicationsAssignedToRecruiterOnJob,
+  createFirstInterviewProposal,
   deepCopyGeneratedContent,
   directApplyToJob,
   downloadCandidateApplicationSubmittedCv,

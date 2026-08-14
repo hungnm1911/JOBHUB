@@ -1,4 +1,5 @@
 import {
+  createFirstInterviewProposal,
   directApplyToJob,
   downloadCandidateApplicationSubmittedCv,
   downloadPrimaryJobApplicationSubmittedCv,
@@ -137,6 +138,24 @@ const submitCandidateAvailabilityFirstTimeHandler = async (
     });
 
     return response.status(201).json({ availability });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const createFirstInterviewProposalHandler = async (request, response, next) => {
+  try {
+    const result = await createFirstInterviewProposal({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      applicationId: request.params.applicationId,
+      date: request.body.date,
+      dayPart: request.body.dayPart,
+      expectedAvailabilityRevision: request.body.expectedAvailabilityRevision,
+      clientCompanyId: readClientCompanyId(request),
+    });
+
+    return response.status(201).json(result);
   } catch (error) {
     return next(error);
   }
@@ -503,6 +522,7 @@ const updateApplicationRecruitmentPipelineStatusHandler = async (
 };
 
 export {
+  createFirstInterviewProposalHandler,
   directApplyToJobHandler,
   downloadCandidateApplicationSubmittedCvHandler,
   downloadPrimaryJobApplicationSubmittedCvHandler,
