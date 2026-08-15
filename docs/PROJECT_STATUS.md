@@ -41,6 +41,17 @@ items stay readable independently of current referenced resource state, while
 any resource navigation/action must continue through the canonical source
 module's current authorization.
 
+Slice 03 is implemented and verified for Direct Application Notification
+(`F02`; `BR-09`–`BR-12`, `BR-47`–`BR-49`, `TX-01`). The canonical Direct Apply
+service now creates an `APPLIED`, `UNASSIGNED` Application and the single
+`DIRECT_APPLICATION_CREATED` durable obligation in one database transaction.
+It snapshots the Candidate self-confirmation and current Job Primary's
+unassigned-application message from trusted state, de-duplicates a shared
+User recipient, and makes an immediate best-effort inbox materialization
+attempt. Materialization failure leaves the committed Application and pending
+event for Slice 01 recovery; no Assignment, Conversation, Message, realtime,
+or other source workflow behavior is added.
+
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
 findings. Slice 01 covers first Candidate Availability submit and Application-read projection

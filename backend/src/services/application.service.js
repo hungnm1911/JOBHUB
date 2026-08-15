@@ -13,6 +13,7 @@ import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import MESSAGE_TYPE from "../constants/message-type.js";
+import NOTIFICATION_TYPE from "../constants/notification-type.js";
 import SYSTEM_MESSAGE_CONTENT from "../constants/system-message-content.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
@@ -41,6 +42,10 @@ import {
 } from "./company.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
 import { evaluateApplicationConversationChatAuthority } from "./application-chat-authority.service.js";
+import {
+  createNotificationEvent,
+  materializeNotificationEvent,
+} from "./notification.service.js";
 import {
   acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
@@ -5212,19 +5217,85 @@ const directApplyToJob = async ({
       });
     uploadedSnapshotStorageKey = storageKey;
 
-    const application = await Application.create({
-      candidateUserId,
-      jobId: job._id,
-      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
-      status: APPLICATION_STATUS.APPLIED,
-      submittedCvSnapshot,
-      appliedAt: new Date(),
-      withdrawnAt: null,
-      withdrawReason: null,
-      // V10: Unassigned is assignment-state only; normalize on Direct Apply write.
-      assignedRecruiterCompanyMemberId: null,
-      version: 0,
-    });
+    const session = await mongoose.startSession();
+    let application;
+    let notificationEvent;
+
+    try {
+      await session.withTransaction(async () => {
+        const currentJob = await Job.findById(job._id).session(session);
+
+        if (!currentJob) {
+          throw new AppError(404, "Job not found", { field: "jobId" });
+        }
+
+        const primaryRecruiter = await CompanyMember.findOne({
+          _id: currentJob.primaryRecruiterCompanyMemberId,
+          companyId: currentJob.companyId,
+        }).session(session);
+
+        if (!primaryRecruiter) {
+          throw new AppError(409, "Job Primary Recruiter is no longer available");
+        }
+
+        [application] = await Application.create(
+          [
+            {
+              candidateUserId,
+              jobId: job._id,
+              source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+              status: APPLICATION_STATUS.APPLIED,
+              submittedCvSnapshot,
+              appliedAt: new Date(),
+              withdrawnAt: null,
+              withdrawReason: null,
+              // V10: Unassigned is assignment-state only; normalize on Direct Apply write.
+              assignedRecruiterCompanyMemberId: null,
+              version: 0,
+            },
+          ],
+          { session },
+        );
+
+        const recipientsByUserId = new Map();
+        const addRecipient = (recipientUserId, content) => {
+          const recipientKey = recipientUserId.toString();
+
+          if (!recipientsByUserId.has(recipientKey)) {
+            recipientsByUserId.set(recipientKey, {
+              recipientUserId,
+              content,
+            });
+          }
+        };
+
+        addRecipient(
+          candidateUserId,
+          `Your application for ${currentJob.title} was submitted successfully.`,
+        );
+        addRecipient(
+          primaryRecruiter.userId,
+          `A new application for ${currentJob.title} is awaiting assignment.`,
+        );
+
+        ({ event: notificationEvent } = await createNotificationEvent({
+          eventKey: `direct-application-created:${application._id.toString()}`,
+          type: NOTIFICATION_TYPE.DIRECT_APPLICATION_CREATED,
+          actorUserId: candidateUserId,
+          applicationId: application._id,
+          recipients: [...recipientsByUserId.values()],
+          session,
+        }));
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The persisted event obligation remains pending for canonical recovery.
+    }
 
     return toPublicApplication(application);
   } catch (error) {
