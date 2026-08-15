@@ -17,11 +17,13 @@ import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import CV_LANGUAGE_PROFICIENCY from "../../src/constants/cv-language-proficiency.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
+import NOTIFICATION_TYPE from "../../src/constants/notification-type.js";
 import Application from "../../src/models/application.model.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
 import Category from "../../src/models/category.model.js";
 import Company from "../../src/models/company.model.js";
 import Job from "../../src/models/job.model.js";
+import NotificationEvent from "../../src/models/notification-event.model.js";
 import {
   directApplyToJob,
   replaceSubmittedCv,
@@ -142,7 +144,7 @@ const setupBaseline = async () => {
   });
   const category = await createFieldCategory();
 
-  return { owner, manager, job, category };
+  return { owner, manager, recruiter, job, category };
 };
 
 describe("V9 Slice 05 — Withdraw Application (F05)", () => {
@@ -164,7 +166,7 @@ describe("V9 Slice 05 — Withdraw Application (F05)", () => {
       publicId: "jobhub/applications/submitted-cv-snapshots/initial-snapshot",
     });
 
-    const { owner, job, category } = await setupBaseline();
+    const { owner, recruiter, job, category } = await setupBaseline();
     const initialCv = await createGeneratedCv({
       candidateUserId: owner._id,
       categoryId: category._id,
@@ -199,6 +201,19 @@ describe("V9 Slice 05 — Withdraw Application (F05)", () => {
     );
     expect(withdrawn.submittedCvSnapshot.sourceCandidateCvId.toString()).toBe(
       created.submittedCvSnapshot.sourceCandidateCvId.toString(),
+    );
+
+    const events = await NotificationEvent.find({
+      applicationId: created.id,
+      type: NOTIFICATION_TYPE.APPLICATION_WITHDRAWN,
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].recipients).toHaveLength(1);
+    expect(events[0].recipients[0].recipientUserId.toString()).toBe(
+      recruiter.user._id.toString(),
+    );
+    expect(events[0].recipients[0].recipientUserId.toString()).not.toBe(
+      owner._id.toString(),
     );
   });
 
@@ -240,7 +255,9 @@ describe("V9 Slice 05 — Withdraw Application (F05)", () => {
           status: APPLICATION_STATUS.APPLIED,
           withdrawnAt: null,
           withdrawReason: null,
-          version: 0,
+          // Keep the V10 concurrency token monotonic when this regression
+          // fixture restores APPLIED to exercise a second independent case.
+          version: 1,
         },
       },
     );
@@ -257,11 +274,11 @@ describe("V9 Slice 05 — Withdraw Application (F05)", () => {
       candidateUserId: owner._id,
       actorUser: owner,
       applicationId: created.id.toString(),
-      expectedVersion: 0,
+      expectedVersion: 1,
       withdrawReason: undefined,
     });
     expect(withdrawnAgain.status).toBe(APPLICATION_STATUS.WITHDRAWN);
-    expect(withdrawnAgain.version).toBe(1);
+    expect(withdrawnAgain.version).toBe(2);
     expect(withdrawnAgain.withdrawReason).toBeNull();
   });
 

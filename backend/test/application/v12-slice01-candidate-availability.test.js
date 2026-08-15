@@ -6,10 +6,12 @@ import APPLICATION_STATUS from "../../src/constants/application-status.js";
 import CANDIDATE_CV_SOURCE_TYPE from "../../src/constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_UPLOADED_PDF from "../../src/constants/candidate-cv-uploaded-pdf.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
+import NOTIFICATION_TYPE from "../../src/constants/notification-type.js";
 import Application from "../../src/models/application.model.js";
 import CandidateAvailability from "../../src/models/candidate-availability.model.js";
 import InterviewSchedule from "../../src/models/interview-schedule.model.js";
 import Job from "../../src/models/job.model.js";
+import NotificationEvent from "../../src/models/notification-event.model.js";
 import {
   cancelRecruiterInterviewProposal,
   confirmCandidateInterviewProposal,
@@ -370,6 +372,15 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
     expect(persistedApplication.version).toBe(2);
     expect(availability.revision).toBe(1);
     expect(schedule.status).toBe("PROPOSED");
+
+    const events = await NotificationEvent.find({
+      applicationId: application._id,
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe(NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED);
+    expect(events[0].recipients[0].recipientUserId.toString()).toBe(
+      candidate.user._id.toString(),
+    );
   });
 
   it("rejects non-assignees, stale Availability, missing slots, and a second active proposal", async () => {

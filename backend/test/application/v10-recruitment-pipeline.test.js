@@ -20,6 +20,7 @@ import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js"
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import CV_LANGUAGE_PROFICIENCY from "../../src/constants/cv-language-proficiency.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
+import NOTIFICATION_TYPE from "../../src/constants/notification-type.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import Application from "../../src/models/application.model.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
@@ -27,6 +28,7 @@ import Category from "../../src/models/category.model.js";
 import Company from "../../src/models/company.model.js";
 import CompanyMember from "../../src/models/company-member.model.js";
 import Job from "../../src/models/job.model.js";
+import NotificationEvent from "../../src/models/notification-event.model.js";
 import User from "../../src/models/user.model.js";
 import {
   reassignApplication,
@@ -329,6 +331,29 @@ describe("V10 Slice 10 — Recruitment Pipeline (F05, F09 partial)", () => {
         expect(persisted).not.toHaveProperty("rejectedAt");
         expect(persisted).not.toHaveProperty("hiredAt");
         expect(persisted).not.toHaveProperty("statusHistory");
+
+        const events = await NotificationEvent.find({
+          applicationId: application._id,
+        }).sort({ type: 1 });
+        const expectedTypes =
+          toStatus === APPLICATION_STATUS.CONTACTED
+            ? [
+                NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED,
+                NOTIFICATION_TYPE.INTERVIEW_AVAILABILITY_REQUESTED,
+              ]
+            : [
+                toStatus === APPLICATION_STATUS.HIRED
+                  ? NOTIFICATION_TYPE.APPLICATION_HIRED
+                  : NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED,
+              ];
+
+        expect(events.map((event) => event.type)).toEqual(expectedTypes);
+        for (const event of events) {
+          expect(event.recipients).toHaveLength(1);
+          expect(event.recipients[0].recipientUserId.toString()).toBe(
+            candidate.user._id.toString(),
+          );
+        }
       },
     );
 
@@ -359,6 +384,14 @@ describe("V10 Slice 10 — Recruitment Pipeline (F05, F09 partial)", () => {
           primary.membership._id.toString(),
         );
         expect(result.application.version).toBe(2);
+        const events = await NotificationEvent.find({
+          applicationId: application._id,
+        });
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe(NOTIFICATION_TYPE.APPLICATION_REJECTED);
+        expect(events[0].recipients[0].recipientUserId.toString()).toBe(
+          candidate.user._id.toString(),
+        );
       },
     );
 

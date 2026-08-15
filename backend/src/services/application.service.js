@@ -1531,6 +1531,7 @@ const createInterviewProposal = async ({
   let job = null;
   let updatedApplication = null;
   let updatedAvailability = null;
+  const notificationEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -1700,6 +1701,21 @@ const createInterviewProposal = async ({
         );
       }
 
+      if (isFirstProposal) {
+        const statusNotificationEvent =
+          await createApplicationLifecycleNotificationEvent({
+            application: updatedApplication,
+            job,
+            type: NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED,
+            actorUserId: actorUser._id,
+            recipientUserId: updatedApplication.candidateUserId,
+            session,
+          });
+        if (statusNotificationEvent) {
+          notificationEvents.push(statusNotificationEvent);
+        }
+      }
+
       availability.revision += 1;
       await availability.save({ session });
       updatedAvailability = availability;
@@ -1713,6 +1729,14 @@ const createInterviewProposal = async ({
     throw error;
   } finally {
     await session.endSession();
+  }
+
+  for (const notificationEvent of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed proposal/status event remains pending for recovery.
+    }
   }
 
   return {
@@ -2678,6 +2702,51 @@ const createAssignmentNotificationEvent = async ({
     actorUserId,
     applicationId: application._id,
     recipients: [...recipientsByUserId.values()],
+    session,
+  });
+
+  return event;
+};
+
+// V13 F04/F05: source transitions own their durable obligation. This helper
+// snapshots exactly one trusted recipient for each Application lifecycle event;
+// it never derives recipients from client input or during materialization.
+const createApplicationLifecycleNotificationEvent = async ({
+  application,
+  job,
+  type,
+  actorUserId = null,
+  recipientUserId,
+  session,
+} = {}) => {
+  if (
+    recipientUserId == null ||
+    (actorUserId != null &&
+      recipientUserId.toString() === actorUserId.toString())
+  ) {
+    return null;
+  }
+
+  const jobTitle = job?.title ?? "this position";
+  const contentByType = {
+    [NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED]: `Your application for ${jobTitle} has moved to ${application.status}.`,
+    [NOTIFICATION_TYPE.APPLICATION_HIRED]: `Your application for ${jobTitle} has been marked as hired.`,
+    [NOTIFICATION_TYPE.APPLICATION_REJECTED]: `Your application for ${jobTitle} has been rejected.`,
+    [NOTIFICATION_TYPE.APPLICATION_WITHDRAWN]: `The candidate withdrew their application for ${jobTitle}.`,
+    [NOTIFICATION_TYPE.INTERVIEW_AVAILABILITY_REQUESTED]: `Please provide your availability for an interview for ${jobTitle}.`,
+  };
+  const content = contentByType[type];
+
+  if (!content) {
+    throw new Error("Unsupported Application lifecycle Notification type");
+  }
+
+  const { event } = await createNotificationEvent({
+    eventKey: `${type.toLowerCase()}:${application._id.toString()}:${application.version}`,
+    type,
+    actorUserId,
+    applicationId: application._id,
+    recipients: [{ recipientUserId, content }],
     session,
   });
 
@@ -4530,6 +4599,7 @@ const updateApplicationRecruitmentPipelineStatus = async ({
   let updatedApplication = null;
   let job = null;
   let assigneeContext = null;
+  const notificationEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -4668,6 +4738,39 @@ const updateApplicationRecruitmentPipelineStatus = async ({
         });
       }
 
+      const notificationType = isApplicationTerminalStatus(targetStatus)
+        ? targetStatus === APPLICATION_STATUS.HIRED
+          ? NOTIFICATION_TYPE.APPLICATION_HIRED
+          : NOTIFICATION_TYPE.APPLICATION_REJECTED
+        : NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED;
+      const statusNotificationEvent =
+        await createApplicationLifecycleNotificationEvent({
+          application: updatedApplication,
+          job,
+          type: notificationType,
+          actorUserId: actorUser._id,
+          recipientUserId: updatedApplication.candidateUserId,
+          session,
+        });
+      if (statusNotificationEvent) {
+        notificationEvents.push(statusNotificationEvent);
+      }
+
+      if (targetStatus === APPLICATION_STATUS.CONTACTED) {
+        const availabilityNotificationEvent =
+          await createApplicationLifecycleNotificationEvent({
+            application: updatedApplication,
+            job,
+            type: NOTIFICATION_TYPE.INTERVIEW_AVAILABILITY_REQUESTED,
+            actorUserId: actorUser._id,
+            recipientUserId: updatedApplication.candidateUserId,
+            session,
+          });
+        if (availabilityNotificationEvent) {
+          notificationEvents.push(availabilityNotificationEvent);
+        }
+      }
+
       if (isApplicationTerminalStatus(targetStatus)) {
         await cancelActiveInterviewScheduleForTerminalApplication({
           applicationId: application._id,
@@ -4677,6 +4780,14 @@ const updateApplicationRecruitmentPipelineStatus = async ({
     });
   } finally {
     await session.endSession();
+  }
+
+  for (const notificationEvent of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Application transition remains recoverable.
+    }
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -5733,6 +5844,7 @@ const withdrawApplication = async ({
   const withdrawnAt = new Date();
   const session = await mongoose.startSession();
   let withdrawnApplication = null;
+  let notificationEvent = null;
 
   try {
     await session.withTransaction(async () => {
@@ -5754,6 +5866,28 @@ const withdrawApplication = async ({
         throw new AppError(409, "Application has changed; refresh and retry withdraw", {
           field: "expectedVersion",
         });
+      }
+
+      const job = await Job.findById(application.jobId).session(session);
+      if (!job) {
+        throw new AppError(404, "Job not found", { field: "jobId" });
+      }
+
+      let recipientUserId;
+      if (application.assignedRecruiterCompanyMemberId != null) {
+        const assignee = await CompanyMember.findById(
+          application.assignedRecruiterCompanyMemberId,
+        ).session(session);
+        recipientUserId = assignee?.userId ?? null;
+      } else {
+        const primaryRecruiter = await CompanyMember.findOne({
+          _id: job.primaryRecruiterCompanyMemberId,
+          companyId: job.companyId,
+        }).session(session);
+        recipientUserId = primaryRecruiter?.userId ?? null;
+      }
+      if (recipientUserId == null) {
+        throw new AppError(409, "Withdraw Notification recipient is unavailable");
       }
 
       withdrawnApplication = await Application.findOneAndUpdate(
@@ -5785,6 +5919,15 @@ const withdrawApplication = async ({
         });
       }
 
+      notificationEvent = await createApplicationLifecycleNotificationEvent({
+        application: withdrawnApplication,
+        job,
+        type: NOTIFICATION_TYPE.APPLICATION_WITHDRAWN,
+        actorUserId: actorUser._id,
+        recipientUserId,
+        session,
+      });
+
       await cancelActiveInterviewScheduleForTerminalApplication({
         applicationId: application._id,
         session,
@@ -5792,6 +5935,14 @@ const withdrawApplication = async ({
     });
   } finally {
     await session.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Withdraw remains recoverable by the Notification worker.
+    }
   }
 
   return toPublicApplication(withdrawnApplication);

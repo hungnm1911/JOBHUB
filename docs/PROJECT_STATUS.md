@@ -77,6 +77,23 @@ canonical SYSTEM Message remains an independent `CHAT_MESSAGE_CREATED` event.
 Post-commit inbox materialization is best-effort and recovery remains
 idempotent; no pipeline, interview, or realtime behavior is added.
 
+Slice 06 is implemented and verified for Pipeline + Withdraw + Availability
+Request Notification (`F04`, `F05` partial; `BR-10`, `BR-11`, `BR-20`–`BR-24`,
+`BR-47`–`BR-50`, `TX-01`). Winning Pipeline transitions, Candidate Withdraw,
+and first Interview Proposal cutover now persist their required lifecycle
+`NotificationEvent` obligations in the same source transaction:
+`APPLICATION_STATUS_CHANGED` for non-terminal moves (including first proposal
+`CONTACTED → INTERVIEW_SCHEDULED`), terminal `APPLICATION_HIRED` /
+`APPLICATION_REJECTED` without a redundant status event,
+`APPLICATION_WITHDRAWN` to the current Assignee or Job Primary when
+UNASSIGNED, and `INTERVIEW_AVAILABILITY_REQUESTED` independently on
+`→ CONTACTED` so both events coexist. Recipient/content snapshots use trusted
+Application/Job/Assignee/Primary state with human actor filtering; Candidate
+self-notify on Withdraw is excluded. Post-commit materialization is
+best-effort; recovery remains idempotent. This slice does not change V10/V12
+source lifecycles, Availability submit, Schedule notifications, Assignment
+redesign, or realtime.
+
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
 findings. Slice 01 covers first Candidate Availability submit and Application-read projection
