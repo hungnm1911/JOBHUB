@@ -1447,7 +1447,6 @@ describe("V11 Slice 07 — Final acceptance + regression closure", () => {
       expect(names).not.toContain("application_timelines");
       expect(names).not.toContain("read_receipts");
       expect(names).not.toContain("message_reactions");
-      expect(names).not.toContain("notifications");
     });
   });
 

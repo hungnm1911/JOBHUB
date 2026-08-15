@@ -2,7 +2,7 @@
 
 ## Current project state
 
-**V13 — Notification và phân phối realtime** is `READY FOR IMPLEMENTATION`.
+**V13 — Notification và phân phối realtime** is `IN PROGRESS`.
 Its approved canonical Product/Data contracts are tracked at
 `docs/product/versions/v13-notification-realtime-distribution.md` and
 `docs/data/versions/v13-notification-realtime-distribution-data-model.md`.
@@ -13,17 +13,21 @@ did not persist Notification, so V13 introduces both `Notification` and
 V13 also inherits the V12 Interview Schedule lifecycle unchanged and does not
 add `InterviewSchedule.COMPLETED` or `INTERVIEW_SCHEDULE_COMPLETED`.
 
-Slice 01 may implement only the Durable Notification Kernel + Recovery
-Foundation (`F11` partial; `BR-01`, `BR-04`, `BR-05`, `BR-47`–`BR-49`) after
-this readiness gate. The approved engineering contract assigns durable event,
-recipient-snapshot materialization, idempotence, and pending-event recovery to
-`notification.service.js`; a bounded, non-overlapping
-`notification-recovery.worker.js` owns scheduling only; `backend/index.js`
-owns explicit start/stop around database readiness and shutdown. Existing
-`MongoMemoryReplSet` and transaction regression infrastructure supports the
-required persistence/transaction invariants. Gate 00 adds no V13 Fxx behavior,
-collection, index, runtime worker, endpoint, or realtime behavior and does not
-change or relax a verification rule.
+Slice 01 is implemented and verified for the Durable Notification Kernel +
+Recovery Foundation (`F11` partial; `BR-01`, `BR-04`, `BR-05`, `BR-47`–`BR-49`
+and the persistence foundation of `TX-01`). It adds the canonical
+`Notification` and `NotificationEvent` models, immutable recipient/content
+snapshots, canonical type/reference invariants, durable-event and
+event-recipient uniqueness indexes, idempotent materialization, and bounded
+pending-event recovery. `notification.service.js` owns durable-event creation,
+materialization, and recovery; source services may pass their active MongoDB
+session so later slices can persist source state plus required obligation in
+one transaction. `notification-recovery.worker.js` runs an immediate bounded
+pass followed by non-overlapping passes; `backend/index.js` starts it after
+collection readiness and stops it before MongoDB disconnect. Slice 01 does not
+yet attach events to Direct Apply, Message, Assignment, Pipeline, Availability,
+or Interview transitions; it adds no inbox/read API, realtime delivery,
+delivery/session/presence persistence, or Job Invitation persistence.
 
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance

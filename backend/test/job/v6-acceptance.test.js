@@ -547,7 +547,7 @@ describe("V6 Slice 07 — Final acceptance + regression closure", () => {
   // ─── Deferred scope absence ───
 
   describe("Explicit absence of deferred V6 scope", () => {
-    it("no Invitation/RecruitmentTeam/history collections", async () => {
+    it("no Job Invitation/RecruitmentTeam/history collections", async () => {
       const collections = await Job.db.db.listCollections().toArray();
       const names = collections.map(c => c.name);
       expect(names).not.toContain("invitations");
@@ -555,7 +555,6 @@ describe("V6 Slice 07 — Final acceptance + regression closure", () => {
       expect(names).not.toContain("job_recruitment_members");
       expect(names).not.toContain("recruitment_team_history");
       expect(names).not.toContain("responsibility_transfer_history");
-      expect(names).not.toContain("notifications");
     });
 
     it("no custom Supporting permission or auto-restore fields in schema", async () => {
