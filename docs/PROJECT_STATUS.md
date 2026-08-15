@@ -108,6 +108,20 @@ workflow and creates no additional event. Post-commit materialization is
 best-effort/recoverable and idempotent. This slice adds no Interview Schedule
 Notification, Availability lifecycle change, or realtime behavior.
 
+Slice 08 is implemented and verified for Interview Schedule Notification
+(`F06`; `BR-10`, `BR-28`–`BR-33`, `BR-47`–`BR-50`, `TX-01`). The winning V12
+proposal creation creates its independent `INTERVIEW_SCHEDULE_CREATED`
+obligation for the Candidate alongside the first-proposal Application event
+when applicable. Recruiter cancellation, expiration, and terminal Application
+cancellation create `INTERVIEW_SCHEDULE_CHANGED` independently; terminal
+cancellation coexists with its required Application event. Candidate
+Confirm/Decline snapshot only the current Assignee at the guarded winning
+transition, while `UNASSIGNED` responses preserve V12 behavior without an
+event or recipient fallback. Every required event commits with the source
+transition, and post-commit materialization remains best-effort, recoverable,
+and idempotent. No V12 Availability, Assignment, Schedule history, or realtime
+behavior changes.
+
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
 findings. Slice 01 covers first Candidate Availability submit and Application-read projection

@@ -1158,7 +1158,7 @@ const expireDueInterviewProposalsForApplications = async ({
   session = null,
 } = {}) => {
   if (applicationIds.length === 0) {
-    return { modifiedCount: 0 };
+    return { modifiedCount: 0, notificationEvents: [] };
   }
 
   const normalizedApplicationIds = applicationIds.map((applicationId) =>
@@ -1166,26 +1166,56 @@ const expireDueInterviewProposalsForApplications = async ({
       ? applicationId
       : new mongoose.Types.ObjectId(applicationId),
   );
+  const dueSchedules = await InterviewSchedule.find({
+    applicationId: { $in: normalizedApplicationIds },
+    status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+    expiresAt: { $lte: now },
+  })
+    .select("_id")
+    .session(session)
+    .lean();
+  const notificationEvents = [];
+  let modifiedCount = 0;
 
-  let updateQuery = InterviewSchedule.updateMany(
-    {
-      applicationId: { $in: normalizedApplicationIds },
-      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
-      expiresAt: { $lte: now },
-    },
-    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
-    { runValidators: true },
-  );
+  for (const dueSchedule of dueSchedules) {
+    const expireOne = async (activeSession) =>
+      expireDueInterviewProposal({
+        interviewScheduleId: dueSchedule._id,
+        now,
+        session: activeSession,
+      });
 
-  if (session) {
-    updateQuery = updateQuery.session(session);
+    let result;
+    if (session) {
+      result = await expireOne(session);
+    } else {
+      const expirationSession = await mongoose.startSession();
+      try {
+        await expirationSession.withTransaction(async () => {
+          result = await expireOne(expirationSession);
+        });
+      } finally {
+        await expirationSession.endSession();
+      }
+    }
+
+    modifiedCount += result.modifiedCount;
+    if (result.notificationEvent) {
+      notificationEvents.push(result.notificationEvent);
+    }
   }
 
-  const result = await updateQuery;
+  if (!session) {
+    for (const notificationEvent of notificationEvents) {
+      try {
+        await materializeNotificationEvent({ eventId: notificationEvent._id });
+      } catch {
+        // The committed expiration and durable obligation remain recoverable.
+      }
+    }
+  }
 
-  return {
-    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
-  };
+  return { modifiedCount, notificationEvents };
 };
 
 const expireDueInterviewProposalsForApplication = async ({
@@ -1200,18 +1230,25 @@ const expireDueInterviewProposalsForApplication = async ({
   });
 
 const expireDueInterviewProposals = async ({ now = new Date() } = {}) => {
-  const result = await InterviewSchedule.updateMany(
+  const dueSchedules = await InterviewSchedule.find(
     {
       status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
       expiresAt: { $lte: now },
     },
-    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
-    { runValidators: true },
-  );
+    { _id: 1, applicationId: 1 },
+  ).lean();
 
-  return {
-    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
-  };
+  return expireDueInterviewProposalsForApplications({
+    applicationIds: [
+      ...new Map(
+        dueSchedules.map((schedule) => [
+          schedule.applicationId.toString(),
+          schedule.applicationId,
+        ]),
+      ).values(),
+    ],
+    now,
+  });
 };
 
 // V12 F08 Slice 07 / TX-03: this is intentionally callable only by canonical
@@ -1219,12 +1256,26 @@ const expireDueInterviewProposals = async ({ now = new Date() } = {}) => {
 // Availability, and terminal Schedule history while invalidating the one active
 // Schedule, if any, in the same transaction as its parent Application.
 const cancelActiveInterviewScheduleForTerminalApplication = async ({
-  applicationId,
+  application,
+  job,
   session,
 } = {}) => {
+  const activeSchedule = await InterviewSchedule.findOne({
+    applicationId: application._id,
+    status: {
+      $in: [
+        INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+        INTERVIEW_SCHEDULE_STATUS.CONFIRMED,
+      ],
+    },
+  }).session(session);
+  if (!activeSchedule) {
+    return { modifiedCount: 0, notificationEvent: null };
+  }
+
   let updateQuery = InterviewSchedule.updateOne(
     {
-      applicationId,
+      _id: activeSchedule._id,
       status: {
         $in: [
           INTERVIEW_SCHEDULE_STATUS.PROPOSED,
@@ -1235,14 +1286,26 @@ const cancelActiveInterviewScheduleForTerminalApplication = async ({
     { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
     { runValidators: true },
   );
-
   if (session) {
     updateQuery = updateQuery.session(session);
   }
-
   const result = await updateQuery;
+  if ((result.modifiedCount ?? result.nModified ?? 0) === 0) {
+    return { modifiedCount: 0, notificationEvent: null };
+  }
+  activeSchedule.status = INTERVIEW_SCHEDULE_STATUS.CANCELLED;
+
+  const notificationEvent = await createInterviewScheduleNotificationEvent({
+    application,
+    job,
+    schedule: activeSchedule,
+    type: NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CHANGED,
+    session,
+  });
+
   return {
-    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+    modifiedCount: 1,
+    notificationEvent,
   };
 };
 
@@ -1553,9 +1616,11 @@ const editCandidateAvailability = async ({
   });
   const session = await mongoose.startSession();
   let updatedAvailability = null;
+  const notificationEvents = [];
 
   try {
     await session.withTransaction(async () => {
+      notificationEvents.length = 0;
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
@@ -1578,11 +1643,12 @@ const editCandidateAvailability = async ({
         );
       }
 
-      await expireDueInterviewProposalsForApplication({
+      const expirationResult = await expireDueInterviewProposalsForApplication({
         applicationId: application._id,
         now,
         session,
       });
+      notificationEvents.push(...expirationResult.notificationEvents);
 
       const proposedSchedule = await InterviewSchedule.exists({
         applicationId: application._id,
@@ -1612,6 +1678,14 @@ const editCandidateAvailability = async ({
     });
   } finally {
     await session.endSession();
+  }
+
+  for (const notificationEvent of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed expiration and Availability edit remain recoverable.
+    }
   }
 
   return toCandidateAvailabilityProjection(updatedAvailability);
@@ -1669,6 +1743,7 @@ const createInterviewProposal = async ({
 
   try {
     await session.withTransaction(async () => {
+      notificationEvents.length = 0;
       job = await Job.findById(jobId).session(session);
       if (!job) {
         throw new AppError(404, "Job not found", { field: "jobId" });
@@ -1757,11 +1832,12 @@ const createInterviewProposal = async ({
         throw new AppError(409, "Selected slot is in the past", { field: "date" });
       }
 
-      await expireDueInterviewProposalsForApplication({
+      const expirationResult = await expireDueInterviewProposalsForApplication({
         applicationId: application._id,
         now,
         session,
       });
+      notificationEvents.push(...expirationResult.notificationEvents);
 
       const [activeSchedule, declinedSchedule] = await Promise.all([
         InterviewSchedule.exists({
@@ -1850,6 +1926,19 @@ const createInterviewProposal = async ({
         }
       }
 
+      const scheduleNotificationEvent =
+        await createInterviewScheduleNotificationEvent({
+          application: updatedApplication,
+          job,
+          schedule,
+          type: NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CREATED,
+          actorUserId: actorUser._id,
+          session,
+        });
+      if (scheduleNotificationEvent) {
+        notificationEvents.push(scheduleNotificationEvent);
+      }
+
       availability.revision += 1;
       await availability.save({ session });
       updatedAvailability = availability;
@@ -1928,42 +2017,130 @@ const respondToCandidateInterviewProposal = async ({
     });
   }
 
-  const application = await Application.findOne({
+  const initialApplication = await Application.findOne({
     _id: applicationId,
     candidateUserId,
     source: APPLICATION_SOURCE.DIRECT_APPLICATION,
   }).lean();
-  if (!application) {
+  if (!initialApplication) {
     throw new AppError(404, "Application not found", { field: "applicationId" });
   }
 
-  if (isApplicationTerminalStatus(application.status)) {
-    throw new AppError(409, "Terminal Applications cannot receive Schedule responses", {
-      field: "status",
-    });
-  }
-
   await expireDueInterviewProposalsForApplication({
-    applicationId: application._id,
+    applicationId: initialApplication._id,
     now,
   });
 
-  const schedule = await InterviewSchedule.findOneAndUpdate(
-    {
-      _id: interviewScheduleId,
-      applicationId: application._id,
-      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
-      expiresAt: { $gt: now },
-    },
-    { $set: { status: targetStatus } },
-    { returnDocument: "after", runValidators: true },
-  );
-  if (!schedule) {
-    throw new AppError(
-      409,
-      "Interview Schedule is no longer a live proposed proposal",
-      { field: "interviewScheduleId" },
-    );
+  const session = await mongoose.startSession();
+  let schedule = null;
+  let notificationEvent = null;
+
+  try {
+    await session.withTransaction(async () => {
+      schedule = null;
+      notificationEvent = null;
+
+      const application = await Application.findOne({
+        _id: applicationId,
+        candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
+      if (!application) {
+        throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot receive Schedule responses", {
+          field: "status",
+        });
+      }
+
+      const acquiredApplication = await acquireWithRestoredUpdatedAt({
+        model: Application,
+        documentId: application._id,
+        session,
+        acquire: () =>
+          Application.findOneAndUpdate(
+            {
+              _id: application._id,
+              candidateUserId,
+              source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+              status: application.status,
+              version: application.version,
+              assignedRecruiterCompanyMemberId:
+                application.assignedRecruiterCompanyMemberId ?? null,
+            },
+            {
+              $set: {
+                assignedRecruiterCompanyMemberId:
+                  application.assignedRecruiterCompanyMemberId ?? null,
+              },
+            },
+            { returnDocument: "after", session },
+          ),
+      });
+      if (!acquiredApplication) {
+        throw new AppError(
+          409,
+          "Application has changed; refresh and retry the Interview Schedule response",
+          { field: "applicationId" },
+        );
+      }
+
+      schedule = await InterviewSchedule.findOneAndUpdate(
+        {
+          _id: interviewScheduleId,
+          applicationId: acquiredApplication._id,
+          status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+          expiresAt: { $gt: now },
+        },
+        { $set: { status: targetStatus } },
+        { returnDocument: "after", runValidators: true, session },
+      );
+      if (!schedule) {
+        throw new AppError(
+          409,
+          "Interview Schedule is no longer a live proposed proposal",
+          { field: "interviewScheduleId" },
+        );
+      }
+
+      if (!isApplicationUnassigned(acquiredApplication)) {
+        const [assignee, job] = await Promise.all([
+          CompanyMember.findById(
+            acquiredApplication.assignedRecruiterCompanyMemberId,
+          )
+            .select("userId")
+            .session(session),
+          Job.findById(acquiredApplication.jobId).select("title").session(session),
+        ]);
+        if (!assignee?.userId) {
+          throw new Error("Current Assignee is unavailable for Schedule Notification");
+        }
+
+        notificationEvent = await createInterviewScheduleNotificationEvent({
+          application: acquiredApplication,
+          job,
+          schedule,
+          type:
+            targetStatus === INTERVIEW_SCHEDULE_STATUS.CONFIRMED
+              ? NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CONFIRMED
+              : NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_DECLINED,
+          actorUserId: actorUser._id,
+          recipientUserId: assignee.userId,
+          session,
+        });
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Schedule response remains recoverable.
+    }
   }
 
   return toInterviewScheduleProjection(schedule);
@@ -2010,9 +2187,12 @@ const cancelRecruiterInterviewProposal = async ({
   });
   const session = await mongoose.startSession();
   let cancelledSchedule = null;
+  let notificationEvent = null;
 
   try {
     await session.withTransaction(async () => {
+      cancelledSchedule = null;
+      notificationEvent = null;
       const job = await Job.findById(jobId).session(session);
       if (!job) {
         throw new AppError(404, "Job not found", { field: "jobId" });
@@ -2069,9 +2249,26 @@ const cancelRecruiterInterviewProposal = async ({
           { field: "interviewScheduleId" },
         );
       }
+
+      notificationEvent = await createInterviewScheduleNotificationEvent({
+        application,
+        job,
+        schedule: cancelledSchedule,
+        type: NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CHANGED,
+        actorUserId: actorUser._id,
+        session,
+      });
     });
   } finally {
     await session.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed cancellation remains recoverable.
+    }
   }
 
   return toInterviewScheduleProjection(cancelledSchedule);
@@ -2885,6 +3082,95 @@ const createApplicationLifecycleNotificationEvent = async ({
   });
 
   return event;
+};
+
+// V13 F06 / TX-01: each Schedule transition owns its independent durable
+// obligation. Recipient/content are fixed from the winning source state; this
+// helper never reuses the historical Schedule creator as a current Assignee.
+const createInterviewScheduleNotificationEvent = async ({
+  application,
+  job,
+  schedule,
+  type,
+  actorUserId = null,
+  recipientUserId = application.candidateUserId,
+  session,
+} = {}) => {
+  if (
+    recipientUserId == null ||
+    (actorUserId != null &&
+      recipientUserId.toString() === actorUserId.toString())
+  ) {
+    return null;
+  }
+
+  const jobTitle = job?.title ?? "this position";
+  const contentByType = {
+    [NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CREATED]: `A new interview schedule has been proposed for ${jobTitle}.`,
+    [NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CHANGED]: `Your interview schedule for ${jobTitle} has changed.`,
+    [NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CONFIRMED]: `The candidate confirmed the interview schedule for ${jobTitle}.`,
+    [NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_DECLINED]: `The candidate declined the interview schedule for ${jobTitle}.`,
+  };
+  const content = contentByType[type];
+
+  if (!content) {
+    throw new Error("Unsupported Interview Schedule Notification type");
+  }
+
+  const { event } = await createNotificationEvent({
+    eventKey: `${type.toLowerCase()}:${schedule._id.toString()}`,
+    type,
+    actorUserId,
+    applicationId: application._id,
+    interviewScheduleId: schedule._id,
+    recipients: [{ recipientUserId, content }],
+    session,
+  });
+
+  return event;
+};
+
+// A guarded expiration transition is a source mutation in V13. It must create
+// its Schedule Changed obligation only after the guarded write wins, in the
+// same session/transaction, so stale expiration scans cannot leave orphans.
+const expireDueInterviewProposal = async ({
+  interviewScheduleId,
+  now,
+  session,
+} = {}) => {
+  const schedule = await InterviewSchedule.findById(interviewScheduleId).session(session);
+  if (!schedule) {
+    return { modifiedCount: 0, notificationEvent: null };
+  }
+
+  const application = await Application.findById(schedule.applicationId).session(session);
+  if (!application) {
+    throw new Error("Interview Schedule references a missing Application");
+  }
+  const job = await Job.findById(application.jobId).select("title").session(session);
+
+  const cancelledSchedule = await InterviewSchedule.findOneAndUpdate(
+    {
+      _id: schedule._id,
+      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      expiresAt: { $lte: now },
+    },
+    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+    { returnDocument: "after", runValidators: true, session },
+  );
+  if (!cancelledSchedule) {
+    return { modifiedCount: 0, notificationEvent: null };
+  }
+
+  const notificationEvent = await createInterviewScheduleNotificationEvent({
+    application,
+    job,
+    schedule: cancelledSchedule,
+    type: NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CHANGED,
+    session,
+  });
+
+  return { modifiedCount: 1, notificationEvent };
 };
 
 // V11 F03/F04/F05/F06 SYSTEM Message consequence when Conversation already
@@ -4875,10 +5161,15 @@ const updateApplicationRecruitmentPipelineStatus = async ({
       }
 
       if (isApplicationTerminalStatus(targetStatus)) {
-        await cancelActiveInterviewScheduleForTerminalApplication({
-          applicationId: application._id,
-          session,
-        });
+        const terminalScheduleCancellation =
+          await cancelActiveInterviewScheduleForTerminalApplication({
+            application: updatedApplication,
+            job,
+            session,
+          });
+        if (terminalScheduleCancellation.notificationEvent) {
+          notificationEvents.push(terminalScheduleCancellation.notificationEvent);
+        }
       }
     });
   } finally {
@@ -5947,10 +6238,11 @@ const withdrawApplication = async ({
   const withdrawnAt = new Date();
   const session = await mongoose.startSession();
   let withdrawnApplication = null;
-  let notificationEvent = null;
+  const notificationEvents = [];
 
   try {
     await session.withTransaction(async () => {
+      notificationEvents.length = 0;
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
@@ -6022,7 +6314,7 @@ const withdrawApplication = async ({
         });
       }
 
-      notificationEvent = await createApplicationLifecycleNotificationEvent({
+      const notificationEvent = await createApplicationLifecycleNotificationEvent({
         application: withdrawnApplication,
         job,
         type: NOTIFICATION_TYPE.APPLICATION_WITHDRAWN,
@@ -6030,17 +6322,25 @@ const withdrawApplication = async ({
         recipientUserId,
         session,
       });
+      if (notificationEvent) {
+        notificationEvents.push(notificationEvent);
+      }
 
-      await cancelActiveInterviewScheduleForTerminalApplication({
-        applicationId: application._id,
-        session,
-      });
+      const terminalScheduleCancellation =
+        await cancelActiveInterviewScheduleForTerminalApplication({
+          application: withdrawnApplication,
+          job,
+          session,
+        });
+      if (terminalScheduleCancellation.notificationEvent) {
+        notificationEvents.push(terminalScheduleCancellation.notificationEvent);
+      }
     });
   } finally {
     await session.endSession();
   }
 
-  if (notificationEvent) {
+  for (const notificationEvent of notificationEvents) {
     try {
       await materializeNotificationEvent({ eventId: notificationEvent._id });
     } catch {
