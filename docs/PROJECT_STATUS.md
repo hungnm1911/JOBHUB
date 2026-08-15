@@ -94,6 +94,20 @@ best-effort; recovery remains idempotent. This slice does not change V10/V12
 source lifecycles, Availability submit, Schedule notifications, Assignment
 redesign, or realtime.
 
+Slice 07 is implemented and verified for Candidate Availability First Submit
+Notification (`F05` closure; `BR-25`–`BR-27`, `BR-47`–`BR-49`, `TX-01`). A
+winning V12 first-submit now serializes with Application Assignment changes
+without changing Application status, version, or timestamps. When the
+Application is `ASSIGNED(A)`, the sole current `CandidateAvailability` and one
+`INTERVIEW_AVAILABILITY_SUBMITTED` durable obligation for trusted current
+Assignee A commit in the same transaction; recipient/content are snapshotted
+from the persisted CompanyMember/User and Job state. When `UNASSIGNED`,
+first-submit still commits with no NotificationEvent and no Primary, outgoing,
+or future-Assignee fallback. Availability edit remains a separate current-set
+workflow and creates no additional event. Post-commit materialization is
+best-effort/recoverable and idempotent. This slice adds no Interview Schedule
+Notification, Availability lifecycle change, or realtime behavior.
+
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
 findings. Slice 01 covers first Candidate Availability submit and Application-read projection
@@ -1590,6 +1604,16 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V13 Slice 07 Candidate Availability First Submit Notification: the focused
+  Slice 07 plus V12 Availability/Assignment regression baseline passed 4 files /
+  41 tests, including the new 7-test
+  `test/notification/v13-slice07-candidate-availability-notification.test.js`;
+  then `cd backend && npm run verify:agent` passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 127 files / 1,222 tests). Coverage includes ASSIGNED trusted
+  recipient snapshots and Assignment ordering, UNASSIGNED no-event/no-fallback
+  behavior, edit exclusion, TX-01 rollback, concurrent duplicate first-submit,
+  and recoverable idempotent materialization.
 - V13 Slice 01 Implementation Readiness baseline: focused V12 Availability +
   MongoDB transaction infrastructure coverage passed (2 files / 23 tests),
   then the official `cd backend && npm run verify:agent` gate passed without

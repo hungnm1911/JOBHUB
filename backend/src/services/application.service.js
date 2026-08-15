@@ -1246,6 +1246,69 @@ const cancelActiveInterviewScheduleForTerminalApplication = async ({
   };
 };
 
+// Guard acquire: perform a real write for transaction serialization, then
+// restore updatedAt so the guard does not become an Application business change.
+const acquireWithRestoredUpdatedAt = async ({
+  acquire,
+  model,
+  documentId,
+  session,
+} = {}) => {
+  const before =
+    documentId == null
+      ? null
+      : await model
+          .findById(documentId)
+          .select("updatedAt")
+          .session(session)
+          .lean();
+
+  const acquired = await acquire();
+
+  if (acquired && before?.updatedAt) {
+    await model.findOneAndUpdate(
+      { _id: documentId },
+      { $set: { updatedAt: before.updatedAt } },
+      { session, timestamps: false },
+    );
+  }
+
+  return acquired;
+};
+
+// V13 F05 / TX-01: serialize first-submit recipient selection with every
+// Assignment CAS without changing Application status, version, or timestamps.
+const acquireApplicationAssignmentForAvailabilityFirstSubmit = async ({
+  application,
+  session,
+} = {}) => {
+  return acquireWithRestoredUpdatedAt({
+    model: Application,
+    documentId: application._id,
+    session,
+    acquire: () =>
+      Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          candidateUserId: application.candidateUserId,
+          jobId: application.jobId,
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          status: APPLICATION_STATUS.CONTACTED,
+          version: application.version,
+          assignedRecruiterCompanyMemberId:
+            application.assignedRecruiterCompanyMemberId ?? null,
+        },
+        {
+          $set: {
+            assignedRecruiterCompanyMemberId:
+              application.assignedRecruiterCompanyMemberId ?? null,
+          },
+        },
+        { returnDocument: "after", session },
+      ),
+  });
+};
+
 const normalizeFirstAvailabilitySubmission = ({ timezone, slots, now }) => {
   if (!isValidTimeZone(timezone)) {
     throw new AppError(400, "timezone must be a valid IANA time zone identifier", {
@@ -1302,8 +1365,10 @@ const normalizeFirstAvailabilitySubmission = ({ timezone, slots, now }) => {
   };
 };
 
-// V12 F02 Slice 01: first submit creates the sole current Availability only.
-// It intentionally does not create a Schedule or mutate Application status/version.
+// V12 F02 + V13 F05: first submit creates the sole current Availability and,
+// only when the winning Application assignment is ASSIGNED(A), the required
+// durable NotificationEvent for A in the same transaction. It never creates a
+// Schedule or mutates Application status/version; UNASSIGNED has no fallback.
 const submitCandidateAvailabilityFirstTime = async ({
   candidateUserId,
   actorUser,
@@ -1327,43 +1392,100 @@ const submitCandidateAvailabilityFirstTime = async ({
     });
   }
 
-  const application = await Application.findOne({
-    _id: applicationId,
-    candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
-  });
-
-  if (!application) {
-    throw new AppError(404, "Application not found", {
-      field: "applicationId",
-    });
-  }
-
-  // Slice 01 opens scheduling only from the current CONTACTED state. Legacy
-  // pre-V12 downstream Applications are never backfilled with inferred data.
-  if (application.status !== APPLICATION_STATUS.CONTACTED) {
-    throw new AppError(
-      409,
-      "Availability can first be submitted only while Application is CONTACTED",
-      { field: "status" },
-    );
-  }
-
   const submission = normalizeFirstAvailabilitySubmission({
     timezone,
     slots,
     now,
   });
+  const session = await mongoose.startSession();
+  let availability = null;
+  let notificationEvent = null;
 
   try {
-    const availability = await CandidateAvailability.create({
-      applicationId: application._id,
-      timezone: submission.timezone,
-      slots: submission.slots,
-      revision: 0,
-    });
+    await session.withTransaction(async () => {
+      // withTransaction may retry this callback after a transient write conflict.
+      availability = null;
+      notificationEvent = null;
 
-    return toCandidateAvailabilityProjection(availability);
+      const application = await Application.findOne({
+        _id: applicationId,
+        candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
+
+      if (!application) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      // Legacy pre-V12 downstream Applications are never backfilled with
+      // inferred Availability.
+      if (application.status !== APPLICATION_STATUS.CONTACTED) {
+        throw new AppError(
+          409,
+          "Availability can first be submitted only while Application is CONTACTED",
+          { field: "status" },
+        );
+      }
+
+      const acquiredApplication =
+        await acquireApplicationAssignmentForAvailabilityFirstSubmit({
+          application,
+          session,
+        });
+      if (!acquiredApplication) {
+        throw new AppError(
+          409,
+          "Application has changed; refresh and retry Availability submission",
+          { field: "applicationId" },
+        );
+      }
+
+      [availability] = await CandidateAvailability.create(
+        [
+          {
+            applicationId: acquiredApplication._id,
+            timezone: submission.timezone,
+            slots: submission.slots,
+            revision: 0,
+          },
+        ],
+        { session },
+      );
+
+      if (!isApplicationUnassigned(acquiredApplication)) {
+        const [assignee, job] = await Promise.all([
+          CompanyMember.findById(
+            acquiredApplication.assignedRecruiterCompanyMemberId,
+          )
+            .select("userId")
+            .session(session),
+          Job.findById(acquiredApplication.jobId).select("title").session(session),
+        ]);
+        if (!assignee?.userId || !job) {
+          throw new AppError(
+            409,
+            "Current Assignee is unavailable for Availability Notification",
+          );
+        }
+
+        const { event } = await createNotificationEvent({
+          eventKey: `interview-availability-submitted:${availability._id.toString()}`,
+          type: NOTIFICATION_TYPE.INTERVIEW_AVAILABILITY_SUBMITTED,
+          actorUserId: actorUser._id,
+          applicationId: acquiredApplication._id,
+          recipients: [
+            {
+              recipientUserId: assignee.userId,
+              content: `The candidate submitted interview availability for ${job.title}.`,
+            },
+          ],
+          session,
+        });
+        notificationEvent = event;
+      }
+    });
   } catch (error) {
     if (isMongoDuplicateKeyError(error)) {
       throw new AppError(
@@ -1374,7 +1496,19 @@ const submitCandidateAvailabilityFirstTime = async ({
     }
 
     throw error;
+  } finally {
+    await session.endSession();
   }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // Availability and its durable obligation stay committed for recovery.
+    }
+  }
+
+  return toCandidateAvailabilityProjection(availability);
 };
 
 // V12 F03: replace the one current Availability set, guarded by its revision.
@@ -3092,37 +3226,6 @@ const normalizeNormalMessageContent = (content) => {
   }
 
   return normalized;
-};
-
-// TX-06 guard acquire: canonical TX-02 conditional acquire for serialization,
-// then restore updatedAt in the same transaction so write-conflict behavior is
-// unchanged while guard documents keep their pre-Send timestamp (BR-49 / F10).
-const acquireWithRestoredUpdatedAt = async ({
-  acquire,
-  model,
-  documentId,
-  session,
-} = {}) => {
-  const before =
-    documentId == null
-      ? null
-      : await model
-          .findById(documentId)
-          .select("updatedAt")
-          .session(session)
-          .lean();
-
-  const acquired = await acquire();
-
-  if (acquired && before?.updatedAt) {
-    await model.findOneAndUpdate(
-      { _id: documentId },
-      { $set: { updatedAt: before.updatedAt } },
-      { session, timestamps: false },
-    );
-  }
-
-  return acquired;
 };
 
 // TX-06: write-lock current writable Assigned Application without bumping

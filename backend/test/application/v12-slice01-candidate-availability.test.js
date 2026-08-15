@@ -375,6 +375,7 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
 
     const events = await NotificationEvent.find({
       applicationId: application._id,
+      type: NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED,
     });
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe(NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED);
