@@ -2569,6 +2569,44 @@ const createConversationOnFirstAssignIfAbsent = async ({
   }
 };
 
+const createChatMessageNotificationEvent = async ({
+  applicationId,
+  message,
+  actorUserId = null,
+  recipients,
+  session,
+} = {}) => {
+  const recipientsByUserId = new Map();
+
+  for (const recipient of recipients) {
+    if (
+      recipient.recipientUserId == null ||
+      (actorUserId != null &&
+        recipient.recipientUserId.toString() === actorUserId.toString())
+    ) {
+      continue;
+    }
+
+    recipientsByUserId.set(recipient.recipientUserId.toString(), recipient);
+  }
+
+  if (recipientsByUserId.size === 0) {
+    return null;
+  }
+
+  const { event } = await createNotificationEvent({
+    eventKey: `chat-message-created:${message._id.toString()}`,
+    type: NOTIFICATION_TYPE.CHAT_MESSAGE_CREATED,
+    actorUserId,
+    applicationId,
+    messageId: message._id,
+    recipients: [...recipientsByUserId.values()],
+    session,
+  });
+
+  return event;
+};
+
 // V11 F03/F04/F05/F06 SYSTEM Message consequence when Conversation already
 // exists. Does not create Conversation, rewrite history, or act as Assignment
 // History / current-Assignee authority.
@@ -2598,7 +2636,39 @@ const createSystemMessageIfConversationExists = async ({
     { session },
   );
 
-  return systemMessage;
+  // V13 Slice 04 / F07 / TX-01: a SYSTEM Message is a normal persisted
+  // Message for CHAT_MESSAGE_CREATED. Resolve participants only from the
+  // post-transition Application state held by this transaction, never from an
+  // outgoing Assignee or caller input.
+  const application = await Application.findById(applicationId).session(session);
+  const recipients = [
+    {
+      recipientUserId: application.candidateUserId,
+      content: "There is a new update in your application conversation.",
+    },
+  ];
+
+  if (application.assignedRecruiterCompanyMemberId != null) {
+    const currentAssignee = await CompanyMember.findById(
+      application.assignedRecruiterCompanyMemberId,
+    ).session(session);
+
+    if (currentAssignee) {
+      recipients.push({
+        recipientUserId: currentAssignee.userId,
+        content: "There is a new update in your application conversation.",
+      });
+    }
+  }
+
+  const notificationEvent = await createChatMessageNotificationEvent({
+    applicationId: application._id,
+    message: systemMessage,
+    recipients,
+    session,
+  });
+
+  return { message: systemMessage, notificationEvent };
 };
 
 const toPublicConversationMessage = (message) => {
@@ -3110,6 +3180,7 @@ const commitNormalMessageSend = async ({
   const normalizedContent = normalizeNormalMessageContent(content);
   const session = await mongoose.startSession();
   let createdMessage = null;
+  let notificationEvent = null;
   let authority = null;
   let conversation = null;
 
@@ -3228,9 +3299,41 @@ const commitNormalMessageSend = async ({
       );
 
       createdMessage = message;
+
+      const recipients =
+        actor.kind === "CANDIDATE"
+          ? [
+              {
+                recipientUserId: eligibility.currentAssignee.userId,
+                content: "The candidate sent you a new message.",
+              },
+            ]
+          : [
+              {
+                recipientUserId: application.candidateUserId,
+                content: "Your recruiter sent you a new message.",
+              },
+            ];
+
+      notificationEvent = await createChatMessageNotificationEvent({
+        applicationId: application._id,
+        message,
+        actorUserId: senderUserId,
+        recipients,
+        session,
+      });
     });
   } finally {
     await session.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Message and durable event obligation remain available for
+      // canonical Notification recovery.
+    }
   }
 
   return {
@@ -3392,6 +3495,7 @@ const firstAssignApplication = async ({
   let assignedApplication = null;
   let job = null;
   let assigneeContext = null;
+  let notificationEvent = null;
 
   try {
     await session.withTransaction(async () => {
@@ -3508,28 +3612,34 @@ const firstAssignApplication = async ({
       // First Assign (no Conversation) creates Conversation with no SYSTEM
       // Message. Assign again (Conversation already exists) keeps that
       // Conversation and writes the required new-assignee SYSTEM Message.
+      // V13 Slice 04 routes Assign-again SYSTEM Message through the shared
+      // Message persistence primitive so CHAT_MESSAGE_CREATED is obligated
+      // in the same TX-01 boundary.
       const conversationOutcome = await createConversationOnFirstAssignIfAbsent({
         applicationId: assignedApplication._id,
         session,
       });
 
       if (!conversationOutcome.created) {
-        await Message.create(
-          [
-            {
-              conversationId: conversationOutcome.conversation._id,
-              type: MESSAGE_TYPE.SYSTEM,
-              senderUserId: null,
-              senderCompanyMemberId: null,
-              content: SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
-            },
-          ],
-          { session },
-        );
+        const systemMessageResult = await createSystemMessageIfConversationExists({
+          applicationId: assignedApplication._id,
+          content: SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
+          session,
+        });
+        notificationEvent = systemMessageResult?.notificationEvent ?? null;
       }
     });
   } finally {
     await session.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Assign-again Message and durable obligation remain
+      // recoverable by the canonical Notification worker.
+    }
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -3685,6 +3795,7 @@ const executePrimaryCurrentAssigneeMutation = async ({
   let mutatedApplication = null;
   let job = null;
   let assigneeContext = null;
+  let notificationEvent = null;
 
   try {
     await session.withTransaction(async () => {
@@ -3853,21 +3964,31 @@ const executePrimaryCurrentAssigneeMutation = async ({
       // already exists. Automatic Unassign Chat consequence is owned by
       // automaticallyUnassignApplication (F05 / TX-04).
       if (isUnassign) {
-        await createSystemMessageIfConversationExists({
+        const systemMessageResult = await createSystemMessageIfConversationExists({
           applicationId: mutatedApplication._id,
           content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
           session,
         });
+        notificationEvent = systemMessageResult?.notificationEvent ?? null;
       } else {
-        await createSystemMessageIfConversationExists({
+        const systemMessageResult = await createSystemMessageIfConversationExists({
           applicationId: mutatedApplication._id,
           content: SYSTEM_MESSAGE_CONTENT.RESPONSIBILITY_CHANGED,
           session,
         });
+        notificationEvent = systemMessageResult?.notificationEvent ?? null;
       }
     });
   } finally {
     await session.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Assignment/System Message outcome remains recoverable.
+    }
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({

@@ -52,6 +52,19 @@ attempt. Materialization failure leaves the committed Application and pending
 event for Slice 01 recovery; no Assignment, Conversation, Message, realtime,
 or other source workflow behavior is added.
 
+Slice 04 is implemented and verified for Durable Chat Notification (`F07`
+partial; `BR-10`, `BR-34`–`BR-37`, `BR-47`–`BR-49`, `TX-01`). Every successful
+V11 NORMAL or canonical SYSTEM Message now persists a single
+`CHAT_MESSAGE_CREATED` NotificationEvent in the same source transaction.
+Recipient/content snapshots use trusted post-transition Application and current
+Assignee state: Candidate sends notify the current Assignee, Assignee sends
+notify the Candidate, and SYSTEM Messages notify only valid post-transition
+participants. Human senders are excluded. Immediate materialization is
+best-effort; a failure leaves the committed Message and pending obligation for
+Slice 01 recovery, which remains idempotent. This slice adds no Assignment
+Notification, realtime, delivery/read receipt, Conversation state, or Message
+schema behavior.
+
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
 findings. Slice 01 covers first Candidate Availability submit and Application-read projection

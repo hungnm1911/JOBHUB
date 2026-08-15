@@ -20,6 +20,8 @@ import Application from "../../src/models/application.model.js";
 import Conversation from "../../src/models/conversation.model.js";
 import Job from "../../src/models/job.model.js";
 import Message from "../../src/models/message.model.js";
+import NotificationEvent from "../../src/models/notification-event.model.js";
+import Notification from "../../src/models/notification.model.js";
 import {
   firstAssignApplication,
   forceReassignApplication,
@@ -319,6 +321,30 @@ describe("V11 Slice 02 — Reassign / Take over SYSTEM Message (F03)", () => {
       expect(String(systemMessages[0].conversationId)).toBe(
         conversationId.toString(),
       );
+
+      const event = await NotificationEvent.findOne({
+        messageId: systemMessages[0]._id,
+      }).lean();
+      expect(event).toMatchObject({
+        type: "CHAT_MESSAGE_CREATED",
+        actorUserId: null,
+        applicationId: application._id,
+      });
+      expect(String(event.messageId)).toBe(systemMessages[0]._id.toString());
+      expect(event.recipients).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ recipientUserId: candidate.user._id }),
+          expect.objectContaining({ recipientUserId: supportingB.user._id }),
+        ]),
+      );
+      expect(event.recipients).toHaveLength(2);
+      expect(
+        event.recipients.some(
+          (recipient) =>
+            String(recipient.recipientUserId) === supporting.user._id.toString(),
+        ),
+      ).toBe(false);
+      expect(await Notification.countDocuments({ eventId: event._id })).toBe(2);
     });
 
     it("Take over onto Primary creates the same SYSTEM Message consequence", async () => {
