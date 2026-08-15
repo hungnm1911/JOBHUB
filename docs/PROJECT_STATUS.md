@@ -29,6 +29,18 @@ yet attach events to Direct Apply, Message, Assignment, Pipeline, Availability,
 or Interview transitions; it adds no inbox/read API, realtime delivery,
 delivery/session/presence persistence, or Job Invitation persistence.
 
+Slice 02 is implemented and verified for Notification Inbox + Read State
+(`F01`; `BR-01`–`BR-08`, `BR-43`). Authenticated Users can list and fetch only
+their own durable Notifications, retrieve a User-wide unread total derived
+solely from `readAt`, and explicitly open their own Notification via the
+one-way, idempotent `null → Date` transition. Listing/fetching does not mark
+Notifications read; no mark-all, mark-unread, bulk mutation, delete/archive,
+module badge, delivery/session state, or realtime behavior is added.
+Notification opening remains a Notification-only workflow: historical inbox
+items stay readable independently of current referenced resource state, while
+any resource navigation/action must continue through the canonical source
+module's current authorization.
+
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
 findings. Slice 01 covers first Candidate Availability submit and Application-read projection

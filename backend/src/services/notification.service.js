@@ -1,9 +1,63 @@
 import NotificationEvent from "../models/notification-event.model.js";
 import Notification from "../models/notification.model.js";
+import AppError from "../utils/app-error.js";
 
 const DEFAULT_RECOVERY_BATCH_SIZE = 100;
 
 const isDuplicateKeyError = (error) => error?.code === 11000;
+
+const findNotificationForRecipient = async ({
+  notificationId,
+  recipientUserId,
+}) => {
+  const notification = await Notification.findOne({
+    _id: notificationId,
+    recipientUserId,
+  });
+
+  if (!notification) {
+    throw new AppError(404, "Notification not found");
+  }
+
+  return notification;
+};
+
+const listNotificationsForRecipient = async ({ recipientUserId }) => {
+  return Notification.find({ recipientUserId }).sort({ createdAt: -1, _id: -1 });
+};
+
+const countUnreadNotificationsForRecipient = async ({ recipientUserId }) => {
+  return Notification.countDocuments({
+    recipientUserId,
+    readAt: null,
+  });
+};
+
+const openNotificationForRecipient = async ({
+  notificationId,
+  recipientUserId,
+  now = new Date(),
+}) => {
+  const newlyReadNotification = await Notification.findOneAndUpdate(
+    {
+      _id: notificationId,
+      recipientUserId,
+      readAt: null,
+    },
+    {
+      $set: { readAt: now },
+    },
+    {
+      returnDocument: "after",
+    },
+  );
+
+  if (newlyReadNotification) {
+    return newlyReadNotification;
+  }
+
+  return findNotificationForRecipient({ notificationId, recipientUserId });
+};
 
 const createNotificationEvent = async ({
   eventKey,
@@ -146,7 +200,11 @@ const recoverPendingNotificationEvents = async ({
 
 export {
   DEFAULT_RECOVERY_BATCH_SIZE,
+  countUnreadNotificationsForRecipient,
   createNotificationEvent,
+  findNotificationForRecipient,
+  listNotificationsForRecipient,
   materializeNotificationEvent,
+  openNotificationForRecipient,
   recoverPendingNotificationEvents,
 };
