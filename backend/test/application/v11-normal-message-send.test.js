@@ -480,7 +480,12 @@ describe("V11 Slice 06 — NORMAL Message Send + Full Chat Concurrency", () => {
     ).rejects.toThrow("chat event persistence failed");
 
     expect(await Message.countDocuments({ conversationId: fixture.conversation._id })).toBe(0);
-    expect(await NotificationEvent.countDocuments()).toBe(0);
+    expect(
+      await NotificationEvent.countDocuments({
+        type: "CHAT_MESSAGE_CREATED",
+        applicationId: fixture.application._id,
+      }),
+    ).toBe(0);
   });
 
   it("leaves no Message or Chat NotificationEvent for an unauthorized send", async () => {

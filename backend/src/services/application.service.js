@@ -2607,6 +2607,83 @@ const createChatMessageNotificationEvent = async ({
   return event;
 };
 
+const createAssignmentNotificationEvent = async ({
+  application,
+  job,
+  type,
+  actorUserId = null,
+  outgoingAssigneeUserId = null,
+  newAssigneeUserId = null,
+  session,
+} = {}) => {
+  const jobTitle = job?.title ?? "this position";
+  const recipientsByUserId = new Map();
+  const addRecipient = (recipientUserId, content) => {
+    if (
+      recipientUserId == null ||
+      (actorUserId != null &&
+        recipientUserId.toString() === actorUserId.toString())
+    ) {
+      return;
+    }
+
+    const recipientKey = recipientUserId.toString();
+    if (!recipientsByUserId.has(recipientKey)) {
+      recipientsByUserId.set(recipientKey, { recipientUserId, content });
+    }
+  };
+
+  if (type === NOTIFICATION_TYPE.APPLICATION_ASSIGNED) {
+    addRecipient(
+      application.candidateUserId,
+      `Your application for ${jobTitle} has been assigned to a recruiter.`,
+    );
+    addRecipient(
+      newAssigneeUserId,
+      `You have been assigned responsibility for an application for ${jobTitle}.`,
+    );
+  } else if (type === NOTIFICATION_TYPE.APPLICATION_REASSIGNED) {
+    addRecipient(
+      application.candidateUserId,
+      `The responsible recruiter for your application for ${jobTitle} has changed.`,
+    );
+    addRecipient(
+      outgoingAssigneeUserId,
+      `You are no longer responsible for an application for ${jobTitle}.`,
+    );
+    addRecipient(
+      newAssigneeUserId,
+      `You are now responsible for an application for ${jobTitle}.`,
+    );
+  } else if (type === NOTIFICATION_TYPE.APPLICATION_UNASSIGNED) {
+    addRecipient(
+      application.candidateUserId,
+      `Your application for ${jobTitle} is waiting for a new responsible recruiter.`,
+    );
+    addRecipient(
+      outgoingAssigneeUserId,
+      `You are no longer responsible for an application for ${jobTitle}.`,
+    );
+  } else {
+    throw new Error("Unsupported Assignment Notification type");
+  }
+
+  if (recipientsByUserId.size === 0) {
+    return null;
+  }
+
+  const { event } = await createNotificationEvent({
+    eventKey: `${type.toLowerCase()}:${application._id.toString()}:${application.version}`,
+    type,
+    actorUserId,
+    applicationId: application._id,
+    recipients: [...recipientsByUserId.values()],
+    session,
+  });
+
+  return event;
+};
+
 // V11 F03/F04/F05/F06 SYSTEM Message consequence when Conversation already
 // exists. Does not create Conversation, rewrite history, or act as Assignment
 // History / current-Assignee authority.
@@ -3495,7 +3572,7 @@ const firstAssignApplication = async ({
   let assignedApplication = null;
   let job = null;
   let assigneeContext = null;
-  let notificationEvent = null;
+  const notificationEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -3608,6 +3685,19 @@ const firstAssignApplication = async ({
         });
       }
 
+      const assignmentNotificationEvent =
+        await createAssignmentNotificationEvent({
+          application: assignedApplication,
+          job,
+          type: NOTIFICATION_TYPE.APPLICATION_ASSIGNED,
+          actorUserId: actorUser._id,
+          newAssigneeUserId: assigneeContext.user._id,
+          session,
+        });
+      if (assignmentNotificationEvent) {
+        notificationEvents.push(assignmentNotificationEvent);
+      }
+
       // V11 F01 / F06 / BR-05 / BR-06 / BR-29 / BR-30 / TX-01 / TX-05:
       // First Assign (no Conversation) creates Conversation with no SYSTEM
       // Message. Assign again (Conversation already exists) keeps that
@@ -3626,18 +3716,20 @@ const firstAssignApplication = async ({
           content: SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
           session,
         });
-        notificationEvent = systemMessageResult?.notificationEvent ?? null;
+        if (systemMessageResult?.notificationEvent) {
+          notificationEvents.push(systemMessageResult.notificationEvent);
+        }
       }
     });
   } finally {
     await session.endSession();
   }
 
-  if (notificationEvent) {
+  for (const notificationEvent of notificationEvents) {
     try {
       await materializeNotificationEvent({ eventId: notificationEvent._id });
     } catch {
-      // The committed Assign-again Message and durable obligation remain
+      // The committed Assignment/Message result and durable obligation remain
       // recoverable by the canonical Notification worker.
     }
   }
@@ -3795,7 +3887,7 @@ const executePrimaryCurrentAssigneeMutation = async ({
   let mutatedApplication = null;
   let job = null;
   let assigneeContext = null;
-  let notificationEvent = null;
+  const notificationEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -3907,6 +3999,9 @@ const executePrimaryCurrentAssigneeMutation = async ({
       }
 
       let nextAssignedRecruiterCompanyMemberId = null;
+      const outgoingAssignee = await CompanyMember.findById(
+        application.assignedRecruiterCompanyMemberId,
+      ).session(session);
 
       // TX-02 actor business access first: Company → actor Membership → actor
       // User. Target NONE still requires this; automatic Unassign does not.
@@ -3958,6 +4053,22 @@ const executePrimaryCurrentAssigneeMutation = async ({
         });
       }
 
+      const assignmentNotificationEvent =
+        await createAssignmentNotificationEvent({
+          application: mutatedApplication,
+          job,
+          type: isUnassign
+            ? NOTIFICATION_TYPE.APPLICATION_UNASSIGNED
+            : NOTIFICATION_TYPE.APPLICATION_REASSIGNED,
+          actorUserId: actorUser._id,
+          outgoingAssigneeUserId: outgoingAssignee?.userId ?? null,
+          newAssigneeUserId: assigneeContext?.user._id ?? null,
+          session,
+        });
+      if (assignmentNotificationEvent) {
+        notificationEvents.push(assignmentNotificationEvent);
+      }
+
       // V11 F03 / F04 / BR-15–BR-23 / BR-47 / BR-51 / TX-02 / TX-03:
       // A → B or A → NONE keeps the existing Conversation and writes the
       // required SYSTEM Message in the same atomic outcome when Conversation
@@ -3969,21 +4080,25 @@ const executePrimaryCurrentAssigneeMutation = async ({
           content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
           session,
         });
-        notificationEvent = systemMessageResult?.notificationEvent ?? null;
+        if (systemMessageResult?.notificationEvent) {
+          notificationEvents.push(systemMessageResult.notificationEvent);
+        }
       } else {
         const systemMessageResult = await createSystemMessageIfConversationExists({
           applicationId: mutatedApplication._id,
           content: SYSTEM_MESSAGE_CONTENT.RESPONSIBILITY_CHANGED,
           session,
         });
-        notificationEvent = systemMessageResult?.notificationEvent ?? null;
+        if (systemMessageResult?.notificationEvent) {
+          notificationEvents.push(systemMessageResult.notificationEvent);
+        }
       }
     });
   } finally {
     await session.endSession();
   }
 
-  if (notificationEvent) {
+  for (const notificationEvent of notificationEvents) {
     try {
       await materializeNotificationEvent({ eventId: notificationEvent._id });
     } catch {
@@ -4082,6 +4197,8 @@ const automaticallyUnassignApplication = async ({
     });
   }
 
+  let notificationEvent = null;
+
   const commitAutomaticUnassign = async (activeSession) => {
     let applicationQuery = Application.findById(applicationId);
     if (activeSession) {
@@ -4163,6 +4280,16 @@ const automaticallyUnassignApplication = async ({
       });
     }
 
+    const outgoingAssignee = await CompanyMember.findById(
+      application.assignedRecruiterCompanyMemberId,
+    ).session(activeSession);
+    notificationEvent = await createAssignmentNotificationEvent({
+      application: unassignedApplication,
+      type: NOTIFICATION_TYPE.APPLICATION_UNASSIGNED,
+      outgoingAssigneeUserId: outgoingAssignee?.userId ?? null,
+      session: activeSession,
+    });
+
     // V11 F05 / BR-23 / BR-27 / BR-28 / BR-47 / BR-51 / TX-04:
     // Same atomic outcome as Manual Unassign when Conversation exists. Content
     // only announces awaiting a new responsible recruiter — never LOCK /
@@ -4192,6 +4319,15 @@ const automaticallyUnassignApplication = async ({
     });
   } finally {
     await ownedSession.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed automatic Unassign and durable obligation remain
+      // recoverable by the canonical Notification worker.
+    }
   }
 
   return unassignedApplication;

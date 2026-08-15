@@ -18,6 +18,8 @@ import Application from "../../src/models/application.model.js";
 import Conversation from "../../src/models/conversation.model.js";
 import Job from "../../src/models/job.model.js";
 import Message from "../../src/models/message.model.js";
+import NotificationEvent from "../../src/models/notification-event.model.js";
+import Notification from "../../src/models/notification.model.js";
 import { firstAssignApplication } from "../../src/services/application.service.js";
 import {
   createActiveCompanyManagerContext,
@@ -241,6 +243,27 @@ describe("V11 Slice 01 — First Assign Conversation creation (F01)", () => {
       await expect(
         Message.countDocuments({ conversationId: conversations[0]._id }),
       ).resolves.toBe(0);
+
+      const assignmentEvent = await NotificationEvent.findOne({
+        type: "APPLICATION_ASSIGNED",
+        applicationId: application._id,
+      }).lean();
+      expect(assignmentEvent).toMatchObject({
+        actorUserId: primary.user._id,
+        applicationId: application._id,
+      });
+      expect(assignmentEvent.recipients).toEqual([
+        expect.objectContaining({ recipientUserId: candidate.user._id }),
+      ]);
+      expect(await Notification.countDocuments({ eventId: assignmentEvent._id })).toBe(
+        1,
+      );
+      await expect(
+        NotificationEvent.countDocuments({
+          type: "CHAT_MESSAGE_CREATED",
+          applicationId: application._id,
+        }),
+      ).resolves.toBe(0);
     });
 
     it("lets owning-Company Manager First Assign create the same Conversation consequence", async () => {
@@ -377,6 +400,75 @@ describe("V11 Slice 01 — First Assign Conversation creation (F01)", () => {
       ).resolves.toBe(0);
     });
 
+    it("rolls back Assign when its required NotificationEvent cannot persist (V13 TX-01)", async () => {
+      const { primary, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v13.s05.assign.event-failure",
+      });
+      const application = await createUnassignedAppliedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+      });
+      const createSpy = vi
+        .spyOn(NotificationEvent, "create")
+        .mockRejectedValue(new Error("forced assignment event failure"));
+
+      try {
+        await expect(
+          firstAssignApplication({
+            actorUser: primary.user,
+            jobId: job._id.toString(),
+            applicationId: application._id.toString(),
+            assigneeCompanyMemberId: primary.membership._id.toString(),
+            expectedVersion: 0,
+          }),
+        ).rejects.toThrow("forced assignment event failure");
+      } finally {
+        createSpy.mockRestore();
+      }
+
+      const persisted = await Application.findById(application._id).lean();
+      expect(persisted.assignedRecruiterCompanyMemberId).toBeNull();
+      expect(persisted.version).toBe(0);
+      await expect(
+        NotificationEvent.countDocuments({ applicationId: application._id }),
+      ).resolves.toBe(0);
+    });
+
+    it("keeps a committed Assign when inbox materialization temporarily fails", async () => {
+      const { primary, job, candidate } = await setupCompanyWithTeam({
+        emailPrefix: "v13.s05.assign.materialization",
+      });
+      const application = await createUnassignedAppliedApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+      });
+      const updateSpy = vi
+        .spyOn(Notification, "updateOne")
+        .mockRejectedValue(new Error("temporary inbox persistence failure"));
+
+      try {
+        await firstAssignApplication({
+          actorUser: primary.user,
+          jobId: job._id.toString(),
+          applicationId: application._id.toString(),
+          assigneeCompanyMemberId: primary.membership._id.toString(),
+          expectedVersion: 0,
+        });
+      } finally {
+        updateSpy.mockRestore();
+      }
+
+      const persisted = await Application.findById(application._id).lean();
+      expect(String(persisted.assignedRecruiterCompanyMemberId)).toBe(
+        primary.membership._id.toString(),
+      );
+      const event = await NotificationEvent.findOne({
+        type: "APPLICATION_ASSIGNED",
+        applicationId: application._id,
+      }).lean();
+      expect(event.materializedAt).toBeNull();
+    });
+
     it("creates only one Conversation when two First Assigns compete (TX-01)", async () => {
       const { primary, supporting, job, candidate } = await setupCompanyWithTeam({
         emailPrefix: "v11.s01.race",
@@ -415,6 +507,12 @@ describe("V11 Slice 01 — First Assign Conversation creation (F01)", () => {
       await expect(countMessagesForApplication(application._id)).resolves.toBe(
         0,
       );
+      await expect(
+        NotificationEvent.countDocuments({
+          type: "APPLICATION_ASSIGNED",
+          applicationId: application._id,
+        }),
+      ).resolves.toBe(1);
     });
 
     it("keeps existing Conversation and creates Assign-again SYSTEM Message (F06)", async () => {

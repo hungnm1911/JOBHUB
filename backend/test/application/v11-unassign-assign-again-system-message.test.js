@@ -312,6 +312,31 @@ describe("V11 Slice 03 — Manual Unassign + Assign again SYSTEM Message (F04/F0
         senderCompanyMemberId: null,
         content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
       });
+
+      const assignmentEvent = await NotificationEvent.findOne({
+        type: "APPLICATION_UNASSIGNED",
+        applicationId: application._id,
+      }).lean();
+      expect(assignmentEvent).toMatchObject({
+        actorUserId: primary.user._id,
+        applicationId: application._id,
+      });
+      expect(assignmentEvent.recipients).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ recipientUserId: candidate.user._id }),
+          expect.objectContaining({ recipientUserId: supporting.user._id }),
+        ]),
+      );
+      expect(assignmentEvent.recipients).toHaveLength(2);
+      expect(
+        assignmentEvent.recipients.find(
+          ({ recipientUserId }) =>
+            recipientUserId.toString() === candidate.user._id.toString(),
+        ).content,
+      ).not.toMatch(/lock|terminat|team|manager|platform/i);
+      expect(await Notification.countDocuments({ eventId: assignmentEvent._id })).toBe(
+        2,
+      );
     });
 
     it("lets Company Manager Unassign create the same SYSTEM Message consequence", async () => {

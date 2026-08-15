@@ -65,6 +65,18 @@ Slice 01 recovery, which remains idempotent. This slice adds no Assignment
 Notification, realtime, delivery/read receipt, Conversation state, or Message
 schema behavior.
 
+Slice 05 is implemented for Assignment Notification (`F03`; `BR-10`–`BR-19`,
+`BR-47`–`BR-50`, `TX-01`). Successful Assign, Reassign, and manual or automatic
+Unassign now persist their respective `APPLICATION_ASSIGNED`,
+`APPLICATION_REASSIGNED`, or `APPLICATION_UNASSIGNED` NotificationEvent inside
+the same source transaction. Recipient/content snapshots use trusted winning
+Application, outgoing/new Assignee, Job, and human actor state with actor
+filtering; automatic Unassign has no synthetic actor and candidate content
+does not expose lifecycle causes. Reassign remains one assignment event and any
+canonical SYSTEM Message remains an independent `CHAT_MESSAGE_CREATED` event.
+Post-commit inbox materialization is best-effort and recovery remains
+idempotent; no pipeline, interview, or realtime behavior is added.
+
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
 findings. Slice 01 covers first Candidate Availability submit and Application-read projection
