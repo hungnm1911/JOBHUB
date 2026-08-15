@@ -296,13 +296,16 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
     const token = await loginAndGetAccessToken(agent, {
       email: candidate.user.email,
     });
+    const futureUtcDate = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
 
     const response = await agent
       .post(`/api/candidate/applications/${application._id}/availability`)
       .set("Authorization", `Bearer ${token}`)
       .send({
         timezone: "UTC",
-        slots: [{ date: "2026-08-14", dayPart: "MORNING" }],
+        slots: [{ date: futureUtcDate, dayPart: "MORNING" }],
       });
 
     expect(response.status).toBe(201);

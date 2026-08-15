@@ -22,6 +22,7 @@ They do not claim that the current repository is fully compliant. Audited deviat
 - Controller files must use `<name>.controller.js`.
 - Service files must use `<name>.service.js`.
 - Model files must use `<name>.model.js`.
+- Approved background worker files must use `<name>.worker.js` under `src/workers/`.
 - Middleware and utility filenames must describe their responsibility in kebab-case, such as `error-handler.js` or `generate-password.js`.
 - JavaScript imports must include the `.js` extension because the backend uses ES modules.
 
@@ -84,6 +85,17 @@ Application routes must be registered before `not-found.js`, and `error-handler.
 - Migrations must be invoked explicitly and must not run from application startup, request handling, seed files, or module import side effects.
 - Seed scaffolding is not a migration runner and must not acquire migration responsibility.
 - A migration definition must not add business behavior beyond its approved persistence transition.
+
+### Background recovery
+
+- `backend/src/workers/notification-recovery.worker.js` is the canonical scheduler and lifecycle owner for V13 pending NotificationEvent recovery.
+- `backend/index.js` may start and stop this worker as part of process lifecycle orchestration, but must not contain Notification queries, materialization logic, retry loops, or event-selection rules.
+- The worker performs an immediate bounded pass after database and collection/index readiness, followed by non-overlapping fixed-delay passes while the process is running.
+- Recovery failures leave durable events pending and are retried by a later pass. They do not roll back a source business result that already committed.
+- The worker delegates Notification persistence and materialization to `backend/src/services/notification.service.js`; it must not import Mongoose models or access collections directly.
+- Multiple process-local workers may run concurrently. The Notification service and canonical unique indexes own idempotence; no worker lock, delivery receipt, retry telemetry, or generic event log is introduced.
+- The worker does not own Socket/realtime distribution. Realtime remains deferred until its later engineering contract.
+- Recovery timing and batch controls, when configurable, are normalized only by `backend/src/config/index.js`; no worker may read `process.env` directly.
 
 ## Layer rules
 
@@ -156,6 +168,14 @@ Service modules must not:
 - read environment variables directly; or
 - create duplicate database, Cloudinary, SMTP, or other shared clients.
 
+For V13 Notification recovery:
+
+- source business services retain ownership of their existing source transitions;
+- `notification.service.js` owns durable Notification obligation support, materialization, and pending-event recovery;
+- source services create required NotificationEvent obligations inside the existing source transaction by passing explicit values and its active MongoDB session;
+- recipient/content snapshots are fixed at source-event time and are never recomputed during recovery; and
+- an immediate post-commit materialization attempt may improve latency, but the background recovery worker remains the runtime recovery trigger and materialization failure must not turn an already committed source result into failure.
+
 There is no repository layer in the approved architecture. Services work directly with models. Introducing repositories requires explicit architectural approval.
 
 ### Models
@@ -172,6 +192,17 @@ Model modules must not:
 - implement route/controller behavior;
 - own multi-step business workflows; or
 - create database connections.
+
+### Background workers
+
+Worker modules may schedule and coordinate approved background execution. They must:
+
+- expose explicit lifecycle functions rather than start on import;
+- depend on services and normalized configuration only;
+- remain independent of Express request/response objects; and
+- contain no business rules or direct persistence access.
+
+No generic worker layer is otherwise approved. A new worker responsibility requires an explicit engineering-contract and source-of-truth update.
 
 ### Utils
 
@@ -245,6 +276,8 @@ The normal request dependency direction is:
 routes -> middlewares/controllers -> services -> models/database
                                       |
                                       +-> infrastructure clients and utils
+
+entry point -> approved workers -> services -> models/database
 ```
 
 Additional rules:
@@ -253,6 +286,7 @@ Additional rules:
 - Models must not import controllers, routes, or middleware.
 - Services may import models, other approved services, config-owned infrastructure clients, constants, and dependency-safe utils.
 - Configuration modules must not import feature routes, controllers, or services.
+- Workers must not import routes, controllers, middlewares, models, Mongoose, or database connection modules.
 - Circular feature dependencies must not be introduced.
 - Existing empty barrel modules do not require consumers to import through them; their intended status remains undecided.
 

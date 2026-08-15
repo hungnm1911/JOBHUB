@@ -104,6 +104,7 @@ Some expected file errors are currently formatted and returned directly by the c
 - `backend/src/config/index.js` is the canonical normalized application configuration provider.
 - `backend/index.js` consumes application configuration during runtime bootstrap, but does not own environment loading, parsing, validation, normalization, or defaults.
 - One-time data migrations required by an approved persistence contract are explicit database tooling. `backend/scripts/run-migration.js` owns migration invocation and connection orchestration, while versioned migration definitions live under `backend/src/database/migrations/`. Migrations are never run implicitly during application startup or seed execution.
+- V13 durable Notification recovery is the approved background-worker exception to request-only execution. `backend/src/workers/notification-recovery.worker.js` owns only the scheduling lifecycle for bounded, non-overlapping recovery passes and delegates materialization to `backend/src/services/notification.service.js`. `backend/index.js` starts the worker after MongoDB and required collection/index readiness, and stops it before disconnecting MongoDB during shutdown.
 - No repository layer is part of the current target architecture. Adding one requires explicit approval as an architecture change.
 
 ### Layer dependency direction
@@ -114,6 +115,8 @@ The intended request dependency direction is:
 route -> middleware -> controller -> service -> model/database
                                       |
                                       +-> approved infrastructure clients/utilities
+
+entry point -> background worker -> service -> model/database
 ```
 
 Not every endpoint must use every layer. A layer may be omitted when it has no responsibility for that endpoint, but callers must not skip a layer in order to take over that layer's responsibility.
@@ -151,6 +154,22 @@ Services own business workflows and business validation. Under the current targe
 - coordinate multiple models;
 - coordinate approved infrastructure clients, other services, constants, and utilities; and
 - return results or throw errors without depending on Express request or response objects.
+
+For V13, `notification.service.js` owns NotificationEvent creation support, Notification materialization, idempotent pending-event recovery, and the rule that recovery consumes immutable recipient/content snapshots rather than recomputing current recipients. Source business services remain owners of their source transitions and pass the active MongoDB session when creating a required durable obligation inside the source transaction.
+
+### Background workers
+
+The approved V13 Notification recovery worker:
+
+- performs one bounded recovery pass after startup readiness and then recurring fixed-delay passes;
+- never overlaps two passes within the same process;
+- calls the Notification service and does not access models directly;
+- leaves failed or partial events pending for a later pass;
+- does not persist retry telemetry, Socket delivery state, or a second event log;
+- does not emit realtime events; and
+- exposes start/stop lifecycle operations for the process entry point.
+
+Parallel application processes may run recovery passes concurrently. Correctness comes from the canonical unique indexes and idempotent Notification service, not from an in-memory or distributed worker lock. Exactly-once execution is not required.
 
 ### Models
 
@@ -194,5 +213,6 @@ The root entry point imports normalized application configuration as part of boo
 - Cross-cutting middleware does not absorb business workflows.
 - Generic utility modules do not become feature service substitutes.
 - New architectural layers or changes in ownership require explicit approval and corresponding documentation updates.
+- Background scheduling outside the approved V13 Notification recovery worker requires separate architectural approval.
 
 Current deviations from these constraints are catalogued in [`source-of-truth.md`](source-of-truth.md). They are documentation of the existing state, not authorization to duplicate or extend the mismatch.

@@ -2,6 +2,29 @@
 
 ## Current project state
 
+**V13 — Notification và phân phối realtime** is `READY FOR IMPLEMENTATION`.
+Its approved canonical Product/Data contracts are tracked at
+`docs/product/versions/v13-notification-realtime-distribution.md` and
+`docs/data/versions/v13-notification-realtime-distribution-data-model.md`.
+Gate 00 corrects the canonical boundary before business implementation: V12
+did not persist Notification, so V13 introduces both `Notification` and
+`NotificationEvent` as new entities; every V13 Notification has a required
+`eventId` and the `{ eventId, recipientUserId }` uniqueness is not partial.
+V13 also inherits the V12 Interview Schedule lifecycle unchanged and does not
+add `InterviewSchedule.COMPLETED` or `INTERVIEW_SCHEDULE_COMPLETED`.
+
+Slice 01 may implement only the Durable Notification Kernel + Recovery
+Foundation (`F11` partial; `BR-01`, `BR-04`, `BR-05`, `BR-47`–`BR-49`) after
+this readiness gate. The approved engineering contract assigns durable event,
+recipient-snapshot materialization, idempotence, and pending-event recovery to
+`notification.service.js`; a bounded, non-overlapping
+`notification-recovery.worker.js` owns scheduling only; `backend/index.js`
+owns explicit start/stop around database readiness and shutdown. Existing
+`MongoMemoryReplSet` and transaction regression infrastructure supports the
+required persistence/transaction invariants. Gate 00 adds no V13 Fxx behavior,
+collection, index, runtime worker, endpoint, or realtime behavior and does not
+change or relax a verification rule.
+
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
 findings. Slice 01 covers first Candidate Availability submit and Application-read projection
@@ -1468,6 +1491,11 @@ the current V10 revision complete.
 
 ## Deferred / not started
 
+- **V13 later-slice gates:** V12 closure is deferred as the acceptance gate for
+  V13 Slices 06–08 and does not block Slice 01. A separate realtime engineering
+  contract remains required before Slice 09 and is not prepared by Gate 00.
+  Realtime/offline client infrastructure remains a Slice 12 concern. No later-
+  slice prerequisite is pulled into Slice 01 readiness.
 - **V12 Final Acceptance:** Slices 01–08 are implemented and verified. Slice 09
   Final Acceptance remains in progress only for recorded acceptance findings;
   Slice 07 terminal cancellation and Slice 08 Assignment/Interview-read
@@ -1493,6 +1521,16 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V13 Slice 01 Implementation Readiness baseline: focused V12 Availability +
+  MongoDB transaction infrastructure coverage passed (2 files / 23 tests),
+  then the official `cd backend && npm run verify:agent` gate passed without
+  implementing V13 Fxx behavior (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016;
+  Vitest: 124 files / 1,194 tests). The stale fixed UTC calendar date in the V12
+  Candidate Availability HTTP regression was replaced by a future UTC date;
+  production date validation was not changed. Existing `MongoMemoryReplSet`
+  and transaction rollback coverage are sufficient for Slice 01 persistence
+  invariants, and no verification rule was changed or relaxed.
 - V12 Gate 00 Implementation Readiness baseline: the official
   `cd backend && npm run verify:agent` gate passed without implementing any V12
   Fxx behavior (ESLint: 0 errors / 2 existing warnings in
