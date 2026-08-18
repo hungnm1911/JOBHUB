@@ -16,6 +16,7 @@ import JOB_STATUS from "../../src/constants/job-status.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
 import Category from "../../src/models/category.model.js";
+import ExperienceLevel from "../../src/models/experience-level.model.js";
 import Job from "../../src/models/job.model.js";
 import User from "../../src/models/user.model.js";
 import { listCandidateSearchEligibleCandidateCvs } from "../../src/services/candidate-cv.service.js";
@@ -38,6 +39,23 @@ const createFieldCategory = async (name = "Software Engineering") => {
     name,
     level: CATEGORY_LEVEL.FIELD,
   });
+};
+
+const createPositionCategory = async ({
+  fieldCategoryId,
+  name = "Backend Developer",
+} = {}) => {
+  return Category.create({
+    name,
+    level: CATEGORY_LEVEL.POSITION,
+    parentCategoryId: fieldCategoryId,
+  });
+};
+
+const createExperienceLevel = async (
+  code = "UNDER_1_YEAR",
+) => {
+  return ExperienceLevel.create({ code });
 };
 
 const createRecruiterWithProofJob = async ({
@@ -355,5 +373,226 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
     expect(response.body.cvs[0]).not.toHaveProperty("email");
     expect(response.body.cvs[0]).not.toHaveProperty("phone");
     expect(response.body.cvs[0]).not.toHaveProperty("profile");
+  });
+
+  it("applies Category hierarchy filter with OR semantics in-group (BR-19, BR-21)", async () => {
+    const fieldA = await createFieldCategory("Engineering");
+    const positionA1 = await createPositionCategory({
+      fieldCategoryId: fieldA._id,
+      name: "Backend",
+    });
+    const positionA2 = await createPositionCategory({
+      fieldCategoryId: fieldA._id,
+      name: "Frontend",
+    });
+    const fieldB = await createFieldCategory("Design");
+    const positionB1 = await createPositionCategory({
+      fieldCategoryId: fieldB._id,
+      name: "UI Designer",
+    });
+    const { recruiter } = await createRecruiterWithProofJob({
+      emailPrefix: "v14.slice03.category",
+    });
+    const candidate = await createVerifiedUser({
+      email: "candidate.v14.slice03.category@example.com",
+      fullName: "Category Candidate",
+    });
+
+    const cvFieldA = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: fieldA._id,
+      name: "CV Field A",
+    });
+    const cvPositionA1 = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: positionA1._id,
+      name: "CV Position A1",
+    });
+    const cvPositionA2 = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: positionA2._id,
+      name: "CV Position A2",
+    });
+    const cvPositionB1 = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: positionB1._id,
+      name: "CV Position B1",
+    });
+
+    const results = await listCandidateSearchEligibleCandidateCvs({
+      actorUser: recruiter.user,
+      filters: {
+        categoryIds: [fieldA._id.toString(), positionB1._id.toString()],
+      },
+    });
+
+    expect(results.map((result) => result.cvId)).toEqual(
+      expect.arrayContaining([
+        cvFieldA._id.toString(),
+        cvPositionA1._id.toString(),
+        cvPositionA2._id.toString(),
+        cvPositionB1._id.toString(),
+      ]),
+    );
+    expect(results).toHaveLength(4);
+  });
+
+  it("applies Experience filter OR semantics and excludes missing metadata when filtered (BR-21, BR-22)", async () => {
+    const category = await createFieldCategory("Finance");
+    const junior = await createExperienceLevel("UNDER_1_YEAR");
+    const senior = await createExperienceLevel("FIVE_TO_TEN_YEARS");
+    const { recruiter } = await createRecruiterWithProofJob({
+      emailPrefix: "v14.slice03.experience",
+    });
+    const candidate = await createVerifiedUser({
+      email: "candidate.v14.slice03.experience@example.com",
+      fullName: "Experience Candidate",
+    });
+
+    const cvJunior = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "CV Junior",
+    });
+    await CandidateCV.updateOne(
+      { _id: cvJunior._id },
+      { $set: { experienceLevelId: junior._id } },
+    );
+
+    const cvSenior = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "CV Senior",
+    });
+    await CandidateCV.updateOne(
+      { _id: cvSenior._id },
+      { $set: { experienceLevelId: senior._id } },
+    );
+
+    await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "CV Missing Experience",
+    });
+
+    const filtered = await listCandidateSearchEligibleCandidateCvs({
+      actorUser: recruiter.user,
+      filters: {
+        experienceLevelIds: [junior._id.toString(), senior._id.toString()],
+      },
+    });
+
+    expect(filtered.map((result) => result.cvId)).toEqual(
+      expect.arrayContaining([cvJunior._id.toString(), cvSenior._id.toString()]),
+    );
+    expect(filtered).toHaveLength(2);
+  });
+
+  it("composes AND across Category and Experience groups (BR-21)", async () => {
+    const field = await createFieldCategory("Operations");
+    const position = await createPositionCategory({
+      fieldCategoryId: field._id,
+      name: "Supply Chain Specialist",
+    });
+    const level = await createExperienceLevel("THREE_TO_FIVE_YEARS");
+    const otherLevel = await createExperienceLevel("OVER_TEN_YEARS");
+    const { recruiter } = await createRecruiterWithProofJob({
+      emailPrefix: "v14.slice03.and",
+    });
+    const candidate = await createVerifiedUser({
+      email: "candidate.v14.slice03.and@example.com",
+      fullName: "AND Candidate",
+    });
+
+    const targetCv = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: position._id,
+      name: "Target CV",
+    });
+    await CandidateCV.updateOne(
+      { _id: targetCv._id },
+      { $set: { experienceLevelId: level._id } },
+    );
+
+    const wrongExperienceCv = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: position._id,
+      name: "Wrong Experience CV",
+    });
+    await CandidateCV.updateOne(
+      { _id: wrongExperienceCv._id },
+      { $set: { experienceLevelId: otherLevel._id } },
+    );
+
+    const wrongCategoryCv = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: field._id,
+      name: "Wrong Category CV",
+    });
+    await CandidateCV.updateOne(
+      { _id: wrongCategoryCv._id },
+      { $set: { experienceLevelId: otherLevel._id } },
+    );
+
+    const filtered = await listCandidateSearchEligibleCandidateCvs({
+      actorUser: recruiter.user,
+      filters: {
+        categoryIds: [position._id.toString()],
+        experienceLevelIds: [level._id.toString()],
+      },
+    });
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].cvId).toBe(targetCv._id.toString());
+  });
+
+  it("supports HTTP filter query params for category + experience (F03 partial)", async () => {
+    const agent = createTestAgent();
+    const field = await createFieldCategory("Product");
+    const position = await createPositionCategory({
+      fieldCategoryId: field._id,
+      name: "Product Manager",
+    });
+    const level = await createExperienceLevel("ONE_TO_THREE_YEARS");
+    const { recruiter } = await createRecruiterWithProofJob({
+      emailPrefix: "v14.slice03.http",
+    });
+    const candidate = await createVerifiedUser({
+      email: "candidate.v14.slice03.http@example.com",
+      fullName: "HTTP Filter Candidate",
+    });
+
+    const matchedCv = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: position._id,
+      name: "Matched CV",
+    });
+    await CandidateCV.updateOne(
+      { _id: matchedCv._id },
+      { $set: { experienceLevelId: level._id } },
+    );
+
+    await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: field._id,
+      name: "No Experience CV",
+    });
+
+    const accessToken = await loginAndGetAccessToken(agent, {
+      email: recruiter.user.email,
+      password: DEFAULT_PASSWORD,
+    });
+
+    const response = await agent
+      .get("/api/jobs/candidate-search/cvs")
+      .query({
+        categoryIds: field._id.toString(),
+        experienceLevelIds: level._id.toString(),
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.cvs).toHaveLength(1);
+    expect(response.body.cvs[0].cvId).toBe(matchedCv._id.toString());
   });
 });

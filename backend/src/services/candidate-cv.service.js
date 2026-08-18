@@ -1062,8 +1062,103 @@ const assertRecruiterCandidateSearchActor = (user) => {
   }
 };
 
-const listCandidateSearchEligibleCandidateCvs = async ({ actorUser }) => {
+const normalizeCandidateSearchFilterObjectIds = (values, field) => {
+  if (values == null) {
+    return [];
+  }
+
+  if (!Array.isArray(values)) {
+    throw new AppError(400, `${field} must be an array`, { field });
+  }
+
+  const normalized = [];
+  const seen = new Set();
+
+  for (const value of values) {
+    if (!mongoose.isValidObjectId(value)) {
+      throw new AppError(400, `Invalid ${field} entry`, { field });
+    }
+
+    const key = value.toString();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push(new mongoose.Types.ObjectId(key));
+  }
+
+  return normalized;
+};
+
+const resolveCandidateSearchCategoryFilterIds = async (categoryIds) => {
+  if (categoryIds.length === 0) {
+    return [];
+  }
+
+  const categories = await Category.find({
+    _id: { $in: categoryIds },
+  }).select("_id level");
+
+  if (categories.length !== categoryIds.length) {
+    throw new AppError(
+      400,
+      "categoryIds must reference canonical FIELD or POSITION categories",
+      {
+        field: "categoryIds",
+      },
+    );
+  }
+
+  const categoryIdSet = new Set(categories.map((category) => category._id.toString()));
+  const selectedFieldIds = [];
+
+  for (const category of categories) {
+    if (category.level === CATEGORY_LEVEL.FIELD) {
+      selectedFieldIds.push(category._id);
+      continue;
+    }
+
+    if (category.level !== CATEGORY_LEVEL.POSITION) {
+      throw new AppError(
+        400,
+        "categoryIds must reference canonical FIELD or POSITION categories",
+        {
+          field: "categoryIds",
+        },
+      );
+    }
+  }
+
+  if (selectedFieldIds.length === 0) {
+    return [...categoryIdSet].map((id) => new mongoose.Types.ObjectId(id));
+  }
+
+  const childPositions = await Category.find({
+    level: CATEGORY_LEVEL.POSITION,
+    parentCategoryId: { $in: selectedFieldIds },
+  }).select("_id");
+
+  for (const position of childPositions) {
+    categoryIdSet.add(position._id.toString());
+  }
+
+  return [...categoryIdSet].map((id) => new mongoose.Types.ObjectId(id));
+};
+
+const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {} }) => {
   assertRecruiterCandidateSearchActor(actorUser);
+
+  const requestedCategoryIds = normalizeCandidateSearchFilterObjectIds(
+    filters.categoryIds,
+    "categoryIds",
+  );
+  const requestedExperienceLevelIds = normalizeCandidateSearchFilterObjectIds(
+    filters.experienceLevelIds,
+    "experienceLevelIds",
+  );
+  const categoryFilterIds =
+    await resolveCandidateSearchCategoryFilterIds(requestedCategoryIds);
 
   // V14 BR-10..BR-16 + BR-32:
   // - local CandidateCV predicate: PUBLIC + not archived;
@@ -1082,6 +1177,12 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser }) => {
         sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
       },
     ],
+    ...(categoryFilterIds.length > 0
+      ? { categoryId: { $in: categoryFilterIds } }
+      : {}),
+    ...(requestedExperienceLevelIds.length > 0
+      ? { experienceLevelId: { $in: requestedExperienceLevelIds } }
+      : {}),
   }).sort({ updatedAt: -1, _id: -1 });
 
   if (candidateCvs.length === 0) {
