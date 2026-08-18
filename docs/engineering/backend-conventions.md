@@ -55,6 +55,7 @@ The current repository is mostly consistent with these patterns, but still conta
 - infrastructure readiness orchestration;
 - HTTP server startup;
 - HTTP server shutdown;
+- Socket.IO attach/close orchestration through the realtime-distribution owner;
 - process signals;
 - process-level uncaught error/rejection handling; and
 - graceful resource cleanup orchestration.
@@ -94,8 +95,23 @@ Application routes must be registered before `not-found.js`, and `error-handler.
 - Recovery failures leave durable events pending and are retried by a later pass. They do not roll back a source business result that already committed.
 - The worker delegates Notification persistence and materialization to `backend/src/services/notification.service.js`; it must not import Mongoose models or access collections directly.
 - Multiple process-local workers may run concurrently. The Notification service and canonical unique indexes own idempotence; no worker lock, delivery receipt, retry telemetry, or generic event log is introduced.
-- The worker does not own Socket/realtime distribution. Realtime remains deferred until its later engineering contract.
+- The worker does not own Socket/realtime distribution and must not call Notification emit directly. Any realtime fan-out happens only after durable materialization inside the Notification → realtime-distribution boundary.
 - Recovery timing and batch controls, when configurable, are normalized only by `backend/src/config/index.js`; no worker may read `process.env` directly.
+
+### Realtime distribution
+
+- `backend/src/services/realtime-distribution.service.js` is the canonical Socket.IO and Notification realtime-distribution owner for V13 Slice 09.
+- `backend/index.js` attaches Socket.IO to the process HTTP server through that owner after the HTTP server exists, and closes it during graceful shutdown. The entry point must not implement handshake auth, room membership, or emit fan-out inline.
+- Connection authentication reuses `authenticateAccess` from `backend/src/services/authenticate-access.service.js`. Handshake credentials must resolve to a valid AuthSession and `ACTIVE` User; onboarding-only access is not a Slice 09 realtime connection path.
+- One authenticated User may have many concurrent Socket connections. Membership is in-memory only, via a User-scoped room such as `user:{userId}`. Slice 09 does not persist SocketSession, connection maps, presence, or delivery receipts.
+- Notification realtime emit is recipient-scoped to that User room only. Cross-user leak, global Notification broadcast, and durable duplication per connection are forbidden.
+- Emit is allowed only after the durable Notification for that recipient exists. `notification.service.js` owns the post-materialization trigger; source/application services keep post-commit `materializeNotificationEvent` and must not emit Notification realtime themselves.
+- Emit is best-effort and outside MongoDB transactions. Socket failure must not delete durable Notification, must not roll back source business state, and does not require exactly-once delivery.
+- Reconnect must not replay Socket event history. Missed realtime events are recovered through durable Notification / current resource APIs already owned by earlier slices.
+- Read state remains durable `Notification.readAt` owned by `notification.service.js`. Socket sessions must not hold per-connection or per-device read state.
+- Slice 09 reserves the authenticated User-connection plane for later Message and Conversation-state realtime slices, but must not implement those event contracts, Conversation rooms, or offline orchestration.
+- Focused Socket tests own an ephemeral HTTP + Socket.IO server through the realtime-distribution lifecycle helpers. The existing HTTP `createTestAgent` harness remains HTTP-only unless a test explicitly attaches Socket.IO.
+- Any Socket-related environment controls are normalized only by `backend/src/config/index.js`.
 
 ## Layer rules
 
@@ -173,8 +189,16 @@ For V13 Notification recovery:
 - source business services retain ownership of their existing source transitions;
 - `notification.service.js` owns durable Notification obligation support, materialization, and pending-event recovery;
 - source services create required NotificationEvent obligations inside the existing source transaction by passing explicit values and its active MongoDB session;
-- recipient/content snapshots are fixed at source-event time and are never recomputed during recovery; and
-- an immediate post-commit materialization attempt may improve latency, but the background recovery worker remains the runtime recovery trigger and materialization failure must not turn an already committed source result into failure.
+- recipient/content snapshots are fixed at source-event time and are never recomputed during recovery;
+- an immediate post-commit materialization attempt may improve latency, but the background recovery worker remains the runtime recovery trigger and materialization failure must not turn an already committed source result into failure; and
+- after a durable Notification exists for a recipient, materialization may best-effort call `realtime-distribution.service.js` for recipient-scoped emit without importing Express, without persisting delivery state, and without treating Socket failure as materialization or source failure.
+
+For V13 Slice 09 realtime distribution:
+
+- `realtime-distribution.service.js` may attach Socket.IO to a Node `http.Server` and must not depend on Express request/response objects;
+- handshake authentication calls the canonical access-auth service rather than reimplementing session validation;
+- Notification emit APIs accept explicit recipient User id and already-persisted Notification data rather than HTTP/Socket request objects; and
+- Message/Conversation realtime helpers remain out of Slice 09 except for sharing the authenticated User-connection plane.
 
 There is no repository layer in the approved architecture. Services work directly with models. Introducing repositories requires explicit architectural approval.
 

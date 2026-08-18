@@ -122,6 +122,18 @@ transition, and post-commit materialization remains best-effort, recoverable,
 and idempotent. No V12 Availability, Assignment, Schedule history, or realtime
 behavior changes.
 
+Slice 09 engineering prerequisite is prepared and verified for Notification
+Realtime Distribution (`F09`; `BR-42`–`BR-45`, `BR-50`; Data §9.5 / §14.1).
+Engineering SoT now assigns Socket.IO lifecycle, handshake auth via
+`authenticateAccess`, in-memory User→connection membership, and
+recipient-scoped Notification emit to
+`backend/src/services/realtime-distribution.service.js`, with
+`backend/index.js` owning attach/close orchestration and
+`notification.service.js` owning the post-materialization emit trigger after
+durable Notification exists. No F09 Socket behavior is implemented yet;
+Message realtime, Conversation-state realtime, and offline orchestration
+remain later-slice concerns on the reserved shared connection plane.
+
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
 findings. Slice 01 covers first Candidate Availability submit and Application-read projection
@@ -1589,10 +1601,12 @@ the current V10 revision complete.
 ## Deferred / not started
 
 - **V13 later-slice gates:** V12 closure is deferred as the acceptance gate for
-  V13 Slices 06–08 and does not block Slice 01. A separate realtime engineering
-  contract remains required before Slice 09 and is not prepared by Gate 00.
-  Realtime/offline client infrastructure remains a Slice 12 concern. No later-
-  slice prerequisite is pulled into Slice 01 readiness.
+  V13 Slices 06–08 and does not block Slice 01. The Slice 09 realtime
+  engineering contract is now recorded in Engineering SoT / architecture /
+  backend conventions; F09 implementation may start against that ownership.
+  Message realtime, Conversation-state realtime, and offline/client
+  resynchronization orchestration remain later-slice concerns and are not
+  pulled into Slice 09 beyond the shared authenticated connection plane.
 - **V12 Final Acceptance:** Slices 01–08 are implemented and verified. Slice 09
   Final Acceptance remains in progress only for recorded acceptance findings;
   Slice 07 terminal cancellation and Slice 08 Assignment/Interview-read
@@ -1618,6 +1632,16 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V13 Slice 09 Notification Realtime Distribution engineering prerequisite:
+  Product/Data F09 ownership points were locked into Engineering SoT,
+  `architecture.md`, and `backend-conventions.md` without implementing F09
+  Socket behavior. Document consistency check: the deferred “realtime
+  engineering contract before Slice 09” note in PROJECT_STATUS was replaced by
+  the recorded owners above; no remaining engineering doc still defers Socket
+  ownership as a Slice 09 blocker. Official `cd backend && npm run verify:agent`
+  passed after the documentation-only change (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 128 files / 1,229 tests).
 - V13 Slice 07 Candidate Availability First Submit Notification: the focused
   Slice 07 plus V12 Availability/Assignment regression baseline passed 4 files /
   41 tests, including the new 7-test
