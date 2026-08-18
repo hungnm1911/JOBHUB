@@ -21,10 +21,39 @@ Recruitment Team lookup indexes on `Job`
 `{ companyId, supportingRecruiterCompanyMemberIds }`) plus focused HTTP/service
 coverage via the Candidate Search authorization probe.
 
+Slice 02 is implemented and verified for browsing the current search-eligible
+CandidateCV pool with stable default ordering (`F02`, `F04`; `BR-06`–`BR-16`,
+`BR-24`, `BR-25`, `BR-32`). The canonical owner extends
+`candidate-cv.service.js` with a Recruiter browse workflow gated by Slice 01
+authorization (`authorizeRecruiterCandidateSearchAccess`) and exposed via
+`GET /api/jobs/candidate-search/cvs` (Job-independent path). Eligibility is
+derived from authoritative current state only: local CandidateCV `PUBLIC` +
+not archived, Generated requires `status=ACTIVE`, Uploaded keeps V7 persisted
+`status=ACTIVE` normalization without an Uploaded-specific status business
+predicate, and final inclusion requires current Candidate `User` to be
+`ACTIVE` with verified email. Results remain CV-granular (no candidate-level
+aggregation, no metadata mixing across CVs), and list projection is limited to
+safe summary fields (`candidateFullName`, `cvName`, CV metadata). No full CV
+content, contact details, Candidate Profile payload, `defaultCandidateCvId`
+filtering, Preview/Download, or F03 filter groups were introduced in this
+slice.
+
+Slice 02 also adds the V14 CandidateCV browse/sort index set in the canonical
+partial scope (`visibility=PUBLIC`, `archivedAt=null`):
+`{ updatedAt:-1,_id:-1 }`,
+`{ categoryId:1,updatedAt:-1,_id:-1 }`,
+`{ experienceLevelId:1,updatedAt:-1,_id:-1 }`,
+`{ skillTags:1,updatedAt:-1,_id:-1 }`,
+`{ preferredLocations:1,updatedAt:-1,_id:-1 }`,
+`{ employmentTypes:1,updatedAt:-1,_id:-1 }`,
+`{ workModes:1,updatedAt:-1,_id:-1 }`.
+
 Verification for this state: focused V14 Slice 01 suite passed
 (`test/auth/v14-recruiter-candidate-search-eligibility.test.js`, 13 tests), and
+focused V14 Slice 02 suite passed
+(`test/auth/v14-candidate-search-browse-eligible-cvs.test.js`, 4 tests), and
 `cd backend && npm run verify:agent` passed with architecture rules
-`ARCH-001` through `ARCH-016`, 133 passing test files, and 1,273 passing tests.
+`ARCH-001` through `ARCH-016`, 134 passing test files, and 1,277 passing tests.
 ESLint reported 0 errors and the same 2 pre-existing `no-unused-vars` warnings
 in `test/job/v6-acceptance.test.js`.
 

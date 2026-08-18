@@ -15,6 +15,7 @@ import WORK_MODE from "../constants/work-mode.js";
 import CandidateCV from "../models/candidate-cv.model.js";
 import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
+import User from "../models/user.model.js";
 import AppError from "../utils/app-error.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
@@ -78,6 +79,22 @@ const toPublicCandidateCvSummary = (candidateCv) => {
     archivedAt: candidateCv.archivedAt ?? null,
     createdAt: candidateCv.createdAt,
     updatedAt: candidateCv.updatedAt,
+  };
+};
+
+const toCandidateSearchResultSummary = (candidateCv, candidate) => {
+  return {
+    cvId: candidateCv._id.toString(),
+    candidateFullName: candidate.fullName ?? null,
+    cvName: candidateCv.name,
+    categoryId: candidateCv.categoryId.toString(),
+    experienceLevelId: candidateCv.experienceLevelId
+      ? candidateCv.experienceLevelId.toString()
+      : null,
+    skillTags: [...(candidateCv.skillTags ?? [])],
+    preferredLocations: [...(candidateCv.preferredLocations ?? [])],
+    employmentTypes: [...(candidateCv.employmentTypes ?? [])],
+    workModes: [...(candidateCv.workModes ?? [])],
   };
 };
 
@@ -1035,6 +1052,65 @@ const listOwnActiveCandidateCvs = async ({ candidateUserId, actorUser }) => {
   return candidateCvs.map(toPublicCandidateCvSummary);
 };
 
+const assertRecruiterCandidateSearchActor = (user) => {
+  if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+    throw new AppError(403, "Recruiter Candidate Search access required");
+  }
+
+  if (user.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(403, "Recruiter account is not active");
+  }
+};
+
+const listCandidateSearchEligibleCandidateCvs = async ({ actorUser }) => {
+  assertRecruiterCandidateSearchActor(actorUser);
+
+  // V14 BR-10..BR-16 + BR-32:
+  // - local CandidateCV predicate: PUBLIC + not archived;
+  // - GENERATED requires status ACTIVE;
+  // - UPLOADED has no extra business status predicate;
+  // - final eligibility also requires current Candidate ACTIVE + verified email.
+  const candidateCvs = await CandidateCV.find({
+    visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+    archivedAt: null,
+    $or: [
+      {
+        sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+        status: CANDIDATE_CV_STATUS.ACTIVE,
+      },
+      {
+        sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
+      },
+    ],
+  }).sort({ updatedAt: -1, _id: -1 });
+
+  if (candidateCvs.length === 0) {
+    return [];
+  }
+
+  const candidateIds = [
+    ...new Set(candidateCvs.map((cv) => cv.candidateUserId.toString())),
+  ];
+  const candidates = await User.find({
+    _id: { $in: candidateIds },
+    role: USER_ROLE.CANDIDATE,
+    status: USER_STATUS.ACTIVE,
+    emailVerifiedAt: { $ne: null },
+  }).select("_id fullName");
+  const candidateById = new Map(
+    candidates.map((candidate) => [candidate._id.toString(), candidate]),
+  );
+
+  return candidateCvs
+    .filter((cv) => candidateById.has(cv.candidateUserId.toString()))
+    .map((cv) =>
+      toCandidateSearchResultSummary(
+        cv,
+        candidateById.get(cv.candidateUserId.toString()),
+      ),
+    );
+};
+
 const getOwnActiveCandidateCv = async ({
   candidateUserId,
   actorUser,
@@ -1671,6 +1747,7 @@ export {
   downloadOwnCandidateCv,
   evaluateGeneratedCvCompleteness,
   getOwnActiveCandidateCv,
+  listCandidateSearchEligibleCandidateCvs,
   listOwnActiveCandidateCvs,
   previewOwnCandidateCv,
   replaceOwnUploadedCandidateCvPdf,

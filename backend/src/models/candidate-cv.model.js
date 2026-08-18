@@ -679,6 +679,69 @@ candidateCvSchema.index(
     },
   },
 );
+candidateCvSchema.index(
+  { updatedAt: -1, _id: -1 },
+  {
+    partialFilterExpression: {
+      visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+      archivedAt: null,
+    },
+  },
+);
+candidateCvSchema.index(
+  { categoryId: 1, updatedAt: -1, _id: -1 },
+  {
+    partialFilterExpression: {
+      visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+      archivedAt: null,
+    },
+  },
+);
+candidateCvSchema.index(
+  { experienceLevelId: 1, updatedAt: -1, _id: -1 },
+  {
+    partialFilterExpression: {
+      visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+      archivedAt: null,
+    },
+  },
+);
+candidateCvSchema.index(
+  { skillTags: 1, updatedAt: -1, _id: -1 },
+  {
+    partialFilterExpression: {
+      visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+      archivedAt: null,
+    },
+  },
+);
+candidateCvSchema.index(
+  { preferredLocations: 1, updatedAt: -1, _id: -1 },
+  {
+    partialFilterExpression: {
+      visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+      archivedAt: null,
+    },
+  },
+);
+candidateCvSchema.index(
+  { employmentTypes: 1, updatedAt: -1, _id: -1 },
+  {
+    partialFilterExpression: {
+      visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+      archivedAt: null,
+    },
+  },
+);
+candidateCvSchema.index(
+  { workModes: 1, updatedAt: -1, _id: -1 },
+  {
+    partialFilterExpression: {
+      visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+      archivedAt: null,
+    },
+  },
+);
 
 const CandidateCV = model("CandidateCV", candidateCvSchema);
 

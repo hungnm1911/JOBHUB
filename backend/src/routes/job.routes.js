@@ -36,10 +36,13 @@ import {
   unassignApplicationHandler,
   updateApplicationRecruitmentPipelineStatusHandler,
 } from "../controllers/application.controller.js";
+import { listCandidateSearchEligibleCandidateCvsHandler } from "../controllers/candidate-search.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-company-manager-business-access.js";
 import authorizeCompanyStaffBusinessAccess from "../middlewares/authorize-company-staff-business-access.js";
-import authorizeRecruiterBusinessAccess from "../middlewares/authorize-recruiter-business-access.js";
+import authorizeRecruiterBusinessAccess, {
+  authorizeRecruiterCandidateSearchAccess,
+} from "../middlewares/authorize-recruiter-business-access.js";
 import authorizeRecruiterChatHistoryAccess from "../middlewares/authorize-recruiter-chat-history-access.js";
 import validateCreateDraftJob from "../middlewares/validate-create-draft-job.js";
 import validateCreateFirstInterviewProposal from "../middlewares/validate-create-first-interview-proposal.js";
@@ -111,6 +114,13 @@ router.get(
   authenticateAccess,
   authorizeRecruiterBusinessAccess,
   downloadRecruiterMyApplicationSubmittedCvHandler,
+);
+
+router.get(
+  "/candidate-search/cvs",
+  authenticateAccess,
+  authorizeRecruiterCandidateSearchAccess,
+  listCandidateSearchEligibleCandidateCvsHandler,
 );
 
 router.get(
