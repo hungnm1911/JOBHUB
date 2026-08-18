@@ -2,7 +2,7 @@
 
 ## Current project state
 
-**V14 — Candidate Search trên CV PUBLIC** is `IN PROGRESS`.
+**V14 — Candidate Search trên CV PUBLIC** is `COMPLETED AND VERIFIED`.
 Its approved canonical Product/Data contracts are tracked at
 `docs/product/versions/v14-candidate-search-public-cv.md` and
 `docs/data/versions/v14-candidate-search-public-cv-data-model.md`.
@@ -98,8 +98,27 @@ Uploaded-specific workflow), missing, ineligible-owner, and previously listed
 CVs that are no longer search-eligible are denied. Preview stays read-only
 and does not add Download, snapshot, view history/count, Invitation,
 Application, Conversation, Message, Notification, or realtime. Slice 05
-Generated Preview and Slice 01–04 Search/Filter behavior are unchanged;
-Slice 07 V14 acceptance-closure remains out of this slice.
+Generated Preview and Slice 01–04 Search/Filter behavior are unchanged.
+
+Slice 07 is implemented and verified for Dynamic Revocation + Read-only
+Acceptance Closure (`F01`–`F06` closure; `BR-01`–`BR-38`). It reuses the
+Slice 01–06 owners and HTTP surfaces without a parallel Search/Preview path.
+Focused acceptance proves every later Search, Filter, and Preview request
+re-derives Recruiter and CandidateCV eligibility from current authoritative
+state: last Primary/Supporting Job membership loss, Recruiter User or
+CompanyMember ineligibility, Company operational loss, Candidate ACTIVE/email
+verification loss, `PUBLIC → PRIVATE`, and Archive all revoke subsequent
+access. Prior search-list membership and client knowledge of `cvId` are not
+authorization. Anonymous, Candidate, Company Manager, and Platform Admin
+remain denied; client-supplied `companyId` cannot create cross-company
+authorization; CandidateCV stays Candidate-owned. Search/Filter/Preview stay
+read-only: no CandidateCV/Profile/Account mutation, no view/search history or
+count, no Recruiter Download, no Invitation/Application/Conversation/Message/
+Notification/realtime object, and no rewrite of an existing Application
+`submittedCvSnapshot`. Keyword/full-text search, Saved Search, view analytics,
+and V15+ Job Invitation remain out of scope. No production-owner change was
+required; current Slice 01–06 behavior already matched the canonical V14
+contract.
 
 Slice 02 also adds the V14 CandidateCV browse/sort index set in the canonical
 partial scope (`visibility=PUBLIC`, `archivedAt=null`):
@@ -119,10 +138,16 @@ focused V14 Slice 05 suite passed
 (`test/auth/v14-candidate-search-generated-preview.test.js`, 7 tests), and
 focused V14 Slice 06 suite passed
 (`test/auth/v14-candidate-search-uploaded-preview.test.js`, 8 tests), and
+focused V14 Slice 07 suite passed
+(`test/auth/v14-candidate-search-acceptance.test.js`, 11 tests), and the
+combined V14 Slice 01–07 focused baseline passed 5 files / 50 tests, and
 `cd backend && npm run verify:agent` passed with architecture rules
-`ARCH-001` through `ARCH-016`, 136 passing test files, and 1,299 passing tests.
+`ARCH-001` through `ARCH-016`, 137 passing test files, and 1,310 passing tests.
 ESLint reported 0 errors and the same 2 pre-existing `no-unused-vars` warnings
-in `test/job/v6-acceptance.test.js`.
+in `test/job/v6-acceptance.test.js`. V14 is `COMPLETED AND VERIFIED`; no V14
+business slice remains in the approved Candidate Search specification.
+Keyword/full-text search, Saved Search, Recruiter Download, Direct Message,
+and Job Invitation stay outside V14 by product boundary.
 
 **V13 — Notification và phân phối realtime** is `IN PROGRESS`.
 Its approved canonical Product/Data contracts are tracked at
@@ -1786,6 +1811,7 @@ the current V10 revision complete.
 - V6 Final Acceptance / regression closure is complete: F01–F05, BR-01–BR-33, and TX-01–TX-03 were rerun with the Slices 01–06 suites, S07 acceptance suite, and the five remediation suites. The focused baseline passed 12 files / 155 tests and the official backend gate passed. No known V6 business-blocking finding remains.
 - **V7 closure:** Final Acceptance / regression closure is complete across F01–F10, BR-01–BR-46, and TX-01. V7 is `COMPLETED AND VERIFIED`; no V7 business slice remains in the approved specification.
 - **V11 closure:** Final Acceptance / regression closure is complete across F01–F10, BR-01–BR-55, and TX-01–TX-08. V11 is `COMPLETED AND VERIFIED`; no V11 business slice remains in the approved Conversation/Chat specification. Realtime, notification, attachment, and related deferred capabilities stay outside V11 by product boundary.
+- **V14 closure:** Final Acceptance / regression closure is complete across F01–F06 and BR-01–BR-38 after Slices 01–06 and the Slice 07 dynamic-revocation and read-only acceptance suite. V14 is `COMPLETED AND VERIFIED`; no V14 business slice remains in the approved Candidate Search specification. Keyword/full-text search, Saved Search, Recruiter Download, Direct Message, and Job Invitation stay outside V14 by product boundary.
 - **Resolved in S09 / acceptance:** Fixed Harvard PDF renderer (including Unicode fidelity) and owner-scoped Uploaded PDF delivery via restricted Cloudinary `authenticated` delivery are established; Preview/Download do not persist public URLs or Generated PDF state.
 - **Resolved in S08:** Generated and Uploaded CVs share one owner-scoped common metadata mutation path; `PUBLIC` remains intent-only in V7 without search/access expansion.
 - **Resolved in S07:** Uploaded PDF replacement validates before mutating current file; persistence failure keeps the prior current file; concurrent/stale replace cannot delete a newer current external artifact; reuses the S06 inspection owner.
@@ -1794,6 +1820,19 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V14 Slice 07 Dynamic Revocation + Read-only Acceptance Closure: focused
+  Slice 07 coverage passed 11 tests in
+  `test/auth/v14-candidate-search-acceptance.test.js`, and the combined V14
+  Slice 01–07 baseline passed 5 files / 50 tests. Then
+  `cd backend && npm run verify:agent` passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 137 files / 1,310 tests). Coverage includes Recruiter last
+  Primary/Supporting membership loss, Recruiter User/membership ineligibility,
+  Company operational loss, Candidate ACTIVE/email-verification loss,
+  `PUBLIC → PRIVATE`, Archive, denied Anonymous/Candidate/Company Manager/
+  Platform Admin Search, client `companyId` non-expansion, CandidateCV
+  Candidate ownership, read-only Search/Filter/Preview, no Recruiter Download,
+  and unchanged historical Application `submittedCvSnapshot`.
 - V13 Slice 12 Offline / Reconnect Resync: focused integration coverage passed
   the new 6-test
   `test/notification/v13-slice12-offline-reconnect-resync.test.js` plus existing
