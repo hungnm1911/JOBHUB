@@ -2,6 +2,23 @@
 
 ## Current project state
 
+**V14 — Candidate Search trên CV PUBLIC** is `READY FOR IMPLEMENTATION` for
+Slice 01. Its approved canonical Product/Data contracts are tracked at
+`docs/product/versions/v14-candidate-search-public-cv.md` and
+`docs/data/versions/v14-candidate-search-public-cv-data-model.md`. Gate 00
+aligned the V14 data contract with V7's canonical metadata representation and
+Uploaded-CV `status = ACTIVE` normalization, and established the Slice 01
+Candidate Search eligibility ownership boundary in the engineering source of
+truth. This readiness step adds no V14 business behavior. Existing test and
+architecture verification infrastructure is sufficient for the read-only
+Slice 01 eligibility workflow; Slice 01 introduces no persistence or
+transaction invariant that requires a new harness.
+
+Gate 00 baseline verification: `cd backend && npm run verify:agent` passed
+with architecture rules `ARCH-001` through `ARCH-016`, 132 passing test files,
+and 1,260 passing tests. ESLint reported 0 errors and 2 pre-existing
+`no-unused-vars` warnings in `test/job/v6-acceptance.test.js`.
+
 **V13 — Notification và phân phối realtime** is `IN PROGRESS`.
 Its approved canonical Product/Data contracts are tracked at
 `docs/product/versions/v13-notification-realtime-distribution.md` and
