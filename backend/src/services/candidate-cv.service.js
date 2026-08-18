@@ -15,6 +15,7 @@ import WORK_MODE from "../constants/work-mode.js";
 import CandidateCV from "../models/candidate-cv.model.js";
 import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
+import User from "../models/user.model.js";
 import AppError from "../utils/app-error.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
@@ -78,6 +79,22 @@ const toPublicCandidateCvSummary = (candidateCv) => {
     archivedAt: candidateCv.archivedAt ?? null,
     createdAt: candidateCv.createdAt,
     updatedAt: candidateCv.updatedAt,
+  };
+};
+
+const toCandidateSearchResultSummary = (candidateCv, candidate) => {
+  return {
+    cvId: candidateCv._id.toString(),
+    candidateFullName: candidate.fullName ?? null,
+    cvName: candidateCv.name,
+    categoryId: candidateCv.categoryId.toString(),
+    experienceLevelId: candidateCv.experienceLevelId
+      ? candidateCv.experienceLevelId.toString()
+      : null,
+    skillTags: [...(candidateCv.skillTags ?? [])],
+    preferredLocations: [...(candidateCv.preferredLocations ?? [])],
+    employmentTypes: [...(candidateCv.employmentTypes ?? [])],
+    workModes: [...(candidateCv.workModes ?? [])],
   };
 };
 
@@ -1035,6 +1052,277 @@ const listOwnActiveCandidateCvs = async ({ candidateUserId, actorUser }) => {
   return candidateCvs.map(toPublicCandidateCvSummary);
 };
 
+const assertRecruiterCandidateSearchActor = (user) => {
+  if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+    throw new AppError(403, "Recruiter Candidate Search access required");
+  }
+
+  if (user.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(403, "Recruiter account is not active");
+  }
+};
+
+// V14 BR-10..BR-16 + BR-32 local CandidateCV predicate:
+// PUBLIC + not archived; GENERATED requires status ACTIVE;
+// UPLOADED has no extra business status predicate.
+const buildCandidateSearchEligibleCvFilter = () => ({
+  visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+  archivedAt: null,
+  $or: [
+    {
+      sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+      status: CANDIDATE_CV_STATUS.ACTIVE,
+    },
+    {
+      sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
+    },
+  ],
+});
+
+const buildSearchEligibleCandidateOwnerFilter = () => ({
+  role: USER_ROLE.CANDIDATE,
+  status: USER_STATUS.ACTIVE,
+  emailVerifiedAt: { $ne: null },
+});
+
+const loadCurrentSearchEligibleCandidateCvById = async (candidateCvId) => {
+  if (!mongoose.isValidObjectId(candidateCvId)) {
+    return null;
+  }
+
+  const candidateCv = await CandidateCV.findOne({
+    _id: candidateCvId,
+    ...buildCandidateSearchEligibleCvFilter(),
+  });
+
+  if (!candidateCv) {
+    return null;
+  }
+
+  const candidateOwner = await User.findOne({
+    _id: candidateCv.candidateUserId,
+    ...buildSearchEligibleCandidateOwnerFilter(),
+  }).select("_id");
+
+  if (!candidateOwner) {
+    return null;
+  }
+
+  return candidateCv;
+};
+
+const normalizeCandidateSearchFilterObjectIds = (values, field) => {
+  if (values == null) {
+    return [];
+  }
+
+  if (!Array.isArray(values)) {
+    throw new AppError(400, `${field} must be an array`, { field });
+  }
+
+  const normalized = [];
+  const seen = new Set();
+
+  for (const value of values) {
+    if (!mongoose.isValidObjectId(value)) {
+      throw new AppError(400, `Invalid ${field} entry`, { field });
+    }
+
+    const key = value.toString();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push(new mongoose.Types.ObjectId(key));
+  }
+
+  return normalized;
+};
+
+const normalizeCandidateSearchFilterStringValues = ({
+  values,
+  field,
+  allowedValues = null,
+  dedupe = true,
+}) => {
+  if (values == null) {
+    return [];
+  }
+
+  if (!Array.isArray(values)) {
+    throw new AppError(400, `${field} must be an array`, { field });
+  }
+
+  const normalized = [];
+  const seen = new Set();
+
+  for (const value of values) {
+    if (typeof value !== "string" || value.trim() === "") {
+      throw new AppError(400, `Invalid ${field} entry`, { field });
+    }
+
+    const trimmed = value.trim();
+
+    if (allowedValues && !allowedValues.has(trimmed)) {
+      throw new AppError(400, `Invalid ${field} entry`, { field });
+    }
+
+    if (dedupe) {
+      if (seen.has(trimmed)) {
+        continue;
+      }
+      seen.add(trimmed);
+    }
+
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+};
+
+const resolveCandidateSearchCategoryFilterIds = async (categoryIds) => {
+  if (categoryIds.length === 0) {
+    return [];
+  }
+
+  const categories = await Category.find({
+    _id: { $in: categoryIds },
+  }).select("_id level");
+
+  if (categories.length !== categoryIds.length) {
+    throw new AppError(
+      400,
+      "categoryIds must reference canonical FIELD or POSITION categories",
+      {
+        field: "categoryIds",
+      },
+    );
+  }
+
+  const categoryIdSet = new Set(categories.map((category) => category._id.toString()));
+  const selectedFieldIds = [];
+
+  for (const category of categories) {
+    if (category.level === CATEGORY_LEVEL.FIELD) {
+      selectedFieldIds.push(category._id);
+      continue;
+    }
+
+    if (category.level !== CATEGORY_LEVEL.POSITION) {
+      throw new AppError(
+        400,
+        "categoryIds must reference canonical FIELD or POSITION categories",
+        {
+          field: "categoryIds",
+        },
+      );
+    }
+  }
+
+  if (selectedFieldIds.length === 0) {
+    return [...categoryIdSet].map((id) => new mongoose.Types.ObjectId(id));
+  }
+
+  const childPositions = await Category.find({
+    level: CATEGORY_LEVEL.POSITION,
+    parentCategoryId: { $in: selectedFieldIds },
+  }).select("_id");
+
+  for (const position of childPositions) {
+    categoryIdSet.add(position._id.toString());
+  }
+
+  return [...categoryIdSet].map((id) => new mongoose.Types.ObjectId(id));
+};
+
+const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {} }) => {
+  assertRecruiterCandidateSearchActor(actorUser);
+
+  const requestedCategoryIds = normalizeCandidateSearchFilterObjectIds(
+    filters.categoryIds,
+    "categoryIds",
+  );
+  const requestedExperienceLevelIds = normalizeCandidateSearchFilterObjectIds(
+    filters.experienceLevelIds,
+    "experienceLevelIds",
+  );
+  const requestedSkillTags = normalizeCandidateSearchFilterStringValues({
+    values: filters.skillTags,
+    field: "skillTags",
+  });
+  const requestedPreferredLocations = normalizeCandidateSearchFilterStringValues(
+    {
+      values: filters.preferredLocations,
+      field: "preferredLocations",
+      allowedValues: LOCATION_VALUES,
+    },
+  );
+  const requestedEmploymentTypes = normalizeCandidateSearchFilterStringValues({
+    values: filters.employmentTypes,
+    field: "employmentTypes",
+    allowedValues: EMPLOYMENT_TYPE_VALUES,
+  });
+  const requestedWorkModes = normalizeCandidateSearchFilterStringValues({
+    values: filters.workModes,
+    field: "workModes",
+    allowedValues: WORK_MODE_VALUES,
+  });
+  const categoryFilterIds =
+    await resolveCandidateSearchCategoryFilterIds(requestedCategoryIds);
+
+  // V14 BR-10..BR-16 + BR-32:
+  // - local CandidateCV predicate: PUBLIC + not archived;
+  // - GENERATED requires status ACTIVE;
+  // - UPLOADED has no extra business status predicate;
+  // - final eligibility also requires current Candidate ACTIVE + verified email.
+  const candidateCvs = await CandidateCV.find({
+    ...buildCandidateSearchEligibleCvFilter(),
+    ...(categoryFilterIds.length > 0
+      ? { categoryId: { $in: categoryFilterIds } }
+      : {}),
+    ...(requestedExperienceLevelIds.length > 0
+      ? { experienceLevelId: { $in: requestedExperienceLevelIds } }
+      : {}),
+    ...(requestedSkillTags.length > 0
+      ? { skillTags: { $in: requestedSkillTags } }
+      : {}),
+    ...(requestedPreferredLocations.length > 0
+      ? { preferredLocations: { $in: requestedPreferredLocations } }
+      : {}),
+    ...(requestedEmploymentTypes.length > 0
+      ? { employmentTypes: { $in: requestedEmploymentTypes } }
+      : {}),
+    ...(requestedWorkModes.length > 0
+      ? { workModes: { $in: requestedWorkModes } }
+      : {}),
+  }).sort({ updatedAt: -1, _id: -1 });
+
+  if (candidateCvs.length === 0) {
+    return [];
+  }
+
+  const candidateIds = [
+    ...new Set(candidateCvs.map((cv) => cv.candidateUserId.toString())),
+  ];
+  const candidates = await User.find({
+    _id: { $in: candidateIds },
+    ...buildSearchEligibleCandidateOwnerFilter(),
+  }).select("_id fullName");
+  const candidateById = new Map(
+    candidates.map((candidate) => [candidate._id.toString(), candidate]),
+  );
+
+  return candidateCvs
+    .filter((cv) => candidateById.has(cv.candidateUserId.toString()))
+    .map((cv) =>
+      toCandidateSearchResultSummary(
+        cv,
+        candidateById.get(cv.candidateUserId.toString()),
+      ),
+    );
+};
+
 const getOwnActiveCandidateCv = async ({
   candidateUserId,
   actorUser,
@@ -1191,6 +1479,91 @@ const previewOwnCandidateCv = async ({
   throw new AppError(409, "Unsupported Candidate CV source type", {
     field: "sourceType",
   });
+};
+
+/**
+ * V14 Slice 05 / F05 Generated Preview: Recruiter reads current
+ * search-eligible GENERATED CandidateCV via the V7 Harvard renderer.
+ * Eligibility is current authoritative state only — prior search-list
+ * membership or client knowledge of cvId is not authorization.
+ * GENERATED/DRAFT/PUBLIC, Uploaded, PRIVATE, archived, and ineligible
+ * owners are denied. Read-only: no snapshot, view history, or Download.
+ */
+const previewSearchEligibleGeneratedCandidateCv = async ({
+  actorUser,
+  candidateCvId,
+}) => {
+  assertRecruiterCandidateSearchActor(actorUser);
+
+  const candidateCv =
+    await loadCurrentSearchEligibleCandidateCvById(candidateCvId);
+
+  if (
+    !candidateCv ||
+    candidateCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.GENERATED
+  ) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  return buildGeneratedCvPdfDelivery(candidateCv);
+};
+
+/**
+ * V14 Slice 06 / F05 Uploaded Preview: Recruiter reads the current
+ * search-eligible UPLOADED CandidateCV PDF via the V7 restricted delivery.
+ * Eligibility is current authoritative state only — prior search-list
+ * membership or client knowledge of cvId is not authorization.
+ * PRIVATE, archived, Generated, missing, and ineligible owners are denied.
+ * Persisted Uploaded status=ACTIVE is V7 normalization, not a V14
+ * eligibility predicate. Read-only: no snapshot, view history, or Download.
+ */
+const previewSearchEligibleUploadedCandidateCv = async ({
+  actorUser,
+  candidateCvId,
+}) => {
+  assertRecruiterCandidateSearchActor(actorUser);
+
+  const candidateCv =
+    await loadCurrentSearchEligibleCandidateCvById(candidateCvId);
+
+  if (
+    !candidateCv ||
+    candidateCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.UPLOADED
+  ) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  return buildUploadedCvPdfDelivery(candidateCv);
+};
+
+/**
+ * V14 Candidate Search Preview HTTP owner.
+ * GENERATED uses Slice 05 Harvard rendering; UPLOADED uses Slice 06
+ * restricted current-file delivery. Shared Slice 01 actor check and
+ * Slice 02 current eligibility — no parallel authorization path.
+ */
+const previewSearchEligibleCandidateCv = async ({
+  actorUser,
+  candidateCvId,
+}) => {
+  assertRecruiterCandidateSearchActor(actorUser);
+
+  const candidateCv =
+    await loadCurrentSearchEligibleCandidateCvById(candidateCvId);
+
+  if (!candidateCv) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  if (candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
+    return buildGeneratedCvPdfDelivery(candidateCv);
+  }
+
+  if (candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.UPLOADED) {
+    return buildUploadedCvPdfDelivery(candidateCv);
+  }
+
+  throw new AppError(404, "Candidate CV not found");
 };
 
 /**
@@ -1671,8 +2044,12 @@ export {
   downloadOwnCandidateCv,
   evaluateGeneratedCvCompleteness,
   getOwnActiveCandidateCv,
+  listCandidateSearchEligibleCandidateCvs,
   listOwnActiveCandidateCvs,
   previewOwnCandidateCv,
+  previewSearchEligibleCandidateCv,
+  previewSearchEligibleGeneratedCandidateCv,
+  previewSearchEligibleUploadedCandidateCv,
   replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
   saveOwnGeneratedDraftContent,

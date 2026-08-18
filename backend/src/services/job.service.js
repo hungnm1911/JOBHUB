@@ -1289,6 +1289,56 @@ const findOutstandingSupportingResponsibility = async ({
   return query.select("_id status applicationDeadline").lean();
 };
 
+const findCandidateSearchEligibilityProofJob = async ({
+  companyId,
+  recruiterCompanyMemberId,
+  session,
+} = {}) => {
+  let query = Job.findOne({
+    companyId,
+    $or: [
+      { primaryRecruiterCompanyMemberId: recruiterCompanyMemberId },
+      { supportingRecruiterCompanyMemberIds: recruiterCompanyMemberId },
+    ],
+  })
+    .select("_id companyId primaryRecruiterCompanyMemberId supportingRecruiterCompanyMemberIds")
+    .lean();
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  return query;
+};
+
+// V14 Slice 01 / BR-03: Candidate Search eligibility requires current
+// Primary/Supporting membership on at least one Job of the canonical Company.
+// The proving Job is not a scope key for Candidate Search and is not filtered
+// by PUBLISHED/deadline/Application activity.
+const assertRecruiterCandidateSearchJobMembership = async ({
+  companyId,
+  recruiterCompanyMemberId,
+  session,
+} = {}) => {
+  const proofJob = await findCandidateSearchEligibilityProofJob({
+    companyId,
+    recruiterCompanyMemberId,
+    session,
+  });
+
+  if (!proofJob) {
+    throw new AppError(
+      403,
+      "Recruiter must currently be Primary or Supporting on at least one Job to use Candidate Search",
+      {
+        field: "recruiterCompanyMemberId",
+      },
+    );
+  }
+
+  return proofJob;
+};
+
 // TX-02: shared ACTIVE Company Staff membership acquire. Used by Recruitment
 // Team responsibility writers (Recruiter) and manual assignment-management
 // actor authority (Recruiter Primary or Company Manager) so lock order stays
@@ -3296,6 +3346,7 @@ export {
   expirePublishedJobIfDue,
   findOutstandingPrimaryResponsibility,
   findOutstandingSupportingResponsibility,
+  findCandidateSearchEligibilityProofJob,
   getInternalJob,
   getJobApplicationDeadline,
   hasJobApplicationDeadlinePassed,
@@ -3312,4 +3363,5 @@ export {
   submitDraftJob,
   toPublicJob,
   updateDraftJob,
+  assertRecruiterCandidateSearchJobMembership,
 };
