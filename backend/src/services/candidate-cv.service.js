@@ -1062,6 +1062,55 @@ const assertRecruiterCandidateSearchActor = (user) => {
   }
 };
 
+// V14 BR-10..BR-16 + BR-32 local CandidateCV predicate:
+// PUBLIC + not archived; GENERATED requires status ACTIVE;
+// UPLOADED has no extra business status predicate.
+const buildCandidateSearchEligibleCvFilter = () => ({
+  visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
+  archivedAt: null,
+  $or: [
+    {
+      sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+      status: CANDIDATE_CV_STATUS.ACTIVE,
+    },
+    {
+      sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
+    },
+  ],
+});
+
+const buildSearchEligibleCandidateOwnerFilter = () => ({
+  role: USER_ROLE.CANDIDATE,
+  status: USER_STATUS.ACTIVE,
+  emailVerifiedAt: { $ne: null },
+});
+
+const loadCurrentSearchEligibleCandidateCvById = async (candidateCvId) => {
+  if (!mongoose.isValidObjectId(candidateCvId)) {
+    return null;
+  }
+
+  const candidateCv = await CandidateCV.findOne({
+    _id: candidateCvId,
+    ...buildCandidateSearchEligibleCvFilter(),
+  });
+
+  if (!candidateCv) {
+    return null;
+  }
+
+  const candidateOwner = await User.findOne({
+    _id: candidateCv.candidateUserId,
+    ...buildSearchEligibleCandidateOwnerFilter(),
+  }).select("_id");
+
+  if (!candidateOwner) {
+    return null;
+  }
+
+  return candidateCv;
+};
+
 const normalizeCandidateSearchFilterObjectIds = (values, field) => {
   if (values == null) {
     return [];
@@ -1228,17 +1277,7 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
   // - UPLOADED has no extra business status predicate;
   // - final eligibility also requires current Candidate ACTIVE + verified email.
   const candidateCvs = await CandidateCV.find({
-    visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
-    archivedAt: null,
-    $or: [
-      {
-        sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
-        status: CANDIDATE_CV_STATUS.ACTIVE,
-      },
-      {
-        sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
-      },
-    ],
+    ...buildCandidateSearchEligibleCvFilter(),
     ...(categoryFilterIds.length > 0
       ? { categoryId: { $in: categoryFilterIds } }
       : {}),
@@ -1268,9 +1307,7 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
   ];
   const candidates = await User.find({
     _id: { $in: candidateIds },
-    role: USER_ROLE.CANDIDATE,
-    status: USER_STATUS.ACTIVE,
-    emailVerifiedAt: { $ne: null },
+    ...buildSearchEligibleCandidateOwnerFilter(),
   }).select("_id fullName");
   const candidateById = new Map(
     candidates.map((candidate) => [candidate._id.toString(), candidate]),
@@ -1442,6 +1479,33 @@ const previewOwnCandidateCv = async ({
   throw new AppError(409, "Unsupported Candidate CV source type", {
     field: "sourceType",
   });
+};
+
+/**
+ * V14 Slice 05 / F05 Generated Preview: Recruiter reads current
+ * search-eligible GENERATED CandidateCV via the V7 Harvard renderer.
+ * Eligibility is current authoritative state only — prior search-list
+ * membership or client knowledge of cvId is not authorization.
+ * GENERATED/DRAFT/PUBLIC, Uploaded, PRIVATE, archived, and ineligible
+ * owners are denied. Read-only: no snapshot, view history, or Download.
+ */
+const previewSearchEligibleGeneratedCandidateCv = async ({
+  actorUser,
+  candidateCvId,
+}) => {
+  assertRecruiterCandidateSearchActor(actorUser);
+
+  const candidateCv =
+    await loadCurrentSearchEligibleCandidateCvById(candidateCvId);
+
+  if (
+    !candidateCv ||
+    candidateCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.GENERATED
+  ) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  return buildGeneratedCvPdfDelivery(candidateCv);
 };
 
 /**
@@ -1925,6 +1989,7 @@ export {
   listCandidateSearchEligibleCandidateCvs,
   listOwnActiveCandidateCvs,
   previewOwnCandidateCv,
+  previewSearchEligibleGeneratedCandidateCv,
   replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
   saveOwnGeneratedDraftContent,

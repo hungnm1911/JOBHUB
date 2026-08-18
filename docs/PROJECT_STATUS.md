@@ -62,6 +62,26 @@ accepts all six filter-group query params:
 `categoryIds`, `experienceLevelIds`, `skillTags`, `preferredLocations`,
 `employmentTypes`, `workModes`.
 
+Slice 05 is implemented and verified for Generated CV Recruiter Preview
+(`F05` partial, `F06` partial; `BR-26`, `BR-27`, `BR-29`–`BR-38`). Eligible
+Recruiters preview the current Harvard representation of a `GENERATED`
+CandidateCV via `GET /api/jobs/candidate-search/cvs/:cvId/preview`. The
+canonical owner remains `candidate-cv.service.js`
+(`previewSearchEligibleGeneratedCandidateCv`), gated by Slice 01
+`authorizeRecruiterCandidateSearchAccess` and reusing Slice 02 current
+CandidateCV eligibility (`PUBLIC`, not archived, Generated `status=ACTIVE`,
+Candidate owner `ACTIVE` with verified email). Preview re-checks that
+authoritative state on every request and does not treat prior search-list
+membership or client knowledge of `cvId` as authorization.
+`GENERATED/DRAFT/PUBLIC`, PRIVATE, archived, Uploaded, missing, and
+ineligible-owner CVs are denied. Delivery reuses the V7 Harvard renderer on
+current CV content, including contact details the Candidate placed in that CV,
+without expanding to Candidate Profile, other CVs, Application, or Recruiter
+Download. The workflow is read-only: no CandidateCV/Profile/Account mutation,
+snapshot, view history/count, Invitation, Application, Conversation, Message,
+Notification, or realtime event. Uploaded CV Recruiter Preview remains Slice
+06; Slice 01–04 Search/Filter behavior is unchanged.
+
 Slice 02 also adds the V14 CandidateCV browse/sort index set in the canonical
 partial scope (`visibility=PUBLIC`, `archivedAt=null`):
 `{ updatedAt:-1,_id:-1 }`,
@@ -76,8 +96,10 @@ Verification for this state: focused V14 Slice 01 suite passed
 (`test/auth/v14-recruiter-candidate-search-eligibility.test.js`, 13 tests), and
 focused V14 Slice 02 suite passed
 (`test/auth/v14-candidate-search-browse-eligible-cvs.test.js`, 11 tests), and
+focused V14 Slice 05 suite passed
+(`test/auth/v14-candidate-search-generated-preview.test.js`, 7 tests), and
 `cd backend && npm run verify:agent` passed with architecture rules
-`ARCH-001` through `ARCH-016`, 134 passing test files, and 1,284 passing tests.
+`ARCH-001` through `ARCH-016`, 135 passing test files, and 1,291 passing tests.
 ESLint reported 0 errors and the same 2 pre-existing `no-unused-vars` warnings
 in `test/job/v6-acceptance.test.js`.
 

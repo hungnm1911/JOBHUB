@@ -1,4 +1,7 @@
-import { listCandidateSearchEligibleCandidateCvs } from "../services/candidate-cv.service.js";
+import {
+  listCandidateSearchEligibleCandidateCvs,
+  previewSearchEligibleGeneratedCandidateCv,
+} from "../services/candidate-cv.service.js";
 
 const normalizeQueryArray = (value) => {
   if (value == null) {
@@ -62,4 +65,37 @@ const listCandidateSearchEligibleCandidateCvsHandler = async (
   }
 };
 
-export { listCandidateSearchEligibleCandidateCvsHandler };
+const sendCandidateSearchCvPdf = (response, delivery, disposition) => {
+  response.setHeader("Content-Type", delivery.mimeType);
+  response.setHeader(
+    "Content-Disposition",
+    `${disposition}; filename="${delivery.fileName}"`,
+  );
+  response.setHeader("Content-Length", delivery.buffer.length);
+  // V14 Preview must not leak storage URLs or invent public-access semantics.
+  response.setHeader("Cache-Control", "private, no-store");
+
+  return response.status(200).send(delivery.buffer);
+};
+
+const previewSearchEligibleGeneratedCandidateCvHandler = async (
+  request,
+  response,
+  next,
+) => {
+  try {
+    const delivery = await previewSearchEligibleGeneratedCandidateCv({
+      actorUser: request.auth.user,
+      candidateCvId: request.params.cvId,
+    });
+
+    return sendCandidateSearchCvPdf(response, delivery, "inline");
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export {
+  listCandidateSearchEligibleCandidateCvsHandler,
+  previewSearchEligibleGeneratedCandidateCvHandler,
+};
