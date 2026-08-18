@@ -2,6 +2,51 @@
 
 ## Current project state
 
+**V15 — Job Invitation và nhánh Recruiter săn ứng viên** is `READY FOR
+IMPLEMENTATION` for Slice 01 only. Its approved canonical Product/Data
+contracts are established at
+`docs/product/versions/v15-job-invitation-recruiter-sourcing.md` and
+`docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`.
+This readiness step introduces no V15 Fxx behavior.
+
+Slice 01 is limited to the persistence kernel: canonical Job Invitation
+status/invalidation-reason vocabularies, `JobInvitation` with embedded
+`InvitedCvSnapshot`, the approved Application source/source-reference
+extension, Notification/Event vocabulary extension, local state matrices,
+and indexes. Engineering ownership for those persistence artifacts is now
+recorded in `docs/engineering/source-of-truth.md`. The existing MongoDB
+replica-set harness proves transaction rollback and the current collection-
+invariant pattern supports schema/database enforcement; the focused
+transaction infrastructure test passes. `ARCH-001` through `ARCH-016` accept
+the planned canonical constants/model locations, so no test infrastructure or
+verification rule was changed or weakened.
+
+The V15 Data contract now uses semantic invalidation reasons
+(`CANDIDATE_NOT_ACTIVE`, `COMPANY_NOT_OPERATIONAL`, `SENDER_NOT_ACTIVE`, and
+the remaining exact Product causes) and defines `invalidatedAt` as the
+effective business time of the invalidating source cause rather than later
+terminal materialization time. This is persistence semantics only; no
+expiration/invalidation runtime is implemented by readiness.
+
+Verification for this readiness state: `cd backend && npm run verify:agent`
+passed on 2026-08-19 with ESLint 0 errors / the same 2 pre-existing V6
+`no-unused-vars` warnings, architecture rules `ARCH-001` through `ARCH-016`,
+137 passing test files, and 1,310 passing tests.
+
+Later-slice prerequisites remain deferred and are not authority for Slice 01:
+
+* Slice 02 must close the shared Candidate–Job serialization contract used by
+  Send and Direct Apply, establish the shared neutral CV snapshot-capture
+  owner, and obtain Product confirmation for the exact BR-23 timezone/day
+  cutoff before implementing Send expiration derivation.
+* Slice 06 must establish expiration/invalidation materialization ownership
+  and runtime integration, including preserving canonical effective-cause
+  times when materialization occurs later.
+* Slice 08 must establish the atomic Accept orchestration and Conversation
+  creation owner; V12/V13 evidence is required at this slice.
+* Slice 09 Final Acceptance requires closure of the applicable prior-version
+  acceptance baselines. V12/V13 closure does not block Slice 01.
+
 **V14 — Candidate Search trên CV PUBLIC** is `COMPLETED AND VERIFIED`.
 Its approved canonical Product/Data contracts are tracked at
 `docs/product/versions/v14-candidate-search-public-cv.md` and
