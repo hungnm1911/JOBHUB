@@ -189,9 +189,46 @@ const emitMessageToRecipients = ({
   }
 };
 
+const emitConversationStateToRecipients = ({
+  recipientUserIds,
+  conversationId,
+  applicationId,
+  mode,
+} = {}) => {
+  if (!ioServer || conversationId == null || applicationId == null || mode == null) {
+    return;
+  }
+
+  const payload = {
+    conversationId: String(conversationId),
+    applicationId: String(applicationId),
+    mode,
+  };
+  const uniqueRecipientIds = [
+    ...new Set(
+      (recipientUserIds ?? [])
+        .map((recipientUserId) =>
+          recipientUserId == null ? null : String(recipientUserId),
+        )
+        .filter(Boolean),
+    ),
+  ];
+
+  for (const recipientId of uniqueRecipientIds) {
+    try {
+      ioServer
+        .to(getUserRealtimeRoomName(recipientId))
+        .emit(REALTIME_EVENT.CONVERSATION_STATE, payload);
+    } catch {
+      // Socket fan-out is best-effort and must not fail the caller.
+    }
+  }
+};
+
 export {
   attachRealtimeDistribution,
   closeRealtimeDistribution,
+  emitConversationStateToRecipients,
   emitMessageToRecipients,
   emitNotificationToRecipient,
   fetchUserRealtimeSockets,

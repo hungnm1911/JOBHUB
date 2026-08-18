@@ -10,6 +10,7 @@ import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
 import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
 import CANDIDATE_CV_UPLOADED_STORAGE from "../constants/candidate-cv-uploaded-storage.js";
 import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
+import CONVERSATION_REALTIME_MODE from "../constants/conversation-realtime-mode.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import MESSAGE_TYPE from "../constants/message-type.js";
@@ -46,7 +47,7 @@ import {
   createNotificationEvent,
   materializeNotificationEvent,
 } from "./notification.service.js";
-import { emitMessageToRecipients } from "./realtime-distribution.service.js";
+import { emitConversationStateToRecipients, emitMessageToRecipients } from "./realtime-distribution.service.js";
 import {
   acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
@@ -2983,6 +2984,101 @@ const emitCommittedChatMessageRealtimeBestEffort = ({
   }
 };
 
+const resolveConversationStateRealtimeRecipients = async ({
+  application,
+  session,
+} = {}) => {
+  if (application == null) {
+    return null;
+  }
+
+  let conversationQuery = Conversation.findOne({
+    applicationId: application._id,
+  });
+  if (session) {
+    conversationQuery = conversationQuery.session(session);
+  }
+
+  const conversation = await conversationQuery;
+
+  if (!conversation) {
+    return null;
+  }
+
+  const recipientUserIds = new Set([
+    application.candidateUserId.toString(),
+  ]);
+
+  if (!isApplicationUnassigned(application)) {
+    let assigneeQuery = CompanyMember.findById(
+      application.assignedRecruiterCompanyMemberId,
+    );
+    if (session) {
+      assigneeQuery = assigneeQuery.session(session);
+    }
+
+    const assignee = await assigneeQuery;
+
+    if (assignee) {
+      let assigneeUserQuery = User.findById(assignee.userId);
+      if (session) {
+        assigneeUserQuery = assigneeUserQuery.session(session);
+      }
+
+      const assigneeUser = await assigneeUserQuery;
+
+      if (assigneeUser) {
+        const applicationIsTerminal = isApplicationTerminalStatus(
+          application.status,
+        );
+
+        if (
+          !applicationIsTerminal ||
+          (assignee.status === COMPANY_MEMBER_STATUS.ACTIVE &&
+            assigneeUser.status === USER_STATUS.ACTIVE)
+        ) {
+          recipientUserIds.add(assignee.userId.toString());
+        }
+      }
+    }
+  }
+
+  return {
+    conversationId: conversation._id,
+    recipientUserIds: [...recipientUserIds],
+  };
+};
+
+const emitCommittedConversationStateRealtimeBestEffort = async ({
+  application,
+  mode,
+  session,
+} = {}) => {
+  if (application == null || mode == null) {
+    return;
+  }
+
+  try {
+    const context = await resolveConversationStateRealtimeRecipients({
+      application,
+      session,
+    });
+
+    if (!context) {
+      return;
+    }
+
+    emitConversationStateToRecipients({
+      recipientUserIds: context.recipientUserIds,
+      conversationId: context.conversationId,
+      applicationId: application._id,
+      mode,
+    });
+  } catch {
+    // Conversation state realtime fan-out is best-effort and must not fail the caller.
+  }
+};
+
 const createAssignmentNotificationEvent = async ({
   application,
   job,
@@ -4071,6 +4167,7 @@ const firstAssignApplication = async ({
   let assigneeContext = null;
   const notificationEvents = [];
   const committedChatMessages = [];
+  const committedConversationStateEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -4224,6 +4321,11 @@ const firstAssignApplication = async ({
             applicationId: assignedApplication._id,
           });
         }
+
+        committedConversationStateEvents.push({
+          application: assignedApplication,
+          mode: CONVERSATION_REALTIME_MODE.WRITABLE,
+        });
       }
     });
   } finally {
@@ -4241,6 +4343,12 @@ const firstAssignApplication = async ({
 
   for (const committedChatMessage of committedChatMessages) {
     emitCommittedChatMessageRealtimeBestEffort(committedChatMessage);
+  }
+
+  for (const committedConversationStateEvent of committedConversationStateEvents) {
+    await emitCommittedConversationStateRealtimeBestEffort(
+      committedConversationStateEvent,
+    );
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -4398,6 +4506,7 @@ const executePrimaryCurrentAssigneeMutation = async ({
   let assigneeContext = null;
   const notificationEvents = [];
   const committedChatMessages = [];
+  const committedConversationStateEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -4600,6 +4709,11 @@ const executePrimaryCurrentAssigneeMutation = async ({
             applicationId: mutatedApplication._id,
           });
         }
+
+        committedConversationStateEvents.push({
+          application: mutatedApplication,
+          mode: CONVERSATION_REALTIME_MODE.PAUSED_UNASSIGNED,
+        });
       } else {
         const systemMessageResult = await createSystemMessageIfConversationExists({
           applicationId: mutatedApplication._id,
@@ -4632,6 +4746,12 @@ const executePrimaryCurrentAssigneeMutation = async ({
 
   for (const committedChatMessage of committedChatMessages) {
     emitCommittedChatMessageRealtimeBestEffort(committedChatMessage);
+  }
+
+  for (const committedConversationStateEvent of committedConversationStateEvents) {
+    await emitCommittedConversationStateRealtimeBestEffort(
+      committedConversationStateEvent,
+    );
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -4870,6 +4990,13 @@ const automaticallyUnassignApplication = async ({
     emitCommittedChatMessageRealtimeBestEffort(committedChatMessage);
   }
 
+  if (unassignedApplication) {
+    await emitCommittedConversationStateRealtimeBestEffort({
+      application: unassignedApplication,
+      mode: CONVERSATION_REALTIME_MODE.PAUSED_UNASSIGNED,
+    });
+  }
+
   return unassignedApplication;
 };
 
@@ -5071,6 +5198,7 @@ const updateApplicationRecruitmentPipelineStatus = async ({
   let job = null;
   let assigneeContext = null;
   const notificationEvents = [];
+  const committedConversationStateEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -5252,6 +5380,11 @@ const updateApplicationRecruitmentPipelineStatus = async ({
         if (terminalScheduleCancellation.notificationEvent) {
           notificationEvents.push(terminalScheduleCancellation.notificationEvent);
         }
+
+        committedConversationStateEvents.push({
+          application: updatedApplication,
+          mode: CONVERSATION_REALTIME_MODE.READ_ONLY,
+        });
       }
     });
   } finally {
@@ -5264,6 +5397,12 @@ const updateApplicationRecruitmentPipelineStatus = async ({
     } catch {
       // The committed Application transition remains recoverable.
     }
+  }
+
+  for (const committedConversationStateEvent of committedConversationStateEvents) {
+    await emitCommittedConversationStateRealtimeBestEffort(
+      committedConversationStateEvent,
+    );
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -6321,6 +6460,7 @@ const withdrawApplication = async ({
   const session = await mongoose.startSession();
   let withdrawnApplication = null;
   const notificationEvents = [];
+  let committedConversationStateEvent = null;
 
   try {
     await session.withTransaction(async () => {
@@ -6417,6 +6557,11 @@ const withdrawApplication = async ({
       if (terminalScheduleCancellation.notificationEvent) {
         notificationEvents.push(terminalScheduleCancellation.notificationEvent);
       }
+
+      committedConversationStateEvent = {
+        application: withdrawnApplication,
+        mode: CONVERSATION_REALTIME_MODE.READ_ONLY,
+      };
     });
   } finally {
     await session.endSession();
@@ -6428,6 +6573,12 @@ const withdrawApplication = async ({
     } catch {
       // The committed Withdraw remains recoverable by the Notification worker.
     }
+  }
+
+  if (committedConversationStateEvent) {
+    await emitCommittedConversationStateRealtimeBestEffort(
+      committedConversationStateEvent,
+    );
   }
 
   return toPublicApplication(withdrawnApplication);
