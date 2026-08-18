@@ -132,9 +132,23 @@ and closes the plane before MongoDB disconnect. `notification.service.js`
 best-effort emits only after a durable `Notification` insert, outside any
 MongoDB transaction; Socket failure does not roll back source state,
 `NotificationEvent`, or `Notification`. Read state remains `Notification.readAt`.
-Reconnect does not replay Socket history. Message realtime, Conversation-state
-realtime, and offline orchestration remain later-slice concerns on the same
-authenticated connection plane.
+Reconnect does not replay Socket history. Conversation-state realtime and
+offline orchestration remain later-slice concerns on the same authenticated
+connection plane.
+
+Slice 10 is implemented and verified for Message Realtime Distribution
+(`F07` closure; `BR-34`–`BR-37`, `BR-50`; Data §9.5 / §14.1). After every
+successful V11 NORMAL or canonical SYSTEM Message commit,
+`application.service.js` best-effort emits `REALTIME_EVENT.MESSAGE` through
+the Slice 09 authenticated multi-session connection plane to trusted
+post-transition Conversation participants only: Candidate sends reach the
+current Assignee, Assignee sends reach the Candidate, and SYSTEM Messages
+reach valid post-transition participants with no stale-Assignee fan-out.
+Emit is post-commit, best-effort, non-exactly-once, and does not roll back
+persisted Message, `NotificationEvent`, or `Notification` on Socket failure.
+Durable `CHAT_MESSAGE_CREATED` from Slice 04 is unchanged. Conversation-state
+realtime, reconnect/offline orchestration, typing/presence/read receipt, and
+delivery persistence remain out of scope.
 
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance

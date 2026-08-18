@@ -60,6 +60,29 @@ const toPlainNotification = (notification) => {
   return notification;
 };
 
+const toPlainMessage = (message) => {
+  if (message == null) {
+    return message;
+  }
+
+  const source =
+    typeof message.toJSON === "function" ? message.toJSON() : message;
+  const messageId = source._id ?? source.id;
+
+  return {
+    id: messageId == null ? null : String(messageId),
+    type: source.type,
+    senderUserId:
+      source.senderUserId == null ? null : String(source.senderUserId),
+    senderCompanyMemberId:
+      source.senderCompanyMemberId == null
+        ? null
+        : String(source.senderCompanyMemberId),
+    content: source.content,
+    createdAt: source.createdAt,
+  };
+};
+
 const attachRealtimeDistribution = (httpServer) => {
   if (ioServer) {
     throw new Error("Realtime distribution is already attached");
@@ -129,9 +152,47 @@ const fetchUserRealtimeSockets = async (userId) => {
   return ioServer.in(getUserRealtimeRoomName(userId)).fetchSockets();
 };
 
+const emitMessageToRecipients = ({
+  recipientUserIds,
+  message,
+  applicationId,
+} = {}) => {
+  if (!ioServer || message == null || applicationId == null) {
+    return;
+  }
+
+  const conversationId =
+    message.conversationId == null ? null : String(message.conversationId);
+  const payload = {
+    message: toPlainMessage(message),
+    conversationId,
+    applicationId: String(applicationId),
+  };
+  const uniqueRecipientIds = [
+    ...new Set(
+      (recipientUserIds ?? [])
+        .map((recipientUserId) =>
+          recipientUserId == null ? null : String(recipientUserId),
+        )
+        .filter(Boolean),
+    ),
+  ];
+
+  for (const recipientId of uniqueRecipientIds) {
+    try {
+      ioServer
+        .to(getUserRealtimeRoomName(recipientId))
+        .emit(REALTIME_EVENT.MESSAGE, payload);
+    } catch {
+      // Socket fan-out is best-effort and must not fail the caller.
+    }
+  }
+};
+
 export {
   attachRealtimeDistribution,
   closeRealtimeDistribution,
+  emitMessageToRecipients,
   emitNotificationToRecipient,
   fetchUserRealtimeSockets,
   getUserRealtimeRoomName,

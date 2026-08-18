@@ -46,6 +46,7 @@ import {
   createNotificationEvent,
   materializeNotificationEvent,
 } from "./notification.service.js";
+import { emitMessageToRecipients } from "./realtime-distribution.service.js";
 import {
   acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
@@ -2962,6 +2963,26 @@ const createChatMessageNotificationEvent = async ({
   return event;
 };
 
+const emitCommittedChatMessageRealtimeBestEffort = ({
+  message,
+  recipientUserIds,
+  applicationId,
+} = {}) => {
+  if (message == null || applicationId == null) {
+    return;
+  }
+
+  try {
+    emitMessageToRecipients({
+      message,
+      recipientUserIds,
+      applicationId,
+    });
+  } catch {
+    // Message realtime fan-out is best-effort and must not fail the caller.
+  }
+};
+
 const createAssignmentNotificationEvent = async ({
   application,
   job,
@@ -3234,7 +3255,11 @@ const createSystemMessageIfConversationExists = async ({
     session,
   });
 
-  return { message: systemMessage, notificationEvent };
+  const recipientUserIds = recipients.map(
+    ({ recipientUserId }) => recipientUserId,
+  );
+
+  return { message: systemMessage, notificationEvent, recipientUserIds };
 };
 
 const toPublicConversationMessage = (message) => {
@@ -3718,6 +3743,7 @@ const commitNormalMessageSend = async ({
   let notificationEvent = null;
   let authority = null;
   let conversation = null;
+  let chatMessageRecipientUserIds = null;
 
   try {
     await session.withTransaction(async () => {
@@ -3857,9 +3883,22 @@ const commitNormalMessageSend = async ({
         recipients,
         session,
       });
+
+      chatMessageRecipientUserIds =
+        actor.kind === "CANDIDATE"
+          ? [eligibility.currentAssignee.userId]
+          : [application.candidateUserId];
     });
   } finally {
     await session.endSession();
+  }
+
+  if (createdMessage) {
+    emitCommittedChatMessageRealtimeBestEffort({
+      message: createdMessage,
+      recipientUserIds: chatMessageRecipientUserIds,
+      applicationId: conversation.applicationId,
+    });
   }
 
   if (notificationEvent) {
@@ -4031,6 +4070,7 @@ const firstAssignApplication = async ({
   let job = null;
   let assigneeContext = null;
   const notificationEvents = [];
+  const committedChatMessages = [];
 
   try {
     await session.withTransaction(async () => {
@@ -4177,6 +4217,13 @@ const firstAssignApplication = async ({
         if (systemMessageResult?.notificationEvent) {
           notificationEvents.push(systemMessageResult.notificationEvent);
         }
+        if (systemMessageResult?.message) {
+          committedChatMessages.push({
+            message: systemMessageResult.message,
+            recipientUserIds: systemMessageResult.recipientUserIds,
+            applicationId: assignedApplication._id,
+          });
+        }
       }
     });
   } finally {
@@ -4190,6 +4237,10 @@ const firstAssignApplication = async ({
       // The committed Assignment/Message result and durable obligation remain
       // recoverable by the canonical Notification worker.
     }
+  }
+
+  for (const committedChatMessage of committedChatMessages) {
+    emitCommittedChatMessageRealtimeBestEffort(committedChatMessage);
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -4346,6 +4397,7 @@ const executePrimaryCurrentAssigneeMutation = async ({
   let job = null;
   let assigneeContext = null;
   const notificationEvents = [];
+  const committedChatMessages = [];
 
   try {
     await session.withTransaction(async () => {
@@ -4541,6 +4593,13 @@ const executePrimaryCurrentAssigneeMutation = async ({
         if (systemMessageResult?.notificationEvent) {
           notificationEvents.push(systemMessageResult.notificationEvent);
         }
+        if (systemMessageResult?.message) {
+          committedChatMessages.push({
+            message: systemMessageResult.message,
+            recipientUserIds: systemMessageResult.recipientUserIds,
+            applicationId: mutatedApplication._id,
+          });
+        }
       } else {
         const systemMessageResult = await createSystemMessageIfConversationExists({
           applicationId: mutatedApplication._id,
@@ -4549,6 +4608,13 @@ const executePrimaryCurrentAssigneeMutation = async ({
         });
         if (systemMessageResult?.notificationEvent) {
           notificationEvents.push(systemMessageResult.notificationEvent);
+        }
+        if (systemMessageResult?.message) {
+          committedChatMessages.push({
+            message: systemMessageResult.message,
+            recipientUserIds: systemMessageResult.recipientUserIds,
+            applicationId: mutatedApplication._id,
+          });
         }
       }
     });
@@ -4562,6 +4628,10 @@ const executePrimaryCurrentAssigneeMutation = async ({
     } catch {
       // The committed Assignment/System Message outcome remains recoverable.
     }
+  }
+
+  for (const committedChatMessage of committedChatMessages) {
+    emitCommittedChatMessageRealtimeBestEffort(committedChatMessage);
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -4656,6 +4726,7 @@ const automaticallyUnassignApplication = async ({
   }
 
   let notificationEvent = null;
+  let committedChatMessage = null;
 
   const commitAutomaticUnassign = async (activeSession) => {
     let applicationQuery = Application.findById(applicationId);
@@ -4752,11 +4823,18 @@ const automaticallyUnassignApplication = async ({
     // Same atomic outcome as Manual Unassign when Conversation exists. Content
     // only announces awaiting a new responsible recruiter — never LOCK /
     // TERMINATE / membership / team-removal reasons.
-    await createSystemMessageIfConversationExists({
+    const systemMessageResult = await createSystemMessageIfConversationExists({
       applicationId: unassignedApplication._id,
       content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
       session: activeSession,
     });
+    if (systemMessageResult?.message) {
+      committedChatMessage = {
+        message: systemMessageResult.message,
+        recipientUserIds: systemMessageResult.recipientUserIds,
+        applicationId: unassignedApplication._id,
+      };
+    }
 
     return unassignedApplication;
   };
@@ -4786,6 +4864,10 @@ const automaticallyUnassignApplication = async ({
       // The committed automatic Unassign and durable obligation remain
       // recoverable by the canonical Notification worker.
     }
+  }
+
+  if (committedChatMessage) {
+    emitCommittedChatMessageRealtimeBestEffort(committedChatMessage);
   }
 
   return unassignedApplication;
