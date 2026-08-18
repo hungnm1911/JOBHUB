@@ -1509,6 +1509,64 @@ const previewSearchEligibleGeneratedCandidateCv = async ({
 };
 
 /**
+ * V14 Slice 06 / F05 Uploaded Preview: Recruiter reads the current
+ * search-eligible UPLOADED CandidateCV PDF via the V7 restricted delivery.
+ * Eligibility is current authoritative state only — prior search-list
+ * membership or client knowledge of cvId is not authorization.
+ * PRIVATE, archived, Generated, missing, and ineligible owners are denied.
+ * Persisted Uploaded status=ACTIVE is V7 normalization, not a V14
+ * eligibility predicate. Read-only: no snapshot, view history, or Download.
+ */
+const previewSearchEligibleUploadedCandidateCv = async ({
+  actorUser,
+  candidateCvId,
+}) => {
+  assertRecruiterCandidateSearchActor(actorUser);
+
+  const candidateCv =
+    await loadCurrentSearchEligibleCandidateCvById(candidateCvId);
+
+  if (
+    !candidateCv ||
+    candidateCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.UPLOADED
+  ) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  return buildUploadedCvPdfDelivery(candidateCv);
+};
+
+/**
+ * V14 Candidate Search Preview HTTP owner.
+ * GENERATED uses Slice 05 Harvard rendering; UPLOADED uses Slice 06
+ * restricted current-file delivery. Shared Slice 01 actor check and
+ * Slice 02 current eligibility — no parallel authorization path.
+ */
+const previewSearchEligibleCandidateCv = async ({
+  actorUser,
+  candidateCvId,
+}) => {
+  assertRecruiterCandidateSearchActor(actorUser);
+
+  const candidateCv =
+    await loadCurrentSearchEligibleCandidateCvById(candidateCvId);
+
+  if (!candidateCv) {
+    throw new AppError(404, "Candidate CV not found");
+  }
+
+  if (candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
+    return buildGeneratedCvPdfDelivery(candidateCv);
+  }
+
+  if (candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.UPLOADED) {
+    return buildUploadedCvPdfDelivery(candidateCv);
+  }
+
+  throw new AppError(404, "Candidate CV not found");
+};
+
+/**
  * F08 / BR-34, BR-43: owner-scoped Download.
  * Generated official PDF only when ACTIVE; Generated DRAFT is denied.
  * Uploaded Download uses current uploadedFile. No public URL / PDF persistence.
@@ -1989,7 +2047,9 @@ export {
   listCandidateSearchEligibleCandidateCvs,
   listOwnActiveCandidateCvs,
   previewOwnCandidateCv,
+  previewSearchEligibleCandidateCv,
   previewSearchEligibleGeneratedCandidateCv,
+  previewSearchEligibleUploadedCandidateCv,
   replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
   saveOwnGeneratedDraftContent,

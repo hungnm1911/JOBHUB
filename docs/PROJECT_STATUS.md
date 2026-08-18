@@ -65,8 +65,8 @@ accepts all six filter-group query params:
 Slice 05 is implemented and verified for Generated CV Recruiter Preview
 (`F05` partial, `F06` partial; `BR-26`, `BR-27`, `BR-29`–`BR-38`). Eligible
 Recruiters preview the current Harvard representation of a `GENERATED`
-CandidateCV via `GET /api/jobs/candidate-search/cvs/:cvId/preview`. The
-canonical owner remains `candidate-cv.service.js`
+CandidateCV via the shared `GET /api/jobs/candidate-search/cvs/:cvId/preview`
+surface. The Generated-specific owner remains `candidate-cv.service.js`
 (`previewSearchEligibleGeneratedCandidateCv`), gated by Slice 01
 `authorizeRecruiterCandidateSearchAccess` and reusing Slice 02 current
 CandidateCV eligibility (`PUBLIC`, not archived, Generated `status=ACTIVE`,
@@ -74,13 +74,32 @@ Candidate owner `ACTIVE` with verified email). Preview re-checks that
 authoritative state on every request and does not treat prior search-list
 membership or client knowledge of `cvId` as authorization.
 `GENERATED/DRAFT/PUBLIC`, PRIVATE, archived, Uploaded, missing, and
-ineligible-owner CVs are denied. Delivery reuses the V7 Harvard renderer on
-current CV content, including contact details the Candidate placed in that CV,
-without expanding to Candidate Profile, other CVs, Application, or Recruiter
-Download. The workflow is read-only: no CandidateCV/Profile/Account mutation,
-snapshot, view history/count, Invitation, Application, Conversation, Message,
-Notification, or realtime event. Uploaded CV Recruiter Preview remains Slice
-06; Slice 01–04 Search/Filter behavior is unchanged.
+ineligible-owner CVs are denied by the Generated-specific workflow. Delivery
+reuses the V7 Harvard renderer on current CV content, including contact
+details the Candidate placed in that CV, without expanding to Candidate
+Profile, other CVs, Application, or Recruiter Download. The workflow is
+read-only: no CandidateCV/Profile/Account mutation, snapshot, view
+history/count, Invitation, Application, Conversation, Message, Notification,
+or realtime event. Slice 01–04 Search/Filter behavior is unchanged.
+
+Slice 06 is implemented and verified for Uploaded CV Recruiter Preview
+(`F05` closure, `F06` partial; `BR-12`, `BR-14`, `BR-16`, `BR-26`–`BR-38`
+for `UPLOADED`). The shared Preview HTTP owner is
+`previewSearchEligibleCandidateCv`; Uploaded-specific delivery is
+`previewSearchEligibleUploadedCandidateCv`. Recruiter eligibility remains
+Slice 01 HTTP authorization and current CandidateCV eligibility reuses Slice
+02 (`PUBLIC`, not archived, `sourceType=UPLOADED`, Candidate owner `ACTIVE`
+with verified email) without an Uploaded `status` business predicate.
+Persisted Uploaded `status=ACTIVE` stays V7 normalization only. Delivery
+reuses the canonical restricted Uploaded-PDF path
+(`buildUploadedCvPdfDelivery` / authenticated `downloadFileBuffer`) for the
+current file of that CV only. PRIVATE, archived, Generated (from the
+Uploaded-specific workflow), missing, ineligible-owner, and previously listed
+CVs that are no longer search-eligible are denied. Preview stays read-only
+and does not add Download, snapshot, view history/count, Invitation,
+Application, Conversation, Message, Notification, or realtime. Slice 05
+Generated Preview and Slice 01–04 Search/Filter behavior are unchanged;
+Slice 07 V14 acceptance-closure remains out of this slice.
 
 Slice 02 also adds the V14 CandidateCV browse/sort index set in the canonical
 partial scope (`visibility=PUBLIC`, `archivedAt=null`):
@@ -98,8 +117,10 @@ focused V14 Slice 02 suite passed
 (`test/auth/v14-candidate-search-browse-eligible-cvs.test.js`, 11 tests), and
 focused V14 Slice 05 suite passed
 (`test/auth/v14-candidate-search-generated-preview.test.js`, 7 tests), and
+focused V14 Slice 06 suite passed
+(`test/auth/v14-candidate-search-uploaded-preview.test.js`, 8 tests), and
 `cd backend && npm run verify:agent` passed with architecture rules
-`ARCH-001` through `ARCH-016`, 135 passing test files, and 1,291 passing tests.
+`ARCH-001` through `ARCH-016`, 136 passing test files, and 1,299 passing tests.
 ESLint reported 0 errors and the same 2 pre-existing `no-unused-vars` warnings
 in `test/job/v6-acceptance.test.js`.
 

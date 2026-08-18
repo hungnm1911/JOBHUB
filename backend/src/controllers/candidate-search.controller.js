@@ -1,6 +1,6 @@
 import {
   listCandidateSearchEligibleCandidateCvs,
-  previewSearchEligibleGeneratedCandidateCv,
+  previewSearchEligibleCandidateCv,
 } from "../services/candidate-cv.service.js";
 
 const normalizeQueryArray = (value) => {
@@ -78,13 +78,13 @@ const sendCandidateSearchCvPdf = (response, delivery, disposition) => {
   return response.status(200).send(delivery.buffer);
 };
 
-const previewSearchEligibleGeneratedCandidateCvHandler = async (
+const previewSearchEligibleCandidateCvHandler = async (
   request,
   response,
   next,
 ) => {
   try {
-    const delivery = await previewSearchEligibleGeneratedCandidateCv({
+    const delivery = await previewSearchEligibleCandidateCv({
       actorUser: request.auth.user,
       candidateCvId: request.params.cvId,
     });
@@ -97,5 +97,5 @@ const previewSearchEligibleGeneratedCandidateCvHandler = async (
 
 export {
   listCandidateSearchEligibleCandidateCvsHandler,
-  previewSearchEligibleGeneratedCandidateCvHandler,
+  previewSearchEligibleCandidateCvHandler,
 };

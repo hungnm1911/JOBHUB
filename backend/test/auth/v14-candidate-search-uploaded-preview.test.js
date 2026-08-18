@@ -1,5 +1,4 @@
-import { inflateSync } from "node:zlib";
-
+import { PDFDocument, StandardFonts } from "pdf-lib";
 import mongoose from "mongoose";
 import {
   afterAll,
@@ -8,10 +7,13 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import CANDIDATE_CV_SOURCE_TYPE from "../../src/constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../../src/constants/candidate-cv-status.js";
+import CANDIDATE_CV_UPLOADED_PDF from "../../src/constants/candidate-cv-uploaded-pdf.js";
+import CANDIDATE_CV_UPLOADED_STORAGE from "../../src/constants/candidate-cv-uploaded-storage.js";
 import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility.js";
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
@@ -25,10 +27,11 @@ import Message from "../../src/models/message.model.js";
 import Notification from "../../src/models/notification.model.js";
 import NotificationEvent from "../../src/models/notification-event.model.js";
 import User from "../../src/models/user.model.js";
-import { renderHarvardCandidateCvPdf } from "../../src/services/candidate-cv-harvard-pdf.service.js";
+import * as fileService from "../../src/services/file.service.js";
 import {
   listCandidateSearchEligibleCandidateCvs,
   previewSearchEligibleGeneratedCandidateCv,
+  previewSearchEligibleUploadedCandidateCv,
 } from "../../src/services/candidate-cv.service.js";
 import {
   DEFAULT_PASSWORD,
@@ -44,10 +47,10 @@ import {
   disconnectTestDatabase,
 } from "../helpers/database.js";
 
-const CONTACT_EMAIL = "v14.slice05.contact@example.com";
-const CONTACT_PHONE = "+84901114005";
-const CURRENT_SUMMARY = "V14 Slice 05 current generated summary";
-const UPDATED_SUMMARY = "QZX14NOW current generated summary";
+const CONTACT_EMAIL = "v14.slice06.contact@example.com";
+const CURRENT_STORAGE_KEY = "jobhub/candidate-cvs/uploaded/v14-slice06-current";
+const REPLACED_STORAGE_KEY =
+  "jobhub/candidate-cvs/uploaded/v14-slice06-replaced";
 
 const createFieldCategory = async (name = "Software Engineering") => {
   return Category.create({
@@ -57,7 +60,7 @@ const createFieldCategory = async (name = "Software Engineering") => {
 };
 
 const createRecruiterWithProofJob = async ({
-  emailPrefix = "v14.slice05",
+  emailPrefix = "v14.slice06",
 } = {}) => {
   const manager = await createActiveCompanyManagerContext({
     email: `${emailPrefix}.manager@example.com`,
@@ -80,22 +83,31 @@ const createRecruiterWithProofJob = async ({
   return { manager, recruiter };
 };
 
-const generatedContent = ({
-  fullName = "Generated Preview Candidate",
-  email = CONTACT_EMAIL,
-  phone = CONTACT_PHONE,
-  professionalSummary = CURRENT_SUMMARY,
-} = {}) => {
+const buildPdfBuffer = async (marker) => {
+  const document = await PDFDocument.create();
+  const page = document.addPage([400, 600]);
+  const font = await document.embedFont(StandardFonts.Helvetica);
+  page.drawText(marker, {
+    x: 40,
+    y: 500,
+    size: 12,
+    font,
+  });
+
+  return Buffer.from(await document.save());
+};
+
+const generatedContent = () => {
   return {
     personalInfo: {
-      fullName,
-      email,
-      phone,
+      fullName: "Generated Sibling Candidate",
+      email: CONTACT_EMAIL,
+      phone: "+84901114006",
       displayLocation: "Ha Noi",
-      links: ["https://linkedin.com/in/v14-slice05"],
+      links: [],
       avatarUrl: null,
     },
-    professionalSummary,
+    professionalSummary: "Sibling generated CV must stay Slice 05",
     educations: [
       {
         institutionName: "Example University",
@@ -117,12 +129,13 @@ const generatedContent = ({
 const createCandidateCv = async ({
   candidateUserId,
   categoryId,
-  sourceType = CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+  sourceType = CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
   status = CANDIDATE_CV_STATUS.ACTIVE,
   visibility = CANDIDATE_CV_VISIBILITY.PUBLIC,
   archivedAt = null,
   name = "Candidate CV",
-  content,
+  storageKey = CURRENT_STORAGE_KEY,
+  originalFileName = "uploaded.pdf",
 } = {}) => {
   const baseDoc = {
     candidateUserId,
@@ -141,12 +154,12 @@ const createCandidateCv = async ({
   };
 
   if (sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
-    baseDoc.generatedContent = content ?? generatedContent();
+    baseDoc.generatedContent = generatedContent();
   } else {
     baseDoc.uploadedFile = {
-      storageKey: `candidate-cvs/${new mongoose.Types.ObjectId().toString()}`,
-      originalFileName: "uploaded.pdf",
-      mimeType: "application/pdf",
+      storageKey,
+      originalFileName,
+      mimeType: CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
       sizeBytes: 1024,
       pageCount: 1,
       uploadedAt: new Date("2026-08-01T00:00:00.000Z"),
@@ -154,71 +167,6 @@ const createCandidateCv = async ({
   }
 
   return CandidateCV.create(baseDoc);
-};
-
-const inflatePdfStreams = (pdfBuffer) => {
-  const raw = pdfBuffer.toString("binary");
-  const inflated = [];
-  let position = 0;
-
-  while (true) {
-    const streamMarker = raw.indexOf("stream", position);
-
-    if (streamMarker === -1) {
-      break;
-    }
-
-    let dataStart = streamMarker + "stream".length;
-
-    if (raw[dataStart] === "\r") {
-      dataStart += 1;
-    }
-
-    if (raw[dataStart] === "\n") {
-      dataStart += 1;
-    }
-
-    const endMarker = raw.indexOf("endstream", dataStart);
-
-    if (endMarker === -1) {
-      break;
-    }
-
-    let dataEnd = endMarker;
-
-    if (raw[dataEnd - 1] === "\n") {
-      dataEnd -= 1;
-    }
-
-    if (raw[dataEnd - 1] === "\r") {
-      dataEnd -= 1;
-    }
-
-    try {
-      inflated.push(
-        inflateSync(
-          Buffer.from(raw.slice(dataStart, dataEnd), "binary"),
-        ).toString("binary"),
-      );
-    } catch {
-      // Ignore non-FlateDecode streams.
-    }
-
-    position = endMarker + "endstream".length;
-  }
-
-  return inflated.join("\n");
-};
-
-const extractPdfMappedCharset = (pdfBuffer) => {
-  const inflated = inflatePdfStreams(pdfBuffer);
-  const hexStrings = [...inflated.matchAll(/<([0-9A-Fa-f]+)>/g)].map((match) =>
-    Buffer.from(match[1], "hex").toString("binary"),
-  );
-
-  return [...new Set(hexStrings.join("").replace(/[^\x20-\x7E]/g, "").split(""))]
-    .sort()
-    .join("");
 };
 
 const requestPdf = (agent, url, accessToken) => {
@@ -251,12 +199,33 @@ const expectNotFound = async (work) => {
   });
 };
 
-describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 partial)", () => {
+const mockRestrictedPdfDownload = (pdfByStorageKey) => {
+  return vi.spyOn(fileService, "downloadFileBuffer").mockImplementation(
+    async ({ publicId, resourceType, deliveryType }) => {
+      expect(resourceType).toBe(CANDIDATE_CV_UPLOADED_STORAGE.RESOURCE_TYPE);
+      expect(deliveryType).toBe(CANDIDATE_CV_UPLOADED_STORAGE.DELIVERY_TYPE);
+      expect(deliveryType).not.toBe("upload");
+
+      const pdfBuffer = pdfByStorageKey.get(publicId);
+
+      if (!pdfBuffer) {
+        const error = new Error(`Missing mocked PDF for ${publicId}`);
+        error.statusCode = 404;
+        throw error;
+      }
+
+      return pdfBuffer;
+    },
+  );
+};
+
+describe("V14 Slice 06 — Uploaded CV Recruiter Preview (F05 closure, F06 partial)", () => {
   beforeAll(async () => {
     await connectTestDatabase();
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await clearDatabase();
   });
 
@@ -264,47 +233,41 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
     await disconnectTestDatabase();
   });
 
-  it("previews current GENERATED search-eligible CV content including unredacted contact (BR-26, BR-29, BR-35)", async () => {
+  it("previews current UPLOADED search-eligible PDF via restricted delivery without redacting contact text (BR-12, BR-26, BR-29)", async () => {
+    const currentPdf = await buildPdfBuffer(`Contact ${CONTACT_EMAIL}`);
+    const downloadSpy = mockRestrictedPdfDownload(
+      new Map([[CURRENT_STORAGE_KEY, currentPdf]]),
+    );
     const category = await createFieldCategory();
     const { recruiter } = await createRecruiterWithProofJob({
-      emailPrefix: "v14.slice05.happy",
+      emailPrefix: "v14.slice06.happy",
     });
     const candidate = await createVerifiedUser({
-      email: "candidate.v14.slice05.happy@example.com",
+      email: "candidate.v14.slice06.happy@example.com",
       fullName: "Preview Candidate",
     });
     const candidateCv = await createCandidateCv({
       candidateUserId: candidate.user._id,
       categoryId: category._id,
-      name: "Public Generated CV",
+      name: "Public Uploaded CV",
+      originalFileName: "public-uploaded.pdf",
     });
 
-    const delivery = await previewSearchEligibleGeneratedCandidateCv({
+    const delivery = await previewSearchEligibleUploadedCandidateCv({
       actorUser: recruiter.user,
       candidateCvId: candidateCv._id.toString(),
     });
-    const currentCv = await CandidateCV.findById(candidateCv._id);
-    const expectedFull = await renderHarvardCandidateCvPdf(
-      currentCv.generatedContent,
-    );
-    const redactedContent = {
-      ...currentCv.toObject().generatedContent,
-      personalInfo: {
-        ...currentCv.toObject().generatedContent.personalInfo,
-        email: null,
-        phone: null,
-      },
-    };
-    const expectedRedacted =
-      await renderHarvardCandidateCvPdf(redactedContent);
-    const previewCharset = extractPdfMappedCharset(delivery.buffer);
 
-    expect(delivery.mimeType).toBe("application/pdf");
-    expect(delivery.sourceType).toBe(CANDIDATE_CV_SOURCE_TYPE.GENERATED);
+    expect(delivery.mimeType).toBe(CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE);
+    expect(delivery.sourceType).toBe(CANDIDATE_CV_SOURCE_TYPE.UPLOADED);
     expect(delivery.status).toBe(CANDIDATE_CV_STATUS.ACTIVE);
-    expect(previewCharset).toBe(extractPdfMappedCharset(expectedFull));
-    expect(previewCharset).toContain("@");
-    expect(extractPdfMappedCharset(expectedRedacted)).not.toContain("@");
+    expect(delivery.fileName.toLowerCase()).toContain("public-uploaded");
+    expect(delivery.buffer.equals(currentPdf)).toBe(true);
+    expect(downloadSpy).toHaveBeenCalledWith({
+      publicId: CURRENT_STORAGE_KEY,
+      resourceType: CANDIDATE_CV_UPLOADED_STORAGE.RESOURCE_TYPE,
+      deliveryType: CANDIDATE_CV_UPLOADED_STORAGE.DELIVERY_TYPE,
+    });
 
     const agent = createTestAgent();
     const accessToken = await loginAndGetAccessToken(agent, {
@@ -318,122 +281,166 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
     );
 
     assertInlinePdf(response);
-    expect(extractPdfMappedCharset(response.body)).toBe(previewCharset);
+    expect(response.body.equals(currentPdf)).toBe(true);
+    expect(response.headers["content-disposition"]).toMatch(
+      /public-uploaded\.pdf/i,
+    );
   });
 
-  it("reads current CV content after updates and does not keep a historical copy (BR-35)", async () => {
+  it("does not use persisted Uploaded status as a V14 eligibility predicate (BR-12)", async () => {
+    const currentPdf = await buildPdfBuffer("status-is-not-eligibility");
+    mockRestrictedPdfDownload(new Map([[CURRENT_STORAGE_KEY, currentPdf]]));
     const category = await createFieldCategory();
     const { recruiter } = await createRecruiterWithProofJob({
-      emailPrefix: "v14.slice05.current",
+      emailPrefix: "v14.slice06.status",
     });
     const candidate = await createVerifiedUser({
-      email: "candidate.v14.slice05.current@example.com",
+      email: "candidate.v14.slice06.status@example.com",
     });
     const candidateCv = await createCandidateCv({
       candidateUserId: candidate.user._id,
       categoryId: category._id,
     });
 
-    const first = await previewSearchEligibleGeneratedCandidateCv({
+    await CandidateCV.collection.updateOne(
+      { _id: candidateCv._id },
+      { $set: { status: CANDIDATE_CV_STATUS.DRAFT } },
+      { bypassDocumentValidation: true },
+    );
+
+    const persisted = await CandidateCV.collection.findOne({
+      _id: candidateCv._id,
+    });
+    expect(persisted.status).toBe(CANDIDATE_CV_STATUS.DRAFT);
+
+    const delivery = await previewSearchEligibleUploadedCandidateCv({
       actorUser: recruiter.user,
       candidateCvId: candidateCv._id.toString(),
     });
-    expect(extractPdfMappedCharset(first.buffer)).not.toContain("Q");
+    expect(delivery.buffer.equals(currentPdf)).toBe(true);
+  });
+
+  it("reads the current Uploaded PDF after replacement and does not keep a historical copy (BR-35)", async () => {
+    const firstPdf = await buildPdfBuffer("first-current-file");
+    const secondPdf = await buildPdfBuffer("second-current-file");
+    const downloadSpy = mockRestrictedPdfDownload(
+      new Map([
+        [CURRENT_STORAGE_KEY, firstPdf],
+        [REPLACED_STORAGE_KEY, secondPdf],
+      ]),
+    );
+    const category = await createFieldCategory();
+    const { recruiter } = await createRecruiterWithProofJob({
+      emailPrefix: "v14.slice06.current",
+    });
+    const candidate = await createVerifiedUser({
+      email: "candidate.v14.slice06.current@example.com",
+    });
+    const candidateCv = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+    });
+
+    const first = await previewSearchEligibleUploadedCandidateCv({
+      actorUser: recruiter.user,
+      candidateCvId: candidateCv._id.toString(),
+    });
+    expect(first.buffer.equals(firstPdf)).toBe(true);
 
     await CandidateCV.updateOne(
       { _id: candidateCv._id },
       {
         $set: {
-          "generatedContent.professionalSummary": UPDATED_SUMMARY,
+          "uploadedFile.storageKey": REPLACED_STORAGE_KEY,
+          "uploadedFile.originalFileName": "replaced.pdf",
         },
       },
     );
 
-    const second = await previewSearchEligibleGeneratedCandidateCv({
+    const second = await previewSearchEligibleUploadedCandidateCv({
       actorUser: recruiter.user,
       candidateCvId: candidateCv._id.toString(),
     });
-    const updatedCv = await CandidateCV.findById(candidateCv._id);
-    const secondExpected = await renderHarvardCandidateCvPdf(
-      updatedCv.generatedContent,
-    );
 
-    expect(extractPdfMappedCharset(second.buffer)).toContain("Q");
-    expect(extractPdfMappedCharset(second.buffer)).toBe(
-      extractPdfMappedCharset(secondExpected),
-    );
+    expect(second.buffer.equals(secondPdf)).toBe(true);
+    expect(second.fileName.toLowerCase()).toContain("replaced");
+    expect(downloadSpy).toHaveBeenLastCalledWith({
+      publicId: REPLACED_STORAGE_KEY,
+      resourceType: CANDIDATE_CV_UPLOADED_STORAGE.RESOURCE_TYPE,
+      deliveryType: CANDIDATE_CV_UPLOADED_STORAGE.DELIVERY_TYPE,
+    });
     expect(await CandidateCV.countDocuments()).toBe(1);
+    const persisted = await CandidateCV.findById(candidateCv._id).lean();
+    expect(persisted).not.toHaveProperty("previousFiles");
+    expect(persisted.uploadedFile.storageKey).toBe(REPLACED_STORAGE_KEY);
   });
 
-  it("rejects GENERATED/DRAFT/PUBLIC, PRIVATE, archived, missing, invalid, and Uploaded CVs (BR-29–BR-31)", async () => {
+  it("rejects PRIVATE, archived, missing, invalid, and Generated CVs (BR-14, BR-16, BR-29–BR-31)", async () => {
+    mockRestrictedPdfDownload(new Map());
     const category = await createFieldCategory();
     const { recruiter } = await createRecruiterWithProofJob({
-      emailPrefix: "v14.slice05.deny.cv",
+      emailPrefix: "v14.slice06.deny.cv",
     });
     const candidate = await createVerifiedUser({
-      email: "candidate.v14.slice05.deny.cv@example.com",
+      email: "candidate.v14.slice06.deny.cv@example.com",
     });
 
-    const draftPublic = await createCandidateCv({
-      candidateUserId: candidate.user._id,
-      categoryId: category._id,
-      status: CANDIDATE_CV_STATUS.DRAFT,
-      name: "Generated Draft Public",
-    });
-    const privateActive = await createCandidateCv({
+    const privateUploaded = await createCandidateCv({
       candidateUserId: candidate.user._id,
       categoryId: category._id,
       visibility: CANDIDATE_CV_VISIBILITY.PRIVATE,
-      name: "Generated Active Private",
+      name: "Uploaded Private",
     });
     const archived = await createCandidateCv({
       candidateUserId: candidate.user._id,
       categoryId: category._id,
       archivedAt: new Date("2026-08-10T00:00:00.000Z"),
-      name: "Generated Archived",
+      name: "Uploaded Archived",
     });
-    const uploadedEligible = await createCandidateCv({
+    const generatedEligible = await createCandidateCv({
       candidateUserId: candidate.user._id,
       categoryId: category._id,
-      sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
-      name: "Uploaded Eligible",
+      sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
+      name: "Generated Eligible",
     });
 
     await expectNotFound(() =>
-      previewSearchEligibleGeneratedCandidateCv({
+      previewSearchEligibleUploadedCandidateCv({
         actorUser: recruiter.user,
-        candidateCvId: draftPublic._id.toString(),
+        candidateCvId: privateUploaded._id.toString(),
       }),
     );
     await expectNotFound(() =>
-      previewSearchEligibleGeneratedCandidateCv({
-        actorUser: recruiter.user,
-        candidateCvId: privateActive._id.toString(),
-      }),
-    );
-    await expectNotFound(() =>
-      previewSearchEligibleGeneratedCandidateCv({
+      previewSearchEligibleUploadedCandidateCv({
         actorUser: recruiter.user,
         candidateCvId: archived._id.toString(),
       }),
     );
     await expectNotFound(() =>
-      previewSearchEligibleGeneratedCandidateCv({
+      previewSearchEligibleUploadedCandidateCv({
         actorUser: recruiter.user,
-        candidateCvId: uploadedEligible._id.toString(),
+        candidateCvId: generatedEligible._id.toString(),
       }),
     );
     await expectNotFound(() =>
-      previewSearchEligibleGeneratedCandidateCv({
+      previewSearchEligibleUploadedCandidateCv({
         actorUser: recruiter.user,
         candidateCvId: new mongoose.Types.ObjectId().toString(),
       }),
     );
     await expectNotFound(() =>
-      previewSearchEligibleGeneratedCandidateCv({
+      previewSearchEligibleUploadedCandidateCv({
         actorUser: recruiter.user,
         candidateCvId: "not-a-cv-id",
       }),
+    );
+
+    const generatedDelivery = await previewSearchEligibleGeneratedCandidateCv({
+      actorUser: recruiter.user,
+      candidateCvId: generatedEligible._id.toString(),
+    });
+    expect(generatedDelivery.sourceType).toBe(
+      CANDIDATE_CV_SOURCE_TYPE.GENERATED,
     );
 
     const agent = createTestAgent();
@@ -443,8 +450,7 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
     });
 
     for (const cvId of [
-      draftPublic._id,
-      privateActive._id,
+      privateUploaded._id,
       archived._id,
       new mongoose.Types.ObjectId(),
     ]) {
@@ -453,18 +459,26 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
         .set("Authorization", `Bearer ${accessToken}`);
       expect(response.status).toBe(404);
     }
+
+    const generatedHttp = await requestPdf(
+      agent,
+      `/api/jobs/candidate-search/cvs/${generatedEligible._id}/preview`,
+      accessToken,
+    );
+    assertInlinePdf(generatedHttp);
   });
 
   it("rejects Preview when the Candidate owner is inactive or unverified (BR-32)", async () => {
+    mockRestrictedPdfDownload(new Map());
     const category = await createFieldCategory();
     const { recruiter } = await createRecruiterWithProofJob({
-      emailPrefix: "v14.slice05.owner",
+      emailPrefix: "v14.slice06.owner",
     });
     const unverified = await createVerifiedUser({
-      email: "candidate.v14.slice05.unverified@example.com",
+      email: "candidate.v14.slice06.unverified@example.com",
     });
     const inactive = await createVerifiedUser({
-      email: "candidate.v14.slice05.inactive@example.com",
+      email: "candidate.v14.slice06.inactive@example.com",
       status: USER_STATUS.LOCKED,
     });
 
@@ -483,13 +497,13 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
     });
 
     await expectNotFound(() =>
-      previewSearchEligibleGeneratedCandidateCv({
+      previewSearchEligibleUploadedCandidateCv({
         actorUser: recruiter.user,
         candidateCvId: unverifiedCv._id.toString(),
       }),
     );
     await expectNotFound(() =>
-      previewSearchEligibleGeneratedCandidateCv({
+      previewSearchEligibleUploadedCandidateCv({
         actorUser: recruiter.user,
         candidateCvId: inactiveCv._id.toString(),
       }),
@@ -497,12 +511,14 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
   });
 
   it("re-checks current eligibility and does not trust prior list membership or cvId knowledge (BR-29, BR-30)", async () => {
+    const currentPdf = await buildPdfBuffer("eligible-then-private");
+    mockRestrictedPdfDownload(new Map([[CURRENT_STORAGE_KEY, currentPdf]]));
     const category = await createFieldCategory();
     const { recruiter } = await createRecruiterWithProofJob({
-      emailPrefix: "v14.slice05.recheck",
+      emailPrefix: "v14.slice06.recheck",
     });
     const candidate = await createVerifiedUser({
-      email: "candidate.v14.slice05.recheck@example.com",
+      email: "candidate.v14.slice06.recheck@example.com",
     });
     const candidateCv = await createCandidateCv({
       candidateUserId: candidate.user._id,
@@ -512,9 +528,11 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
     const listed = await listCandidateSearchEligibleCandidateCvs({
       actorUser: recruiter.user,
     });
-    expect(listed.map((item) => item.cvId)).toContain(candidateCv._id.toString());
+    expect(listed.map((item) => item.cvId)).toContain(
+      candidateCv._id.toString(),
+    );
 
-    await previewSearchEligibleGeneratedCandidateCv({
+    await previewSearchEligibleUploadedCandidateCv({
       actorUser: recruiter.user,
       candidateCvId: candidateCv._id.toString(),
     });
@@ -530,7 +548,7 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
     expect(listedAfter).toHaveLength(0);
 
     await expectNotFound(() =>
-      previewSearchEligibleGeneratedCandidateCv({
+      previewSearchEligibleUploadedCandidateCv({
         actorUser: recruiter.user,
         candidateCvId: candidateCv._id.toString(),
       }),
@@ -538,24 +556,27 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
   });
 
   it("keeps Preview read-only and does not expand to Profile, other CVs, Application, or Download (BR-27, BR-28, BR-34–BR-38)", async () => {
+    const currentPdf = await buildPdfBuffer("boundary-current-pdf");
+    mockRestrictedPdfDownload(new Map([[CURRENT_STORAGE_KEY, currentPdf]]));
     const category = await createFieldCategory();
     const { recruiter } = await createRecruiterWithProofJob({
-      emailPrefix: "v14.slice05.boundary",
+      emailPrefix: "v14.slice06.boundary",
     });
     const candidate = await createVerifiedUser({
-      email: "candidate.v14.slice05.boundary@example.com",
+      email: "candidate.v14.slice06.boundary@example.com",
       fullName: "Boundary Candidate",
     });
     const publicCv = await createCandidateCv({
       candidateUserId: candidate.user._id,
       categoryId: category._id,
-      name: "Public Generated",
+      name: "Public Uploaded",
     });
     const otherCv = await createCandidateCv({
       candidateUserId: candidate.user._id,
       categoryId: category._id,
       visibility: CANDIDATE_CV_VISIBILITY.PRIVATE,
       name: "Private Other CV",
+      storageKey: "jobhub/candidate-cvs/uploaded/v14-slice06-other",
     });
 
     const beforeCv = await CandidateCV.findById(publicCv._id).lean();
@@ -573,6 +594,7 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
       accessToken,
     );
     assertInlinePdf(preview);
+    expect(preview.body.equals(currentPdf)).toBe(true);
 
     const afterCv = await CandidateCV.findById(publicCv._id).lean();
     const afterOwner = await User.findById(candidate.user._id).lean();
@@ -618,7 +640,7 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
     expect(browse.body.cvs[0]).toEqual({
       cvId: publicCv._id.toString(),
       candidateFullName: "Boundary Candidate",
-      cvName: "Public Generated",
+      cvName: "Public Uploaded",
       categoryId: category._id.toString(),
       experienceLevelId: null,
       skillTags: [],
@@ -626,23 +648,26 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
       employmentTypes: [],
       workModes: [],
     });
-    expect(browse.body.cvs[0]).not.toHaveProperty("generatedContent");
+    expect(browse.body.cvs[0]).not.toHaveProperty("uploadedFile");
+    expect(browse.body.cvs[0]).not.toHaveProperty("storageKey");
     expect(browse.body.cvs[0]).not.toHaveProperty("email");
     expect(browse.body.cvs[0]).not.toHaveProperty("phone");
   });
 
   it("HTTP denies Candidate, Company Manager, and Recruiter without current Candidate Search eligibility (BR-33)", async () => {
+    const currentPdf = await buildPdfBuffer("authz-current-pdf");
+    mockRestrictedPdfDownload(new Map([[CURRENT_STORAGE_KEY, currentPdf]]));
     const category = await createFieldCategory();
     const { manager, recruiter } = await createRecruiterWithProofJob({
-      emailPrefix: "v14.slice05.authz",
+      emailPrefix: "v14.slice06.authz",
     });
     const ineligibleRecruiter = await createActiveRecruiterContext({
-      email: "recruiter.v14.slice05.nojob@example.com",
+      email: "recruiter.v14.slice06.nojob@example.com",
       company: manager.company,
-      employeeCode: "NV-V14-SLICE05-NOJOB",
+      employeeCode: "NV-V14-SLICE06-NOJOB",
     });
     const candidate = await createVerifiedUser({
-      email: "candidate.v14.slice05.authz@example.com",
+      email: "candidate.v14.slice06.authz@example.com",
     });
     const candidateCv = await createCandidateCv({
       candidateUserId: candidate.user._id,
@@ -682,7 +707,12 @@ describe("V14 Slice 05 — Generated CV Recruiter Preview (F05 partial, F06 part
       email: recruiter.user.email,
       password: DEFAULT_PASSWORD,
     });
-    const eligibleResponse = await requestPdf(agent, previewPath, eligibleToken);
+    const eligibleResponse = await requestPdf(
+      agent,
+      previewPath,
+      eligibleToken,
+    );
     assertInlinePdf(eligibleResponse);
+    expect(eligibleResponse.body.equals(currentPdf)).toBe(true);
   });
 });

@@ -38,7 +38,7 @@ import {
 } from "../controllers/application.controller.js";
 import {
   listCandidateSearchEligibleCandidateCvsHandler,
-  previewSearchEligibleGeneratedCandidateCvHandler,
+  previewSearchEligibleCandidateCvHandler,
 } from "../controllers/candidate-search.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-company-manager-business-access.js";
@@ -130,7 +130,7 @@ router.get(
   "/candidate-search/cvs/:cvId/preview",
   authenticateAccess,
   authorizeRecruiterCandidateSearchAccess,
-  previewSearchEligibleGeneratedCandidateCvHandler,
+  previewSearchEligibleCandidateCvHandler,
 );
 
 router.get(
