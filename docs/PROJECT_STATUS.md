@@ -132,8 +132,9 @@ and closes the plane before MongoDB disconnect. `notification.service.js`
 best-effort emits only after a durable `Notification` insert, outside any
 MongoDB transaction; Socket failure does not roll back source state,
 `NotificationEvent`, or `Notification`. Read state remains `Notification.readAt`.
-Reconnect does not replay Socket history. Offline orchestration remains a
-later-slice concern on the same authenticated connection plane.
+Reconnect does not replay Socket history. Offline/resync uses durable
+Notification and canonical Conversation HTTP reads (Slice 12); no Socket
+replay orchestration is added to the realtime plane.
 
 Slice 10 is implemented and verified for Message Realtime Distribution
 (`F07` closure; `BR-34`–`BR-37`, `BR-50`; Data §9.5 / §14.1). After every
@@ -145,9 +146,8 @@ current Assignee, Assignee sends reach the Candidate, and SYSTEM Messages
 reach valid post-transition participants with no stale-Assignee fan-out.
 Emit is post-commit, best-effort, non-exactly-once, and does not roll back
 persisted Message, `NotificationEvent`, or `Notification` on Socket failure.
-Durable `CHAT_MESSAGE_CREATED` from Slice 04 is unchanged. Reconnect/offline
-orchestration, typing/presence/read receipt, and delivery persistence remain
-out of scope.
+Durable `CHAT_MESSAGE_CREATED` from Slice 04 is unchanged. Offline resync is
+Slice 12; typing/presence/read receipt and delivery persistence remain out of scope.
 
 Slice 11 is implemented and verified for Conversation State Realtime
 (`F08`; `BR-38`–`BR-41`, `BR-50`; Data §8.14 / §9.5 / §14.1). After winning
@@ -163,7 +163,19 @@ fake pause/resume cycle. Emit is post-commit, best-effort, creates no durable
 `NotificationEvent`/`Notification`, and does not roll back source Application,
 Assignment, or Conversation state on Socket failure. Focused coverage in
 `test/notification/v13-slice11-conversation-state-realtime-distribution.test.js`
-(9 tests). Reconnect/offline orchestration remains Slice 12.
+(9 tests). Reconnect/offline resync is implemented and verified in Slice 12.
+
+Slice 12 is implemented and verified for Offline / Reconnect Resync (`F10`;
+`BR-02`, `BR-45`, `BR-46`). Missed realtime events are not replayed on Socket
+reconnect; clients recover authoritative state through existing durable HTTP
+reads only — `GET /api/notifications` for Notification inbox,
+`GET /api/candidate/applications/:applicationId/conversation` and
+`GET /api/jobs/my-applications/:applicationId/conversation` for Message history
+and current Conversation interaction mode derived from Application/Assignment
+authority. No new resync endpoint, Socket event history, missed-event queue,
+`SocketSession`, delivery cursor, or per-device sync persistence is added.
+Focused coverage in
+`test/notification/v13-slice12-offline-reconnect-resync.test.js` (6 tests).
 
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
@@ -1632,11 +1644,9 @@ the current V10 revision complete.
 ## Deferred / not started
 
 - **V13 later-slice gates:** V12 closure is deferred as the acceptance gate for
-  V13 Slices 06–08 and does not block Slice 01. Slice 09 Notification realtime
-  distribution is implemented on the shared authenticated connection plane.
-  Message realtime, Conversation-state realtime, and offline/client
-  resynchronization orchestration remain later-slice concerns and are not
-  pulled into Slice 09.
+  V13 Slices 06–08 and does not block Slice 01. Slice 09–12 are implemented on
+  the shared authenticated connection plane with durable HTTP resync for offline
+  recovery; Slice 13 Final Acceptance remains later work.
 - **V12 Final Acceptance:** Slices 01–08 are implemented and verified. Slice 09
   Final Acceptance remains in progress only for recorded acceptance findings;
   Slice 07 terminal cancellation and Slice 08 Assignment/Interview-read
@@ -1662,6 +1672,17 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V13 Slice 12 Offline / Reconnect Resync: focused integration coverage passed
+  the new 6-test
+  `test/notification/v13-slice12-offline-reconnect-resync.test.js` plus existing
+  Slice 09–11 realtime suites. Then `cd backend && npm run verify:agent` passed
+  (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`;
+  architecture: ARCH-001 through ARCH-016; Vitest: 132 files / 1,260 tests).
+  Coverage includes no Socket replay on reconnect, durable Notification inbox
+  HTTP resync, canonical Conversation/Message HTTP resync, authoritative
+  Conversation mode recovery after missed transitions, new-realtime-only delivery
+  after reconnect, no duplicate durable data across reconnects, cross-user HTTP
+  authorization on resync reads, and no offline sync/delivery persistence.
 - V13 Slice 09 Notification Realtime Distribution: focused Notification
   coverage passed 5 files / 32 tests, including the new 6-test
   `test/notification/v13-slice09-notification-realtime-distribution.test.js`
