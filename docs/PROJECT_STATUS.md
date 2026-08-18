@@ -122,17 +122,19 @@ transition, and post-commit materialization remains best-effort, recoverable,
 and idempotent. No V12 Availability, Assignment, Schedule history, or realtime
 behavior changes.
 
-Slice 09 engineering prerequisite is prepared and verified for Notification
-Realtime Distribution (`F09`; `BR-42`–`BR-45`, `BR-50`; Data §9.5 / §14.1).
-Engineering SoT now assigns Socket.IO lifecycle, handshake auth via
-`authenticateAccess`, in-memory User→connection membership, and
-recipient-scoped Notification emit to
-`backend/src/services/realtime-distribution.service.js`, with
-`backend/index.js` owning attach/close orchestration and
-`notification.service.js` owning the post-materialization emit trigger after
-durable Notification exists. No F09 Socket behavior is implemented yet;
-Message realtime, Conversation-state realtime, and offline orchestration
-remain later-slice concerns on the reserved shared connection plane.
+Slice 09 is implemented and verified for Notification Realtime Distribution
+(`F09`, `F11` realtime closure; `BR-04`, `BR-08`, `BR-42`–`BR-44`, `BR-50`;
+Data §9.5 / §14.1). `realtime-distribution.service.js` owns Socket.IO
+lifecycle, `authenticateAccess` handshake auth (ACTIVE User + valid
+AuthSession only), in-memory `user:{userId}` membership, and recipient-scoped
+Notification emit. `backend/index.js` attaches after the HTTP server exists
+and closes the plane before MongoDB disconnect. `notification.service.js`
+best-effort emits only after a durable `Notification` insert, outside any
+MongoDB transaction; Socket failure does not roll back source state,
+`NotificationEvent`, or `Notification`. Read state remains `Notification.readAt`.
+Reconnect does not replay Socket history. Message realtime, Conversation-state
+realtime, and offline orchestration remain later-slice concerns on the same
+authenticated connection plane.
 
 **V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
 verified, while Slice 09 Final Acceptance is resolving recorded acceptance
@@ -1601,12 +1603,11 @@ the current V10 revision complete.
 ## Deferred / not started
 
 - **V13 later-slice gates:** V12 closure is deferred as the acceptance gate for
-  V13 Slices 06–08 and does not block Slice 01. The Slice 09 realtime
-  engineering contract is now recorded in Engineering SoT / architecture /
-  backend conventions; F09 implementation may start against that ownership.
+  V13 Slices 06–08 and does not block Slice 01. Slice 09 Notification realtime
+  distribution is implemented on the shared authenticated connection plane.
   Message realtime, Conversation-state realtime, and offline/client
   resynchronization orchestration remain later-slice concerns and are not
-  pulled into Slice 09 beyond the shared authenticated connection plane.
+  pulled into Slice 09.
 - **V12 Final Acceptance:** Slices 01–08 are implemented and verified. Slice 09
   Final Acceptance remains in progress only for recorded acceptance findings;
   Slice 07 terminal cancellation and Slice 08 Assignment/Interview-read
@@ -1632,6 +1633,18 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V13 Slice 09 Notification Realtime Distribution: focused Notification
+  coverage passed 5 files / 32 tests, including the new 6-test
+  `test/notification/v13-slice09-notification-realtime-distribution.test.js`
+  plus existing Slice 01, 02, 07, and 08 Notification suites. Then
+  `cd backend && npm run verify:agent` passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 129 files / 1,235 tests). Coverage includes rejected
+  unauthenticated/invalid-session handshakes, recipient-only fan-out to every
+  active socket of that User, no cross-user leak, emit only after durable
+  insert, no ghost emit on materialization failure, Socket emit/disconnect
+  failure leaving durable state intact, in-memory room membership without
+  replay, and no SocketSession/delivery/presence persistence.
 - V13 Slice 09 Notification Realtime Distribution engineering prerequisite:
   Product/Data F09 ownership points were locked into Engineering SoT,
   `architecture.md`, and `backend-conventions.md` without implementing F09

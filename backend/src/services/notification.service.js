@@ -1,10 +1,22 @@
 import NotificationEvent from "../models/notification-event.model.js";
 import Notification from "../models/notification.model.js";
 import AppError from "../utils/app-error.js";
+import { emitNotificationToRecipient } from "./realtime-distribution.service.js";
 
 const DEFAULT_RECOVERY_BATCH_SIZE = 100;
 
 const isDuplicateKeyError = (error) => error?.code === 11000;
+
+const emitMaterializedNotification = (notification) => {
+  try {
+    emitNotificationToRecipient({
+      recipientUserId: notification.recipientUserId,
+      notification,
+    });
+  } catch {
+    // Realtime fan-out is best-effort and must not fail materialization.
+  }
+};
 
 const findNotificationForRecipient = async ({
   notificationId,
@@ -113,7 +125,7 @@ const materializeNotificationEvent = async ({
 
   for (const recipient of event.recipients) {
     try {
-      await Notification.updateOne(
+      const writeResult = await Notification.updateOne(
         {
           eventId: event._id,
           recipientUserId: recipient.recipientUserId,
@@ -137,6 +149,17 @@ const materializeNotificationEvent = async ({
           setDefaultsOnInsert: true,
         },
       );
+
+      if (!session && writeResult.upsertedCount === 1) {
+        const durableNotification = await Notification.findOne({
+          eventId: event._id,
+          recipientUserId: recipient.recipientUserId,
+        });
+
+        if (durableNotification) {
+          emitMaterializedNotification(durableNotification);
+        }
+      }
     } catch (error) {
       if (!isDuplicateKeyError(error)) {
         throw error;
