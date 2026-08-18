@@ -32,7 +32,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
 | V11 | Conversation và Chat thuộc Application | COMPLETED AND VERIFIED |
 | V12 | Interview Schedule | IN PROGRESS |
-| V13 | Notification và phân phối realtime | PLANNED |
+| V13 | Notification và phân phối realtime | READY FOR IMPLEMENTATION |
 | V14 | Candidate Search trên CV PUBLIC | PLANNED |
 | V15 | Job Invitation và nhánh Recruiter săn ứng viên | PLANNED |
 | V16 | Saved Jobs | PLANNED |
@@ -101,8 +101,20 @@ approved Conversation/Chat Product/Data contracts. Realtime, notification,
 attachment, and related deferred capabilities remain outside V11 by product
 boundary. V12 now has approved Product/Data contracts and is `IN PROGRESS`;
 Slices 01–08 are implemented and verified, while Slice 09 Final Acceptance is
-resolving recorded acceptance findings. V13 through
-V17 must not be implemented merely from their roadmap titles.
+resolving recorded acceptance findings. V13 has approved Product/Data
+contracts and is `READY FOR IMPLEMENTATION`; its Slice 01 may start against
+those contracts and the approved recovery ownership/trigger contract. V12
+closure remains a later acceptance gate for V13 Slices 06–08, not a Slice 01
+prerequisite. V14 through V17 must not be implemented merely from their
+roadmap titles.
+
+V13 canonical specification:
+
+`docs/product/versions/v13-notification-realtime-distribution.md`
+
+V13 canonical persistence contract:
+
+`docs/data/versions/v13-notification-realtime-distribution-data-model.md`
 
 V12 canonical specification:
 

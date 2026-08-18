@@ -211,6 +211,36 @@ const authSession = Object.freeze({
   expiresInMs: authSessionExpiresInMs,
 });
 
+const notificationRecoveryIntervalMs = Number(
+  process.env.NOTIFICATION_RECOVERY_INTERVAL_MS || 60_000,
+);
+const notificationRecoveryBatchSize = Number(
+  process.env.NOTIFICATION_RECOVERY_BATCH_SIZE || 100,
+);
+
+if (
+  !Number.isInteger(notificationRecoveryIntervalMs) ||
+  notificationRecoveryIntervalMs <= 0
+) {
+  throw new Error(
+    "NOTIFICATION_RECOVERY_INTERVAL_MS must be a positive integer",
+  );
+}
+
+if (
+  !Number.isInteger(notificationRecoveryBatchSize) ||
+  notificationRecoveryBatchSize <= 0
+) {
+  throw new Error(
+    "NOTIFICATION_RECOVERY_BATCH_SIZE must be a positive integer",
+  );
+}
+
+const notificationRecovery = Object.freeze({
+  intervalMs: notificationRecoveryIntervalMs,
+  batchSize: notificationRecoveryBatchSize,
+});
+
 const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:8000";
 
 export default Object.freeze({
@@ -225,5 +255,6 @@ export default Object.freeze({
   fileUpload,
   authToken,
   authSession,
+  notificationRecovery,
   appBaseUrl,
 });

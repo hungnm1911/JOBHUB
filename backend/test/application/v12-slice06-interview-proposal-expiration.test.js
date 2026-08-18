@@ -203,9 +203,15 @@ describe("V12 Slice 06 — Automatic Interview Proposal Expiration", () => {
     ).toBe("PROPOSED");
 
     await InterviewSchedule.deleteMany({ applicationId: context.application._id });
+    // Keep Application.version monotonic. Reusing an earlier version after a
+    // first-proposal NotificationEvent was committed makes the next first
+    // proposal collide on eventKey inside a Mongo transaction and hang retries.
     await Application.updateOne(
       { _id: context.application._id },
-      { $set: { status: APPLICATION_STATUS.CONTACTED, version: 1 } },
+      {
+        $set: { status: APPLICATION_STATUS.CONTACTED },
+        $inc: { version: 1 },
+      },
     );
     await CandidateAvailability.deleteMany({ applicationId: context.application._id });
 

@@ -10,9 +10,11 @@ import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
 import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
 import CANDIDATE_CV_UPLOADED_STORAGE from "../constants/candidate-cv-uploaded-storage.js";
 import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
+import CONVERSATION_REALTIME_MODE from "../constants/conversation-realtime-mode.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import MESSAGE_TYPE from "../constants/message-type.js";
+import NOTIFICATION_TYPE from "../constants/notification-type.js";
 import SYSTEM_MESSAGE_CONTENT from "../constants/system-message-content.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
@@ -41,6 +43,11 @@ import {
 } from "./company.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
 import { evaluateApplicationConversationChatAuthority } from "./application-chat-authority.service.js";
+import {
+  createNotificationEvent,
+  materializeNotificationEvent,
+} from "./notification.service.js";
+import { emitConversationStateToRecipients, emitMessageToRecipients } from "./realtime-distribution.service.js";
 import {
   acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
@@ -1153,7 +1160,7 @@ const expireDueInterviewProposalsForApplications = async ({
   session = null,
 } = {}) => {
   if (applicationIds.length === 0) {
-    return { modifiedCount: 0 };
+    return { modifiedCount: 0, notificationEvents: [] };
   }
 
   const normalizedApplicationIds = applicationIds.map((applicationId) =>
@@ -1161,26 +1168,56 @@ const expireDueInterviewProposalsForApplications = async ({
       ? applicationId
       : new mongoose.Types.ObjectId(applicationId),
   );
+  const dueSchedules = await InterviewSchedule.find({
+    applicationId: { $in: normalizedApplicationIds },
+    status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+    expiresAt: { $lte: now },
+  })
+    .select("_id")
+    .session(session)
+    .lean();
+  const notificationEvents = [];
+  let modifiedCount = 0;
 
-  let updateQuery = InterviewSchedule.updateMany(
-    {
-      applicationId: { $in: normalizedApplicationIds },
-      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
-      expiresAt: { $lte: now },
-    },
-    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
-    { runValidators: true },
-  );
+  for (const dueSchedule of dueSchedules) {
+    const expireOne = async (activeSession) =>
+      expireDueInterviewProposal({
+        interviewScheduleId: dueSchedule._id,
+        now,
+        session: activeSession,
+      });
 
-  if (session) {
-    updateQuery = updateQuery.session(session);
+    let result;
+    if (session) {
+      result = await expireOne(session);
+    } else {
+      const expirationSession = await mongoose.startSession();
+      try {
+        await expirationSession.withTransaction(async () => {
+          result = await expireOne(expirationSession);
+        });
+      } finally {
+        await expirationSession.endSession();
+      }
+    }
+
+    modifiedCount += result.modifiedCount;
+    if (result.notificationEvent) {
+      notificationEvents.push(result.notificationEvent);
+    }
   }
 
-  const result = await updateQuery;
+  if (!session) {
+    for (const notificationEvent of notificationEvents) {
+      try {
+        await materializeNotificationEvent({ eventId: notificationEvent._id });
+      } catch {
+        // The committed expiration and durable obligation remain recoverable.
+      }
+    }
+  }
 
-  return {
-    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
-  };
+  return { modifiedCount, notificationEvents };
 };
 
 const expireDueInterviewProposalsForApplication = async ({
@@ -1195,18 +1232,25 @@ const expireDueInterviewProposalsForApplication = async ({
   });
 
 const expireDueInterviewProposals = async ({ now = new Date() } = {}) => {
-  const result = await InterviewSchedule.updateMany(
+  const dueSchedules = await InterviewSchedule.find(
     {
       status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
       expiresAt: { $lte: now },
     },
-    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
-    { runValidators: true },
-  );
+    { _id: 1, applicationId: 1 },
+  ).lean();
 
-  return {
-    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
-  };
+  return expireDueInterviewProposalsForApplications({
+    applicationIds: [
+      ...new Map(
+        dueSchedules.map((schedule) => [
+          schedule.applicationId.toString(),
+          schedule.applicationId,
+        ]),
+      ).values(),
+    ],
+    now,
+  });
 };
 
 // V12 F08 Slice 07 / TX-03: this is intentionally callable only by canonical
@@ -1214,12 +1258,26 @@ const expireDueInterviewProposals = async ({ now = new Date() } = {}) => {
 // Availability, and terminal Schedule history while invalidating the one active
 // Schedule, if any, in the same transaction as its parent Application.
 const cancelActiveInterviewScheduleForTerminalApplication = async ({
-  applicationId,
+  application,
+  job,
   session,
 } = {}) => {
+  const activeSchedule = await InterviewSchedule.findOne({
+    applicationId: application._id,
+    status: {
+      $in: [
+        INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+        INTERVIEW_SCHEDULE_STATUS.CONFIRMED,
+      ],
+    },
+  }).session(session);
+  if (!activeSchedule) {
+    return { modifiedCount: 0, notificationEvent: null };
+  }
+
   let updateQuery = InterviewSchedule.updateOne(
     {
-      applicationId,
+      _id: activeSchedule._id,
       status: {
         $in: [
           INTERVIEW_SCHEDULE_STATUS.PROPOSED,
@@ -1230,15 +1288,90 @@ const cancelActiveInterviewScheduleForTerminalApplication = async ({
     { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
     { runValidators: true },
   );
-
   if (session) {
     updateQuery = updateQuery.session(session);
   }
-
   const result = await updateQuery;
+  if ((result.modifiedCount ?? result.nModified ?? 0) === 0) {
+    return { modifiedCount: 0, notificationEvent: null };
+  }
+  activeSchedule.status = INTERVIEW_SCHEDULE_STATUS.CANCELLED;
+
+  const notificationEvent = await createInterviewScheduleNotificationEvent({
+    application,
+    job,
+    schedule: activeSchedule,
+    type: NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CHANGED,
+    session,
+  });
+
   return {
-    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+    modifiedCount: 1,
+    notificationEvent,
   };
+};
+
+// Guard acquire: perform a real write for transaction serialization, then
+// restore updatedAt so the guard does not become an Application business change.
+const acquireWithRestoredUpdatedAt = async ({
+  acquire,
+  model,
+  documentId,
+  session,
+} = {}) => {
+  const before =
+    documentId == null
+      ? null
+      : await model
+          .findById(documentId)
+          .select("updatedAt")
+          .session(session)
+          .lean();
+
+  const acquired = await acquire();
+
+  if (acquired && before?.updatedAt) {
+    await model.findOneAndUpdate(
+      { _id: documentId },
+      { $set: { updatedAt: before.updatedAt } },
+      { session, timestamps: false },
+    );
+  }
+
+  return acquired;
+};
+
+// V13 F05 / TX-01: serialize first-submit recipient selection with every
+// Assignment CAS without changing Application status, version, or timestamps.
+const acquireApplicationAssignmentForAvailabilityFirstSubmit = async ({
+  application,
+  session,
+} = {}) => {
+  return acquireWithRestoredUpdatedAt({
+    model: Application,
+    documentId: application._id,
+    session,
+    acquire: () =>
+      Application.findOneAndUpdate(
+        {
+          _id: application._id,
+          candidateUserId: application.candidateUserId,
+          jobId: application.jobId,
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          status: APPLICATION_STATUS.CONTACTED,
+          version: application.version,
+          assignedRecruiterCompanyMemberId:
+            application.assignedRecruiterCompanyMemberId ?? null,
+        },
+        {
+          $set: {
+            assignedRecruiterCompanyMemberId:
+              application.assignedRecruiterCompanyMemberId ?? null,
+          },
+        },
+        { returnDocument: "after", session },
+      ),
+  });
 };
 
 const normalizeFirstAvailabilitySubmission = ({ timezone, slots, now }) => {
@@ -1297,8 +1430,10 @@ const normalizeFirstAvailabilitySubmission = ({ timezone, slots, now }) => {
   };
 };
 
-// V12 F02 Slice 01: first submit creates the sole current Availability only.
-// It intentionally does not create a Schedule or mutate Application status/version.
+// V12 F02 + V13 F05: first submit creates the sole current Availability and,
+// only when the winning Application assignment is ASSIGNED(A), the required
+// durable NotificationEvent for A in the same transaction. It never creates a
+// Schedule or mutates Application status/version; UNASSIGNED has no fallback.
 const submitCandidateAvailabilityFirstTime = async ({
   candidateUserId,
   actorUser,
@@ -1322,43 +1457,100 @@ const submitCandidateAvailabilityFirstTime = async ({
     });
   }
 
-  const application = await Application.findOne({
-    _id: applicationId,
-    candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
-  });
-
-  if (!application) {
-    throw new AppError(404, "Application not found", {
-      field: "applicationId",
-    });
-  }
-
-  // Slice 01 opens scheduling only from the current CONTACTED state. Legacy
-  // pre-V12 downstream Applications are never backfilled with inferred data.
-  if (application.status !== APPLICATION_STATUS.CONTACTED) {
-    throw new AppError(
-      409,
-      "Availability can first be submitted only while Application is CONTACTED",
-      { field: "status" },
-    );
-  }
-
   const submission = normalizeFirstAvailabilitySubmission({
     timezone,
     slots,
     now,
   });
+  const session = await mongoose.startSession();
+  let availability = null;
+  let notificationEvent = null;
 
   try {
-    const availability = await CandidateAvailability.create({
-      applicationId: application._id,
-      timezone: submission.timezone,
-      slots: submission.slots,
-      revision: 0,
-    });
+    await session.withTransaction(async () => {
+      // withTransaction may retry this callback after a transient write conflict.
+      availability = null;
+      notificationEvent = null;
 
-    return toCandidateAvailabilityProjection(availability);
+      const application = await Application.findOne({
+        _id: applicationId,
+        candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
+
+      if (!application) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
+      }
+
+      // Legacy pre-V12 downstream Applications are never backfilled with
+      // inferred Availability.
+      if (application.status !== APPLICATION_STATUS.CONTACTED) {
+        throw new AppError(
+          409,
+          "Availability can first be submitted only while Application is CONTACTED",
+          { field: "status" },
+        );
+      }
+
+      const acquiredApplication =
+        await acquireApplicationAssignmentForAvailabilityFirstSubmit({
+          application,
+          session,
+        });
+      if (!acquiredApplication) {
+        throw new AppError(
+          409,
+          "Application has changed; refresh and retry Availability submission",
+          { field: "applicationId" },
+        );
+      }
+
+      [availability] = await CandidateAvailability.create(
+        [
+          {
+            applicationId: acquiredApplication._id,
+            timezone: submission.timezone,
+            slots: submission.slots,
+            revision: 0,
+          },
+        ],
+        { session },
+      );
+
+      if (!isApplicationUnassigned(acquiredApplication)) {
+        const [assignee, job] = await Promise.all([
+          CompanyMember.findById(
+            acquiredApplication.assignedRecruiterCompanyMemberId,
+          )
+            .select("userId")
+            .session(session),
+          Job.findById(acquiredApplication.jobId).select("title").session(session),
+        ]);
+        if (!assignee?.userId || !job) {
+          throw new AppError(
+            409,
+            "Current Assignee is unavailable for Availability Notification",
+          );
+        }
+
+        const { event } = await createNotificationEvent({
+          eventKey: `interview-availability-submitted:${availability._id.toString()}`,
+          type: NOTIFICATION_TYPE.INTERVIEW_AVAILABILITY_SUBMITTED,
+          actorUserId: actorUser._id,
+          applicationId: acquiredApplication._id,
+          recipients: [
+            {
+              recipientUserId: assignee.userId,
+              content: `The candidate submitted interview availability for ${job.title}.`,
+            },
+          ],
+          session,
+        });
+        notificationEvent = event;
+      }
+    });
   } catch (error) {
     if (isMongoDuplicateKeyError(error)) {
       throw new AppError(
@@ -1369,7 +1561,19 @@ const submitCandidateAvailabilityFirstTime = async ({
     }
 
     throw error;
+  } finally {
+    await session.endSession();
   }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // Availability and its durable obligation stay committed for recovery.
+    }
+  }
+
+  return toCandidateAvailabilityProjection(availability);
 };
 
 // V12 F03: replace the one current Availability set, guarded by its revision.
@@ -1414,9 +1618,11 @@ const editCandidateAvailability = async ({
   });
   const session = await mongoose.startSession();
   let updatedAvailability = null;
+  const notificationEvents = [];
 
   try {
     await session.withTransaction(async () => {
+      notificationEvents.length = 0;
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
@@ -1439,11 +1645,12 @@ const editCandidateAvailability = async ({
         );
       }
 
-      await expireDueInterviewProposalsForApplication({
+      const expirationResult = await expireDueInterviewProposalsForApplication({
         applicationId: application._id,
         now,
         session,
       });
+      notificationEvents.push(...expirationResult.notificationEvents);
 
       const proposedSchedule = await InterviewSchedule.exists({
         applicationId: application._id,
@@ -1473,6 +1680,14 @@ const editCandidateAvailability = async ({
     });
   } finally {
     await session.endSession();
+  }
+
+  for (const notificationEvent of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed expiration and Availability edit remain recoverable.
+    }
   }
 
   return toCandidateAvailabilityProjection(updatedAvailability);
@@ -1526,9 +1741,11 @@ const createInterviewProposal = async ({
   let job = null;
   let updatedApplication = null;
   let updatedAvailability = null;
+  const notificationEvents = [];
 
   try {
     await session.withTransaction(async () => {
+      notificationEvents.length = 0;
       job = await Job.findById(jobId).session(session);
       if (!job) {
         throw new AppError(404, "Job not found", { field: "jobId" });
@@ -1617,11 +1834,12 @@ const createInterviewProposal = async ({
         throw new AppError(409, "Selected slot is in the past", { field: "date" });
       }
 
-      await expireDueInterviewProposalsForApplication({
+      const expirationResult = await expireDueInterviewProposalsForApplication({
         applicationId: application._id,
         now,
         session,
       });
+      notificationEvents.push(...expirationResult.notificationEvents);
 
       const [activeSchedule, declinedSchedule] = await Promise.all([
         InterviewSchedule.exists({
@@ -1695,6 +1913,34 @@ const createInterviewProposal = async ({
         );
       }
 
+      if (isFirstProposal) {
+        const statusNotificationEvent =
+          await createApplicationLifecycleNotificationEvent({
+            application: updatedApplication,
+            job,
+            type: NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED,
+            actorUserId: actorUser._id,
+            recipientUserId: updatedApplication.candidateUserId,
+            session,
+          });
+        if (statusNotificationEvent) {
+          notificationEvents.push(statusNotificationEvent);
+        }
+      }
+
+      const scheduleNotificationEvent =
+        await createInterviewScheduleNotificationEvent({
+          application: updatedApplication,
+          job,
+          schedule,
+          type: NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CREATED,
+          actorUserId: actorUser._id,
+          session,
+        });
+      if (scheduleNotificationEvent) {
+        notificationEvents.push(scheduleNotificationEvent);
+      }
+
       availability.revision += 1;
       await availability.save({ session });
       updatedAvailability = availability;
@@ -1708,6 +1954,14 @@ const createInterviewProposal = async ({
     throw error;
   } finally {
     await session.endSession();
+  }
+
+  for (const notificationEvent of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed proposal/status event remains pending for recovery.
+    }
   }
 
   return {
@@ -1765,42 +2019,130 @@ const respondToCandidateInterviewProposal = async ({
     });
   }
 
-  const application = await Application.findOne({
+  const initialApplication = await Application.findOne({
     _id: applicationId,
     candidateUserId,
     source: APPLICATION_SOURCE.DIRECT_APPLICATION,
   }).lean();
-  if (!application) {
+  if (!initialApplication) {
     throw new AppError(404, "Application not found", { field: "applicationId" });
   }
 
-  if (isApplicationTerminalStatus(application.status)) {
-    throw new AppError(409, "Terminal Applications cannot receive Schedule responses", {
-      field: "status",
-    });
-  }
-
   await expireDueInterviewProposalsForApplication({
-    applicationId: application._id,
+    applicationId: initialApplication._id,
     now,
   });
 
-  const schedule = await InterviewSchedule.findOneAndUpdate(
-    {
-      _id: interviewScheduleId,
-      applicationId: application._id,
-      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
-      expiresAt: { $gt: now },
-    },
-    { $set: { status: targetStatus } },
-    { returnDocument: "after", runValidators: true },
-  );
-  if (!schedule) {
-    throw new AppError(
-      409,
-      "Interview Schedule is no longer a live proposed proposal",
-      { field: "interviewScheduleId" },
-    );
+  const session = await mongoose.startSession();
+  let schedule = null;
+  let notificationEvent = null;
+
+  try {
+    await session.withTransaction(async () => {
+      schedule = null;
+      notificationEvent = null;
+
+      const application = await Application.findOne({
+        _id: applicationId,
+        candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      }).session(session);
+      if (!application) {
+        throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(409, "Terminal Applications cannot receive Schedule responses", {
+          field: "status",
+        });
+      }
+
+      const acquiredApplication = await acquireWithRestoredUpdatedAt({
+        model: Application,
+        documentId: application._id,
+        session,
+        acquire: () =>
+          Application.findOneAndUpdate(
+            {
+              _id: application._id,
+              candidateUserId,
+              source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+              status: application.status,
+              version: application.version,
+              assignedRecruiterCompanyMemberId:
+                application.assignedRecruiterCompanyMemberId ?? null,
+            },
+            {
+              $set: {
+                assignedRecruiterCompanyMemberId:
+                  application.assignedRecruiterCompanyMemberId ?? null,
+              },
+            },
+            { returnDocument: "after", session },
+          ),
+      });
+      if (!acquiredApplication) {
+        throw new AppError(
+          409,
+          "Application has changed; refresh and retry the Interview Schedule response",
+          { field: "applicationId" },
+        );
+      }
+
+      schedule = await InterviewSchedule.findOneAndUpdate(
+        {
+          _id: interviewScheduleId,
+          applicationId: acquiredApplication._id,
+          status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+          expiresAt: { $gt: now },
+        },
+        { $set: { status: targetStatus } },
+        { returnDocument: "after", runValidators: true, session },
+      );
+      if (!schedule) {
+        throw new AppError(
+          409,
+          "Interview Schedule is no longer a live proposed proposal",
+          { field: "interviewScheduleId" },
+        );
+      }
+
+      if (!isApplicationUnassigned(acquiredApplication)) {
+        const [assignee, job] = await Promise.all([
+          CompanyMember.findById(
+            acquiredApplication.assignedRecruiterCompanyMemberId,
+          )
+            .select("userId")
+            .session(session),
+          Job.findById(acquiredApplication.jobId).select("title").session(session),
+        ]);
+        if (!assignee?.userId) {
+          throw new Error("Current Assignee is unavailable for Schedule Notification");
+        }
+
+        notificationEvent = await createInterviewScheduleNotificationEvent({
+          application: acquiredApplication,
+          job,
+          schedule,
+          type:
+            targetStatus === INTERVIEW_SCHEDULE_STATUS.CONFIRMED
+              ? NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CONFIRMED
+              : NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_DECLINED,
+          actorUserId: actorUser._id,
+          recipientUserId: assignee.userId,
+          session,
+        });
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Schedule response remains recoverable.
+    }
   }
 
   return toInterviewScheduleProjection(schedule);
@@ -1847,9 +2189,12 @@ const cancelRecruiterInterviewProposal = async ({
   });
   const session = await mongoose.startSession();
   let cancelledSchedule = null;
+  let notificationEvent = null;
 
   try {
     await session.withTransaction(async () => {
+      cancelledSchedule = null;
+      notificationEvent = null;
       const job = await Job.findById(jobId).session(session);
       if (!job) {
         throw new AppError(404, "Job not found", { field: "jobId" });
@@ -1906,9 +2251,26 @@ const cancelRecruiterInterviewProposal = async ({
           { field: "interviewScheduleId" },
         );
       }
+
+      notificationEvent = await createInterviewScheduleNotificationEvent({
+        application,
+        job,
+        schedule: cancelledSchedule,
+        type: NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CHANGED,
+        actorUserId: actorUser._id,
+        session,
+      });
     });
   } finally {
     await session.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed cancellation remains recoverable.
+    }
   }
 
   return toInterviewScheduleProjection(cancelledSchedule);
@@ -2564,6 +2926,370 @@ const createConversationOnFirstAssignIfAbsent = async ({
   }
 };
 
+const createChatMessageNotificationEvent = async ({
+  applicationId,
+  message,
+  actorUserId = null,
+  recipients,
+  session,
+} = {}) => {
+  const recipientsByUserId = new Map();
+
+  for (const recipient of recipients) {
+    if (
+      recipient.recipientUserId == null ||
+      (actorUserId != null &&
+        recipient.recipientUserId.toString() === actorUserId.toString())
+    ) {
+      continue;
+    }
+
+    recipientsByUserId.set(recipient.recipientUserId.toString(), recipient);
+  }
+
+  if (recipientsByUserId.size === 0) {
+    return null;
+  }
+
+  const { event } = await createNotificationEvent({
+    eventKey: `chat-message-created:${message._id.toString()}`,
+    type: NOTIFICATION_TYPE.CHAT_MESSAGE_CREATED,
+    actorUserId,
+    applicationId,
+    messageId: message._id,
+    recipients: [...recipientsByUserId.values()],
+    session,
+  });
+
+  return event;
+};
+
+const emitCommittedChatMessageRealtimeBestEffort = ({
+  message,
+  recipientUserIds,
+  applicationId,
+} = {}) => {
+  if (message == null || applicationId == null) {
+    return;
+  }
+
+  try {
+    emitMessageToRecipients({
+      message,
+      recipientUserIds,
+      applicationId,
+    });
+  } catch {
+    // Message realtime fan-out is best-effort and must not fail the caller.
+  }
+};
+
+const resolveConversationStateRealtimeRecipients = async ({
+  application,
+  session,
+} = {}) => {
+  if (application == null) {
+    return null;
+  }
+
+  let conversationQuery = Conversation.findOne({
+    applicationId: application._id,
+  });
+  if (session) {
+    conversationQuery = conversationQuery.session(session);
+  }
+
+  const conversation = await conversationQuery;
+
+  if (!conversation) {
+    return null;
+  }
+
+  const recipientUserIds = new Set([
+    application.candidateUserId.toString(),
+  ]);
+
+  if (!isApplicationUnassigned(application)) {
+    let assigneeQuery = CompanyMember.findById(
+      application.assignedRecruiterCompanyMemberId,
+    );
+    if (session) {
+      assigneeQuery = assigneeQuery.session(session);
+    }
+
+    const assignee = await assigneeQuery;
+
+    if (assignee) {
+      let assigneeUserQuery = User.findById(assignee.userId);
+      if (session) {
+        assigneeUserQuery = assigneeUserQuery.session(session);
+      }
+
+      const assigneeUser = await assigneeUserQuery;
+
+      if (assigneeUser) {
+        const applicationIsTerminal = isApplicationTerminalStatus(
+          application.status,
+        );
+
+        if (
+          !applicationIsTerminal ||
+          (assignee.status === COMPANY_MEMBER_STATUS.ACTIVE &&
+            assigneeUser.status === USER_STATUS.ACTIVE)
+        ) {
+          recipientUserIds.add(assignee.userId.toString());
+        }
+      }
+    }
+  }
+
+  return {
+    conversationId: conversation._id,
+    recipientUserIds: [...recipientUserIds],
+  };
+};
+
+const emitCommittedConversationStateRealtimeBestEffort = async ({
+  application,
+  mode,
+  session,
+} = {}) => {
+  if (application == null || mode == null) {
+    return;
+  }
+
+  try {
+    const context = await resolveConversationStateRealtimeRecipients({
+      application,
+      session,
+    });
+
+    if (!context) {
+      return;
+    }
+
+    emitConversationStateToRecipients({
+      recipientUserIds: context.recipientUserIds,
+      conversationId: context.conversationId,
+      applicationId: application._id,
+      mode,
+    });
+  } catch {
+    // Conversation state realtime fan-out is best-effort and must not fail the caller.
+  }
+};
+
+const createAssignmentNotificationEvent = async ({
+  application,
+  job,
+  type,
+  actorUserId = null,
+  outgoingAssigneeUserId = null,
+  newAssigneeUserId = null,
+  session,
+} = {}) => {
+  const jobTitle = job?.title ?? "this position";
+  const recipientsByUserId = new Map();
+  const addRecipient = (recipientUserId, content) => {
+    if (
+      recipientUserId == null ||
+      (actorUserId != null &&
+        recipientUserId.toString() === actorUserId.toString())
+    ) {
+      return;
+    }
+
+    const recipientKey = recipientUserId.toString();
+    if (!recipientsByUserId.has(recipientKey)) {
+      recipientsByUserId.set(recipientKey, { recipientUserId, content });
+    }
+  };
+
+  if (type === NOTIFICATION_TYPE.APPLICATION_ASSIGNED) {
+    addRecipient(
+      application.candidateUserId,
+      `Your application for ${jobTitle} has been assigned to a recruiter.`,
+    );
+    addRecipient(
+      newAssigneeUserId,
+      `You have been assigned responsibility for an application for ${jobTitle}.`,
+    );
+  } else if (type === NOTIFICATION_TYPE.APPLICATION_REASSIGNED) {
+    addRecipient(
+      application.candidateUserId,
+      `The responsible recruiter for your application for ${jobTitle} has changed.`,
+    );
+    addRecipient(
+      outgoingAssigneeUserId,
+      `You are no longer responsible for an application for ${jobTitle}.`,
+    );
+    addRecipient(
+      newAssigneeUserId,
+      `You are now responsible for an application for ${jobTitle}.`,
+    );
+  } else if (type === NOTIFICATION_TYPE.APPLICATION_UNASSIGNED) {
+    addRecipient(
+      application.candidateUserId,
+      `Your application for ${jobTitle} is waiting for a new responsible recruiter.`,
+    );
+    addRecipient(
+      outgoingAssigneeUserId,
+      `You are no longer responsible for an application for ${jobTitle}.`,
+    );
+  } else {
+    throw new Error("Unsupported Assignment Notification type");
+  }
+
+  if (recipientsByUserId.size === 0) {
+    return null;
+  }
+
+  const { event } = await createNotificationEvent({
+    eventKey: `${type.toLowerCase()}:${application._id.toString()}:${application.version}`,
+    type,
+    actorUserId,
+    applicationId: application._id,
+    recipients: [...recipientsByUserId.values()],
+    session,
+  });
+
+  return event;
+};
+
+// V13 F04/F05: source transitions own their durable obligation. This helper
+// snapshots exactly one trusted recipient for each Application lifecycle event;
+// it never derives recipients from client input or during materialization.
+const createApplicationLifecycleNotificationEvent = async ({
+  application,
+  job,
+  type,
+  actorUserId = null,
+  recipientUserId,
+  session,
+} = {}) => {
+  if (
+    recipientUserId == null ||
+    (actorUserId != null &&
+      recipientUserId.toString() === actorUserId.toString())
+  ) {
+    return null;
+  }
+
+  const jobTitle = job?.title ?? "this position";
+  const contentByType = {
+    [NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED]: `Your application for ${jobTitle} has moved to ${application.status}.`,
+    [NOTIFICATION_TYPE.APPLICATION_HIRED]: `Your application for ${jobTitle} has been marked as hired.`,
+    [NOTIFICATION_TYPE.APPLICATION_REJECTED]: `Your application for ${jobTitle} has been rejected.`,
+    [NOTIFICATION_TYPE.APPLICATION_WITHDRAWN]: `The candidate withdrew their application for ${jobTitle}.`,
+    [NOTIFICATION_TYPE.INTERVIEW_AVAILABILITY_REQUESTED]: `Please provide your availability for an interview for ${jobTitle}.`,
+  };
+  const content = contentByType[type];
+
+  if (!content) {
+    throw new Error("Unsupported Application lifecycle Notification type");
+  }
+
+  const { event } = await createNotificationEvent({
+    eventKey: `${type.toLowerCase()}:${application._id.toString()}:${application.version}`,
+    type,
+    actorUserId,
+    applicationId: application._id,
+    recipients: [{ recipientUserId, content }],
+    session,
+  });
+
+  return event;
+};
+
+// V13 F06 / TX-01: each Schedule transition owns its independent durable
+// obligation. Recipient/content are fixed from the winning source state; this
+// helper never reuses the historical Schedule creator as a current Assignee.
+const createInterviewScheduleNotificationEvent = async ({
+  application,
+  job,
+  schedule,
+  type,
+  actorUserId = null,
+  recipientUserId = application.candidateUserId,
+  session,
+} = {}) => {
+  if (
+    recipientUserId == null ||
+    (actorUserId != null &&
+      recipientUserId.toString() === actorUserId.toString())
+  ) {
+    return null;
+  }
+
+  const jobTitle = job?.title ?? "this position";
+  const contentByType = {
+    [NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CREATED]: `A new interview schedule has been proposed for ${jobTitle}.`,
+    [NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CHANGED]: `Your interview schedule for ${jobTitle} has changed.`,
+    [NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CONFIRMED]: `The candidate confirmed the interview schedule for ${jobTitle}.`,
+    [NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_DECLINED]: `The candidate declined the interview schedule for ${jobTitle}.`,
+  };
+  const content = contentByType[type];
+
+  if (!content) {
+    throw new Error("Unsupported Interview Schedule Notification type");
+  }
+
+  const { event } = await createNotificationEvent({
+    eventKey: `${type.toLowerCase()}:${schedule._id.toString()}`,
+    type,
+    actorUserId,
+    applicationId: application._id,
+    interviewScheduleId: schedule._id,
+    recipients: [{ recipientUserId, content }],
+    session,
+  });
+
+  return event;
+};
+
+// A guarded expiration transition is a source mutation in V13. It must create
+// its Schedule Changed obligation only after the guarded write wins, in the
+// same session/transaction, so stale expiration scans cannot leave orphans.
+const expireDueInterviewProposal = async ({
+  interviewScheduleId,
+  now,
+  session,
+} = {}) => {
+  const schedule = await InterviewSchedule.findById(interviewScheduleId).session(session);
+  if (!schedule) {
+    return { modifiedCount: 0, notificationEvent: null };
+  }
+
+  const application = await Application.findById(schedule.applicationId).session(session);
+  if (!application) {
+    throw new Error("Interview Schedule references a missing Application");
+  }
+  const job = await Job.findById(application.jobId).select("title").session(session);
+
+  const cancelledSchedule = await InterviewSchedule.findOneAndUpdate(
+    {
+      _id: schedule._id,
+      status: INTERVIEW_SCHEDULE_STATUS.PROPOSED,
+      expiresAt: { $lte: now },
+    },
+    { $set: { status: INTERVIEW_SCHEDULE_STATUS.CANCELLED } },
+    { returnDocument: "after", runValidators: true, session },
+  );
+  if (!cancelledSchedule) {
+    return { modifiedCount: 0, notificationEvent: null };
+  }
+
+  const notificationEvent = await createInterviewScheduleNotificationEvent({
+    application,
+    job,
+    schedule: cancelledSchedule,
+    type: NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CHANGED,
+    session,
+  });
+
+  return { modifiedCount: 1, notificationEvent };
+};
+
 // V11 F03/F04/F05/F06 SYSTEM Message consequence when Conversation already
 // exists. Does not create Conversation, rewrite history, or act as Assignment
 // History / current-Assignee authority.
@@ -2593,7 +3319,43 @@ const createSystemMessageIfConversationExists = async ({
     { session },
   );
 
-  return systemMessage;
+  // V13 Slice 04 / F07 / TX-01: a SYSTEM Message is a normal persisted
+  // Message for CHAT_MESSAGE_CREATED. Resolve participants only from the
+  // post-transition Application state held by this transaction, never from an
+  // outgoing Assignee or caller input.
+  const application = await Application.findById(applicationId).session(session);
+  const recipients = [
+    {
+      recipientUserId: application.candidateUserId,
+      content: "There is a new update in your application conversation.",
+    },
+  ];
+
+  if (application.assignedRecruiterCompanyMemberId != null) {
+    const currentAssignee = await CompanyMember.findById(
+      application.assignedRecruiterCompanyMemberId,
+    ).session(session);
+
+    if (currentAssignee) {
+      recipients.push({
+        recipientUserId: currentAssignee.userId,
+        content: "There is a new update in your application conversation.",
+      });
+    }
+  }
+
+  const notificationEvent = await createChatMessageNotificationEvent({
+    applicationId: application._id,
+    message: systemMessage,
+    recipients,
+    session,
+  });
+
+  const recipientUserIds = recipients.map(
+    ({ recipientUserId }) => recipientUserId,
+  );
+
+  return { message: systemMessage, notificationEvent, recipientUserIds };
 };
 
 const toPublicConversationMessage = (message) => {
@@ -2873,37 +3635,6 @@ const normalizeNormalMessageContent = (content) => {
   return normalized;
 };
 
-// TX-06 guard acquire: canonical TX-02 conditional acquire for serialization,
-// then restore updatedAt in the same transaction so write-conflict behavior is
-// unchanged while guard documents keep their pre-Send timestamp (BR-49 / F10).
-const acquireWithRestoredUpdatedAt = async ({
-  acquire,
-  model,
-  documentId,
-  session,
-} = {}) => {
-  const before =
-    documentId == null
-      ? null
-      : await model
-          .findById(documentId)
-          .select("updatedAt")
-          .session(session)
-          .lean();
-
-  const acquired = await acquire();
-
-  if (acquired && before?.updatedAt) {
-    await model.findOneAndUpdate(
-      { _id: documentId },
-      { $set: { updatedAt: before.updatedAt } },
-      { session, timestamps: false },
-    );
-  }
-
-  return acquired;
-};
-
 // TX-06: write-lock current writable Assigned Application without bumping
 // version or mutating business content. Concurrent assignment / terminal CAS
 // writers either lose on version/assignee/status predicate or WriteConflict.
@@ -3105,8 +3836,10 @@ const commitNormalMessageSend = async ({
   const normalizedContent = normalizeNormalMessageContent(content);
   const session = await mongoose.startSession();
   let createdMessage = null;
+  let notificationEvent = null;
   let authority = null;
   let conversation = null;
+  let chatMessageRecipientUserIds = null;
 
   try {
     await session.withTransaction(async () => {
@@ -3223,9 +3956,54 @@ const commitNormalMessageSend = async ({
       );
 
       createdMessage = message;
+
+      const recipients =
+        actor.kind === "CANDIDATE"
+          ? [
+              {
+                recipientUserId: eligibility.currentAssignee.userId,
+                content: "The candidate sent you a new message.",
+              },
+            ]
+          : [
+              {
+                recipientUserId: application.candidateUserId,
+                content: "Your recruiter sent you a new message.",
+              },
+            ];
+
+      notificationEvent = await createChatMessageNotificationEvent({
+        applicationId: application._id,
+        message,
+        actorUserId: senderUserId,
+        recipients,
+        session,
+      });
+
+      chatMessageRecipientUserIds =
+        actor.kind === "CANDIDATE"
+          ? [eligibility.currentAssignee.userId]
+          : [application.candidateUserId];
     });
   } finally {
     await session.endSession();
+  }
+
+  if (createdMessage) {
+    emitCommittedChatMessageRealtimeBestEffort({
+      message: createdMessage,
+      recipientUserIds: chatMessageRecipientUserIds,
+      applicationId: conversation.applicationId,
+    });
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Message and durable event obligation remain available for
+      // canonical Notification recovery.
+    }
   }
 
   return {
@@ -3387,6 +4165,9 @@ const firstAssignApplication = async ({
   let assignedApplication = null;
   let job = null;
   let assigneeContext = null;
+  const notificationEvents = [];
+  const committedChatMessages = [];
+  const committedConversationStateEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -3499,32 +4280,75 @@ const firstAssignApplication = async ({
         });
       }
 
+      const assignmentNotificationEvent =
+        await createAssignmentNotificationEvent({
+          application: assignedApplication,
+          job,
+          type: NOTIFICATION_TYPE.APPLICATION_ASSIGNED,
+          actorUserId: actorUser._id,
+          newAssigneeUserId: assigneeContext.user._id,
+          session,
+        });
+      if (assignmentNotificationEvent) {
+        notificationEvents.push(assignmentNotificationEvent);
+      }
+
       // V11 F01 / F06 / BR-05 / BR-06 / BR-29 / BR-30 / TX-01 / TX-05:
       // First Assign (no Conversation) creates Conversation with no SYSTEM
       // Message. Assign again (Conversation already exists) keeps that
       // Conversation and writes the required new-assignee SYSTEM Message.
+      // V13 Slice 04 routes Assign-again SYSTEM Message through the shared
+      // Message persistence primitive so CHAT_MESSAGE_CREATED is obligated
+      // in the same TX-01 boundary.
       const conversationOutcome = await createConversationOnFirstAssignIfAbsent({
         applicationId: assignedApplication._id,
         session,
       });
 
       if (!conversationOutcome.created) {
-        await Message.create(
-          [
-            {
-              conversationId: conversationOutcome.conversation._id,
-              type: MESSAGE_TYPE.SYSTEM,
-              senderUserId: null,
-              senderCompanyMemberId: null,
-              content: SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
-            },
-          ],
-          { session },
-        );
+        const systemMessageResult = await createSystemMessageIfConversationExists({
+          applicationId: assignedApplication._id,
+          content: SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
+          session,
+        });
+        if (systemMessageResult?.notificationEvent) {
+          notificationEvents.push(systemMessageResult.notificationEvent);
+        }
+        if (systemMessageResult?.message) {
+          committedChatMessages.push({
+            message: systemMessageResult.message,
+            recipientUserIds: systemMessageResult.recipientUserIds,
+            applicationId: assignedApplication._id,
+          });
+        }
+
+        committedConversationStateEvents.push({
+          application: assignedApplication,
+          mode: CONVERSATION_REALTIME_MODE.WRITABLE,
+        });
       }
     });
   } finally {
     await session.endSession();
+  }
+
+  for (const notificationEvent of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Assignment/Message result and durable obligation remain
+      // recoverable by the canonical Notification worker.
+    }
+  }
+
+  for (const committedChatMessage of committedChatMessages) {
+    emitCommittedChatMessageRealtimeBestEffort(committedChatMessage);
+  }
+
+  for (const committedConversationStateEvent of committedConversationStateEvents) {
+    await emitCommittedConversationStateRealtimeBestEffort(
+      committedConversationStateEvent,
+    );
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -3680,6 +4504,9 @@ const executePrimaryCurrentAssigneeMutation = async ({
   let mutatedApplication = null;
   let job = null;
   let assigneeContext = null;
+  const notificationEvents = [];
+  const committedChatMessages = [];
+  const committedConversationStateEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -3791,6 +4618,9 @@ const executePrimaryCurrentAssigneeMutation = async ({
       }
 
       let nextAssignedRecruiterCompanyMemberId = null;
+      const outgoingAssignee = await CompanyMember.findById(
+        application.assignedRecruiterCompanyMemberId,
+      ).session(session);
 
       // TX-02 actor business access first: Company → actor Membership → actor
       // User. Target NONE still requires this; automatic Unassign does not.
@@ -3842,27 +4672,86 @@ const executePrimaryCurrentAssigneeMutation = async ({
         });
       }
 
+      const assignmentNotificationEvent =
+        await createAssignmentNotificationEvent({
+          application: mutatedApplication,
+          job,
+          type: isUnassign
+            ? NOTIFICATION_TYPE.APPLICATION_UNASSIGNED
+            : NOTIFICATION_TYPE.APPLICATION_REASSIGNED,
+          actorUserId: actorUser._id,
+          outgoingAssigneeUserId: outgoingAssignee?.userId ?? null,
+          newAssigneeUserId: assigneeContext?.user._id ?? null,
+          session,
+        });
+      if (assignmentNotificationEvent) {
+        notificationEvents.push(assignmentNotificationEvent);
+      }
+
       // V11 F03 / F04 / BR-15–BR-23 / BR-47 / BR-51 / TX-02 / TX-03:
       // A → B or A → NONE keeps the existing Conversation and writes the
       // required SYSTEM Message in the same atomic outcome when Conversation
       // already exists. Automatic Unassign Chat consequence is owned by
       // automaticallyUnassignApplication (F05 / TX-04).
       if (isUnassign) {
-        await createSystemMessageIfConversationExists({
+        const systemMessageResult = await createSystemMessageIfConversationExists({
           applicationId: mutatedApplication._id,
           content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
           session,
         });
+        if (systemMessageResult?.notificationEvent) {
+          notificationEvents.push(systemMessageResult.notificationEvent);
+        }
+        if (systemMessageResult?.message) {
+          committedChatMessages.push({
+            message: systemMessageResult.message,
+            recipientUserIds: systemMessageResult.recipientUserIds,
+            applicationId: mutatedApplication._id,
+          });
+        }
+
+        committedConversationStateEvents.push({
+          application: mutatedApplication,
+          mode: CONVERSATION_REALTIME_MODE.PAUSED_UNASSIGNED,
+        });
       } else {
-        await createSystemMessageIfConversationExists({
+        const systemMessageResult = await createSystemMessageIfConversationExists({
           applicationId: mutatedApplication._id,
           content: SYSTEM_MESSAGE_CONTENT.RESPONSIBILITY_CHANGED,
           session,
         });
+        if (systemMessageResult?.notificationEvent) {
+          notificationEvents.push(systemMessageResult.notificationEvent);
+        }
+        if (systemMessageResult?.message) {
+          committedChatMessages.push({
+            message: systemMessageResult.message,
+            recipientUserIds: systemMessageResult.recipientUserIds,
+            applicationId: mutatedApplication._id,
+          });
+        }
       }
     });
   } finally {
     await session.endSession();
+  }
+
+  for (const notificationEvent of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Assignment/System Message outcome remains recoverable.
+    }
+  }
+
+  for (const committedChatMessage of committedChatMessages) {
+    emitCommittedChatMessageRealtimeBestEffort(committedChatMessage);
+  }
+
+  for (const committedConversationStateEvent of committedConversationStateEvents) {
+    await emitCommittedConversationStateRealtimeBestEffort(
+      committedConversationStateEvent,
+    );
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -3956,6 +4845,9 @@ const automaticallyUnassignApplication = async ({
     });
   }
 
+  let notificationEvent = null;
+  let committedChatMessage = null;
+
   const commitAutomaticUnassign = async (activeSession) => {
     let applicationQuery = Application.findById(applicationId);
     if (activeSession) {
@@ -4037,15 +4929,32 @@ const automaticallyUnassignApplication = async ({
       });
     }
 
+    const outgoingAssignee = await CompanyMember.findById(
+      application.assignedRecruiterCompanyMemberId,
+    ).session(activeSession);
+    notificationEvent = await createAssignmentNotificationEvent({
+      application: unassignedApplication,
+      type: NOTIFICATION_TYPE.APPLICATION_UNASSIGNED,
+      outgoingAssigneeUserId: outgoingAssignee?.userId ?? null,
+      session: activeSession,
+    });
+
     // V11 F05 / BR-23 / BR-27 / BR-28 / BR-47 / BR-51 / TX-04:
     // Same atomic outcome as Manual Unassign when Conversation exists. Content
     // only announces awaiting a new responsible recruiter — never LOCK /
     // TERMINATE / membership / team-removal reasons.
-    await createSystemMessageIfConversationExists({
+    const systemMessageResult = await createSystemMessageIfConversationExists({
       applicationId: unassignedApplication._id,
       content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
       session: activeSession,
     });
+    if (systemMessageResult?.message) {
+      committedChatMessage = {
+        message: systemMessageResult.message,
+        recipientUserIds: systemMessageResult.recipientUserIds,
+        applicationId: unassignedApplication._id,
+      };
+    }
 
     return unassignedApplication;
   };
@@ -4066,6 +4975,26 @@ const automaticallyUnassignApplication = async ({
     });
   } finally {
     await ownedSession.endSession();
+  }
+
+  if (notificationEvent) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed automatic Unassign and durable obligation remain
+      // recoverable by the canonical Notification worker.
+    }
+  }
+
+  if (committedChatMessage) {
+    emitCommittedChatMessageRealtimeBestEffort(committedChatMessage);
+  }
+
+  if (unassignedApplication) {
+    await emitCommittedConversationStateRealtimeBestEffort({
+      application: unassignedApplication,
+      mode: CONVERSATION_REALTIME_MODE.PAUSED_UNASSIGNED,
+    });
   }
 
   return unassignedApplication;
@@ -4268,6 +5197,8 @@ const updateApplicationRecruitmentPipelineStatus = async ({
   let updatedApplication = null;
   let job = null;
   let assigneeContext = null;
+  const notificationEvents = [];
+  const committedConversationStateEvents = [];
 
   try {
     await session.withTransaction(async () => {
@@ -4406,15 +5337,72 @@ const updateApplicationRecruitmentPipelineStatus = async ({
         });
       }
 
-      if (isApplicationTerminalStatus(targetStatus)) {
-        await cancelActiveInterviewScheduleForTerminalApplication({
-          applicationId: application._id,
+      const notificationType = isApplicationTerminalStatus(targetStatus)
+        ? targetStatus === APPLICATION_STATUS.HIRED
+          ? NOTIFICATION_TYPE.APPLICATION_HIRED
+          : NOTIFICATION_TYPE.APPLICATION_REJECTED
+        : NOTIFICATION_TYPE.APPLICATION_STATUS_CHANGED;
+      const statusNotificationEvent =
+        await createApplicationLifecycleNotificationEvent({
+          application: updatedApplication,
+          job,
+          type: notificationType,
+          actorUserId: actorUser._id,
+          recipientUserId: updatedApplication.candidateUserId,
           session,
+        });
+      if (statusNotificationEvent) {
+        notificationEvents.push(statusNotificationEvent);
+      }
+
+      if (targetStatus === APPLICATION_STATUS.CONTACTED) {
+        const availabilityNotificationEvent =
+          await createApplicationLifecycleNotificationEvent({
+            application: updatedApplication,
+            job,
+            type: NOTIFICATION_TYPE.INTERVIEW_AVAILABILITY_REQUESTED,
+            actorUserId: actorUser._id,
+            recipientUserId: updatedApplication.candidateUserId,
+            session,
+          });
+        if (availabilityNotificationEvent) {
+          notificationEvents.push(availabilityNotificationEvent);
+        }
+      }
+
+      if (isApplicationTerminalStatus(targetStatus)) {
+        const terminalScheduleCancellation =
+          await cancelActiveInterviewScheduleForTerminalApplication({
+            application: updatedApplication,
+            job,
+            session,
+          });
+        if (terminalScheduleCancellation.notificationEvent) {
+          notificationEvents.push(terminalScheduleCancellation.notificationEvent);
+        }
+
+        committedConversationStateEvents.push({
+          application: updatedApplication,
+          mode: CONVERSATION_REALTIME_MODE.READ_ONLY,
         });
       }
     });
   } finally {
     await session.endSession();
+  }
+
+  for (const notificationEvent of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Application transition remains recoverable.
+    }
+  }
+
+  for (const committedConversationStateEvent of committedConversationStateEvents) {
+    await emitCommittedConversationStateRealtimeBestEffort(
+      committedConversationStateEvent,
+    );
   }
 
   const applicationView = await buildPrimaryApplicationViewFromDocs({
@@ -5212,19 +6200,85 @@ const directApplyToJob = async ({
       });
     uploadedSnapshotStorageKey = storageKey;
 
-    const application = await Application.create({
-      candidateUserId,
-      jobId: job._id,
-      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
-      status: APPLICATION_STATUS.APPLIED,
-      submittedCvSnapshot,
-      appliedAt: new Date(),
-      withdrawnAt: null,
-      withdrawReason: null,
-      // V10: Unassigned is assignment-state only; normalize on Direct Apply write.
-      assignedRecruiterCompanyMemberId: null,
-      version: 0,
-    });
+    const session = await mongoose.startSession();
+    let application;
+    let notificationEvent;
+
+    try {
+      await session.withTransaction(async () => {
+        const currentJob = await Job.findById(job._id).session(session);
+
+        if (!currentJob) {
+          throw new AppError(404, "Job not found", { field: "jobId" });
+        }
+
+        const primaryRecruiter = await CompanyMember.findOne({
+          _id: currentJob.primaryRecruiterCompanyMemberId,
+          companyId: currentJob.companyId,
+        }).session(session);
+
+        if (!primaryRecruiter) {
+          throw new AppError(409, "Job Primary Recruiter is no longer available");
+        }
+
+        [application] = await Application.create(
+          [
+            {
+              candidateUserId,
+              jobId: job._id,
+              source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+              status: APPLICATION_STATUS.APPLIED,
+              submittedCvSnapshot,
+              appliedAt: new Date(),
+              withdrawnAt: null,
+              withdrawReason: null,
+              // V10: Unassigned is assignment-state only; normalize on Direct Apply write.
+              assignedRecruiterCompanyMemberId: null,
+              version: 0,
+            },
+          ],
+          { session },
+        );
+
+        const recipientsByUserId = new Map();
+        const addRecipient = (recipientUserId, content) => {
+          const recipientKey = recipientUserId.toString();
+
+          if (!recipientsByUserId.has(recipientKey)) {
+            recipientsByUserId.set(recipientKey, {
+              recipientUserId,
+              content,
+            });
+          }
+        };
+
+        addRecipient(
+          candidateUserId,
+          `Your application for ${currentJob.title} was submitted successfully.`,
+        );
+        addRecipient(
+          primaryRecruiter.userId,
+          `A new application for ${currentJob.title} is awaiting assignment.`,
+        );
+
+        ({ event: notificationEvent } = await createNotificationEvent({
+          eventKey: `direct-application-created:${application._id.toString()}`,
+          type: NOTIFICATION_TYPE.DIRECT_APPLICATION_CREATED,
+          actorUserId: candidateUserId,
+          applicationId: application._id,
+          recipients: [...recipientsByUserId.values()],
+          session,
+        }));
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The persisted event obligation remains pending for canonical recovery.
+    }
 
     return toPublicApplication(application);
   } catch (error) {
@@ -5405,9 +6459,12 @@ const withdrawApplication = async ({
   const withdrawnAt = new Date();
   const session = await mongoose.startSession();
   let withdrawnApplication = null;
+  const notificationEvents = [];
+  let committedConversationStateEvent = null;
 
   try {
     await session.withTransaction(async () => {
+      notificationEvents.length = 0;
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
@@ -5426,6 +6483,28 @@ const withdrawApplication = async ({
         throw new AppError(409, "Application has changed; refresh and retry withdraw", {
           field: "expectedVersion",
         });
+      }
+
+      const job = await Job.findById(application.jobId).session(session);
+      if (!job) {
+        throw new AppError(404, "Job not found", { field: "jobId" });
+      }
+
+      let recipientUserId;
+      if (application.assignedRecruiterCompanyMemberId != null) {
+        const assignee = await CompanyMember.findById(
+          application.assignedRecruiterCompanyMemberId,
+        ).session(session);
+        recipientUserId = assignee?.userId ?? null;
+      } else {
+        const primaryRecruiter = await CompanyMember.findOne({
+          _id: job.primaryRecruiterCompanyMemberId,
+          companyId: job.companyId,
+        }).session(session);
+        recipientUserId = primaryRecruiter?.userId ?? null;
+      }
+      if (recipientUserId == null) {
+        throw new AppError(409, "Withdraw Notification recipient is unavailable");
       }
 
       withdrawnApplication = await Application.findOneAndUpdate(
@@ -5457,13 +6536,49 @@ const withdrawApplication = async ({
         });
       }
 
-      await cancelActiveInterviewScheduleForTerminalApplication({
-        applicationId: application._id,
+      const notificationEvent = await createApplicationLifecycleNotificationEvent({
+        application: withdrawnApplication,
+        job,
+        type: NOTIFICATION_TYPE.APPLICATION_WITHDRAWN,
+        actorUserId: actorUser._id,
+        recipientUserId,
         session,
       });
+      if (notificationEvent) {
+        notificationEvents.push(notificationEvent);
+      }
+
+      const terminalScheduleCancellation =
+        await cancelActiveInterviewScheduleForTerminalApplication({
+          application: withdrawnApplication,
+          job,
+          session,
+        });
+      if (terminalScheduleCancellation.notificationEvent) {
+        notificationEvents.push(terminalScheduleCancellation.notificationEvent);
+      }
+
+      committedConversationStateEvent = {
+        application: withdrawnApplication,
+        mode: CONVERSATION_REALTIME_MODE.READ_ONLY,
+      };
     });
   } finally {
     await session.endSession();
+  }
+
+  for (const notificationEvent of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: notificationEvent._id });
+    } catch {
+      // The committed Withdraw remains recoverable by the Notification worker.
+    }
+  }
+
+  if (committedConversationStateEvent) {
+    await emitCommittedConversationStateRealtimeBestEffort(
+      committedConversationStateEvent,
+    );
   }
 
   return toPublicApplication(withdrawnApplication);

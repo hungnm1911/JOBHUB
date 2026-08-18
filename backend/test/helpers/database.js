@@ -11,6 +11,8 @@ import { ensureConversationCollection } from "../../src/models/conversation.mode
 import { ensureInterviewScheduleCollection } from "../../src/models/interview-schedule.model.js";
 import { ensureJobCollectionInvariants } from "../../src/models/job.model.js";
 import { ensureMessageCollection } from "../../src/models/message.model.js";
+import { ensureNotificationEventCollection } from "../../src/models/notification-event.model.js";
+import { ensureNotificationCollection } from "../../src/models/notification.model.js";
 
 let mongoMemoryReplicaSet = null;
 
@@ -39,6 +41,8 @@ const connectTestDatabase = async () => {
   await ensureInterviewScheduleCollection(mongoose.connection);
   await ensureConversationCollection(mongoose.connection);
   await ensureMessageCollection(mongoose.connection);
+  await ensureNotificationEventCollection(mongoose.connection);
+  await ensureNotificationCollection(mongoose.connection);
 };
 
 const disconnectTestDatabase = async () => {

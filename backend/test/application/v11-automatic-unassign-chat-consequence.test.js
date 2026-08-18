@@ -23,6 +23,8 @@ import Application from "../../src/models/application.model.js";
 import Conversation from "../../src/models/conversation.model.js";
 import Job from "../../src/models/job.model.js";
 import Message from "../../src/models/message.model.js";
+import NotificationEvent from "../../src/models/notification-event.model.js";
+import Notification from "../../src/models/notification.model.js";
 import User from "../../src/models/user.model.js";
 import {
   automaticallyUnassignApplication,
@@ -278,6 +280,27 @@ describe("V11 Slice 04 — Automatic Unassign Chat Consequence (F05)", () => {
         senderCompanyMemberId: null,
       });
       expect(messages[1].content).not.toMatch(/lock|terminat|team|member/i);
+
+      const assignmentEvent = await NotificationEvent.findOne({
+        type: "APPLICATION_UNASSIGNED",
+        applicationId: application._id,
+      }).lean();
+      expect(assignmentEvent.actorUserId).toBeNull();
+      expect(assignmentEvent.recipients).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ recipientUserId: candidate.user._id }),
+          expect.objectContaining({ recipientUserId: supporting.user._id }),
+        ]),
+      );
+      expect(
+        assignmentEvent.recipients.find(
+          ({ recipientUserId }) =>
+            recipientUserId.toString() === candidate.user._id.toString(),
+        ).content,
+      ).toMatch(/waiting for a new responsible recruiter/i);
+      expect(await Notification.countDocuments({ eventId: assignmentEvent._id })).toBe(
+        2,
+      );
     });
 
     it("does not create Conversation or SYSTEM Message when none existed (V10-compatible)", async () => {

@@ -104,6 +104,8 @@ Some expected file errors are currently formatted and returned directly by the c
 - `backend/src/config/index.js` is the canonical normalized application configuration provider.
 - `backend/index.js` consumes application configuration during runtime bootstrap, but does not own environment loading, parsing, validation, normalization, or defaults.
 - One-time data migrations required by an approved persistence contract are explicit database tooling. `backend/scripts/run-migration.js` owns migration invocation and connection orchestration, while versioned migration definitions live under `backend/src/database/migrations/`. Migrations are never run implicitly during application startup or seed execution.
+- V13 durable Notification recovery is the approved background-worker exception to request-only execution. `backend/src/workers/notification-recovery.worker.js` owns only the scheduling lifecycle for bounded, non-overlapping recovery passes and delegates materialization to `backend/src/services/notification.service.js`. `backend/index.js` starts the worker after MongoDB and required collection/index readiness, and stops it before disconnecting MongoDB during shutdown.
+- V13 Socket.IO realtime distribution is the approved transport exception for online fan-out. `backend/src/services/realtime-distribution.service.js` owns attaching Socket.IO to the process HTTP server, connection authentication, in-memory User→connection membership, and recipient-scoped Notification emit. `backend/index.js` attaches the Socket server after the HTTP server exists and closes it during graceful shutdown. This is not a new architectural layer and must not introduce Socket session/delivery persistence.
 - No repository layer is part of the current target architecture. Adding one requires explicit approval as an architecture change.
 
 ### Layer dependency direction
@@ -114,6 +116,10 @@ The intended request dependency direction is:
 route -> middleware -> controller -> service -> model/database
                                       |
                                       +-> approved infrastructure clients/utilities
+
+entry point -> background worker -> service -> model/database
+entry point -> realtime distribution service (Socket.IO on http.Server)
+notification materialization -> realtime distribution service (best-effort emit)
 ```
 
 Not every endpoint must use every layer. A layer may be omitted when it has no responsibility for that endpoint, but callers must not skip a layer in order to take over that layer's responsibility.
@@ -151,6 +157,40 @@ Services own business workflows and business validation. Under the current targe
 - coordinate multiple models;
 - coordinate approved infrastructure clients, other services, constants, and utilities; and
 - return results or throw errors without depending on Express request or response objects.
+
+For V13, `notification.service.js` owns NotificationEvent creation support, Notification materialization, idempotent pending-event recovery, and the rule that recovery consumes immutable recipient/content snapshots rather than recomputing current recipients. Source business services remain owners of their source transitions and pass the active MongoDB session when creating a required durable obligation inside the source transaction.
+
+For V13 Slice 09, after a durable Notification for a recipient has been materialized, `notification.service.js` may trigger a best-effort recipient-scoped emit through `realtime-distribution.service.js`. That emit is outside any MongoDB transaction, must not run before the durable Notification exists, must not change read state, and must not roll back Notification or source business state on Socket failure. Exactly-once Socket delivery is not required.
+
+### Realtime distribution
+
+The approved V13 Socket.IO distribution owner:
+
+- attaches one Socket.IO server to the process HTTP server owned by `backend/index.js`;
+- authenticates each connection with the canonical `authenticateAccess` credential rules (valid access token, AuthSession, and `ACTIVE` User);
+- maps one authenticated User to zero or more active Socket connections through an in-memory User-scoped room such as `user:{userId}`;
+- owns connection join/leave membership for that User room;
+- emits Notification realtime only to the recipient User room after durable Notification materialization;
+- does not replay missed Socket history on reconnect;
+- does not persist SocketSession, NotificationDelivery, presence, or receipt state;
+- does not store Notification read state on the Socket session; durable `Notification.readAt` remains the only read-state owner; and
+- reserves the same authenticated connection plane for later Message and Conversation-state realtime slices without implementing those event contracts in Slice 09.
+
+Source/application services and the recovery worker must not call Notification emit directly. They continue to create obligations and invoke materialization; materialization owns the post-durable emit trigger.
+
+### Background workers
+
+The approved V13 Notification recovery worker:
+
+- performs one bounded recovery pass after startup readiness and then recurring fixed-delay passes;
+- never overlaps two passes within the same process;
+- calls the Notification service and does not access models directly;
+- leaves failed or partial events pending for a later pass;
+- does not persist retry telemetry, Socket delivery state, or a second event log;
+- does not own Socket.IO or call Notification emit directly (any realtime fan-out happens only inside Notification materialization after durable writes); and
+- exposes start/stop lifecycle operations for the process entry point.
+
+Parallel application processes may run recovery passes concurrently. Correctness comes from the canonical unique indexes and idempotent Notification service, not from an in-memory or distributed worker lock. Exactly-once execution is not required.
 
 ### Models
 
@@ -194,5 +234,7 @@ The root entry point imports normalized application configuration as part of boo
 - Cross-cutting middleware does not absorb business workflows.
 - Generic utility modules do not become feature service substitutes.
 - New architectural layers or changes in ownership require explicit approval and corresponding documentation updates.
+- Background scheduling outside the approved V13 Notification recovery worker requires separate architectural approval.
+- Socket.IO realtime distribution outside `backend/src/services/realtime-distribution.service.js`, or Notification realtime emit outside the Notification materialization → distributor boundary, requires separate architectural approval.
 
 Current deviations from these constraints are catalogued in [`source-of-truth.md`](source-of-truth.md). They are documentation of the existing state, not authorization to duplicate or extend the mismatch.

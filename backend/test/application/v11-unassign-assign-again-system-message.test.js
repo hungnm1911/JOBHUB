@@ -20,6 +20,8 @@ import Application from "../../src/models/application.model.js";
 import Conversation from "../../src/models/conversation.model.js";
 import Job from "../../src/models/job.model.js";
 import Message from "../../src/models/message.model.js";
+import NotificationEvent from "../../src/models/notification-event.model.js";
+import Notification from "../../src/models/notification.model.js";
 import {
   firstAssignApplication,
   unassignApplication,
@@ -310,6 +312,31 @@ describe("V11 Slice 03 — Manual Unassign + Assign again SYSTEM Message (F04/F0
         senderCompanyMemberId: null,
         content: SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
       });
+
+      const assignmentEvent = await NotificationEvent.findOne({
+        type: "APPLICATION_UNASSIGNED",
+        applicationId: application._id,
+      }).lean();
+      expect(assignmentEvent).toMatchObject({
+        actorUserId: primary.user._id,
+        applicationId: application._id,
+      });
+      expect(assignmentEvent.recipients).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ recipientUserId: candidate.user._id }),
+          expect.objectContaining({ recipientUserId: supporting.user._id }),
+        ]),
+      );
+      expect(assignmentEvent.recipients).toHaveLength(2);
+      expect(
+        assignmentEvent.recipients.find(
+          ({ recipientUserId }) =>
+            recipientUserId.toString() === candidate.user._id.toString(),
+        ).content,
+      ).not.toMatch(/lock|terminat|team|manager|platform/i);
+      expect(await Notification.countDocuments({ eventId: assignmentEvent._id })).toBe(
+        2,
+      );
     });
 
     it("lets Company Manager Unassign create the same SYSTEM Message consequence", async () => {
@@ -546,6 +573,36 @@ describe("V11 Slice 03 — Manual Unassign + Assign again SYSTEM Message (F04/F0
         SYSTEM_MESSAGE_CONTENT.AWAITING_NEW_ASSIGNEE,
         SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
       ]);
+
+      const assignAgainMessage = messages.find(
+        (message) => message.content === SYSTEM_MESSAGE_CONTENT.NEW_ASSIGNEE,
+      );
+      const assignAgainEvent = await NotificationEvent.findOne({
+        messageId: assignAgainMessage._id,
+      }).lean();
+      expect(assignAgainEvent).toMatchObject({
+        type: "CHAT_MESSAGE_CREATED",
+        actorUserId: null,
+      });
+      expect(String(assignAgainEvent.applicationId)).toBe(
+        application._id.toString(),
+      );
+      expect(assignAgainEvent.recipients).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ recipientUserId: candidate.user._id }),
+          expect.objectContaining({ recipientUserId: supportingB.user._id }),
+        ]),
+      );
+      expect(assignAgainEvent.recipients).toHaveLength(2);
+      expect(
+        assignAgainEvent.recipients.some(
+          (recipient) =>
+            String(recipient.recipientUserId) === supporting.user._id.toString(),
+        ),
+      ).toBe(false);
+      expect(
+        await Notification.countDocuments({ eventId: assignAgainEvent._id }),
+      ).toBe(2);
     });
 
     it("First Assign without Conversation still creates Conversation with zero Messages", async () => {
@@ -569,6 +626,12 @@ describe("V11 Slice 03 — Manual Unassign + Assign again SYSTEM Message (F04/F0
       await expect(
         Message.countDocuments({ conversationId: conversations[0]._id }),
       ).resolves.toBe(0);
+      expect(
+        await NotificationEvent.countDocuments({
+          type: "CHAT_MESSAGE_CREATED",
+          applicationId: application._id,
+        }),
+      ).toBe(0);
     });
 
     it("rolls back Assign again when SYSTEM Message creation fails (TX-05/BR-47)", async () => {

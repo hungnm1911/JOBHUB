@@ -15,6 +15,16 @@ import { ensureCandidateCvCollectionInvariants } from "./src/models/candidate-cv
 import { ensureCompanyCollectionInvariants } from "./src/models/company.model.js";
 import { ensureInterviewScheduleCollection } from "./src/models/interview-schedule.model.js";
 import { ensureJobCollectionInvariants } from "./src/models/job.model.js";
+import { ensureNotificationEventCollection } from "./src/models/notification-event.model.js";
+import { ensureNotificationCollection } from "./src/models/notification.model.js";
+import {
+  attachRealtimeDistribution,
+  closeRealtimeDistribution,
+} from "./src/services/realtime-distribution.service.js";
+import {
+  startNotificationRecoveryWorker,
+  stopNotificationRecoveryWorker,
+} from "./src/workers/notification-recovery.worker.js";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -43,7 +53,13 @@ const startHttpServer = () => {
 };
 
 const closeHttpServer = async () => {
-  if (!httpServer || !httpServer.listening) {
+  if (!httpServer) {
+    return;
+  }
+
+  if (!httpServer.listening) {
+    httpServer = null;
+
     return;
   }
 
@@ -89,12 +105,34 @@ const shutdown = async ({
   let finalExitCode = exitCode;
 
   try {
+    await closeRealtimeDistribution();
+  } catch (error) {
+    finalExitCode = 1;
+
+    console.error(
+      "Failed to close realtime distribution:",
+      error,
+    );
+  }
+
+  try {
     await closeHttpServer();
   } catch (error) {
     finalExitCode = 1;
 
     console.error(
       "Failed to close HTTP server:",
+      error,
+    );
+  }
+
+  try {
+    await stopNotificationRecoveryWorker();
+  } catch (error) {
+    finalExitCode = 1;
+
+    console.error(
+      "Failed to stop Notification recovery worker:",
       error,
     );
   }
@@ -129,10 +167,14 @@ const startServer = async () => {
   await ensureApplicationCollectionInvariants();
   await ensureCandidateAvailabilityCollection();
   await ensureInterviewScheduleCollection();
+  await ensureNotificationEventCollection();
+  await ensureNotificationCollection();
 
   await verifyCloudinaryConnection();
 
   httpServer = await startHttpServer();
+  attachRealtimeDistribution(httpServer);
+  startNotificationRecoveryWorker();
 
   httpServer.on("error", (error) => {
     console.error("HTTP server error:", error);

@@ -22,10 +22,14 @@ import Application from "../../src/models/application.model.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
 import Category from "../../src/models/category.model.js";
 import Company from "../../src/models/company.model.js";
+import CompanyMember from "../../src/models/company-member.model.js";
 import Job from "../../src/models/job.model.js";
+import NotificationEvent from "../../src/models/notification-event.model.js";
+import Notification from "../../src/models/notification.model.js";
 import { directApplyToJob } from "../../src/services/application.service.js";
 import { saveOwnGeneratedContent } from "../../src/services/candidate-cv.service.js";
 import * as fileService from "../../src/services/file.service.js";
+import { recoverPendingNotificationEvents } from "../../src/services/notification.service.js";
 import {
   createActiveCompanyManagerContext,
   createActiveRecruiterContext,
@@ -272,10 +276,179 @@ describe("V9 Slice 02 — Direct Apply with Generated ACTIVE CV (F01–F03)", ()
       expect(persisted).not.toHaveProperty("companyId");
       expect(persisted.assignedRecruiterCompanyMemberId).toBeNull();
 
+      const event = await NotificationEvent.findOne({
+        applicationId: persisted._id,
+      });
+      expect(event).toMatchObject({
+        type: "DIRECT_APPLICATION_CREATED",
+        actorUserId: user._id,
+      });
+      const contentByRecipientId = new Map(
+        event.recipients.map((recipient) => [
+          recipient.recipientUserId.toString(),
+          recipient.content,
+        ]),
+      );
+      expect(contentByRecipientId.get(user._id.toString())).toBe(
+        "Your application for Backend Engineer was submitted successfully.",
+      );
+      expect(contentByRecipientId.get(recruiter.user._id.toString())).toBe(
+        "A new application for Backend Engineer is awaiting assignment.",
+      );
+      expect(event.recipients).toHaveLength(2);
+      expect(await Notification.countDocuments({ eventId: event._id })).toBe(2);
+
       const jobAfter = await Job.findById(job._id).lean();
       const cvAfter = await CandidateCV.findById(candidateCv._id).lean();
       expect(jobAfter).toEqual(jobBefore);
       expect(cvAfter).toEqual(cvBefore);
+    });
+
+    it("rolls back Direct Apply when its required NotificationEvent cannot persist", async () => {
+      mockSnapshotUpload();
+      const { user } = await createVerifiedUser({
+        email: "apply.notification-event-failure@example.com",
+      });
+      const manager = await createActiveCompanyManagerContext({
+        email: "manager.apply.notification-event-failure@example.com",
+        businessRegistrationNumber: "BRN-V13-APPLY-EVENT-FAILURE",
+      });
+      const recruiter = await createActiveRecruiterContext({
+        email: "recruiter.apply.notification-event-failure@example.com",
+        company: manager.company,
+        employeeCode: "NV-V13-APPLY-EVENT-FAILURE",
+      });
+      const job = await createPublishedJob({
+        companyId: manager.company._id,
+        primaryMemberId: recruiter.membership._id,
+      });
+      const category = await createFieldCategory();
+      const candidateCv = await createGeneratedCv({
+        candidateUserId: user._id,
+        categoryId: category._id,
+      });
+      vi.spyOn(NotificationEvent, "create").mockRejectedValue(
+        new Error("event persistence failed"),
+      );
+
+      await expect(
+        directApplyToJob({
+          candidateUserId: user._id,
+          actorUser: user,
+          jobId: job._id.toString(),
+          candidateCvId: candidateCv._id.toString(),
+        }),
+      ).rejects.toThrow("event persistence failed");
+
+      expect(
+        await Application.findOne({ candidateUserId: user._id, jobId: job._id }),
+      ).toBeNull();
+      expect(await NotificationEvent.countDocuments()).toBe(0);
+    });
+
+    it("keeps a committed Direct Apply when inbox materialization temporarily fails", async () => {
+      mockSnapshotUpload();
+      const { user } = await createVerifiedUser({
+        email: "apply.notification-recovery@example.com",
+      });
+      const manager = await createActiveCompanyManagerContext({
+        email: "manager.apply.notification-recovery@example.com",
+        businessRegistrationNumber: "BRN-V13-APPLY-RECOVERY",
+      });
+      const recruiter = await createActiveRecruiterContext({
+        email: "recruiter.apply.notification-recovery@example.com",
+        company: manager.company,
+        employeeCode: "NV-V13-APPLY-RECOVERY",
+      });
+      const job = await createPublishedJob({
+        companyId: manager.company._id,
+        primaryMemberId: recruiter.membership._id,
+      });
+      const category = await createFieldCategory();
+      const candidateCv = await createGeneratedCv({
+        candidateUserId: user._id,
+        categoryId: category._id,
+      });
+      vi.spyOn(Notification, "updateOne").mockRejectedValue(
+        new Error("temporary inbox persistence failure"),
+      );
+
+      const application = await directApplyToJob({
+        candidateUserId: user._id,
+        actorUser: user,
+        jobId: job._id.toString(),
+        candidateCvId: candidateCv._id.toString(),
+      });
+
+      const event = await NotificationEvent.findOne({
+        applicationId: application.id,
+      });
+      expect(await Application.findById(application.id)).not.toBeNull();
+      expect(event.materializedAt).toBeNull();
+      expect(await Notification.countDocuments({ eventId: event._id })).toBe(0);
+
+      vi.restoreAllMocks();
+      await recoverPendingNotificationEvents();
+      await recoverPendingNotificationEvents();
+
+      expect(await Notification.countDocuments({ eventId: event._id })).toBe(2);
+      expect((await NotificationEvent.findById(event._id)).materializedAt).toBeInstanceOf(
+        Date,
+      );
+    });
+
+    it("deduplicates a Candidate who is also the current Primary recipient", async () => {
+      mockSnapshotUpload();
+      const { user } = await createVerifiedUser({
+        email: "apply.notification-self-primary@example.com",
+      });
+      const manager = await createActiveCompanyManagerContext({
+        email: "manager.apply.notification-self-primary@example.com",
+        businessRegistrationNumber: "BRN-V13-APPLY-SELF-PRIMARY",
+      });
+      const recruiter = await createActiveRecruiterContext({
+        email: "recruiter.apply.notification-self-primary@example.com",
+        company: manager.company,
+        employeeCode: "NV-V13-APPLY-SELF-PRIMARY",
+      });
+      const candidatePrimaryMembership = await CompanyMember.create({
+        userId: user._id,
+        companyId: manager.company._id,
+        role: "RECRUITER",
+        status: "ACTIVE",
+        employeeCode: "NV-V13-APPLY-CANDIDATE-PRIMARY",
+        jobTitle: "Recruiter",
+      });
+      const job = await createPublishedJob({
+        companyId: manager.company._id,
+        primaryMemberId: recruiter.membership._id,
+      });
+      await Job.updateOne(
+        { _id: job._id },
+        { $set: { primaryRecruiterCompanyMemberId: candidatePrimaryMembership._id } },
+      );
+      const category = await createFieldCategory();
+      const candidateCv = await createGeneratedCv({
+        candidateUserId: user._id,
+        categoryId: category._id,
+      });
+
+      const application = await directApplyToJob({
+        candidateUserId: user._id,
+        actorUser: user,
+        jobId: job._id.toString(),
+        candidateCvId: candidateCv._id.toString(),
+      });
+
+      const event = await NotificationEvent.findOne({
+        applicationId: application.id,
+      });
+      expect(event.recipients).toHaveLength(1);
+      expect(event.recipients[0]).toMatchObject({
+        recipientUserId: user._id,
+        content: "Your application for Backend Engineer was submitted successfully.",
+      });
+      expect(await Notification.countDocuments({ eventId: event._id })).toBe(1);
     });
 
     it("rejects Direct Apply when candidate supplies foreign CandidateCV (ownership guard)", async () => {
@@ -570,6 +743,12 @@ describe("V9 Slice 02 — Direct Apply with Generated ACTIVE CV (F01–F03)", ()
         jobId: job._id,
       });
       expect(applications).toHaveLength(1);
+      expect(
+        await NotificationEvent.countDocuments({
+          type: "DIRECT_APPLICATION_CREATED",
+          applicationId: applications[0]._id,
+        }),
+      ).toBe(1);
     });
   });
 });

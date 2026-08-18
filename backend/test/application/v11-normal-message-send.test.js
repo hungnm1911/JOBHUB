@@ -25,6 +25,8 @@ import CompanyMember from "../../src/models/company-member.model.js";
 import Conversation from "../../src/models/conversation.model.js";
 import Job from "../../src/models/job.model.js";
 import Message from "../../src/models/message.model.js";
+import NotificationEvent from "../../src/models/notification-event.model.js";
+import Notification from "../../src/models/notification.model.js";
 import User from "../../src/models/user.model.js";
 import {
   firstAssignApplication,
@@ -38,6 +40,7 @@ import {
   lockAccount,
   lockCompany,
 } from "../../src/services/platform-admin.service.js";
+import { recoverPendingNotificationEvents } from "../../src/services/notification.service.js";
 import {
   createActiveCompanyManagerContext,
   createActiveRecruiterContext,
@@ -388,6 +391,152 @@ describe("V11 Slice 06 — NORMAL Message Send + Full Chat Concurrency", () => {
       conversationId: fixture.conversation._id,
     }).lean();
     expect(messages).toHaveLength(2);
+  });
+
+  it("creates one recipient-specific CHAT_MESSAGE_CREATED obligation for each valid NORMAL Message", async () => {
+    const fixture = await createAssignedConversationFixture({
+      emailPrefix: "v13.s04.normal.recipients",
+    });
+
+    const candidateSend = await sendCandidateApplicationConversationNormalMessage({
+      candidateUserId: fixture.candidate.user._id,
+      actorUser: fixture.candidate.user,
+      applicationId: fixture.application.id,
+      content: "Message from candidate",
+    });
+    const recruiterSend = await sendRecruiterApplicationConversationNormalMessage({
+      actorUser: fixture.primary.user,
+      applicationId: fixture.application.id,
+      content: "Message from recruiter",
+    });
+
+    const events = await NotificationEvent.find({
+      type: "CHAT_MESSAGE_CREATED",
+      applicationId: fixture.application.id,
+    }).lean();
+    expect(events).toHaveLength(2);
+
+    const candidateEvent = events.find(
+      (event) => String(event.messageId) === candidateSend.message.id,
+    );
+    const recruiterEvent = events.find(
+      (event) => String(event.messageId) === recruiterSend.message.id,
+    );
+
+    expect(candidateEvent).toMatchObject({
+      actorUserId: fixture.candidate.user._id,
+    });
+    expect(String(candidateEvent.applicationId)).toBe(fixture.application.id);
+    expect(String(candidateEvent.messageId)).toBe(candidateSend.message.id);
+    expect(candidateEvent.recipients).toEqual([
+      expect.objectContaining({
+        recipientUserId: fixture.primary.user._id,
+        content: "The candidate sent you a new message.",
+      }),
+    ]);
+    expect(recruiterEvent).toMatchObject({
+      actorUserId: fixture.primary.user._id,
+    });
+    expect(String(recruiterEvent.applicationId)).toBe(fixture.application.id);
+    expect(String(recruiterEvent.messageId)).toBe(recruiterSend.message.id);
+    expect(recruiterEvent.recipients).toEqual([
+      expect.objectContaining({
+        recipientUserId: fixture.candidate.user._id,
+        content: "Your recruiter sent you a new message.",
+      }),
+    ]);
+    expect(
+      candidateEvent.recipients.some(
+        (recipient) =>
+          String(recipient.recipientUserId) ===
+          fixture.candidate.user._id.toString(),
+      ),
+    ).toBe(false);
+    expect(
+      recruiterEvent.recipients.some(
+        (recipient) =>
+          String(recipient.recipientUserId) === fixture.primary.user._id.toString(),
+      ),
+    ).toBe(false);
+    expect(await Notification.countDocuments({ eventId: candidateEvent._id })).toBe(1);
+    expect(await Notification.countDocuments({ eventId: recruiterEvent._id })).toBe(1);
+  });
+
+  it("rolls back a NORMAL Message when its required Chat NotificationEvent cannot persist", async () => {
+    const fixture = await createAssignedConversationFixture({
+      emailPrefix: "v13.s04.normal.rollback",
+    });
+    vi.spyOn(NotificationEvent, "create").mockRejectedValue(
+      new Error("chat event persistence failed"),
+    );
+
+    await expect(
+      sendCandidateApplicationConversationNormalMessage({
+        candidateUserId: fixture.candidate.user._id,
+        actorUser: fixture.candidate.user,
+        applicationId: fixture.application.id,
+        content: "This must roll back",
+      }),
+    ).rejects.toThrow("chat event persistence failed");
+
+    expect(await Message.countDocuments({ conversationId: fixture.conversation._id })).toBe(0);
+    expect(
+      await NotificationEvent.countDocuments({
+        type: "CHAT_MESSAGE_CREATED",
+        applicationId: fixture.application._id,
+      }),
+    ).toBe(0);
+  });
+
+  it("leaves no Message or Chat NotificationEvent for an unauthorized send", async () => {
+    const fixture = await createAssignedConversationFixture({
+      emailPrefix: "v13.s04.normal.unauthorized",
+    });
+
+    await expect(
+      sendRecruiterApplicationConversationNormalMessage({
+        actorUser: fixture.supportingRecruiter.user,
+        applicationId: fixture.application.id,
+        content: "Unauthorized recruiter message",
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(await Message.countDocuments({ conversationId: fixture.conversation._id })).toBe(0);
+    expect(
+      await NotificationEvent.countDocuments({
+        type: "CHAT_MESSAGE_CREATED",
+      }),
+    ).toBe(0);
+  });
+
+  it("keeps a committed Message pending when materialization fails, then recovers without duplicates", async () => {
+    const fixture = await createAssignedConversationFixture({
+      emailPrefix: "v13.s04.normal.recovery",
+    });
+    vi.spyOn(Notification, "updateOne").mockRejectedValue(
+      new Error("temporary inbox persistence failure"),
+    );
+
+    const sent = await sendCandidateApplicationConversationNormalMessage({
+      candidateUserId: fixture.candidate.user._id,
+      actorUser: fixture.candidate.user,
+      applicationId: fixture.application.id,
+      content: "Recover this notification",
+    });
+    const event = await NotificationEvent.findOne({ messageId: sent.message.id });
+
+    expect(await Message.findById(sent.message.id)).not.toBeNull();
+    expect(event.materializedAt).toBeNull();
+    expect(await Notification.countDocuments({ eventId: event._id })).toBe(0);
+
+    vi.restoreAllMocks();
+    await recoverPendingNotificationEvents();
+    await recoverPendingNotificationEvents();
+
+    expect(await Notification.countDocuments({ eventId: event._id })).toBe(1);
+    expect((await NotificationEvent.findById(event._id)).materializedAt).toBeInstanceOf(
+      Date,
+    );
   });
 
   it("lets Candidate and current Assignee send NORMAL Messages with historical sender identity (F02 / BR-13 / BR-14)", async () => {
