@@ -1091,6 +1091,47 @@ const normalizeCandidateSearchFilterObjectIds = (values, field) => {
   return normalized;
 };
 
+const normalizeCandidateSearchFilterStringValues = ({
+  values,
+  field,
+  allowedValues = null,
+  dedupe = true,
+}) => {
+  if (values == null) {
+    return [];
+  }
+
+  if (!Array.isArray(values)) {
+    throw new AppError(400, `${field} must be an array`, { field });
+  }
+
+  const normalized = [];
+  const seen = new Set();
+
+  for (const value of values) {
+    if (typeof value !== "string" || value.trim() === "") {
+      throw new AppError(400, `Invalid ${field} entry`, { field });
+    }
+
+    const trimmed = value.trim();
+
+    if (allowedValues && !allowedValues.has(trimmed)) {
+      throw new AppError(400, `Invalid ${field} entry`, { field });
+    }
+
+    if (dedupe) {
+      if (seen.has(trimmed)) {
+        continue;
+      }
+      seen.add(trimmed);
+    }
+
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+};
+
 const resolveCandidateSearchCategoryFilterIds = async (categoryIds) => {
   if (categoryIds.length === 0) {
     return [];
@@ -1157,6 +1198,27 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     filters.experienceLevelIds,
     "experienceLevelIds",
   );
+  const requestedSkillTags = normalizeCandidateSearchFilterStringValues({
+    values: filters.skillTags,
+    field: "skillTags",
+  });
+  const requestedPreferredLocations = normalizeCandidateSearchFilterStringValues(
+    {
+      values: filters.preferredLocations,
+      field: "preferredLocations",
+      allowedValues: LOCATION_VALUES,
+    },
+  );
+  const requestedEmploymentTypes = normalizeCandidateSearchFilterStringValues({
+    values: filters.employmentTypes,
+    field: "employmentTypes",
+    allowedValues: EMPLOYMENT_TYPE_VALUES,
+  });
+  const requestedWorkModes = normalizeCandidateSearchFilterStringValues({
+    values: filters.workModes,
+    field: "workModes",
+    allowedValues: WORK_MODE_VALUES,
+  });
   const categoryFilterIds =
     await resolveCandidateSearchCategoryFilterIds(requestedCategoryIds);
 
@@ -1182,6 +1244,18 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
       : {}),
     ...(requestedExperienceLevelIds.length > 0
       ? { experienceLevelId: { $in: requestedExperienceLevelIds } }
+      : {}),
+    ...(requestedSkillTags.length > 0
+      ? { skillTags: { $in: requestedSkillTags } }
+      : {}),
+    ...(requestedPreferredLocations.length > 0
+      ? { preferredLocations: { $in: requestedPreferredLocations } }
+      : {}),
+    ...(requestedEmploymentTypes.length > 0
+      ? { employmentTypes: { $in: requestedEmploymentTypes } }
+      : {}),
+    ...(requestedWorkModes.length > 0
+      ? { workModes: { $in: requestedWorkModes } }
       : {}),
   }).sort({ updatedAt: -1, _id: -1 });
 

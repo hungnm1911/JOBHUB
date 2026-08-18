@@ -35,12 +35,22 @@ const listCandidateSearchEligibleCandidateCvsHandler = async (
     const experienceLevelIds = normalizeQueryArray(
       request.query?.experienceLevelIds,
     );
+    const skillTags = normalizeQueryArray(request.query?.skillTags);
+    const preferredLocations = normalizeQueryArray(
+      request.query?.preferredLocations,
+    );
+    const employmentTypes = normalizeQueryArray(request.query?.employmentTypes);
+    const workModes = normalizeQueryArray(request.query?.workModes);
 
     const cvs = await listCandidateSearchEligibleCandidateCvs({
       actorUser: request.auth.user,
       filters: {
         categoryIds,
         experienceLevelIds,
+        skillTags,
+        preferredLocations,
+        employmentTypes,
+        workModes,
       },
     });
 

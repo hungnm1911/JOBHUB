@@ -12,8 +12,11 @@ import CANDIDATE_CV_SOURCE_TYPE from "../../src/constants/candidate-cv-source-ty
 import CANDIDATE_CV_STATUS from "../../src/constants/candidate-cv-status.js";
 import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility.js";
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
+import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
+import LOCATION from "../../src/constants/location.js";
 import USER_STATUS from "../../src/constants/user-status.js";
+import WORK_MODE from "../../src/constants/work-mode.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
 import Category from "../../src/models/category.model.js";
 import ExperienceLevel from "../../src/models/experience-level.model.js";
@@ -588,6 +591,227 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       .query({
         categoryIds: field._id.toString(),
         experienceLevelIds: level._id.toString(),
+      })
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.cvs).toHaveLength(1);
+    expect(response.body.cvs[0].cvId).toBe(matchedCv._id.toString());
+  });
+
+  it("applies Skill/Location/EmploymentType/WorkMode with OR in-group and excludes missing metadata when filtered (BR-20..BR-23)", async () => {
+    const category = await createFieldCategory("Marketing");
+    const { recruiter } = await createRecruiterWithProofJob({
+      emailPrefix: "v14.slice04.or",
+    });
+    const candidate = await createVerifiedUser({
+      email: "candidate.v14.slice04.or@example.com",
+      fullName: "Slice04 OR Candidate",
+    });
+
+    const cvSkillOnly = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "CV Skill Only",
+      skillTags: ["nodejs"],
+      preferredLocations: [],
+      employmentTypes: [],
+      workModes: [],
+    });
+    const cvLocationOnly = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "CV Location Only",
+      skillTags: [],
+      preferredLocations: [LOCATION.HA_NOI],
+      employmentTypes: [],
+      workModes: [],
+    });
+    const cvEmploymentOnly = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "CV Employment Only",
+      skillTags: [],
+      preferredLocations: [],
+      employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
+      workModes: [],
+    });
+    const cvWorkModeOnly = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "CV WorkMode Only",
+      skillTags: [],
+      preferredLocations: [],
+      employmentTypes: [],
+      workModes: [WORK_MODE.REMOTE],
+    });
+    await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "CV Missing Optional Metadata",
+      skillTags: [],
+      preferredLocations: [],
+      employmentTypes: [],
+      workModes: [],
+    });
+
+    const skillFiltered = await listCandidateSearchEligibleCandidateCvs({
+      actorUser: recruiter.user,
+      filters: {
+        skillTags: ["nodejs", "reactjs"],
+      },
+    });
+    expect(skillFiltered).toHaveLength(1);
+    expect(skillFiltered[0].cvId).toBe(cvSkillOnly._id.toString());
+
+    const locationFiltered = await listCandidateSearchEligibleCandidateCvs({
+      actorUser: recruiter.user,
+      filters: {
+        preferredLocations: [LOCATION.HA_NOI, LOCATION.DA_NANG],
+      },
+    });
+    expect(locationFiltered).toHaveLength(1);
+    expect(locationFiltered[0].cvId).toBe(cvLocationOnly._id.toString());
+
+    const employmentFiltered = await listCandidateSearchEligibleCandidateCvs({
+      actorUser: recruiter.user,
+      filters: {
+        employmentTypes: [
+          EMPLOYMENT_TYPE.FULL_TIME,
+          EMPLOYMENT_TYPE.PART_TIME,
+        ],
+      },
+    });
+    expect(employmentFiltered).toHaveLength(1);
+    expect(employmentFiltered[0].cvId).toBe(cvEmploymentOnly._id.toString());
+
+    const workModeFiltered = await listCandidateSearchEligibleCandidateCvs({
+      actorUser: recruiter.user,
+      filters: {
+        workModes: [WORK_MODE.REMOTE, WORK_MODE.ONSITE],
+      },
+    });
+    expect(workModeFiltered).toHaveLength(1);
+    expect(workModeFiltered[0].cvId).toBe(cvWorkModeOnly._id.toString());
+  });
+
+  it("composes AND across all six filter groups including Slice 03 groups (BR-21)", async () => {
+    const field = await createFieldCategory("Data");
+    const position = await createPositionCategory({
+      fieldCategoryId: field._id,
+      name: "Data Engineer",
+    });
+    const experience = await createExperienceLevel("THREE_TO_FIVE_YEARS");
+    const otherExperience = await createExperienceLevel("ONE_TO_THREE_YEARS");
+    const { recruiter } = await createRecruiterWithProofJob({
+      emailPrefix: "v14.slice04.and6",
+    });
+    const candidate = await createVerifiedUser({
+      email: "candidate.v14.slice04.and6@example.com",
+      fullName: "Slice04 AND Candidate",
+    });
+
+    const targetCv = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: position._id,
+      name: "Target CV 6 groups",
+      skillTags: ["nodejs", "mongodb"],
+      preferredLocations: [LOCATION.HA_NOI],
+      employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
+      workModes: [WORK_MODE.HYBRID],
+    });
+    await CandidateCV.updateOne(
+      { _id: targetCv._id },
+      { $set: { experienceLevelId: experience._id } },
+    );
+
+    const wrongSkill = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: position._id,
+      name: "Wrong Skill",
+      skillTags: ["reactjs"],
+      preferredLocations: [LOCATION.HA_NOI],
+      employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
+      workModes: [WORK_MODE.HYBRID],
+    });
+    await CandidateCV.updateOne(
+      { _id: wrongSkill._id },
+      { $set: { experienceLevelId: experience._id } },
+    );
+
+    const wrongExperience = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: position._id,
+      name: "Wrong Experience",
+      skillTags: ["nodejs"],
+      preferredLocations: [LOCATION.HA_NOI],
+      employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
+      workModes: [WORK_MODE.HYBRID],
+    });
+    await CandidateCV.updateOne(
+      { _id: wrongExperience._id },
+      { $set: { experienceLevelId: otherExperience._id } },
+    );
+
+    const filtered = await listCandidateSearchEligibleCandidateCvs({
+      actorUser: recruiter.user,
+      filters: {
+        categoryIds: [field._id.toString()],
+        experienceLevelIds: [experience._id.toString()],
+        skillTags: ["nodejs"],
+        preferredLocations: [LOCATION.HA_NOI],
+        employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
+        workModes: [WORK_MODE.HYBRID],
+      },
+    });
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].cvId).toBe(targetCv._id.toString());
+  });
+
+  it("supports HTTP query params for Skill/Location/EmploymentType/WorkMode filters", async () => {
+    const agent = createTestAgent();
+    const category = await createFieldCategory("HR");
+    const { recruiter } = await createRecruiterWithProofJob({
+      emailPrefix: "v14.slice04.http",
+    });
+    const candidate = await createVerifiedUser({
+      email: "candidate.v14.slice04.http@example.com",
+      fullName: "Slice04 HTTP Candidate",
+    });
+
+    const matchedCv = await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "Slice04 HTTP Matched",
+      skillTags: ["nodejs"],
+      preferredLocations: [LOCATION.HA_NOI],
+      employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
+      workModes: [WORK_MODE.REMOTE],
+    });
+
+    await createCandidateCv({
+      candidateUserId: candidate.user._id,
+      categoryId: category._id,
+      name: "Slice04 HTTP Unmatched",
+      skillTags: ["reactjs"],
+      preferredLocations: [LOCATION.DA_NANG],
+      employmentTypes: [EMPLOYMENT_TYPE.CONTRACT],
+      workModes: [WORK_MODE.ONSITE],
+    });
+
+    const accessToken = await loginAndGetAccessToken(agent, {
+      email: recruiter.user.email,
+      password: DEFAULT_PASSWORD,
+    });
+
+    const response = await agent
+      .get("/api/jobs/candidate-search/cvs")
+      .query({
+        skillTags: "nodejs",
+        preferredLocations: LOCATION.HA_NOI,
+        employmentTypes: EMPLOYMENT_TYPE.FULL_TIME,
+        workModes: WORK_MODE.REMOTE,
       })
       .set("Authorization", `Bearer ${accessToken}`);
 
