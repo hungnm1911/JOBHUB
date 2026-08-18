@@ -2,22 +2,31 @@
 
 ## Current project state
 
-**V14 — Candidate Search trên CV PUBLIC** is `READY FOR IMPLEMENTATION` for
-Slice 01. Its approved canonical Product/Data contracts are tracked at
+**V14 — Candidate Search trên CV PUBLIC** is `IN PROGRESS`.
+Its approved canonical Product/Data contracts are tracked at
 `docs/product/versions/v14-candidate-search-public-cv.md` and
-`docs/data/versions/v14-candidate-search-public-cv-data-model.md`. Gate 00
-aligned the V14 data contract with V7's canonical metadata representation and
-Uploaded-CV `status = ACTIVE` normalization, and established the Slice 01
-Candidate Search eligibility ownership boundary in the engineering source of
-truth. This readiness step adds no V14 business behavior. Existing test and
-architecture verification infrastructure is sufficient for the read-only
-Slice 01 eligibility workflow; Slice 01 introduces no persistence or
-transaction invariant that requires a new harness.
+`docs/data/versions/v14-candidate-search-public-cv-data-model.md`.
 
-Gate 00 baseline verification: `cd backend && npm run verify:agent` passed
-with architecture rules `ARCH-001` through `ARCH-016`, 132 passing test files,
-and 1,260 passing tests. ESLint reported 0 errors and 2 pre-existing
-`no-unused-vars` warnings in `test/job/v6-acceptance.test.js`.
+Slice 01 is implemented and verified for Recruiter Candidate Search
+eligibility (`F01`; `BR-01`–`BR-05`, `BR-33`). The canonical owner reuses
+`company.service.js` Recruiter business context and adds a `job.service.js`
+proof-of-membership workflow that derives eligibility from current persisted
+state on every check: authenticated active Recruiter User, active Recruiter
+`CompanyMember`, active canonical `Company`, and current Primary/Supporting
+membership on at least one same-Company `Job` regardless of `PUBLISHED`,
+deadline, or Application activity. No static permission field or derived
+eligibility persistence was added. V14 also adds the canonical same-Company
+Recruitment Team lookup indexes on `Job`
+(`{ companyId, primaryRecruiterCompanyMemberId }` and
+`{ companyId, supportingRecruiterCompanyMemberIds }`) plus focused HTTP/service
+coverage via the Candidate Search authorization probe.
+
+Verification for this state: focused V14 Slice 01 suite passed
+(`test/auth/v14-recruiter-candidate-search-eligibility.test.js`, 13 tests), and
+`cd backend && npm run verify:agent` passed with architecture rules
+`ARCH-001` through `ARCH-016`, 133 passing test files, and 1,273 passing tests.
+ESLint reported 0 errors and the same 2 pre-existing `no-unused-vars` warnings
+in `test/job/v6-acceptance.test.js`.
 
 **V13 — Notification và phân phối realtime** is `IN PROGRESS`.
 Its approved canonical Product/Data contracts are tracked at

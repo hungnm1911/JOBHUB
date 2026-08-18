@@ -334,6 +334,14 @@ jobSchema.index({ companyId: 1, status: 1 });
 jobSchema.index({
   companyId: 1,
   primaryRecruiterCompanyMemberId: 1,
+});
+jobSchema.index({
+  companyId: 1,
+  supportingRecruiterCompanyMemberIds: 1,
+});
+jobSchema.index({
+  companyId: 1,
+  primaryRecruiterCompanyMemberId: 1,
   status: 1,
 });
 jobSchema.index({

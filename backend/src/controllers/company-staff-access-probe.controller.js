@@ -25,7 +25,18 @@ const getCompanyManagerRecruiterManagementProbe = (request, response) => {
   });
 };
 
+const getRecruiterCandidateSearchAccessProbe = (request, response) => {
+  return response.status(200).json({
+    message: "Recruiter Candidate Search access granted",
+    authz: {
+      ...toProbeAuthz(request),
+      proofJobId: request.recruiterCandidateSearch.proofJobId,
+    },
+  });
+};
+
 export {
   getCompanyManagerRecruiterManagementProbe,
+  getRecruiterCandidateSearchAccessProbe,
   getCompanyStaffBusinessAccessProbe,
 };
