@@ -25,7 +25,14 @@ const IMMUTABLE_APPLICATION_IDENTITY_FIELDS = Object.freeze([
   "candidateUserId",
   "jobId",
   "source",
+  "sourceInvitationId",
   "appliedAt",
+]);
+
+const INVITATION_SOURCE_FORBIDDEN_STATUSES = Object.freeze([
+  APPLICATION_STATUS.APPLIED,
+  APPLICATION_STATUS.SCREENING,
+  APPLICATION_STATUS.WITHDRAWN,
 ]);
 
 const hasAssignedRecruiter = (application) => {
@@ -204,6 +211,36 @@ const assertApplicationLocalInvariants = (application) => {
     errors.push("Application version must be non-negative");
   }
 
+  if (application.source === APPLICATION_SOURCE.DIRECT_APPLICATION) {
+    if (application.sourceInvitationId != null) {
+      errors.push("DIRECT_APPLICATION must not have sourceInvitationId");
+    }
+  }
+
+  if (application.source === APPLICATION_SOURCE.RECRUITER_INVITATION) {
+    if (application.sourceInvitationId == null) {
+      errors.push("RECRUITER_INVITATION must have sourceInvitationId");
+    }
+
+    if (application.appliedAt != null) {
+      errors.push("Invitation Application must not have appliedAt");
+    }
+
+    if (application.withdrawnAt != null) {
+      errors.push("Invitation Application must not have withdrawnAt");
+    }
+
+    if (application.withdrawReason != null) {
+      errors.push("Invitation Application must not have withdrawReason");
+    }
+
+    if (INVITATION_SOURCE_FORBIDDEN_STATUSES.includes(application.status)) {
+      errors.push(
+        `Invitation Application must not have status=${application.status}`,
+      );
+    }
+  }
+
   return errors;
 };
 
@@ -223,7 +260,45 @@ const APPLICATION_COLLECTION_VALIDATOR = Object.freeze({
         $in: ["$status", APPLICATION_STATUS_VALUES],
       },
       {
-        $eq: [{ $type: "$appliedAt" }, "date"],
+        $or: [
+          {
+            $and: [
+              {
+                $eq: ["$source", APPLICATION_SOURCE.DIRECT_APPLICATION],
+              },
+              {
+                $eq: [{ $type: "$appliedAt" }, "date"],
+              },
+              {
+                $eq: [{ $ifNull: ["$sourceInvitationId", null] }, null],
+              },
+            ],
+          },
+          {
+            $and: [
+              {
+                $eq: ["$source", APPLICATION_SOURCE.RECRUITER_INVITATION],
+              },
+              {
+                $eq: [{ $type: "$sourceInvitationId" }, "objectId"],
+              },
+              {
+                $eq: [{ $ifNull: ["$appliedAt", null] }, null],
+              },
+              {
+                $eq: [{ $ifNull: ["$withdrawnAt", null] }, null],
+              },
+              {
+                $eq: [{ $ifNull: ["$withdrawReason", null] }, null],
+              },
+              {
+                $not: {
+                  $in: ["$status", INVITATION_SOURCE_FORBIDDEN_STATUSES],
+                },
+              },
+            ],
+          },
+        ],
       },
       {
         $gte: ["$version", 0],
@@ -523,6 +598,15 @@ const applicationSchema = new Schema(
       default: APPLICATION_SOURCE.DIRECT_APPLICATION,
       immutable: true,
     },
+    sourceInvitationId: {
+      type: Schema.Types.ObjectId,
+      ref: "JobInvitation",
+      default: null,
+      immutable: true,
+      required: function isSourceInvitationIdRequired() {
+        return this.source === APPLICATION_SOURCE.RECRUITER_INVITATION;
+      },
+    },
     status: {
       type: String,
       required: true,
@@ -530,7 +614,11 @@ const applicationSchema = new Schema(
         values: APPLICATION_STATUS_VALUES,
         message: "status must use canonical Application status values",
       },
-      default: APPLICATION_STATUS.APPLIED,
+      default: function defaultApplicationStatus() {
+        return this.source === APPLICATION_SOURCE.RECRUITER_INVITATION
+          ? APPLICATION_STATUS.CONTACTED
+          : APPLICATION_STATUS.APPLIED;
+      },
     },
     submittedCvSnapshot: {
       type: submittedCvSnapshotSchema,
@@ -538,8 +626,11 @@ const applicationSchema = new Schema(
     },
     appliedAt: {
       type: Date,
-      required: true,
+      default: null,
       immutable: true,
+      required: function isAppliedAtRequired() {
+        return this.source !== APPLICATION_SOURCE.RECRUITER_INVITATION;
+      },
     },
     withdrawnAt: {
       type: Date,
@@ -711,6 +802,24 @@ applicationSchema.pre("validate", function enforceApplicationLocalInvariants() {
     }
   }
 
+  if (this.isNew && this.source === APPLICATION_SOURCE.RECRUITER_INVITATION) {
+    if (this.status !== APPLICATION_STATUS.CONTACTED) {
+      errors.push(
+        "Invitation Application creation must start with status=CONTACTED",
+      );
+    }
+
+    if (!hasAssignedRecruiter(this)) {
+      errors.push(
+        "Invitation Application creation must start with assignedRecruiterCompanyMemberId",
+      );
+    }
+
+    if (this.version !== 0) {
+      errors.push("Invitation Application creation must use version=0");
+    }
+  }
+
   if (errors.length > 0) {
     this.invalidate("status", errors[0]);
   }
@@ -766,6 +875,16 @@ applicationSchema.index(
   { candidateUserId: 1, jobId: 1 },
   {
     unique: true,
+  },
+);
+
+applicationSchema.index(
+  { sourceInvitationId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      sourceInvitationId: { $exists: true, $type: "objectId" },
+    },
   },
 );
 
@@ -839,6 +958,7 @@ const ensureApplicationCollectionInvariants = async (
 export {
   APPLICATION_COLLECTION_VALIDATOR,
   APPLICATION_STATUSES_REQUIRING_ASSIGNEE,
+  INVITATION_SOURCE_FORBIDDEN_STATUSES,
   assertApplicationLocalInvariants,
   applicationSchema,
   cvSnapshotPdfFileSchema,

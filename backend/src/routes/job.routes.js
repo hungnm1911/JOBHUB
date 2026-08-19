@@ -1,6 +1,12 @@
 import express from "express";
 
 import {
+  getPrimaryJobInvitationHandler,
+  listPrimaryJobInvitationsHandler,
+  revokePrimaryJobInvitationHandler,
+  sendJobInvitationHandler,
+} from "../controllers/job-invitation.controller.js";
+import {
   approveAndPublishJobHandler,
   closePublishedJobHandler,
   createDraftJobHandler,
@@ -58,6 +64,7 @@ import validateUnassignApplication from "../middlewares/validate-unassign-applic
 import validateRecruitmentPipelineStatus from "../middlewares/validate-recruitment-pipeline-status.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
 import validateReplacePrimaryRecruiter from "../middlewares/validate-replace-primary-recruiter.js";
+import validateSendJobInvitation from "../middlewares/validate-send-job-invitation.js";
 import validateUpdateDraftJob from "../middlewares/validate-update-draft-job.js";
 
 const router = express.Router();
@@ -229,6 +236,35 @@ router.post(
   authenticateAccess,
   authorizeRecruiterBusinessAccess,
   cancelRecruiterInterviewProposalHandler,
+);
+
+router.post(
+  "/:jobId/invitations",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  validateSendJobInvitation,
+  sendJobInvitationHandler,
+);
+
+router.get(
+  "/:jobId/invitations",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  listPrimaryJobInvitationsHandler,
+);
+
+router.get(
+  "/:jobId/invitations/:invitationId",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  getPrimaryJobInvitationHandler,
+);
+
+router.post(
+  "/:jobId/invitations/:invitationId/revoke",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  revokePrimaryJobInvitationHandler,
 );
 
 router.get(

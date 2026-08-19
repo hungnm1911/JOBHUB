@@ -15,12 +15,17 @@ import { ensureCandidateCvCollectionInvariants } from "./src/models/candidate-cv
 import { ensureCompanyCollectionInvariants } from "./src/models/company.model.js";
 import { ensureInterviewScheduleCollection } from "./src/models/interview-schedule.model.js";
 import { ensureJobCollectionInvariants } from "./src/models/job.model.js";
+import { ensureJobInvitationCollectionInvariants } from "./src/models/job-invitation.model.js";
 import { ensureNotificationEventCollection } from "./src/models/notification-event.model.js";
 import { ensureNotificationCollection } from "./src/models/notification.model.js";
 import {
   attachRealtimeDistribution,
   closeRealtimeDistribution,
 } from "./src/services/realtime-distribution.service.js";
+import {
+  startJobInvitationExpirationWorker,
+  stopJobInvitationExpirationWorker,
+} from "./src/workers/job-invitation-expiration.worker.js";
 import {
   startNotificationRecoveryWorker,
   stopNotificationRecoveryWorker,
@@ -138,6 +143,17 @@ const shutdown = async ({
   }
 
   try {
+    await stopJobInvitationExpirationWorker();
+  } catch (error) {
+    finalExitCode = 1;
+
+    console.error(
+      "Failed to stop Job Invitation expiration worker:",
+      error,
+    );
+  }
+
+  try {
     await disconnectDatabase();
   } catch (error) {
     finalExitCode = 1;
@@ -165,6 +181,7 @@ const startServer = async () => {
   await ensureJobCollectionInvariants();
   await ensureCandidateCvCollectionInvariants();
   await ensureApplicationCollectionInvariants();
+  await ensureJobInvitationCollectionInvariants();
   await ensureCandidateAvailabilityCollection();
   await ensureInterviewScheduleCollection();
   await ensureNotificationEventCollection();
@@ -175,6 +192,7 @@ const startServer = async () => {
   httpServer = await startHttpServer();
   attachRealtimeDistribution(httpServer);
   startNotificationRecoveryWorker();
+  startJobInvitationExpirationWorker();
 
   httpServer.on("error", (error) => {
     console.error("HTTP server error:", error);

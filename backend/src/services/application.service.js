@@ -1,4 +1,3 @@
-import { PDFDocument } from "pdf-lib";
 import mongoose from "mongoose";
 
 import APPLICATION_SOURCE from "../constants/application-source.js";
@@ -7,9 +6,6 @@ import APPLICATION_SUBMITTED_CV_STORAGE from "../constants/application-submitted
 import AVAILABILITY_DAY_PART from "../constants/availability-day-part.js";
 import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
-import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
-import CANDIDATE_CV_UPLOADED_STORAGE from "../constants/candidate-cv-uploaded-storage.js";
-import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import CONVERSATION_REALTIME_MODE from "../constants/conversation-realtime-mode.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
@@ -33,7 +29,20 @@ import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
 import INTERVIEW_SCHEDULE_STATUS from "../constants/interview-schedule-status.js";
 import AppError from "../utils/app-error.js";
-import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
+import {
+  APPLICATION_EXISTS_MESSAGE,
+  acquireCandidateJobSerialization,
+  assertCandidateJobAllowsDirectApply,
+} from "./candidate-job-serialization.service.js";
+import {
+  APPLICATION_CV_SNAPSHOT_STORAGE,
+  captureCvSnapshot,
+  captureGeneratedCvSnapshot,
+  captureUploadedCvSnapshot,
+  deepCopyCvSnapshot,
+  deepCopyGeneratedContent,
+  deleteCvSnapshotFile,
+} from "./cv-snapshot.service.js";
 import {
   assertSameCompanyTenant,
   resolveCompanyManagerRecruiterManagementContext,
@@ -41,7 +50,7 @@ import {
   resolveRecruiterBusinessContext,
   resolveRecruiterChatHistoryContext,
 } from "./company.service.js";
-import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
+import { downloadFileBuffer } from "./file.service.js";
 import { evaluateApplicationConversationChatAuthority } from "./application-chat-authority.service.js";
 import {
   createNotificationEvent,
@@ -59,21 +68,12 @@ import {
   isOwningCompanyActiveForPublicEligibility,
   toPublicJob,
 } from "./job.service.js";
-
-const uploadApplicationSubmittedCvSnapshotFile = (buffer) => {
-  return uploadFileBuffer({
-    buffer,
-    assetFolder: CLOUDINARY_FOLDER.APPLICATION_SUBMITTED_CV_SNAPSHOTS,
-    resourceType: APPLICATION_SUBMITTED_CV_STORAGE.RESOURCE_TYPE,
-    deliveryType: APPLICATION_SUBMITTED_CV_STORAGE.DELIVERY_TYPE,
-  });
-};
+import { materializeStalePendingInvitationForCandidateJob } from "./job-invitation.service.js";
 
 const deleteApplicationSubmittedCvSnapshotFile = (publicId) => {
-  return deleteFile({
-    publicId,
-    resourceType: APPLICATION_SUBMITTED_CV_STORAGE.RESOURCE_TYPE,
-    deliveryType: APPLICATION_SUBMITTED_CV_STORAGE.DELIVERY_TYPE,
+  return deleteCvSnapshotFile({
+    storageKey: publicId,
+    storage: APPLICATION_CV_SNAPSHOT_STORAGE,
   });
 };
 
@@ -83,6 +83,17 @@ const isMongoDuplicateKeyError = (error) => {
 
 const AVAILABILITY_DAY_PART_VALUES = Object.values(AVAILABILITY_DAY_PART);
 
+// V15 Slice 07: Invitation-source Applications reuse the existing Application
+// lifecycle after CONTACTED. Direct Apply create/Replace/Withdraw stay
+// source-specific and keep `DIRECT_APPLICATION` guards.
+const LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES = Object.freeze([
+  APPLICATION_SOURCE.DIRECT_APPLICATION,
+  APPLICATION_SOURCE.RECRUITER_INVITATION,
+]);
+
+const isLifecycleCompatibleApplicationSource = (source) =>
+  LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES.includes(source);
+
 const assertCandidateActor = (user) => {
   if (!user || user.role !== USER_ROLE.CANDIDATE) {
     throw new AppError(403, "Candidate access required");
@@ -91,18 +102,6 @@ const assertCandidateActor = (user) => {
   if (user.status !== USER_STATUS.ACTIVE) {
     throw new AppError(403, "Candidate account is not active");
   }
-};
-
-const deepCopyGeneratedContent = (generatedContent) => {
-  if (generatedContent == null) {
-    return null;
-  }
-
-  if (typeof generatedContent.toObject === "function") {
-    return generatedContent.toObject();
-  }
-
-  return JSON.parse(JSON.stringify(generatedContent));
 };
 
 const toPublicSnapshotPdfFile = (pdfFile) => {
@@ -427,10 +426,10 @@ const hydratePrimaryJobApplicationViews = async (
   });
 };
 
-const loadDirectApplicationsForJob = async (jobId) => {
+const loadLifecycleCompatibleApplicationsForJob = async (jobId) => {
   return Application.find({
     jobId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   }).sort({ appliedAt: 1, _id: 1 });
 };
 
@@ -602,8 +601,10 @@ const listPrimaryJobApplications = async ({
     actionLabel: "view",
   });
 
-  // BR-44: V10 assignment-management Application View only covers Direct Applications.
-  const applications = await loadDirectApplicationsForJob(job._id);
+  // V15 Slice 07: Primary/CM Application View covers both Direct Apply and
+  // Invitation-source Applications. Authority remains tenant + current
+  // assignment-management role, never sourceInvitationId or historical sender.
+  const applications = await loadLifecycleCompatibleApplicationsForJob(job._id);
   const applicationViews = await hydratePrimaryJobApplicationViews(applications);
 
   return {
@@ -637,7 +638,7 @@ const listManagedJobs = async ({ actorUser, clientCompanyId } = {}) => {
       ? []
       : await Application.find({
           jobId: { $in: managedJobIds },
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
         })
           .select("jobId status assignedRecruiterCompanyMemberId")
           .lean();
@@ -692,7 +693,7 @@ const getManagedJobPipelineWorkspace = async ({
     actionLabel: "view the Pipeline Workspace of",
   });
 
-  const applications = await loadDirectApplicationsForJob(job._id);
+  const applications = await loadLifecycleCompatibleApplicationsForJob(job._id);
   const applicationViews =
     await hydratePrimaryJobApplicationViews(applications);
   const aggregates = deriveManagedJobApplicationProjection(applications);
@@ -736,7 +737,7 @@ const loadRecruiterMyApplicationsForActor = async ({
   // IDX-A04: current responsibility only — never Assignment History / prior assignee.
   const applications = await Application.find({
     assignedRecruiterCompanyMemberId: actorMembershipId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   }).sort({ appliedAt: 1, _id: 1 });
 
   if (applications.length === 0) {
@@ -811,7 +812,7 @@ const getRecruiterMyApplication = async ({
 
   if (
     !application ||
-    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+    !isLifecycleCompatibleApplicationSource(application.source)
   ) {
     throw new AppError(404, "Application not found", {
       field: "applicationId",
@@ -1357,7 +1358,7 @@ const acquireApplicationAssignmentForAvailabilityFirstSubmit = async ({
           _id: application._id,
           candidateUserId: application.candidateUserId,
           jobId: application.jobId,
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
           status: APPLICATION_STATUS.CONTACTED,
           version: application.version,
           assignedRecruiterCompanyMemberId:
@@ -1475,7 +1476,7 @@ const submitCandidateAvailabilityFirstTime = async ({
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
 
       if (!application) {
@@ -1626,7 +1627,7 @@ const editCandidateAvailability = async ({
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
       if (!application) {
         throw new AppError(404, "Application not found", {
@@ -1761,9 +1762,9 @@ const createInterviewProposal = async ({
         throw new AppError(404, "Application not found", { field: "applicationId" });
       }
 
-      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(409, "Only Direct Applications can receive proposals", {
-          field: "source",
+      if (!isLifecycleCompatibleApplicationSource(application.source)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
         });
       }
 
@@ -2022,7 +2023,7 @@ const respondToCandidateInterviewProposal = async ({
   const initialApplication = await Application.findOne({
     _id: applicationId,
     candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   }).lean();
   if (!initialApplication) {
     throw new AppError(404, "Application not found", { field: "applicationId" });
@@ -2045,7 +2046,7 @@ const respondToCandidateInterviewProposal = async ({
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
       if (!application) {
         throw new AppError(404, "Application not found", { field: "applicationId" });
@@ -2065,7 +2066,7 @@ const respondToCandidateInterviewProposal = async ({
             {
               _id: application._id,
               candidateUserId,
-              source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+              source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
               status: application.status,
               version: application.version,
               assignedRecruiterCompanyMemberId:
@@ -2207,7 +2208,7 @@ const cancelRecruiterInterviewProposal = async ({
       const application = await Application.findOne({
         _id: applicationId,
         jobId: job._id,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
       if (!application) {
         throw new AppError(404, "Application not found", { field: "applicationId" });
@@ -2298,7 +2299,7 @@ const listCandidateMyApplications = async ({
   // IDX-A05: Candidate My Applications by owner (+ optional status).
   const query = {
     candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   };
 
   if (statusFilter != null) {
@@ -2351,7 +2352,7 @@ const getCandidateMyApplication = async ({
   const application = await Application.findOne({
     _id: applicationId,
     candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   });
 
   if (!application) {
@@ -2868,7 +2869,7 @@ const commitAssignFromUnassigned = async ({
     {
       _id: applicationId,
       jobId,
-      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
       version: expectedVersion,
       assignedRecruiterCompanyMemberId: null,
@@ -2889,6 +2890,8 @@ const commitAssignFromUnassigned = async ({
 };
 
 // V11 F01 / TX-01: Conversation consequence of a successful First Assign.
+// V15 Slice 08 / TX-02 reuses this helper for Invitation Accept, which also
+// requires exactly one Conversation on the newly created Application.
 // Absence of Conversation distinguishes First Assign from Assign again; this
 // helper creates Conversation only when none exists.
 const createConversationOnFirstAssignIfAbsent = async ({
@@ -3464,7 +3467,7 @@ const loadApplicationConversationHistoryContext = async ({
 
   if (
     !application ||
-    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+    !isLifecycleCompatibleApplicationSource(application.source)
   ) {
     throw new AppError(404, "Application not found", {
       field: "applicationId",
@@ -3654,7 +3657,7 @@ const commitApplicationWritableStateForNormalMessageSend = async ({
         {
           _id: applicationId,
           jobId,
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
           version: expectedVersion,
           assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
           status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
@@ -3855,7 +3858,7 @@ const commitNormalMessageSend = async ({
 
       if (
         !application ||
-        application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+        !isLifecycleCompatibleApplicationSource(application.source)
       ) {
         throw new AppError(404, "Application not found", {
           field: "applicationId",
@@ -3879,7 +3882,7 @@ const commitNormalMessageSend = async ({
 
       if (
         !application ||
-        application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+        !isLifecycleCompatibleApplicationSource(application.source)
       ) {
         throw new AppError(404, "Application not found", {
           field: "applicationId",
@@ -4106,7 +4109,7 @@ const commitAssignedAssigneeMutation = async ({
     {
       _id: applicationId,
       jobId,
-      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       version: expectedVersion,
       assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
       status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
@@ -4207,10 +4210,9 @@ const firstAssignApplication = async ({
         });
       }
 
-      // BR-44: V10 Assign only covers Direct Applications.
-      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(409, "Only Direct Applications can be Assigned", {
-          field: "source",
+      if (!isLifecycleCompatibleApplicationSource(application.source)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
         });
       }
 
@@ -4547,15 +4549,10 @@ const executePrimaryCurrentAssigneeMutation = async ({
         });
       }
 
-      // BR-44: V10 assignment mutations only cover Direct Applications.
-      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(
-          409,
-          isUnassign
-            ? "Only Direct Applications can be unassigned"
-            : "Only Direct Applications can be reassigned",
-          { field: "source" },
-        );
+      if (!isLifecycleCompatibleApplicationSource(application.source)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
       }
 
       // BR-17: terminal Applications cannot change Assignee.
@@ -4862,10 +4859,9 @@ const automaticallyUnassignApplication = async ({
       });
     }
 
-    // BR-44: V10 assignment mutations only cover Direct Applications.
-    if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-      throw new AppError(409, "Only Direct Applications can be unassigned", {
-        field: "source",
+    if (!isLifecycleCompatibleApplicationSource(application.source)) {
+      throw new AppError(404, "Application not found", {
+        field: "applicationId",
       });
     }
 
@@ -5231,13 +5227,10 @@ const updateApplicationRecruitmentPipelineStatus = async ({
         });
       }
 
-      // BR-44: V10 Pipeline only covers Direct Applications.
-      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(
-          409,
-          "Only Direct Applications can be updated in Recruitment Pipeline",
-          { field: "source" },
-        );
+      if (!isLifecycleCompatibleApplicationSource(application.source)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
       }
 
       // BR-18: Unassigned Applications have no pipeline processing authority.
@@ -5308,7 +5301,7 @@ const updateApplicationRecruitmentPipelineStatus = async ({
         {
           _id: application._id,
           jobId: job._id,
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
           status: expectedStatus,
           version: expectedVersion,
           assignedRecruiterCompanyMemberId: context.membership._id,
@@ -5692,14 +5685,6 @@ const loadJobAcceptingDirectApplications = async (jobId, now = new Date()) => {
   return job;
 };
 
-const downloadUploadedCandidateCvFile = (publicId) => {
-  return downloadFileBuffer({
-    publicId,
-    resourceType: CANDIDATE_CV_UPLOADED_STORAGE.RESOURCE_TYPE,
-    deliveryType: CANDIDATE_CV_UPLOADED_STORAGE.DELIVERY_TYPE,
-  });
-};
-
 const downloadSubmittedCvSnapshotFile = (publicId) => {
   return downloadFileBuffer({
     publicId,
@@ -5795,7 +5780,7 @@ const loadCandidateOwnedApplicationForSnapshotDelivery = async ({
   const application = await Application.findOne({
     _id: applicationId,
     candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   });
 
   if (!application) {
@@ -5830,7 +5815,7 @@ const loadPrimaryManagedJobApplicationForSnapshotDelivery = async ({
 
   if (
     !application ||
-    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION ||
+    !isLifecycleCompatibleApplicationSource(application.source) ||
     application.jobId.toString() !== job._id.toString()
   ) {
     throw new AppError(404, "Application not found", {
@@ -5861,7 +5846,7 @@ const loadRecruiterMyApplicationForSnapshotDelivery = async ({
 
   if (
     !application ||
-    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+    !isLifecycleCompatibleApplicationSource(application.source)
   ) {
     throw new AppError(404, "Application not found", {
       field: "applicationId",
@@ -6038,117 +6023,107 @@ const loadEligibleCandidateCvForDirectApply = async ({
   return candidateCv;
 };
 
-const buildSnapshotOriginalFileName = (candidateCvName) => {
-  const trimmedName =
-    typeof candidateCvName === "string" ? candidateCvName.trim() : "";
-
-  if (trimmedName === "") {
-    return "submitted-cv.pdf";
-  }
-
-  return trimmedName.toLowerCase().endsWith(".pdf")
-    ? trimmedName
-    : `${trimmedName}.pdf`;
-};
-
-const resolveUploadedSnapshotOriginalFileName = (candidateCv) => {
-  const uploadedOriginalFileName =
-    typeof candidateCv.uploadedFile?.originalFileName === "string"
-      ? candidateCv.uploadedFile.originalFileName.trim()
-      : "";
-
-  if (uploadedOriginalFileName !== "") {
-    return uploadedOriginalFileName;
-  }
-
-  return buildSnapshotOriginalFileName(candidateCv.name);
-};
-
-const captureUploadedSubmittedCvSnapshot = async ({
+const captureUploadedSubmittedCvSnapshot = ({
   candidateCv,
   capturedAt = new Date(),
 }) => {
-  let pdfBuffer;
+  return captureUploadedCvSnapshot({
+    candidateCv,
+    capturedAt,
+    storage: APPLICATION_CV_SNAPSHOT_STORAGE,
+  });
+};
+
+const captureGeneratedSubmittedCvSnapshot = ({
+  candidateCv,
+  capturedAt = new Date(),
+}) => {
+  return captureGeneratedCvSnapshot({
+    candidateCv,
+    capturedAt,
+    storage: APPLICATION_CV_SNAPSHOT_STORAGE,
+  });
+};
+
+// V15 Slice 08 / TX-02: Invitation Accept creates the Invitation-source
+// Application at CONTACTED with the historical sender as initial Assignee,
+// then reuses the canonical V11 Conversation create helper. Availability
+// handoff is the existing V13 INTERVIEW_AVAILABILITY_REQUESTED obligation;
+// this must not emit synthetic APPLICATION_ASSIGNED / APPLICATION_STATUS_CHANGED.
+const createInvitationSourceApplicationOnAccept = async ({
+  invitation,
+  job,
+  session,
+} = {}) => {
+  const submittedCvSnapshot = deepCopyCvSnapshot(invitation.invitedCvSnapshot);
+
+  if (submittedCvSnapshot == null) {
+    throw new AppError(409, "Job Invitation is no longer actionable", {
+      field: "invitationId",
+    });
+  }
+
+  let application;
 
   try {
-    pdfBuffer = await downloadUploadedCandidateCvFile(
-      candidateCv.uploadedFile.storageKey,
+    [application] = await Application.create(
+      [
+        {
+          candidateUserId: invitation.candidateUserId,
+          jobId: invitation.jobId,
+          source: APPLICATION_SOURCE.RECRUITER_INVITATION,
+          sourceInvitationId: invitation._id,
+          status: APPLICATION_STATUS.CONTACTED,
+          submittedCvSnapshot,
+          appliedAt: null,
+          withdrawnAt: null,
+          withdrawReason: null,
+          assignedRecruiterCompanyMemberId:
+            invitation.sentByRecruiterCompanyMemberId,
+          version: 0,
+        },
+      ],
+      { session },
     );
-  } catch {
-    throw new AppError(502, "Failed to retrieve Uploaded CV PDF for snapshot", {
-      field: "candidateCvId",
-    });
+  } catch (error) {
+    if (isMongoDuplicateKeyError(error)) {
+      throw new AppError(409, APPLICATION_EXISTS_MESSAGE, {
+        field: "jobId",
+      });
+    }
+
+    throw error;
   }
 
-  const storedFile = await uploadApplicationSubmittedCvSnapshotFile(pdfBuffer);
-  const pageCount = candidateCv.uploadedFile.pageCount;
-  const sizeBytes = candidateCv.uploadedFile.sizeBytes ?? pdfBuffer.length;
+  const conversationOutcome = await createConversationOnFirstAssignIfAbsent({
+    applicationId: application._id,
+    session,
+  });
 
-  if (!Number.isInteger(pageCount) || pageCount < 1) {
-    throw new AppError(502, "Failed to capture Uploaded CV snapshot PDF", {
-      field: "candidateCvId",
-    });
+  if (conversationOutcome.conversation == null) {
+    throw new Error("Invitation Accept requires a Conversation");
   }
 
-  if (!Number.isInteger(sizeBytes) || sizeBytes < 1) {
-    throw new AppError(502, "Failed to capture Uploaded CV snapshot PDF", {
-      field: "candidateCvId",
+  const availabilityNotificationEvent =
+    await createApplicationLifecycleNotificationEvent({
+      application,
+      job,
+      type: NOTIFICATION_TYPE.INTERVIEW_AVAILABILITY_REQUESTED,
+      actorUserId: null,
+      recipientUserId: invitation.candidateUserId,
+      session,
     });
+
+  if (!availabilityNotificationEvent) {
+    throw new Error(
+      "Invitation Accept requires INTERVIEW_AVAILABILITY_REQUESTED",
+    );
   }
 
   return {
-    snapshot: {
-      sourceCandidateCvId: candidateCv._id,
-      name: candidateCv.name,
-      sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
-      pdfFile: {
-        storageKey: storedFile.publicId,
-        originalFileName: resolveUploadedSnapshotOriginalFileName(candidateCv),
-        mimeType: CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
-        sizeBytes,
-        pageCount,
-      },
-      capturedAt,
-    },
-    storageKey: storedFile.publicId,
-  };
-};
-
-const captureGeneratedSubmittedCvSnapshot = async ({
-  candidateCv,
-  capturedAt = new Date(),
-}) => {
-  const generatedContent = deepCopyGeneratedContent(
-    candidateCv.generatedContent,
-  );
-  const pdfBuffer = await renderHarvardCandidateCvPdf(generatedContent);
-  const pdfDocument = await PDFDocument.load(pdfBuffer);
-  const pageCount = pdfDocument.getPageCount();
-
-  if (!Number.isInteger(pageCount) || pageCount < 1) {
-    throw new AppError(502, "Failed to render Generated CV snapshot PDF", {
-      field: "candidateCvId",
-    });
-  }
-
-  const storedFile = await uploadApplicationSubmittedCvSnapshotFile(pdfBuffer);
-
-  return {
-    snapshot: {
-      sourceCandidateCvId: candidateCv._id,
-      name: candidateCv.name,
-      sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
-      generatedContent,
-      pdfFile: {
-        storageKey: storedFile.publicId,
-        originalFileName: buildSnapshotOriginalFileName(candidateCv.name),
-        mimeType: CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
-        sizeBytes: pdfBuffer.length,
-        pageCount,
-      },
-      capturedAt,
-    },
-    storageKey: storedFile.publicId,
+    application,
+    conversation: conversationOutcome.conversation,
+    availabilityNotificationEvent,
   };
 };
 
@@ -6157,6 +6132,7 @@ const directApplyToJob = async ({
   actorUser,
   jobId,
   candidateCvId,
+  now = new Date(),
 }) => {
   assertCandidateActor(actorUser);
 
@@ -6164,52 +6140,62 @@ const directApplyToJob = async ({
     throw new AppError(403, "Candidates may only apply for themselves");
   }
 
-  const job = await loadJobAcceptingDirectApplications(jobId);
+  const job = await loadJobAcceptingDirectApplications(jobId, now);
   const candidateCv = await loadEligibleCandidateCvForDirectApply({
     candidateUserId,
     candidateCvId,
   });
 
-  const existingApplication = await Application.findOne({
+  await assertCandidateJobAllowsDirectApply({
     candidateUserId,
     jobId: job._id,
-  }).select("_id");
-
-  if (existingApplication) {
-    throw new AppError(
-      409,
-      "Application already exists for this Candidate and Job",
-      {
-        field: "jobId",
-      },
-    );
-  }
+    now,
+  });
 
   let uploadedSnapshotStorageKey = null;
 
   try {
     const capturedAt = new Date();
-    const captureSubmittedCvSnapshot =
-      candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED
-        ? captureGeneratedSubmittedCvSnapshot
-        : captureUploadedSubmittedCvSnapshot;
-    const { snapshot: submittedCvSnapshot, storageKey } =
-      await captureSubmittedCvSnapshot({
+    const { snapshot: submittedCvSnapshot, storageKey } = await captureCvSnapshot(
+      {
         candidateCv,
         capturedAt,
-      });
+        storage: APPLICATION_CV_SNAPSHOT_STORAGE,
+      },
+    );
     uploadedSnapshotStorageKey = storageKey;
 
     const session = await mongoose.startSession();
     let application;
-    let notificationEvent;
+    const notificationEvents = [];
 
     try {
       await session.withTransaction(async () => {
-        const currentJob = await Job.findById(job._id).session(session);
+        notificationEvents.length = 0;
 
-        if (!currentJob) {
-          throw new AppError(404, "Job not found", { field: "jobId" });
+        const { job: currentJob } = await acquireCandidateJobSerialization({
+          candidateUserId,
+          jobId: job._id,
+          session,
+        });
+
+        await assertCandidateJobAllowsDirectApply({
+          candidateUserId,
+          jobId: currentJob._id,
+          session,
+          now,
+        });
+
+        const staleInvitationResult =
+          await materializeStalePendingInvitationForCandidateJob({
+            candidateUserId,
+            jobId: currentJob._id,
+            session,
+            now,
+          });
+
+        if (staleInvitationResult.notificationEvent) {
+          notificationEvents.push(staleInvitationResult.notificationEvent);
         }
 
         const primaryRecruiter = await CompanyMember.findOne({
@@ -6261,23 +6247,26 @@ const directApplyToJob = async ({
           `A new application for ${currentJob.title} is awaiting assignment.`,
         );
 
-        ({ event: notificationEvent } = await createNotificationEvent({
+        const { event: createdApplicationEvent } = await createNotificationEvent({
           eventKey: `direct-application-created:${application._id.toString()}`,
           type: NOTIFICATION_TYPE.DIRECT_APPLICATION_CREATED,
           actorUserId: candidateUserId,
           applicationId: application._id,
           recipients: [...recipientsByUserId.values()],
           session,
-        }));
+        });
+        notificationEvents.push(createdApplicationEvent);
       });
     } finally {
       await session.endSession();
     }
 
-    try {
-      await materializeNotificationEvent({ eventId: notificationEvent._id });
-    } catch {
-      // The persisted event obligation remains pending for canonical recovery.
+    for (const event of notificationEvents) {
+      try {
+        await materializeNotificationEvent({ eventId: event._id });
+      } catch {
+        // The persisted event obligation remains pending for canonical recovery.
+      }
     }
 
     return toPublicApplication(application);
@@ -6351,6 +6340,14 @@ const replaceSubmittedCv = async ({
     applicationId,
   });
 
+  if (application.source === APPLICATION_SOURCE.RECRUITER_INVITATION) {
+    throw new AppError(
+      409,
+      "Invitation-source Applications cannot replace Submitted CV",
+      { field: "source" },
+    );
+  }
+
   if (application.status !== APPLICATION_STATUS.APPLIED) {
     throw new AppError(409, "Only APPLIED Applications can replace Submitted CV", {
       field: "status",
@@ -6382,6 +6379,7 @@ const replaceSubmittedCv = async ({
       {
         _id: application._id,
         candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
         status: APPLICATION_STATUS.APPLIED,
         version: expectedVersion,
       },
@@ -6468,11 +6466,18 @@ const withdrawApplication = async ({
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
 
       if (!application) {
         throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+      if (application.source === APPLICATION_SOURCE.RECRUITER_INVITATION) {
+        throw new AppError(
+          409,
+          "Invitation-source Applications cannot be withdrawn",
+          { field: "source" },
+        );
       }
       if (application.status !== APPLICATION_STATUS.APPLIED) {
         throw new AppError(409, "Only APPLIED Applications can be withdrawn", {
@@ -6511,6 +6516,7 @@ const withdrawApplication = async ({
         {
           _id: application._id,
           candidateUserId,
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
           status: APPLICATION_STATUS.APPLIED,
           version: expectedVersion,
         },
@@ -6599,6 +6605,7 @@ export {
   countNonTerminalApplicationsAssignedToRecruiterOnJob,
   createFirstInterviewProposal,
   createInterviewProposal,
+  createInvitationSourceApplicationOnAccept,
   deepCopyGeneratedContent,
   declineCandidateInterviewProposal,
   directApplyToJob,

@@ -10,6 +10,7 @@ import { ensureCompanyCollectionInvariants } from "../../src/models/company.mode
 import { ensureConversationCollection } from "../../src/models/conversation.model.js";
 import { ensureInterviewScheduleCollection } from "../../src/models/interview-schedule.model.js";
 import { ensureJobCollectionInvariants } from "../../src/models/job.model.js";
+import { ensureJobInvitationCollectionInvariants } from "../../src/models/job-invitation.model.js";
 import { ensureMessageCollection } from "../../src/models/message.model.js";
 import { ensureNotificationEventCollection } from "../../src/models/notification-event.model.js";
 import { ensureNotificationCollection } from "../../src/models/notification.model.js";
@@ -37,6 +38,7 @@ const connectTestDatabase = async () => {
   await ensureJobCollectionInvariants(mongoose.connection);
   await ensureCandidateCvCollectionInvariants(mongoose.connection);
   await ensureApplicationCollectionInvariants(mongoose.connection);
+  await ensureJobInvitationCollectionInvariants(mongoose.connection);
   await ensureCandidateAvailabilityCollection(mongoose.connection);
   await ensureInterviewScheduleCollection(mongoose.connection);
   await ensureConversationCollection(mongoose.connection);

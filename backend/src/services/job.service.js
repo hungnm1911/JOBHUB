@@ -1042,7 +1042,11 @@ const expirePublishedJobIfDue = async ({
     );
   }
 
-  return toPublicJob(updatedJob);
+  const publicJob = toPublicJob(updatedJob);
+  await materializePendingJobInvitationsAfterSourceBestEffort({
+    filter: { jobId: updatedJob._id },
+  });
+  return publicJob;
 };
 
 // Canonical lifecycle readiness gate: submit and approve/publish revalidation.
@@ -2053,6 +2057,19 @@ const assertManualCloseJobAuthority = ({
   );
 };
 
+const materializePendingJobInvitationsAfterSourceBestEffort = async (
+  args = {},
+) => {
+  try {
+    const { materializePendingJobInvitationsBestEffort } = await import(
+      "./job-invitation.service.js"
+    );
+    await materializePendingJobInvitationsBestEffort(args);
+  } catch {
+    // Source lifecycle already committed; Invitation catch-up remains eventual.
+  }
+};
+
 const closePublishedJob = async ({
   actorUser,
   jobId,
@@ -2137,7 +2154,11 @@ const closePublishedJob = async ({
     });
   }
 
-  return toPublicJob(updatedJob);
+  const publicJob = toPublicJob(updatedJob);
+  await materializePendingJobInvitationsAfterSourceBestEffort({
+    filter: { jobId: updatedJob._id },
+  });
+  return publicJob;
 };
 
 // V6 F01: Recruitment Team read — dedicated authorization separate from
@@ -2630,6 +2651,13 @@ const removeSupportingRecruiter = async ({
     await session.endSession();
   }
 
+  await materializePendingJobInvitationsAfterSourceBestEffort({
+    filter: {
+      jobId: updatedJob._id,
+      sentByRecruiterCompanyMemberId: supportingRecruiterCompanyMemberId,
+    },
+  });
+
   return {
     jobId: updatedJob._id.toString(),
     primaryRecruiterCompanyMemberId:
@@ -2920,6 +2948,15 @@ const replacePrimaryRecruiter = async ({
     });
   } finally {
     await session.endSession();
+  }
+
+  if (!keepOldPrimaryAsSupporting) {
+    await materializePendingJobInvitationsAfterSourceBestEffort({
+      filter: {
+        jobId: updatedJob._id,
+        sentByRecruiterCompanyMemberId: oldPrimaryId,
+      },
+    });
   }
 
   return {
@@ -3241,6 +3278,13 @@ const executeForcedPrimaryTransfer = async ({
     await session.endSession();
   }
 
+  await materializePendingJobInvitationsAfterSourceBestEffort({
+    filter: {
+      jobId: updatedJob._id,
+      sentByRecruiterCompanyMemberId: oldPrimaryCompanyMemberId,
+    },
+  });
+
   return {
     jobId: updatedJob._id.toString(),
     primaryRecruiterCompanyMemberId:
@@ -3304,6 +3348,13 @@ const executeForcedSupportingRemoval = async ({
       alreadyRemoved: true,
     };
   }
+
+  await materializePendingJobInvitationsAfterSourceBestEffort({
+    filter: {
+      jobId: updatedJob._id,
+      sentByRecruiterCompanyMemberId: supportingCompanyMemberId,
+    },
+  });
 
   return {
     jobId: updatedJob._id.toString(),

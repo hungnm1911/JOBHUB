@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 import NOTIFICATION_TYPE from "../constants/notification-type.js";
-import { SCHEDULE_NOTIFICATION_TYPES } from "./notification-event.model.js";
+import { assertNotificationReferenceInvariant } from "./notification-event.model.js";
 
 const { Schema, model } = mongoose;
 
@@ -9,32 +9,6 @@ const NOTIFICATION_TYPE_VALUES = Object.values(NOTIFICATION_TYPE);
 
 const isNonEmptyTrimmedString = (value) => {
   return typeof value === "string" && value.trim() !== "";
-};
-
-const assertNotificationReferenceInvariant = (notification) => {
-  const isChatNotification =
-    notification.type === NOTIFICATION_TYPE.CHAT_MESSAGE_CREATED;
-  const isScheduleNotification = SCHEDULE_NOTIFICATION_TYPES.has(
-    notification.type,
-  );
-
-  if (isChatNotification && notification.messageId == null) {
-    return "CHAT_MESSAGE_CREATED must have messageId";
-  }
-
-  if (!isChatNotification && notification.messageId != null) {
-    return "messageId is only allowed for CHAT_MESSAGE_CREATED";
-  }
-
-  if (isScheduleNotification && notification.interviewScheduleId == null) {
-    return "Schedule Notification types must have interviewScheduleId";
-  }
-
-  if (!isScheduleNotification && notification.interviewScheduleId != null) {
-    return "interviewScheduleId is only allowed for Schedule Notification types";
-  }
-
-  return null;
 };
 
 const notificationSchema = new Schema(
@@ -79,7 +53,13 @@ const notificationSchema = new Schema(
     applicationId: {
       type: Schema.Types.ObjectId,
       ref: "Application",
-      required: true,
+      default: null,
+      immutable: true,
+    },
+    jobInvitationId: {
+      type: Schema.Types.ObjectId,
+      ref: "JobInvitation",
+      default: null,
       immutable: true,
     },
     messageId: {
