@@ -4,51 +4,47 @@
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is `IN PROGRESS`.
 Slice 01 — Persistence Kernel, Slice 02 — Send Job Invitation + Direct Apply
-Exclusion, and Slice 03 — Candidate Invitation Read + Current-State Evaluation
-are `IMPLEMENTED AND VERIFIED`. Slice 03 covers `F03` and `F07`/`F08` enabler
-(`BR-15`, `BR-16`, `BR-23`–`BR-26`, `BR-31`–`BR-34`, `BR-53`, `BR-58`,
-`BR-59`). Its approved canonical Product/Data contracts remain
+Exclusion, Slice 03 — Candidate Invitation Read + Current-State Evaluation,
+and Slice 04 — Candidate Reject Job Invitation are `IMPLEMENTED AND VERIFIED`.
+Slice 04 covers `F05` and `F11` partial (`BR-20`, `BR-25`, `BR-26`, `BR-30`,
+`BR-34`, `BR-36`, `BR-50`, `BR-56`–`BR-59`; `TX-03`). Its approved canonical
+Product/Data contracts remain
 `docs/product/versions/v15-job-invitation-recruiter-sourcing.md` and
 `docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`.
 
-Slice 03 lets an authenticated Candidate list and read only Invitations with
-`candidateUserId = authenticated Candidate`, including terminal history.
-Knowing an Invitation id does not authorize reading another Candidate's
-Invitation. The Candidate read model exposes Job/Company, historical sender,
-greeting, the immutable invited CV snapshot, sent/expiry information, and
-current Invitation status; live CandidateCV is not used as a snapshot
-replacement.
+Slice 04 lets an authenticated Candidate Reject only an Invitation with
+`candidateUserId = authenticated Candidate`. Knowing another Candidate's
+Invitation id does not authorize Reject. Reject is allowed only when the
+shared current-state evaluator still treats the Invitation as effectively
+`PENDING` at commit: persisted `PENDING` is re-checked against authoritative
+Invitation/Job/Company/Candidate/CV/sender state, and an earlier expiration
+or invalidation cause prevents persisting `REJECTED`, `rejectedAt`, or
+`JOB_INVITATION_REJECTED`. Successful Reject is `PENDING → REJECTED` with
+`rejectedAt`, unchanged Candidate/Job/CV snapshot/historical sender, no
+reject reason, and no Application, Conversation, or Message. `REJECTED` is
+terminal and continues to block future Recruiter Invitation for the same
+Candidate–Job through the existing Send resend rule; it does not by itself
+block later Candidate Direct Apply. TX-03 commits the status transition and
+the durable sender `JOB_INVITATION_REJECTED` NotificationEvent in one
+MongoDB transaction; V13 materialization/dedupe is reused, and inbox or
+realtime failure after commit does not roll back `REJECTED`. Candidate
+self-notification is not created.
 
-A reusable current-state evaluator in
-`job-invitation-current-state.service.js` derives actionability from
-authoritative Invitation and source-resource state, not from Notification
-history. Persisted terminal states `ACCEPTED`, `REJECTED`, `REVOKED`,
-`EXPIRED`, and `INVALIDATED` are kept and do not return to `PENDING`. For
-persisted `PENDING`, Invitation cutoff / Job deadline / Job `CLOSED` or
-effective `EXPIRED` make the Invitation non-actionable on the `EXPIRED`
-branch; Candidate account ineligibility, exact invited CV Archive, Company
-not operational, or historical sender loss of eligibility / Company
-membership / current Job-team relationship make it non-actionable on the
-`INVALIDATED` branch. `PUBLIC → PRIVATE`, Candidate CV edits, and Generated
-CV loss of `ACTIVE` after Send do not invalidate. Winning cause follows
-canonical terminal-cause precedence and effective business time, not the
-evaluator/read clock. Derived `canAccept` / `canReject` / `isActionable` are
-not persisted on `JobInvitation`.
+HTTP: Candidate `POST /api/candidate/invitations/:invitationId/reject` after
+access authentication and Candidate authorization. Slice 04 does not
+implement Candidate Accept, Primary Revoke, persistent `PENDING → EXPIRED` /
+`PENDING → INVALIDATED`, expiration/invalidation workers, Candidate–Job
+Direct Apply stale-PENDING closure, Invitation-source Application,
+Conversation/Availability handoff, or new realtime behavior. Slice 03
+read/current-state evaluation, Slice 02 Send / Direct Apply exclusion, and
+Slice 01 persistence remain in place.
 
-HTTP: Candidate `GET /api/candidate/invitations` and
-`GET /api/candidate/invitations/:invitationId` after access authentication
-and Candidate authorization. Slice 03 does not implement Candidate Accept,
-Reject, Primary Revoke, persistent `PENDING → EXPIRED` / `PENDING →
-INVALIDATED`, expiration worker, source-lifecycle invalidation propagation,
-Invitation-source Application, Conversation, Availability handoff, or new
-realtime behavior. Slice 02 Send / Direct Apply exclusion and Slice 01
-persistence remain in place; Direct Apply exclusion still uses persisted
-`PENDING` until later materialization slices.
-
-Verification for this Slice 03 state: `cd backend && npm run verify:agent`
+Verification for this Slice 04 state: `cd backend && npm run verify:agent`
 passed on 2026-08-19 with ESLint 0 errors / the same 2 pre-existing V6
 `no-unused-vars` warnings, architecture rules `ARCH-001` through `ARCH-016`,
-141 passing test files, and 1,356 passing tests. Focused Slice 03 coverage is
+142 passing test files, and 1,366 passing tests. Focused Slice 04 coverage is
+`test/application/v15-slice04-candidate-reject-job-invitation.test.js`
+(10 tests). Slice 03 coverage remains
 `test/application/v15-slice03-candidate-invitation-read.test.js` (8 tests).
 Slice 02 coverage remains
 `test/application/v15-slice02-send-job-invitation.test.js` (16 tests). Slice 01
@@ -56,7 +52,7 @@ persistence suites remain
 `test/application/v15-slice01-persistence-kernel.test.js` and
 `test/notification/v15-slice01-invitation-notification-foundation.test.js`.
 
-Later-slice prerequisites remain deferred and are not authority for Slice 03:
+Later-slice prerequisites remain deferred and are not authority for Slice 04:
 
 * Slice 06 must establish expiration/invalidation materialization ownership
   and runtime integration, including preserving canonical effective-cause
@@ -64,7 +60,7 @@ Later-slice prerequisites remain deferred and are not authority for Slice 03:
 * Slice 08 must establish the atomic Accept orchestration and Conversation
   creation owner; V12/V13 evidence is required at this slice.
 * Slice 09 Final Acceptance requires closure of the applicable prior-version
-  acceptance baselines. V12/V13 closure does not block Slice 03.
+  acceptance baselines. V12/V13 closure does not block Slice 04.
 
 **V14 — Candidate Search trên CV PUBLIC** is `COMPLETED AND VERIFIED`.
 Its approved canonical Product/Data contracts are tracked at
@@ -720,6 +716,28 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Current V15 Job Invitation revision
+
+- **Implemented; verified:** V15 Slice 04 — Candidate Reject Job Invitation
+  (`F05`, `F11` partial; `BR-20`, `BR-25`, `BR-26`, `BR-30`, `BR-34`,
+  `BR-36`, `BR-50`, `BR-56`–`BR-59`; `TX-03`): authenticated Candidate Rejects
+  only own actionable Invitations via
+  `POST /api/candidate/invitations/:invitationId/reject`. `rejectOwnJobInvitation`
+  reuses `evaluateJobInvitationCurrentState` inside the commit transaction,
+  acquires Candidate–Job serialization, and commits `PENDING → REJECTED` plus
+  `rejectedAt` plus durable sender `JOB_INVITATION_REJECTED` in one MongoDB
+  transaction. An earlier expiration or invalidation cause blocks Reject
+  without persisting `REJECTED`. Identity/snapshot/sender fields stay
+  unchanged; no reject reason, Application, Conversation, Message, or
+  Candidate self-notification. `REJECTED` remains terminal and continues to
+  block future Send for the same Candidate–Job; Direct Apply remains allowed
+  under canonical Direct Apply rules. Inbox materialization/realtime failure
+  after commit does not roll back the business transition. Accept, Primary
+  Revoke, persistent Expiration/Invalidation, and Invitation-source
+  Application remain later slices. Focused coverage in
+  `test/application/v15-slice04-candidate-reject-job-invitation.test.js`
+  (10 tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 142 files / 1,366 tests).
 
 - **Implemented; verified:** V15 Slice 03 — Candidate Invitation Read +
   Current-State Evaluation (`F03`, `F07`/`F08` enabler; `BR-15`, `BR-16`,

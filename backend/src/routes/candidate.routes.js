@@ -33,6 +33,7 @@ import {
 import {
   getOwnJobInvitationHandler,
   listOwnJobInvitationsHandler,
+  rejectOwnJobInvitationHandler,
 } from "../controllers/job-invitation.controller.js";
 import {
   getOwnCandidateProfileHandler,
@@ -187,6 +188,13 @@ router.get(
   authenticateAccess,
   authorizeCandidate,
   getOwnJobInvitationHandler,
+);
+
+router.post(
+  "/invitations/:invitationId/reject",
+  authenticateAccess,
+  authorizeCandidate,
+  rejectOwnJobInvitationHandler,
 );
 
 router.get(

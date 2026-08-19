@@ -577,23 +577,27 @@ const listOwnJobInvitations = async ({
   };
 };
 
-const getOwnJobInvitation = async ({
+const loadOwnJobInvitationForCandidate = async ({
   candidateUser,
   invitationId,
-  now = new Date(),
-} = {}) => {
-  assertCandidateInvitationActor(candidateUser);
-
+  session = null,
+}) => {
   if (!mongoose.isValidObjectId(invitationId)) {
     throw new AppError(404, "Job Invitation not found", {
       field: "invitationId",
     });
   }
 
-  const invitation = await JobInvitation.findOne({
+  const query = JobInvitation.findOne({
     _id: invitationId,
     candidateUserId: candidateUser._id,
   });
+
+  if (session) {
+    query.session(session);
+  }
+
+  const invitation = await query;
 
   if (!invitation) {
     throw new AppError(404, "Job Invitation not found", {
@@ -601,7 +605,145 @@ const getOwnJobInvitation = async ({
     });
   }
 
+  return invitation;
+};
+
+const getOwnJobInvitation = async ({
+  candidateUser,
+  invitationId,
+  now = new Date(),
+} = {}) => {
+  assertCandidateInvitationActor(candidateUser);
+
+  const invitation = await loadOwnJobInvitationForCandidate({
+    candidateUser,
+    invitationId,
+  });
+
   const [view] = await hydrateCandidateJobInvitationViews([invitation], {
+    now,
+  });
+
+  return {
+    invitation: view,
+  };
+};
+
+const rejectOwnJobInvitation = async ({
+  candidateUser,
+  invitationId,
+  now = new Date(),
+} = {}) => {
+  assertCandidateInvitationActor(candidateUser);
+
+  const ownedInvitation = await loadOwnJobInvitationForCandidate({
+    candidateUser,
+    invitationId,
+  });
+
+  const session = await mongoose.startSession();
+  let rejectedInvitation;
+  let notificationEvent;
+
+  try {
+    await session.withTransaction(async () => {
+      rejectedInvitation = null;
+      notificationEvent = null;
+
+      await acquireCandidateJobSerialization({
+        candidateUserId: ownedInvitation.candidateUserId,
+        jobId: ownedInvitation.jobId,
+        session,
+      });
+
+      const invitation = await loadOwnJobInvitationForCandidate({
+        candidateUser,
+        invitationId: ownedInvitation._id,
+        session,
+      });
+
+      if (invitation.status !== JOB_INVITATION_STATUS.PENDING) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      const resources = await loadJobInvitationCurrentStateResources(
+        [invitation],
+        { session },
+      );
+      const invitationResources = resourcesForInvitation(invitation, resources);
+      const evaluation = evaluateJobInvitationCurrentStateFromResources({
+        invitation,
+        resources,
+        now,
+      });
+
+      if (!evaluation.isActionable) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      if (
+        invitationResources.senderUser == null ||
+        invitationResources.job == null
+      ) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      rejectedInvitation = await JobInvitation.findOneAndUpdate(
+        {
+          _id: invitation._id,
+          candidateUserId: candidateUser._id,
+          status: JOB_INVITATION_STATUS.PENDING,
+        },
+        {
+          $set: {
+            status: JOB_INVITATION_STATUS.REJECTED,
+            rejectedAt: now,
+          },
+        },
+        {
+          returnDocument: "after",
+          runValidators: true,
+          session,
+        },
+      );
+
+      if (!rejectedInvitation) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      ({ event: notificationEvent } = await createNotificationEvent({
+        eventKey: `job-invitation-rejected:${rejectedInvitation._id.toString()}`,
+        type: NOTIFICATION_TYPE.JOB_INVITATION_REJECTED,
+        actorUserId: candidateUser._id,
+        jobInvitationId: rejectedInvitation._id,
+        recipients: [
+          {
+            recipientUserId: invitationResources.senderUser._id,
+            content: `A candidate rejected the job invitation for ${invitationResources.job.title}.`,
+          },
+        ],
+        session,
+      }));
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  try {
+    await materializeNotificationEvent({ eventId: notificationEvent._id });
+  } catch {
+    // The persisted event obligation remains pending for canonical recovery.
+  }
+
+  const [view] = await hydrateCandidateJobInvitationViews([rejectedInvitation], {
     now,
   });
 
@@ -614,6 +756,7 @@ export {
   deriveInvitationExpiresAt,
   getOwnJobInvitation,
   listOwnJobInvitations,
+  rejectOwnJobInvitation,
   sendJobInvitation,
   toPublicJobInvitation,
 };

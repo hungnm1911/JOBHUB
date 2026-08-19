@@ -1,6 +1,7 @@
 import {
   getOwnJobInvitation,
   listOwnJobInvitations,
+  rejectOwnJobInvitation,
   sendJobInvitation,
 } from "../services/job-invitation.service.js";
 
@@ -56,8 +57,22 @@ const getOwnJobInvitationHandler = async (request, response, next) => {
   }
 };
 
+const rejectOwnJobInvitationHandler = async (request, response, next) => {
+  try {
+    const result = await rejectOwnJobInvitation({
+      candidateUser: request.auth.user,
+      invitationId: request.params.invitationId,
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   getOwnJobInvitationHandler,
   listOwnJobInvitationsHandler,
+  rejectOwnJobInvitationHandler,
   sendJobInvitationHandler,
 };
