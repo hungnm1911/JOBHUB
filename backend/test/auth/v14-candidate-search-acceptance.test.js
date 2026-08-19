@@ -31,6 +31,7 @@ import CompanyMember from "../../src/models/company-member.model.js";
 import Conversation from "../../src/models/conversation.model.js";
 import InterviewSchedule from "../../src/models/interview-schedule.model.js";
 import Job from "../../src/models/job.model.js";
+import JobInvitation from "../../src/models/job-invitation.model.js";
 import Message from "../../src/models/message.model.js";
 import Notification from "../../src/models/notification.model.js";
 import NotificationEvent from "../../src/models/notification-event.model.js";
@@ -222,6 +223,7 @@ const captureCounts = async () => ({
   notificationEvents: await NotificationEvent.countDocuments(),
   interviewSchedules: await InterviewSchedule.countDocuments(),
   availabilities: await CandidateAvailability.countDocuments(),
+  jobInvitations: await JobInvitation.countDocuments(),
 });
 
 describe("V14 Slice 07 — Dynamic revocation + read-only acceptance closure (F01–F06)", () => {
@@ -757,10 +759,10 @@ describe("V14 Slice 07 — Dynamic revocation + read-only acceptance closure (F0
         "candidate_search_histories",
         "candidate_cv_views",
         "candidate_cv_view_histories",
-        "job_invitations",
       ]) {
         expect(afterCollections).not.toContain(name);
       }
+      expect(await JobInvitation.countDocuments()).toBe(0);
       expect(beforeCv).not.toHaveProperty("viewCount");
       expect(beforeCv).not.toHaveProperty("viewedByRecruiterIds");
       expect(beforeCv).not.toHaveProperty("searchEligible");

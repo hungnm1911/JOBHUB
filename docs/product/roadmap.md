@@ -34,7 +34,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V12 | Interview Schedule | IN PROGRESS |
 | V13 | Notification và phân phối realtime | READY FOR IMPLEMENTATION |
 | V14 | Candidate Search trên CV PUBLIC | COMPLETED AND VERIFIED |
-| V15 | Job Invitation và nhánh Recruiter săn ứng viên | READY FOR IMPLEMENTATION |
+| V15 | Job Invitation và nhánh Recruiter săn ứng viên | IN PROGRESS |
 | V16 | Saved Jobs | PLANNED |
 | V17 | Dashboard, thống kê và giám sát | PLANNED |
 
@@ -111,10 +111,10 @@ read-only acceptance suite. The required backend verification gate passed;
 V14 is therefore `COMPLETED AND VERIFIED` against the approved Candidate
 Search Product/Data contracts. Keyword/full-text search, Saved Search,
 Recruiter Download, Direct Message, and Job Invitation remain outside V14 by
-product boundary. V15 has approved Product/Data contracts and is `READY FOR
-IMPLEMENTATION` for Slice 01, the persistence kernel; this status does not
-authorize any V15 business workflow or remove the recorded prerequisites for
-later slices. V16 and V17 must not be implemented merely from their roadmap
+product boundary. V15 has approved Product/Data contracts and is `IN PROGRESS`;
+Slice 01 Persistence Kernel is implemented and verified. This status does not
+authorize any later V15 business workflow or remove the recorded prerequisites
+for later slices. V16 and V17 must not be implemented merely from their roadmap
 titles.
 
 V15 canonical specification:

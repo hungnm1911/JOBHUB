@@ -53,7 +53,7 @@ describe("V13 Slice 01 durable Notification kernel", () => {
 
   it("enforces the canonical enum, references, and recipient snapshot invariants", async () => {
     const invalidType = new NotificationEvent(
-      eventInput({ type: "JOB_INVITATION_RECEIVED" }),
+      eventInput({ type: "JOB_INVITATION_EXPIRED" }),
     );
     const missingChatReference = new NotificationEvent(
       eventInput({ type: NOTIFICATION_TYPE.CHAT_MESSAGE_CREATED }),
@@ -84,7 +84,7 @@ describe("V13 Slice 01 durable Notification kernel", () => {
     await expect(missingEventNotification.validate()).rejects.toThrow();
 
     expect(Object.values(NOTIFICATION_TYPE)).not.toContain(
-      "JOB_INVITATION_RECEIVED",
+      "JOB_INVITATION_EXPIRED",
     );
     expect(Object.values(NOTIFICATION_TYPE)).not.toContain(
       "CONVERSATION_BECAME_READ_ONLY",

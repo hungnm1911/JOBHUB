@@ -11,6 +11,17 @@ const SCHEDULE_NOTIFICATION_TYPES = new Set([
   NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_CONFIRMED,
   NOTIFICATION_TYPE.INTERVIEW_SCHEDULE_DECLINED,
 ]);
+const PURE_JOB_INVITATION_NOTIFICATION_TYPES = new Set([
+  NOTIFICATION_TYPE.JOB_INVITATION_RECEIVED,
+  NOTIFICATION_TYPE.JOB_INVITATION_ACCEPTED,
+  NOTIFICATION_TYPE.JOB_INVITATION_REJECTED,
+  NOTIFICATION_TYPE.JOB_INVITATION_REVOKED,
+  NOTIFICATION_TYPE.JOB_INVITATION_INVALIDATED,
+]);
+const JOB_INVITATION_NOTIFICATION_TYPES = new Set([
+  ...PURE_JOB_INVITATION_NOTIFICATION_TYPES,
+  NOTIFICATION_TYPE.INVITED_APPLICATION_CREATED,
+]);
 
 const isNonEmptyTrimmedString = (value) => {
   return typeof value === "string" && value.trim() !== "";
@@ -19,6 +30,12 @@ const isNonEmptyTrimmedString = (value) => {
 const assertNotificationReferenceInvariant = (event) => {
   const isChatEvent = event.type === NOTIFICATION_TYPE.CHAT_MESSAGE_CREATED;
   const isScheduleEvent = SCHEDULE_NOTIFICATION_TYPES.has(event.type);
+  const isPureInvitationEvent = PURE_JOB_INVITATION_NOTIFICATION_TYPES.has(
+    event.type,
+  );
+  const isInvitedApplicationCreated =
+    event.type === NOTIFICATION_TYPE.INVITED_APPLICATION_CREATED;
+  const isInvitationEvent = JOB_INVITATION_NOTIFICATION_TYPES.has(event.type);
 
   if (isChatEvent && event.messageId == null) {
     return "CHAT_MESSAGE_CREATED must have messageId";
@@ -34,6 +51,26 @@ const assertNotificationReferenceInvariant = (event) => {
 
   if (!isScheduleEvent && event.interviewScheduleId != null) {
     return "interviewScheduleId is only allowed for Schedule Notification types";
+  }
+
+  if (isInvitationEvent && event.jobInvitationId == null) {
+    return "Job Invitation Notification types must have jobInvitationId";
+  }
+
+  if (!isInvitationEvent && event.jobInvitationId != null) {
+    return "jobInvitationId is only allowed for Job Invitation Notification types";
+  }
+
+  if (isPureInvitationEvent && event.applicationId != null) {
+    return "pure Job Invitation Notification types must not have applicationId";
+  }
+
+  if (isInvitedApplicationCreated && event.applicationId == null) {
+    return "INVITED_APPLICATION_CREATED must have applicationId";
+  }
+
+  if (!isPureInvitationEvent && event.applicationId == null) {
+    return "Application-scoped Notification types must have applicationId";
   }
 
   return null;
@@ -94,7 +131,13 @@ const notificationEventSchema = new Schema(
     applicationId: {
       type: Schema.Types.ObjectId,
       ref: "Application",
-      required: true,
+      default: null,
+      immutable: true,
+    },
+    jobInvitationId: {
+      type: Schema.Types.ObjectId,
+      ref: "JobInvitation",
+      default: null,
       immutable: true,
     },
     messageId: {
@@ -178,6 +221,8 @@ const ensureNotificationEventCollection = async (
 };
 
 export {
+  JOB_INVITATION_NOTIFICATION_TYPES,
+  PURE_JOB_INVITATION_NOTIFICATION_TYPES,
   SCHEDULE_NOTIFICATION_TYPES,
   assertNotificationReferenceInvariant,
   ensureNotificationEventCollection,

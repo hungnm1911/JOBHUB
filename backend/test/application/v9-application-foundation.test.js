@@ -151,11 +151,9 @@ describe("V9 Slice 01 — Application persistence foundation", () => {
       ).toBeUndefined();
       expect(generatedApplication.toObject()).not.toHaveProperty("companyId");
       expect(generatedApplication.assignedRecruiterCompanyMemberId).toBeNull();
+      expect(generatedApplication.sourceInvitationId).toBeNull();
       expect(generatedApplication.toObject()).not.toHaveProperty(
         "sourceRecruiterCompanyMemberId",
-      );
-      expect(generatedApplication.toObject()).not.toHaveProperty(
-        "sourceInvitationId",
       );
       expect(generatedApplication.toObject()).not.toHaveProperty("jobSnapshot");
       expect(generatedApplication.toObject()).not.toHaveProperty(

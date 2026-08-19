@@ -15,6 +15,7 @@ import { ensureCandidateCvCollectionInvariants } from "./src/models/candidate-cv
 import { ensureCompanyCollectionInvariants } from "./src/models/company.model.js";
 import { ensureInterviewScheduleCollection } from "./src/models/interview-schedule.model.js";
 import { ensureJobCollectionInvariants } from "./src/models/job.model.js";
+import { ensureJobInvitationCollectionInvariants } from "./src/models/job-invitation.model.js";
 import { ensureNotificationEventCollection } from "./src/models/notification-event.model.js";
 import { ensureNotificationCollection } from "./src/models/notification.model.js";
 import {
@@ -165,6 +166,7 @@ const startServer = async () => {
   await ensureJobCollectionInvariants();
   await ensureCandidateCvCollectionInvariants();
   await ensureApplicationCollectionInvariants();
+  await ensureJobInvitationCollectionInvariants();
   await ensureCandidateAvailabilityCollection();
   await ensureInterviewScheduleCollection();
   await ensureNotificationEventCollection();

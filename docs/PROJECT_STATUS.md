@@ -2,36 +2,42 @@
 
 ## Current project state
 
-**V15 — Job Invitation và nhánh Recruiter săn ứng viên** is `READY FOR
-IMPLEMENTATION` for Slice 01 only. Its approved canonical Product/Data
-contracts are established at
+**V15 — Job Invitation và nhánh Recruiter săn ứng viên** is `IN PROGRESS`.
+Slice 01 — Persistence Kernel is `IMPLEMENTED AND VERIFIED` (`F02`, `F04`,
+`F11` persistence foundation; `BR-13`, `BR-18`, `BR-23` cutoff field only,
+`BR-25`, `BR-37`–`BR-42`, `BR-47`–`BR-49`, `BR-56`, `BR-60`, `BR-61`). Its
+approved canonical Product/Data contracts remain
 `docs/product/versions/v15-job-invitation-recruiter-sourcing.md` and
 `docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`.
-This readiness step introduces no V15 Fxx behavior.
 
-Slice 01 is limited to the persistence kernel: canonical Job Invitation
-status/invalidation-reason vocabularies, `JobInvitation` with embedded
-`InvitedCvSnapshot`, the approved Application source/source-reference
-extension, Notification/Event vocabulary extension, local state matrices,
-and indexes. Engineering ownership for those persistence artifacts is now
-recorded in `docs/engineering/source-of-truth.md`. The existing MongoDB
-replica-set harness proves transaction rollback and the current collection-
-invariant pattern supports schema/database enforcement; the focused
-transaction infrastructure test passes. `ARCH-001` through `ARCH-016` accept
-the planned canonical constants/model locations, so no test infrastructure or
-verification rule was changed or weakened.
+Slice 01 adds canonical `JobInvitation` persistence (`job_invitations`) with
+Candidate / exact invited CandidateCV / Job / historical sender references,
+immutable `InvitedCvSnapshot` reusing the V9 submitted-CV snapshot shape,
+the six Invitation statuses, terminal metadata, exact invalidation-reason
+vocabulary, `invalidatedAt` as the persisted effective business time of the
+source cause, and `expiresAt` as a persisted cutoff field without BR-23
+derivation. Database protection includes the partial unique PENDING
+Candidate–Job index and the remaining canonical Invitation indexes, with no
+TTL delete on `expiresAt`. `Application` now accepts `RECRUITER_INVITATION`
+with immutable conditional `sourceInvitationId`, source-dependent structural
+invariants, canonical creation state `CONTACTED`, and no Source Recruiter
+field. V13 Notification/Event persistence now includes the V15 Invitation
+types, conditional `jobInvitationId`, and the pure-Invitation vs
+`INVITED_APPLICATION_CREATED` reference matrix, while event-key / recipient
+dedupe remains unchanged.
 
-The V15 Data contract now uses semantic invalidation reasons
-(`CANDIDATE_NOT_ACTIVE`, `COMPANY_NOT_OPERATIONAL`, `SENDER_NOT_ACTIVE`, and
-the remaining exact Product causes) and defines `invalidatedAt` as the
-effective business time of the invalidating source cause rather than later
-terminal materialization time. This is persistence semantics only; no
-expiration/invalidation runtime is implemented by readiness.
+Slice 01 does not implement Send, Candidate read, Accept, Reject, Revoke,
+Direct Apply exclusion, Candidate–Job serialization, snapshot capture/render/
+upload, expiration calculation or worker, invalidation propagation,
+Conversation creation, Availability handoff, NotificationEvent creation from
+business transitions, realtime behavior, or any HTTP business flow.
 
-Verification for this readiness state: `cd backend && npm run verify:agent`
+Verification for this Slice 01 state: `cd backend && npm run verify:agent`
 passed on 2026-08-19 with ESLint 0 errors / the same 2 pre-existing V6
 `no-unused-vars` warnings, architecture rules `ARCH-001` through `ARCH-016`,
-137 passing test files, and 1,310 passing tests.
+139 passing test files, and 1,332 passing tests. Focused Slice 01 persistence
+suites are `test/application/v15-slice01-persistence-kernel.test.js` and
+`test/notification/v15-slice01-invitation-notification-foundation.test.js`.
 
 Later-slice prerequisites remain deferred and are not authority for Slice 01:
 
