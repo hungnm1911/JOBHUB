@@ -3,55 +3,70 @@
 ## Current project state
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is `IN PROGRESS`.
-Slice 01 — Persistence Kernel is `IMPLEMENTED AND VERIFIED` (`F02`, `F04`,
-`F11` persistence foundation; `BR-13`, `BR-18`, `BR-23` cutoff field only,
-`BR-25`, `BR-37`–`BR-42`, `BR-47`–`BR-49`, `BR-56`, `BR-60`, `BR-61`). Its
-approved canonical Product/Data contracts remain
+Slice 01 — Persistence Kernel and Slice 02 — Send Job Invitation + Direct Apply
+Exclusion are `IMPLEMENTED AND VERIFIED`. Slice 02 covers `F01`, `F02`, `F09`,
+and `F11` partial (`BR-03`–`BR-22`, `BR-23` Send cutoff, `BR-35`, `BR-36`,
+`BR-48`, `BR-56`, `BR-61`, `TX-01`). Its approved canonical Product/Data
+contracts remain
 `docs/product/versions/v15-job-invitation-recruiter-sourcing.md` and
 `docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`.
 
-Slice 01 adds canonical `JobInvitation` persistence (`job_invitations`) with
-Candidate / exact invited CandidateCV / Job / historical sender references,
-immutable `InvitedCvSnapshot` reusing the V9 submitted-CV snapshot shape,
-the six Invitation statuses, terminal metadata, exact invalidation-reason
-vocabulary, `invalidatedAt` as the persisted effective business time of the
-source cause, and `expiresAt` as a persisted cutoff field without BR-23
-derivation. Database protection includes the partial unique PENDING
-Candidate–Job index and the remaining canonical Invitation indexes, with no
-TTL delete on `expiresAt`. `Application` now accepts `RECRUITER_INVITATION`
-with immutable conditional `sourceInvitationId`, source-dependent structural
-invariants, canonical creation state `CONTACTED`, and no Source Recruiter
-field. V13 Notification/Event persistence now includes the V15 Invitation
-types, conditional `jobInvitationId`, and the pure-Invitation vs
-`INVITED_APPLICATION_CREATED` reference matrix, while event-key / recipient
-dedupe remains unchanged.
+Slice 02 is the first V14 Candidate Search → Job Invitation bridge. An
+authenticated ACTIVE Recruiter in an operational Company who is current
+Primary or Supporting of the exact selected Job can send one `PENDING`
+Invitation for an exact search-eligible CandidateCV. Send re-checks
+authoritative Recruiter/Company/Job-team/Job-window state, reuses V14
+`loadCurrentSearchEligibleCandidateCvById` (Generated `ACTIVE+PUBLIC+not
+archived`; Uploaded `PUBLIC+not archived` without inventing `ACTIVE/DRAFT`;
+owner `ACTIVE` and email-verified), and does not run CV–Job compatibility
+matching. Successful Send captures an immutable `InvitedCvSnapshot` through
+the shared `cv-snapshot.service.js` owner (V9 snapshot shape/primitives;
+Invitation Cloudinary folder), persists canonical `expiresAt` at Send
+(`Asia/Ho_Chi_Minh`, sent calendar date = Day 1, own cutoff = `00:00` start of
+Day 16, effective cutoff = min(own cutoff, `Job.applicationDeadline`)), and
+commits `JobInvitation(PENDING)` plus durable `JOB_INVITATION_RECEIVED`
+`NotificationEvent` in one MongoDB transaction (`TX-01`). Inbox
+materialization/realtime remain V13 post-commit.
 
-Slice 01 does not implement Send, Candidate read, Accept, Reject, Revoke,
-Direct Apply exclusion, Candidate–Job serialization, snapshot capture/render/
-upload, expiration calculation or worker, invalidation propagation,
-Conversation creation, Availability handoff, NotificationEvent creation from
-business transitions, realtime behavior, or any HTTP business flow.
+Candidate–Job exclusion now matches the approved V15 extension of V9 Direct
+Apply: existing Application, `PENDING` Invitation, and `REJECTED` history
+block Send; `EXPIRED`/`REVOKED`/`INVALIDATED` do not self-block resend;
+effective `PENDING` blocks Direct Apply; other terminal Invitation states do
+not. Concurrent Send and Direct Apply share
+`acquireCandidateJobSerialization` on existing Job then Candidate User
+documents (no coordination collection or extra Data Contract field) so
+`Application + PENDING Invitation` cannot both commit.
 
-Verification for this Slice 01 state: `cd backend && npm run verify:agent`
+HTTP: Recruiter `POST /api/jobs/:jobId/invitations` after access
+authentication and Recruiter business access. Send does not create
+Application, Conversation, Message, or Chat authority, and does not rewrite
+the snapshot after commit.
+
+Slice 01 persistence kernel remains in place (`job_invitations`, Invitation
+indexes, Application `RECRUITER_INVITATION` / `sourceInvitationId`, V15
+Notification types). Slice 02 does not implement Candidate Invitation
+read/detail, Accept, Reject, Revoke, expiration worker/materialization,
+source-driven invalidation, Conversation creation, Availability handoff,
+Invitation-source Application creation, or new realtime behavior.
+
+Verification for this Slice 02 state: `cd backend && npm run verify:agent`
 passed on 2026-08-19 with ESLint 0 errors / the same 2 pre-existing V6
 `no-unused-vars` warnings, architecture rules `ARCH-001` through `ARCH-016`,
-139 passing test files, and 1,332 passing tests. Focused Slice 01 persistence
-suites are `test/application/v15-slice01-persistence-kernel.test.js` and
+140 passing test files, and 1,348 passing tests. Focused Slice 02 coverage is
+`test/application/v15-slice02-send-job-invitation.test.js` (16 tests). Slice 01
+persistence suites remain
+`test/application/v15-slice01-persistence-kernel.test.js` and
 `test/notification/v15-slice01-invitation-notification-foundation.test.js`.
 
-Later-slice prerequisites remain deferred and are not authority for Slice 01:
+Later-slice prerequisites remain deferred and are not authority for Slice 02:
 
-* Slice 02 must close the shared Candidate–Job serialization contract used by
-  Send and Direct Apply, establish the shared neutral CV snapshot-capture
-  owner, and obtain Product confirmation for the exact BR-23 timezone/day
-  cutoff before implementing Send expiration derivation.
 * Slice 06 must establish expiration/invalidation materialization ownership
   and runtime integration, including preserving canonical effective-cause
   times when materialization occurs later.
 * Slice 08 must establish the atomic Accept orchestration and Conversation
   creation owner; V12/V13 evidence is required at this slice.
 * Slice 09 Final Acceptance requires closure of the applicable prior-version
-  acceptance baselines. V12/V13 closure does not block Slice 01.
+  acceptance baselines. V12/V13 closure does not block Slice 02.
 
 **V14 — Candidate Search trên CV PUBLIC** is `COMPLETED AND VERIFIED`.
 Its approved canonical Product/Data contracts are tracked at
@@ -705,6 +720,32 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 ## Operational provisioning
 
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
+
+## Current V15 Job Invitation revision
+
+- **Implemented; verified:** V15 Slice 02 — Send Job Invitation + Direct Apply
+  Exclusion (`F01`, `F02`, `F09`, `F11` partial; `BR-03`–`BR-22`, `BR-23` Send
+  cutoff, `BR-35`, `BR-36`, `BR-48`, `BR-56`, `BR-61`; `TX-01`): authenticated
+  ACTIVE Recruiter in an operational Company who is current Primary or
+  Supporting of the exact selected Job can `POST /api/jobs/:jobId/invitations`
+  for an exact V14 search-eligible CandidateCV. Send re-checks authoritative
+  Recruiter/Company/Job-team/Job-window state, captures immutable
+  `InvitedCvSnapshot` through shared `cv-snapshot.service.js`, persists
+  BR-23 `expiresAt` (`Asia/Ho_Chi_Minh`, sent date = Day 1, own cutoff =
+  `00:00` start of Day 16, min with `Job.applicationDeadline`), and commits
+  `JobInvitation(PENDING)` plus durable `JOB_INVITATION_RECEIVED` in one
+  MongoDB transaction. Existing Application, `PENDING`, and `REJECTED` block
+  Send; `EXPIRED`/`REVOKED`/`INVALIDATED` do not self-block resend; effective
+  `PENDING` blocks Direct Apply. Concurrent Send and Direct Apply share
+  `acquireCandidateJobSerialization` on existing Job then Candidate User
+  documents. Send does not create Application, Conversation, or Message.
+  Candidate read, Accept, Reject, Revoke, expiration worker, invalidation,
+  Conversation, Availability, and Invitation-source Application remain later
+  slices. Focused coverage in
+  `test/application/v15-slice02-send-job-invitation.test.js` (16 tests). The
+  official backend gate passed (ESLint: 0 errors / 2 existing warnings in
+  `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 140
+  files / 1,348 tests).
 
 ## Current V11 Conversation revision
 

@@ -1,4 +1,3 @@
-import { PDFDocument } from "pdf-lib";
 import mongoose from "mongoose";
 
 import APPLICATION_SOURCE from "../constants/application-source.js";
@@ -7,9 +6,6 @@ import APPLICATION_SUBMITTED_CV_STORAGE from "../constants/application-submitted
 import AVAILABILITY_DAY_PART from "../constants/availability-day-part.js";
 import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
-import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
-import CANDIDATE_CV_UPLOADED_STORAGE from "../constants/candidate-cv-uploaded-storage.js";
-import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import CONVERSATION_REALTIME_MODE from "../constants/conversation-realtime-mode.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
@@ -33,7 +29,18 @@ import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
 import INTERVIEW_SCHEDULE_STATUS from "../constants/interview-schedule-status.js";
 import AppError from "../utils/app-error.js";
-import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
+import {
+  acquireCandidateJobSerialization,
+  assertCandidateJobAllowsDirectApply,
+} from "./candidate-job-serialization.service.js";
+import {
+  APPLICATION_CV_SNAPSHOT_STORAGE,
+  captureCvSnapshot,
+  captureGeneratedCvSnapshot,
+  captureUploadedCvSnapshot,
+  deepCopyGeneratedContent,
+  deleteCvSnapshotFile,
+} from "./cv-snapshot.service.js";
 import {
   assertSameCompanyTenant,
   resolveCompanyManagerRecruiterManagementContext,
@@ -41,7 +48,7 @@ import {
   resolveRecruiterBusinessContext,
   resolveRecruiterChatHistoryContext,
 } from "./company.service.js";
-import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
+import { downloadFileBuffer } from "./file.service.js";
 import { evaluateApplicationConversationChatAuthority } from "./application-chat-authority.service.js";
 import {
   createNotificationEvent,
@@ -60,20 +67,10 @@ import {
   toPublicJob,
 } from "./job.service.js";
 
-const uploadApplicationSubmittedCvSnapshotFile = (buffer) => {
-  return uploadFileBuffer({
-    buffer,
-    assetFolder: CLOUDINARY_FOLDER.APPLICATION_SUBMITTED_CV_SNAPSHOTS,
-    resourceType: APPLICATION_SUBMITTED_CV_STORAGE.RESOURCE_TYPE,
-    deliveryType: APPLICATION_SUBMITTED_CV_STORAGE.DELIVERY_TYPE,
-  });
-};
-
 const deleteApplicationSubmittedCvSnapshotFile = (publicId) => {
-  return deleteFile({
-    publicId,
-    resourceType: APPLICATION_SUBMITTED_CV_STORAGE.RESOURCE_TYPE,
-    deliveryType: APPLICATION_SUBMITTED_CV_STORAGE.DELIVERY_TYPE,
+  return deleteCvSnapshotFile({
+    storageKey: publicId,
+    storage: APPLICATION_CV_SNAPSHOT_STORAGE,
   });
 };
 
@@ -91,18 +88,6 @@ const assertCandidateActor = (user) => {
   if (user.status !== USER_STATUS.ACTIVE) {
     throw new AppError(403, "Candidate account is not active");
   }
-};
-
-const deepCopyGeneratedContent = (generatedContent) => {
-  if (generatedContent == null) {
-    return null;
-  }
-
-  if (typeof generatedContent.toObject === "function") {
-    return generatedContent.toObject();
-  }
-
-  return JSON.parse(JSON.stringify(generatedContent));
 };
 
 const toPublicSnapshotPdfFile = (pdfFile) => {
@@ -5692,14 +5677,6 @@ const loadJobAcceptingDirectApplications = async (jobId, now = new Date()) => {
   return job;
 };
 
-const downloadUploadedCandidateCvFile = (publicId) => {
-  return downloadFileBuffer({
-    publicId,
-    resourceType: CANDIDATE_CV_UPLOADED_STORAGE.RESOURCE_TYPE,
-    deliveryType: CANDIDATE_CV_UPLOADED_STORAGE.DELIVERY_TYPE,
-  });
-};
-
 const downloadSubmittedCvSnapshotFile = (publicId) => {
   return downloadFileBuffer({
     publicId,
@@ -6038,118 +6015,26 @@ const loadEligibleCandidateCvForDirectApply = async ({
   return candidateCv;
 };
 
-const buildSnapshotOriginalFileName = (candidateCvName) => {
-  const trimmedName =
-    typeof candidateCvName === "string" ? candidateCvName.trim() : "";
-
-  if (trimmedName === "") {
-    return "submitted-cv.pdf";
-  }
-
-  return trimmedName.toLowerCase().endsWith(".pdf")
-    ? trimmedName
-    : `${trimmedName}.pdf`;
-};
-
-const resolveUploadedSnapshotOriginalFileName = (candidateCv) => {
-  const uploadedOriginalFileName =
-    typeof candidateCv.uploadedFile?.originalFileName === "string"
-      ? candidateCv.uploadedFile.originalFileName.trim()
-      : "";
-
-  if (uploadedOriginalFileName !== "") {
-    return uploadedOriginalFileName;
-  }
-
-  return buildSnapshotOriginalFileName(candidateCv.name);
-};
-
-const captureUploadedSubmittedCvSnapshot = async ({
+const captureUploadedSubmittedCvSnapshot = ({
   candidateCv,
   capturedAt = new Date(),
 }) => {
-  let pdfBuffer;
-
-  try {
-    pdfBuffer = await downloadUploadedCandidateCvFile(
-      candidateCv.uploadedFile.storageKey,
-    );
-  } catch {
-    throw new AppError(502, "Failed to retrieve Uploaded CV PDF for snapshot", {
-      field: "candidateCvId",
-    });
-  }
-
-  const storedFile = await uploadApplicationSubmittedCvSnapshotFile(pdfBuffer);
-  const pageCount = candidateCv.uploadedFile.pageCount;
-  const sizeBytes = candidateCv.uploadedFile.sizeBytes ?? pdfBuffer.length;
-
-  if (!Number.isInteger(pageCount) || pageCount < 1) {
-    throw new AppError(502, "Failed to capture Uploaded CV snapshot PDF", {
-      field: "candidateCvId",
-    });
-  }
-
-  if (!Number.isInteger(sizeBytes) || sizeBytes < 1) {
-    throw new AppError(502, "Failed to capture Uploaded CV snapshot PDF", {
-      field: "candidateCvId",
-    });
-  }
-
-  return {
-    snapshot: {
-      sourceCandidateCvId: candidateCv._id,
-      name: candidateCv.name,
-      sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
-      pdfFile: {
-        storageKey: storedFile.publicId,
-        originalFileName: resolveUploadedSnapshotOriginalFileName(candidateCv),
-        mimeType: CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
-        sizeBytes,
-        pageCount,
-      },
-      capturedAt,
-    },
-    storageKey: storedFile.publicId,
-  };
+  return captureUploadedCvSnapshot({
+    candidateCv,
+    capturedAt,
+    storage: APPLICATION_CV_SNAPSHOT_STORAGE,
+  });
 };
 
-const captureGeneratedSubmittedCvSnapshot = async ({
+const captureGeneratedSubmittedCvSnapshot = ({
   candidateCv,
   capturedAt = new Date(),
 }) => {
-  const generatedContent = deepCopyGeneratedContent(
-    candidateCv.generatedContent,
-  );
-  const pdfBuffer = await renderHarvardCandidateCvPdf(generatedContent);
-  const pdfDocument = await PDFDocument.load(pdfBuffer);
-  const pageCount = pdfDocument.getPageCount();
-
-  if (!Number.isInteger(pageCount) || pageCount < 1) {
-    throw new AppError(502, "Failed to render Generated CV snapshot PDF", {
-      field: "candidateCvId",
-    });
-  }
-
-  const storedFile = await uploadApplicationSubmittedCvSnapshotFile(pdfBuffer);
-
-  return {
-    snapshot: {
-      sourceCandidateCvId: candidateCv._id,
-      name: candidateCv.name,
-      sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
-      generatedContent,
-      pdfFile: {
-        storageKey: storedFile.publicId,
-        originalFileName: buildSnapshotOriginalFileName(candidateCv.name),
-        mimeType: CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE,
-        sizeBytes: pdfBuffer.length,
-        pageCount,
-      },
-      capturedAt,
-    },
-    storageKey: storedFile.publicId,
-  };
+  return captureGeneratedCvSnapshot({
+    candidateCv,
+    capturedAt,
+    storage: APPLICATION_CV_SNAPSHOT_STORAGE,
+  });
 };
 
 const directApplyToJob = async ({
@@ -6170,34 +6055,22 @@ const directApplyToJob = async ({
     candidateCvId,
   });
 
-  const existingApplication = await Application.findOne({
+  await assertCandidateJobAllowsDirectApply({
     candidateUserId,
     jobId: job._id,
-  }).select("_id");
-
-  if (existingApplication) {
-    throw new AppError(
-      409,
-      "Application already exists for this Candidate and Job",
-      {
-        field: "jobId",
-      },
-    );
-  }
+  });
 
   let uploadedSnapshotStorageKey = null;
 
   try {
     const capturedAt = new Date();
-    const captureSubmittedCvSnapshot =
-      candidateCv.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED
-        ? captureGeneratedSubmittedCvSnapshot
-        : captureUploadedSubmittedCvSnapshot;
-    const { snapshot: submittedCvSnapshot, storageKey } =
-      await captureSubmittedCvSnapshot({
+    const { snapshot: submittedCvSnapshot, storageKey } = await captureCvSnapshot(
+      {
         candidateCv,
         capturedAt,
-      });
+        storage: APPLICATION_CV_SNAPSHOT_STORAGE,
+      },
+    );
     uploadedSnapshotStorageKey = storageKey;
 
     const session = await mongoose.startSession();
@@ -6206,11 +6079,17 @@ const directApplyToJob = async ({
 
     try {
       await session.withTransaction(async () => {
-        const currentJob = await Job.findById(job._id).session(session);
+        const { job: currentJob } = await acquireCandidateJobSerialization({
+          candidateUserId,
+          jobId: job._id,
+          session,
+        });
 
-        if (!currentJob) {
-          throw new AppError(404, "Job not found", { field: "jobId" });
-        }
+        await assertCandidateJobAllowsDirectApply({
+          candidateUserId,
+          jobId: currentJob._id,
+          session,
+        });
 
         const primaryRecruiter = await CompanyMember.findOne({
           _id: currentJob.primaryRecruiterCompanyMemberId,

@@ -1,5 +1,6 @@
 import express from "express";
 
+import { sendJobInvitationHandler } from "../controllers/job-invitation.controller.js";
 import {
   approveAndPublishJobHandler,
   closePublishedJobHandler,
@@ -58,6 +59,7 @@ import validateUnassignApplication from "../middlewares/validate-unassign-applic
 import validateRecruitmentPipelineStatus from "../middlewares/validate-recruitment-pipeline-status.js";
 import validateReassignPrimaryRecruiter from "../middlewares/validate-reassign-primary-recruiter.js";
 import validateReplacePrimaryRecruiter from "../middlewares/validate-replace-primary-recruiter.js";
+import validateSendJobInvitation from "../middlewares/validate-send-job-invitation.js";
 import validateUpdateDraftJob from "../middlewares/validate-update-draft-job.js";
 
 const router = express.Router();
@@ -229,6 +231,14 @@ router.post(
   authenticateAccess,
   authorizeRecruiterBusinessAccess,
   cancelRecruiterInterviewProposalHandler,
+);
+
+router.post(
+  "/:jobId/invitations",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  validateSendJobInvitation,
+  sendJobInvitationHandler,
 );
 
 router.get(

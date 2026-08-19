@@ -1085,24 +1085,37 @@ const buildSearchEligibleCandidateOwnerFilter = () => ({
   emailVerifiedAt: { $ne: null },
 });
 
-const loadCurrentSearchEligibleCandidateCvById = async (candidateCvId) => {
+const loadCurrentSearchEligibleCandidateCvById = async (
+  candidateCvId,
+  { session } = {},
+) => {
   if (!mongoose.isValidObjectId(candidateCvId)) {
     return null;
   }
 
-  const candidateCv = await CandidateCV.findOne({
+  const candidateCvQuery = CandidateCV.findOne({
     _id: candidateCvId,
     ...buildCandidateSearchEligibleCvFilter(),
   });
+  if (session) {
+    candidateCvQuery.session(session);
+  }
+
+  const candidateCv = await candidateCvQuery;
 
   if (!candidateCv) {
     return null;
   }
 
-  const candidateOwner = await User.findOne({
+  const candidateOwnerQuery = User.findOne({
     _id: candidateCv.candidateUserId,
     ...buildSearchEligibleCandidateOwnerFilter(),
   }).select("_id");
+  if (session) {
+    candidateOwnerQuery.session(session);
+  }
+
+  const candidateOwner = await candidateOwnerQuery;
 
   if (!candidateOwner) {
     return null;
@@ -2046,6 +2059,7 @@ export {
   getOwnActiveCandidateCv,
   listCandidateSearchEligibleCandidateCvs,
   listOwnActiveCandidateCvs,
+  loadCurrentSearchEligibleCandidateCvById,
   previewOwnCandidateCv,
   previewSearchEligibleCandidateCv,
   previewSearchEligibleGeneratedCandidateCv,

@@ -112,9 +112,11 @@ V14 is therefore `COMPLETED AND VERIFIED` against the approved Candidate
 Search Product/Data contracts. Keyword/full-text search, Saved Search,
 Recruiter Download, Direct Message, and Job Invitation remain outside V14 by
 product boundary. V15 has approved Product/Data contracts and is `IN PROGRESS`;
-Slice 01 Persistence Kernel is implemented and verified. This status does not
-authorize any later V15 business workflow or remove the recorded prerequisites
-for later slices. V16 and V17 must not be implemented merely from their roadmap
+Slice 01 Persistence Kernel and Slice 02 Send Job Invitation + Direct Apply
+Exclusion are implemented and verified. This status does not authorize later
+V15 Candidate read/Accept/Reject/Revoke/expiration-worker/invalidation/Accept
+orchestration workflows or remove the recorded prerequisites for later slices.
+V16 and V17 must not be implemented merely from their roadmap
 titles.
 
 V15 canonical specification:
