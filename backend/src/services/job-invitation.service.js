@@ -12,9 +12,11 @@ import JobInvitation from "../models/job-invitation.model.js";
 import AppError from "../utils/app-error.js";
 import { loadCurrentSearchEligibleCandidateCvById } from "./candidate-cv.service.js";
 import {
+  APPLICATION_EXISTS_MESSAGE,
   PENDING_INVITATION_EXISTS_MESSAGE,
   acquireCandidateJobSerialization,
   assertCandidateJobAllowsSendInvitation,
+  findApplicationForCandidateJob,
   findPendingInvitationForCandidateJob,
 } from "./candidate-job-serialization.service.js";
 import { resolveRecruiterBusinessContext } from "./company.service.js";
@@ -1213,6 +1215,177 @@ const rejectOwnJobInvitation = async ({
   };
 };
 
+const acceptOwnJobInvitation = async ({
+  candidateUser,
+  invitationId,
+  now = new Date(),
+} = {}) => {
+  assertCandidateInvitationActor(candidateUser);
+
+  const ownedInvitation = await loadOwnJobInvitationForCandidate({
+    candidateUser,
+    invitationId,
+  });
+
+  const session = await mongoose.startSession();
+  let acceptedInvitation;
+  let createdApplication;
+  const notificationEvents = [];
+
+  try {
+    await session.withTransaction(async () => {
+      acceptedInvitation = null;
+      createdApplication = null;
+      notificationEvents.length = 0;
+
+      await acquireCandidateJobSerialization({
+        candidateUserId: ownedInvitation.candidateUserId,
+        jobId: ownedInvitation.jobId,
+        session,
+      });
+
+      const invitation = await loadOwnJobInvitationForCandidate({
+        candidateUser,
+        invitationId: ownedInvitation._id,
+        session,
+      });
+
+      if (invitation.status !== JOB_INVITATION_STATUS.PENDING) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      const resources = await loadJobInvitationCurrentStateResources(
+        [invitation],
+        { session },
+      );
+      const invitationResources = resourcesForInvitation(invitation, resources);
+      const evaluation = evaluateJobInvitationCurrentStateFromResources({
+        invitation,
+        resources,
+        now,
+      });
+
+      if (!evaluation.isActionable) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      if (
+        invitationResources.senderUser == null ||
+        invitationResources.job == null
+      ) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      const existingApplication = await findApplicationForCandidateJob({
+        candidateUserId: invitation.candidateUserId,
+        jobId: invitation.jobId,
+        session,
+      });
+
+      if (existingApplication) {
+        throw new AppError(409, APPLICATION_EXISTS_MESSAGE, {
+          field: "jobId",
+        });
+      }
+
+      acceptedInvitation = await JobInvitation.findOneAndUpdate(
+        {
+          _id: invitation._id,
+          candidateUserId: candidateUser._id,
+          status: JOB_INVITATION_STATUS.PENDING,
+        },
+        {
+          $set: {
+            status: JOB_INVITATION_STATUS.ACCEPTED,
+            acceptedAt: now,
+          },
+        },
+        {
+          returnDocument: "after",
+          runValidators: true,
+          session,
+        },
+      );
+
+      if (!acceptedInvitation) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      const { createInvitationSourceApplicationOnAccept } = await import(
+        "./application.service.js"
+      );
+      const applicationOutcome = await createInvitationSourceApplicationOnAccept({
+        invitation: acceptedInvitation,
+        job: invitationResources.job,
+        session,
+      });
+      createdApplication = applicationOutcome.application;
+      notificationEvents.push(applicationOutcome.availabilityNotificationEvent);
+
+      const jobTitle = invitationResources.job.title;
+      const senderUserId = invitationResources.senderUser._id;
+
+      const { event: acceptedEvent } = await createNotificationEvent({
+        eventKey: `job-invitation-accepted:${acceptedInvitation._id.toString()}`,
+        type: NOTIFICATION_TYPE.JOB_INVITATION_ACCEPTED,
+        actorUserId: candidateUser._id,
+        jobInvitationId: acceptedInvitation._id,
+        recipients: [
+          {
+            recipientUserId: senderUserId,
+            content: `A candidate accepted the job invitation for ${jobTitle}.`,
+          },
+        ],
+        session,
+      });
+      notificationEvents.push(acceptedEvent);
+
+      const { event: invitedApplicationEvent } = await createNotificationEvent({
+        eventKey: `invited-application-created:${createdApplication._id.toString()}`,
+        type: NOTIFICATION_TYPE.INVITED_APPLICATION_CREATED,
+        actorUserId: candidateUser._id,
+        jobInvitationId: acceptedInvitation._id,
+        applicationId: createdApplication._id,
+        recipients: [
+          {
+            recipientUserId: senderUserId,
+            content: `An invited application for ${jobTitle} was created.`,
+          },
+        ],
+        session,
+      });
+      notificationEvents.push(invitedApplicationEvent);
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  for (const event of notificationEvents) {
+    try {
+      await materializeNotificationEvent({ eventId: event._id });
+    } catch {
+      // The persisted event obligation remains pending for canonical recovery.
+    }
+  }
+
+  const [view] = await hydrateCandidateJobInvitationViews([acceptedInvitation], {
+    now,
+  });
+
+  return {
+    invitation: view,
+    applicationId: createdApplication._id,
+  };
+};
+
 const assertRecruiterInvitationActor = (user) => {
   if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
     throw new AppError(403, "Recruiter access required");
@@ -1527,6 +1700,7 @@ const revokePrimaryJobInvitation = async ({
 };
 
 export {
+  acceptOwnJobInvitation,
   deriveInvitationExpiresAt,
   getOwnJobInvitation,
   getPrimaryJobInvitation,

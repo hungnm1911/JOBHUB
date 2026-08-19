@@ -30,6 +30,7 @@ import User from "../models/user.model.js";
 import INTERVIEW_SCHEDULE_STATUS from "../constants/interview-schedule-status.js";
 import AppError from "../utils/app-error.js";
 import {
+  APPLICATION_EXISTS_MESSAGE,
   acquireCandidateJobSerialization,
   assertCandidateJobAllowsDirectApply,
 } from "./candidate-job-serialization.service.js";
@@ -38,6 +39,7 @@ import {
   captureCvSnapshot,
   captureGeneratedCvSnapshot,
   captureUploadedCvSnapshot,
+  deepCopyCvSnapshot,
   deepCopyGeneratedContent,
   deleteCvSnapshotFile,
 } from "./cv-snapshot.service.js";
@@ -2888,6 +2890,8 @@ const commitAssignFromUnassigned = async ({
 };
 
 // V11 F01 / TX-01: Conversation consequence of a successful First Assign.
+// V15 Slice 08 / TX-02 reuses this helper for Invitation Accept, which also
+// requires exactly one Conversation on the newly created Application.
 // Absence of Conversation distinguishes First Assign from Assign again; this
 // helper creates Conversation only when none exists.
 const createConversationOnFirstAssignIfAbsent = async ({
@@ -6041,6 +6045,88 @@ const captureGeneratedSubmittedCvSnapshot = ({
   });
 };
 
+// V15 Slice 08 / TX-02: Invitation Accept creates the Invitation-source
+// Application at CONTACTED with the historical sender as initial Assignee,
+// then reuses the canonical V11 Conversation create helper. Availability
+// handoff is the existing V13 INTERVIEW_AVAILABILITY_REQUESTED obligation;
+// this must not emit synthetic APPLICATION_ASSIGNED / APPLICATION_STATUS_CHANGED.
+const createInvitationSourceApplicationOnAccept = async ({
+  invitation,
+  job,
+  session,
+} = {}) => {
+  const submittedCvSnapshot = deepCopyCvSnapshot(invitation.invitedCvSnapshot);
+
+  if (submittedCvSnapshot == null) {
+    throw new AppError(409, "Job Invitation is no longer actionable", {
+      field: "invitationId",
+    });
+  }
+
+  let application;
+
+  try {
+    [application] = await Application.create(
+      [
+        {
+          candidateUserId: invitation.candidateUserId,
+          jobId: invitation.jobId,
+          source: APPLICATION_SOURCE.RECRUITER_INVITATION,
+          sourceInvitationId: invitation._id,
+          status: APPLICATION_STATUS.CONTACTED,
+          submittedCvSnapshot,
+          appliedAt: null,
+          withdrawnAt: null,
+          withdrawReason: null,
+          assignedRecruiterCompanyMemberId:
+            invitation.sentByRecruiterCompanyMemberId,
+          version: 0,
+        },
+      ],
+      { session },
+    );
+  } catch (error) {
+    if (isMongoDuplicateKeyError(error)) {
+      throw new AppError(409, APPLICATION_EXISTS_MESSAGE, {
+        field: "jobId",
+      });
+    }
+
+    throw error;
+  }
+
+  const conversationOutcome = await createConversationOnFirstAssignIfAbsent({
+    applicationId: application._id,
+    session,
+  });
+
+  if (conversationOutcome.conversation == null) {
+    throw new Error("Invitation Accept requires a Conversation");
+  }
+
+  const availabilityNotificationEvent =
+    await createApplicationLifecycleNotificationEvent({
+      application,
+      job,
+      type: NOTIFICATION_TYPE.INTERVIEW_AVAILABILITY_REQUESTED,
+      actorUserId: null,
+      recipientUserId: invitation.candidateUserId,
+      session,
+    });
+
+  if (!availabilityNotificationEvent) {
+    throw new Error(
+      "Invitation Accept requires INTERVIEW_AVAILABILITY_REQUESTED",
+    );
+  }
+
+  return {
+    application,
+    conversation: conversationOutcome.conversation,
+    availabilityNotificationEvent,
+  };
+};
+
 const directApplyToJob = async ({
   candidateUserId,
   actorUser,
@@ -6519,6 +6605,7 @@ export {
   countNonTerminalApplicationsAssignedToRecruiterOnJob,
   createFirstInterviewProposal,
   createInterviewProposal,
+  createInvitationSourceApplicationOnAccept,
   deepCopyGeneratedContent,
   declineCandidateInterviewProposal,
   directApplyToJob,

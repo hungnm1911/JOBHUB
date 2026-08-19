@@ -1,4 +1,5 @@
 import {
+  acceptOwnJobInvitation,
   getOwnJobInvitation,
   getPrimaryJobInvitation,
   listOwnJobInvitations,
@@ -73,6 +74,21 @@ const rejectOwnJobInvitationHandler = async (request, response, next) => {
   }
 };
 
+const acceptOwnJobInvitationHandler = async (request, response, next) => {
+  try {
+    const result = await acceptOwnJobInvitation({
+      candidateUser: request.auth.user,
+      invitationId: request.params.invitationId,
+    });
+
+    return response.status(200).json({
+      invitation: result.invitation,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const listPrimaryJobInvitationsHandler = async (request, response, next) => {
   try {
     const result = await listPrimaryJobInvitations({
@@ -118,6 +134,7 @@ const revokePrimaryJobInvitationHandler = async (request, response, next) => {
 };
 
 export {
+  acceptOwnJobInvitationHandler,
   getOwnJobInvitationHandler,
   getPrimaryJobInvitationHandler,
   listOwnJobInvitationsHandler,

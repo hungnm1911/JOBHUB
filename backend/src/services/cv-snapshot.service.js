@@ -33,6 +33,49 @@ const deepCopyGeneratedContent = (generatedContent) => {
   return JSON.parse(JSON.stringify(generatedContent));
 };
 
+const toPlainSnapshot = (snapshot) => {
+  if (snapshot == null) {
+    return null;
+  }
+
+  if (typeof snapshot.toObject === "function") {
+    return snapshot.toObject({ depopulate: true });
+  }
+
+  return snapshot;
+};
+
+const deepCopyCvSnapshot = (snapshot) => {
+  const plain = toPlainSnapshot(snapshot);
+
+  if (plain == null) {
+    return null;
+  }
+
+  const copied = {
+    sourceCandidateCvId: plain.sourceCandidateCvId,
+    name: plain.name,
+    sourceType: plain.sourceType,
+    pdfFile: {
+      storageKey: plain.pdfFile.storageKey,
+      originalFileName: plain.pdfFile.originalFileName,
+      mimeType: plain.pdfFile.mimeType,
+      sizeBytes: plain.pdfFile.sizeBytes,
+      pageCount: plain.pdfFile.pageCount,
+    },
+    capturedAt:
+      plain.capturedAt instanceof Date
+        ? new Date(plain.capturedAt)
+        : new Date(plain.capturedAt),
+  };
+
+  if (plain.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
+    copied.generatedContent = deepCopyGeneratedContent(plain.generatedContent);
+  }
+
+  return copied;
+};
+
 const uploadCvSnapshotFile = ({ buffer, storage }) => {
   return uploadFileBuffer({
     buffer,
@@ -200,6 +243,7 @@ export {
   captureCvSnapshot,
   captureGeneratedCvSnapshot,
   captureUploadedCvSnapshot,
+  deepCopyCvSnapshot,
   deepCopyGeneratedContent,
   deleteCvSnapshotFile,
 };

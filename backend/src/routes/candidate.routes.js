@@ -31,6 +31,7 @@ import {
   updateOwnCandidateCvMetadataHandler,
 } from "../controllers/candidate-cv.controller.js";
 import {
+  acceptOwnJobInvitationHandler,
   getOwnJobInvitationHandler,
   listOwnJobInvitationsHandler,
   rejectOwnJobInvitationHandler,
@@ -195,6 +196,13 @@ router.post(
   authenticateAccess,
   authorizeCandidate,
   rejectOwnJobInvitationHandler,
+);
+
+router.post(
+  "/invitations/:invitationId/accept",
+  authenticateAccess,
+  authorizeCandidate,
+  acceptOwnJobInvitationHandler,
 );
 
 router.get(

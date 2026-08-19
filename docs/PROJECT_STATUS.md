@@ -7,48 +7,51 @@ Slice 01 — Persistence Kernel, Slice 02 — Send Job Invitation + Direct Apply
 Exclusion, Slice 03 — Candidate Invitation Read + Current-State Evaluation,
 Slice 04 — Candidate Reject Job Invitation, Slice 05 — Primary Invitation
 Management + Revoke, Slice 06 — Invitation Expiration + Invalidation
-Materialization, and Slice 07 — Invitation-source Application Compatibility
-are `IMPLEMENTED AND VERIFIED`. Slice 07 covers `F04` partial and `F10`
-(`BR-37`–`BR-46`, `BR-54`, `BR-55`, `BR-60` compatibility/enabler). Its
-approved canonical Product/Data contracts remain
+Materialization, Slice 07 — Invitation-source Application Compatibility, and
+Slice 08 — Atomic Accept + Availability Handoff are `IMPLEMENTED AND VERIFIED`.
+Slice 08 closes `F04` and `F10` and covers `F11` Accept Notification obligations
+(`BR-34`, `BR-37`–`BR-49`, `BR-54`–`BR-60`; `TX-02`). Its approved canonical
+Product/Data contracts remain
 `docs/product/versions/v15-job-invitation-recruiter-sourcing.md` and
 `docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`.
 
-Slice 07 extends the existing Application ecosystem so a
-`source = RECRUITER_INVITATION` Application that already exists at canonical
-entry state `CONTACTED` is read and processed by the same V10–V12 owners as
-Direct Applications. Candidate My Applications, Primary/CM Application View,
-Managed Jobs, Recruiter My Applications, submitted-CV snapshot delivery,
-First Assign / Reassign / Unassign / automatic Unassign, Recruitment Pipeline
-from `CONTACTED`, Conversation history/Send once a Conversation exists,
-Availability first-submit/edit, and Interview proposal/response/cancel no
-longer treat `DIRECT_APPLICATION` as the only eligible source. Authority
-continues to follow Application owner, tenant, current
-`assignedRecruiterCompanyMemberId`, eligibility, and current team.
-`sourceInvitationId` remains immutable sourcing provenance; historical sender
-is resolved through the source Invitation and is not Application authority.
-No `sourceRecruiterCompanyMemberId` was added. Invitation-source Applications
-do not require or simulate persisted `APPLIED → SCREENING → CONTACTED`.
-Candidate Replace Submitted CV and Withdraw remain Direct Apply-only:
-`RECRUITER_INVITATION` is denied, while canonical V9 `DIRECT_APPLICATION`
-behavior is unchanged. Submitted CV snapshots stay independent of live
-CandidateCV and source Invitation content.
+Slice 08 completes Candidate Accept on the existing Invitation owner:
+authenticated Candidate owner of the exact Invitation may Accept only when the
+shared Slice 03 current-state evaluator still says the Invitation is
+effectively actionable. Persisted `PENDING` is not authority. If expiration,
+invalidation, or another terminal transition has an earlier effective time,
+Accept fails and creates no Application, Conversation, CandidateAvailability,
+or durable NotificationEvent. Successful Accept is one MongoDB transaction
+(`TX-02`): `PENDING → ACCEPTED` with `acceptedAt`; exactly one
+`source = RECRUITER_INVITATION` Application at `CONTACTED` for the Invitation
+Candidate–Job, `sourceInvitationId` provenance, initial Assignee = historical
+sender, and submitted snapshot as a deep copy of immutable `invitedCvSnapshot`
+(no live recapture, no fake `appliedAt`/Withdraw metadata); canonical V11
+Conversation create; no fake `CandidateAvailability`; required durable events
+`JOB_INVITATION_ACCEPTED` and `INVITED_APPLICATION_CREATED` for the historical
+sender plus existing V13 `INTERVIEW_AVAILABILITY_REQUESTED` for the Candidate.
+No synthetic `APPLICATION_ASSIGNED` or `APPLICATION_STATUS_CHANGED`. Candidate–
+Job Application uniqueness and `sourceInvitationId` uniqueness remain database
+protection. Inbox materialization and realtime stay outside the transaction.
+Historical sender is initial Assignee and sourcing attribution only; later
+Application authority continues on the V10 current-assignee lifecycle from
+Slice 07.
 
-Slice 07 does not implement Candidate Accept, Application creation from
-Invitation, Invitation `PENDING → ACCEPTED`, Conversation creation,
-`JOB_INVITATION_ACCEPTED`, `INVITED_APPLICATION_CREATED`, Accept-time
-`INTERVIEW_AVAILABILITY_REQUESTED`, or atomic Accept `TX-02`. It does not
-change Direct Apply semantics, add Application/Assignment history, Source
-Recruiter authority, or Invitation-specific Pipeline/Conversation/Availability
-models. Slice 06 Expiration/Invalidation, Slice 05 Revoke, Slice 04 Reject,
-Slice 03 read/current-state evaluation, Slice 02 Send, and Slice 01
-persistence remain in place.
+Slice 08 does not implement sourcing KPI/reporting, Company Manager Invitation
+authority, an Invitation audit/history collection, a new realtime protocol, or
+source-specific Pipeline/Conversation/Availability models. Candidate Replace
+Submitted CV and Withdraw remain Direct Apply-only. Slice 07 compatibility,
+Slice 06 Expiration/Invalidation, Slice 05 Revoke, Slice 04 Reject, Slice 03
+read/current-state evaluation, Slice 02 Send, and Slice 01 persistence remain
+in place.
 
-Verification for this Slice 07 state: `cd backend && npm run verify:agent`
+Verification for this Slice 08 state: `cd backend && npm run verify:agent`
 passed on 2026-08-19 with ESLint 0 errors / the same 2 pre-existing V6
 `no-unused-vars` warnings, architecture rules `ARCH-001` through `ARCH-016`,
-145 passing test files, and 1,401 passing tests.
-Focused Slice 07 coverage is
+146 passing test files, and 1,413 passing tests.
+Focused Slice 08 coverage is
+`test/application/v15-slice08-atomic-accept-availability-handoff.test.js`
+(12 tests). Slice 07 coverage remains
 `test/application/v15-slice07-invitation-source-application-compatibility.test.js`
 (9 tests). Slice 06 coverage remains
 `test/application/v15-slice06-invitation-expiration-invalidation.test.js`
@@ -64,12 +67,10 @@ persistence suites remain
 `test/application/v15-slice01-persistence-kernel.test.js` and
 `test/notification/v15-slice01-invitation-notification-foundation.test.js`.
 
-Later-slice prerequisites remain deferred and are not authority for Slice 07:
+Later-slice prerequisites remain deferred and are not authority for Slice 08:
 
-* Slice 08 must establish the atomic Accept orchestration and Conversation
-  creation owner; V12/V13 evidence is required at this slice.
 * Slice 09 Final Acceptance requires closure of the applicable prior-version
-  acceptance baselines. V12/V13 closure does not block Slice 07.
+  acceptance baselines.
 
 **V14 — Candidate Search trên CV PUBLIC** is `COMPLETED AND VERIFIED`.
 Its approved canonical Product/Data contracts are tracked at
@@ -725,6 +726,32 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Current V15 Job Invitation revision
+
+- **Implemented; verified:** V15 Slice 08 — Atomic Accept + Availability
+  Handoff (`F04` closure, `F10` closure, `F11`; `BR-34`, `BR-37`–`BR-49`,
+  `BR-54`–`BR-60`; `TX-02`): `acceptOwnJobInvitation` in
+  `job-invitation.service.js` lets only the authenticated Candidate owner of
+  the exact Invitation Accept, after Candidate–Job serialization and a shared
+  Slice 03 current-state re-check inside the commit transaction. Persisted
+  `PENDING` is not actionability. Expiration, invalidation, or another terminal
+  cause with earlier effective time returns 409 with no Application,
+  Conversation, CandidateAvailability, or durable NotificationEvent. Successful
+  Accept commits `PENDING → ACCEPTED` + `acceptedAt`, creates exactly one
+  Invitation-source Application at `CONTACTED` (initial Assignee = historical
+  sender, submitted snapshot = deep copy of `invitedCvSnapshot`, no fake
+  `appliedAt`/Withdraw metadata), reuses V11 `createConversationOnFirstAssignIfAbsent`,
+  and writes `JOB_INVITATION_ACCEPTED` + `INVITED_APPLICATION_CREATED` for the
+  sender plus existing V13 `INTERVIEW_AVAILABILITY_REQUESTED` for the Candidate
+  in one MongoDB transaction. Application uniqueness and `sourceInvitationId`
+  uniqueness remain database protection. No synthetic `APPLICATION_ASSIGNED` /
+  `APPLICATION_STATUS_CHANGED`, no pre-Accept chat, no live CV recapture, no
+  `sourceRecruiterCompanyMemberId`. Inbox materialization stays best-effort
+  post-commit. HTTP `POST /api/candidate/invitations/:invitationId/accept`.
+  Focused coverage in
+  `test/application/v15-slice08-atomic-accept-availability-handoff.test.js`
+  (12 tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 146 files / 1,413 tests).
 
 - **Implemented; verified:** V15 Slice 07 — Invitation-source Application
   Compatibility (`F04` partial, `F10`; `BR-37`–`BR-46`, `BR-54`, `BR-55`,
