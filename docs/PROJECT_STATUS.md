@@ -6,50 +6,51 @@
 Slice 01 — Persistence Kernel, Slice 02 — Send Job Invitation + Direct Apply
 Exclusion, Slice 03 — Candidate Invitation Read + Current-State Evaluation,
 Slice 04 — Candidate Reject Job Invitation, Slice 05 — Primary Invitation
-Management + Revoke, and Slice 06 — Invitation Expiration + Invalidation
-Materialization are `IMPLEMENTED AND VERIFIED`. Slice 06 covers `F07`, `F08`,
-`F11` partial, and the `F09` effective-`PENDING` Direct Apply closure
-(`BR-14`–`BR-16`, `BR-21`, `BR-23`–`BR-25`, `BR-31`–`BR-36`, `BR-52`, `BR-53`,
-`BR-56`–`BR-59`; `TX-05`). Its approved canonical Product/Data contracts remain
+Management + Revoke, Slice 06 — Invitation Expiration + Invalidation
+Materialization, and Slice 07 — Invitation-source Application Compatibility
+are `IMPLEMENTED AND VERIFIED`. Slice 07 covers `F04` partial and `F10`
+(`BR-37`–`BR-46`, `BR-54`, `BR-55`, `BR-60` compatibility/enabler). Its
+approved canonical Product/Data contracts remain
 `docs/product/versions/v15-job-invitation-recruiter-sourcing.md` and
 `docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`.
 
-Slice 06 materializes persisted `PENDING` Invitations that are already
-effectively expired or ineligible into the terminal persisted state of the
-earliest authoritative cause. `evaluateJobInvitationCurrentState` remains the
-sole expiration/invalidation decision path for workers, source integration,
-Direct Apply/Send, and HTTP actions. Job lifecycle causes
-(`expiresAt`, application deadline, effective `EXPIRED`, early `CLOSED`) persist
-as `EXPIRED` with no `JOB_INVITATION_EXPIRED` Notification. Eligibility-loss
-causes persist as `INVALIDATED` with `invalidatedAt` equal to the source-cause
-effective time (not materialization time) and the canonical
-`invalidationReason`. Individual `PENDING → INVALIDATED` follows TX-05:
-terminal Invitation state, effective `invalidatedAt`, reason, and durable
-Candidate plus historical-sender `JOB_INVITATION_INVALIDATED` NotificationEvent
-commit in one MongoDB transaction. Canonical source owners
-(Job close/expire/team removal, Platform User/Company lock, CandidateCV Archive,
-Recruiter lock/terminate) best-effort materialize affected Invitations after
-their own source commit; source success is not rolled back if materialization
-is delayed. Time-driven expiration has an `expiresAt` catch-up scan. Direct
-Apply and Send now treat only effectively `PENDING` Invitations as exclusion
-authority: a stale persisted `PENDING` that is effectively `EXPIRED` or
-`INVALIDATED` is materialized through the shared path inside Candidate–Job
-serialization and no longer blocks solely because materialization had not yet
-run. `PUBLIC → PRIVATE`, live CV edits, and Generated loss of `ACTIVE` still
-do not invalidate or rewrite `invitedCvSnapshot`.
+Slice 07 extends the existing Application ecosystem so a
+`source = RECRUITER_INVITATION` Application that already exists at canonical
+entry state `CONTACTED` is read and processed by the same V10–V12 owners as
+Direct Applications. Candidate My Applications, Primary/CM Application View,
+Managed Jobs, Recruiter My Applications, submitted-CV snapshot delivery,
+First Assign / Reassign / Unassign / automatic Unassign, Recruitment Pipeline
+from `CONTACTED`, Conversation history/Send once a Conversation exists,
+Availability first-submit/edit, and Interview proposal/response/cancel no
+longer treat `DIRECT_APPLICATION` as the only eligible source. Authority
+continues to follow Application owner, tenant, current
+`assignedRecruiterCompanyMemberId`, eligibility, and current team.
+`sourceInvitationId` remains immutable sourcing provenance; historical sender
+is resolved through the source Invitation and is not Application authority.
+No `sourceRecruiterCompanyMemberId` was added. Invitation-source Applications
+do not require or simulate persisted `APPLIED → SCREENING → CONTACTED`.
+Candidate Replace Submitted CV and Withdraw remain Direct Apply-only:
+`RECRUITER_INVITATION` is denied, while canonical V9 `DIRECT_APPLICATION`
+behavior is unchanged. Submitted CV snapshots stay independent of live
+CandidateCV and source Invitation content.
 
-Slice 06 does not implement Candidate Accept, Invitation-source Application,
-Conversation/Availability handoff, Company Manager Invitation authority, an
-Invitation audit/history collection, TTL deletion, a new background worker, or
-new realtime behavior. Historical sender remains attribution, not current
-authorization. Slice 05 Revoke, Slice 04 Reject, Slice 03 read/current-state
-evaluation, Slice 02 Send, and Slice 01 persistence remain in place.
+Slice 07 does not implement Candidate Accept, Application creation from
+Invitation, Invitation `PENDING → ACCEPTED`, Conversation creation,
+`JOB_INVITATION_ACCEPTED`, `INVITED_APPLICATION_CREATED`, Accept-time
+`INTERVIEW_AVAILABILITY_REQUESTED`, or atomic Accept `TX-02`. It does not
+change Direct Apply semantics, add Application/Assignment history, Source
+Recruiter authority, or Invitation-specific Pipeline/Conversation/Availability
+models. Slice 06 Expiration/Invalidation, Slice 05 Revoke, Slice 04 Reject,
+Slice 03 read/current-state evaluation, Slice 02 Send, and Slice 01
+persistence remain in place.
 
-Verification for this Slice 06 state: `cd backend && npm run verify:agent`
+Verification for this Slice 07 state: `cd backend && npm run verify:agent`
 passed on 2026-08-19 with ESLint 0 errors / the same 2 pre-existing V6
 `no-unused-vars` warnings, architecture rules `ARCH-001` through `ARCH-016`,
-144 passing test files, and 1,392 passing tests.
-Focused Slice 06 coverage is
+145 passing test files, and 1,401 passing tests.
+Focused Slice 07 coverage is
+`test/application/v15-slice07-invitation-source-application-compatibility.test.js`
+(9 tests). Slice 06 coverage remains
 `test/application/v15-slice06-invitation-expiration-invalidation.test.js`
 (13 tests). Slice 05 coverage remains
 `test/application/v15-slice05-primary-invitation-management.test.js`
@@ -63,12 +64,12 @@ persistence suites remain
 `test/application/v15-slice01-persistence-kernel.test.js` and
 `test/notification/v15-slice01-invitation-notification-foundation.test.js`.
 
-Later-slice prerequisites remain deferred and are not authority for Slice 06:
+Later-slice prerequisites remain deferred and are not authority for Slice 07:
 
 * Slice 08 must establish the atomic Accept orchestration and Conversation
   creation owner; V12/V13 evidence is required at this slice.
 * Slice 09 Final Acceptance requires closure of the applicable prior-version
-  acceptance baselines. V12/V13 closure does not block Slice 06.
+  acceptance baselines. V12/V13 closure does not block Slice 07.
 
 **V14 — Candidate Search trên CV PUBLIC** is `COMPLETED AND VERIFIED`.
 Its approved canonical Product/Data contracts are tracked at
@@ -724,6 +725,34 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Current V15 Job Invitation revision
+
+- **Implemented; verified:** V15 Slice 07 — Invitation-source Application
+  Compatibility (`F04` partial, `F10`; `BR-37`–`BR-46`, `BR-54`, `BR-55`,
+  `BR-60` compatibility/enabler): existing Application read, assignment,
+  pipeline, Conversation, Availability, Interview, and submitted-CV snapshot
+  owners in `application.service.js` accept `source = RECRUITER_INVITATION`
+  under the same ownership, tenant, and current-assignee rules as Direct
+  Applications. Canonical entry state is persisted `CONTACTED` with no fake
+  `APPLIED → SCREENING → CONTACTED`. After `CONTACTED`, V10 Reassign/Unassign/
+  First Assign again follow current `assignedRecruiterCompanyMemberId`,
+  eligibility, and current team; historical Invitation sender is attribution
+  via immutable `sourceInvitationId`, not Application authority. Pipeline from
+  `CONTACTED` reuses canonical V10/V12 rules, including the Interview-proposal
+  cutover to `INTERVIEW_SCHEDULED`. Conversation history/Send work when a
+  Conversation already exists and still derive from Application owner +
+  current Assignee + current lifecycle. Availability first-submit and
+  Interview owners accept Invitation-source Applications at `CONTACTED`
+  without inventing `CandidateAvailability` before first submit. Replace
+  Submitted CV and Withdraw remain Direct Apply-only and return 409 for
+  Invitation-source Applications. Submitted CV snapshots stay independent of
+  live CandidateCV and source Invitation. Slice 07 does not create
+  Application from Accept, move Invitation to `ACCEPTED`, create Conversation,
+  or emit `JOB_INVITATION_ACCEPTED` / `INVITED_APPLICATION_CREATED` /
+  Accept-time `INTERVIEW_AVAILABILITY_REQUESTED`. Focused coverage in
+  `test/application/v15-slice07-invitation-source-application-compatibility.test.js`
+  (9 tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 145 files / 1,401 tests).
 
 - **Implemented; verified:** V15 Slice 05 — Primary Invitation Management +
   Revoke (`F06`, `F11` partial; `BR-24`, `BR-27`, `BR-28`, `BR-34`, `BR-51`,

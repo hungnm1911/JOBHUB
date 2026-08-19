@@ -81,6 +81,17 @@ const isMongoDuplicateKeyError = (error) => {
 
 const AVAILABILITY_DAY_PART_VALUES = Object.values(AVAILABILITY_DAY_PART);
 
+// V15 Slice 07: Invitation-source Applications reuse the existing Application
+// lifecycle after CONTACTED. Direct Apply create/Replace/Withdraw stay
+// source-specific and keep `DIRECT_APPLICATION` guards.
+const LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES = Object.freeze([
+  APPLICATION_SOURCE.DIRECT_APPLICATION,
+  APPLICATION_SOURCE.RECRUITER_INVITATION,
+]);
+
+const isLifecycleCompatibleApplicationSource = (source) =>
+  LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES.includes(source);
+
 const assertCandidateActor = (user) => {
   if (!user || user.role !== USER_ROLE.CANDIDATE) {
     throw new AppError(403, "Candidate access required");
@@ -413,10 +424,10 @@ const hydratePrimaryJobApplicationViews = async (
   });
 };
 
-const loadDirectApplicationsForJob = async (jobId) => {
+const loadLifecycleCompatibleApplicationsForJob = async (jobId) => {
   return Application.find({
     jobId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   }).sort({ appliedAt: 1, _id: 1 });
 };
 
@@ -588,8 +599,10 @@ const listPrimaryJobApplications = async ({
     actionLabel: "view",
   });
 
-  // BR-44: V10 assignment-management Application View only covers Direct Applications.
-  const applications = await loadDirectApplicationsForJob(job._id);
+  // V15 Slice 07: Primary/CM Application View covers both Direct Apply and
+  // Invitation-source Applications. Authority remains tenant + current
+  // assignment-management role, never sourceInvitationId or historical sender.
+  const applications = await loadLifecycleCompatibleApplicationsForJob(job._id);
   const applicationViews = await hydratePrimaryJobApplicationViews(applications);
 
   return {
@@ -623,7 +636,7 @@ const listManagedJobs = async ({ actorUser, clientCompanyId } = {}) => {
       ? []
       : await Application.find({
           jobId: { $in: managedJobIds },
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
         })
           .select("jobId status assignedRecruiterCompanyMemberId")
           .lean();
@@ -678,7 +691,7 @@ const getManagedJobPipelineWorkspace = async ({
     actionLabel: "view the Pipeline Workspace of",
   });
 
-  const applications = await loadDirectApplicationsForJob(job._id);
+  const applications = await loadLifecycleCompatibleApplicationsForJob(job._id);
   const applicationViews =
     await hydratePrimaryJobApplicationViews(applications);
   const aggregates = deriveManagedJobApplicationProjection(applications);
@@ -722,7 +735,7 @@ const loadRecruiterMyApplicationsForActor = async ({
   // IDX-A04: current responsibility only — never Assignment History / prior assignee.
   const applications = await Application.find({
     assignedRecruiterCompanyMemberId: actorMembershipId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   }).sort({ appliedAt: 1, _id: 1 });
 
   if (applications.length === 0) {
@@ -797,7 +810,7 @@ const getRecruiterMyApplication = async ({
 
   if (
     !application ||
-    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+    !isLifecycleCompatibleApplicationSource(application.source)
   ) {
     throw new AppError(404, "Application not found", {
       field: "applicationId",
@@ -1343,7 +1356,7 @@ const acquireApplicationAssignmentForAvailabilityFirstSubmit = async ({
           _id: application._id,
           candidateUserId: application.candidateUserId,
           jobId: application.jobId,
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
           status: APPLICATION_STATUS.CONTACTED,
           version: application.version,
           assignedRecruiterCompanyMemberId:
@@ -1461,7 +1474,7 @@ const submitCandidateAvailabilityFirstTime = async ({
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
 
       if (!application) {
@@ -1612,7 +1625,7 @@ const editCandidateAvailability = async ({
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
       if (!application) {
         throw new AppError(404, "Application not found", {
@@ -1747,9 +1760,9 @@ const createInterviewProposal = async ({
         throw new AppError(404, "Application not found", { field: "applicationId" });
       }
 
-      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(409, "Only Direct Applications can receive proposals", {
-          field: "source",
+      if (!isLifecycleCompatibleApplicationSource(application.source)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
         });
       }
 
@@ -2008,7 +2021,7 @@ const respondToCandidateInterviewProposal = async ({
   const initialApplication = await Application.findOne({
     _id: applicationId,
     candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   }).lean();
   if (!initialApplication) {
     throw new AppError(404, "Application not found", { field: "applicationId" });
@@ -2031,7 +2044,7 @@ const respondToCandidateInterviewProposal = async ({
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
       if (!application) {
         throw new AppError(404, "Application not found", { field: "applicationId" });
@@ -2051,7 +2064,7 @@ const respondToCandidateInterviewProposal = async ({
             {
               _id: application._id,
               candidateUserId,
-              source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+              source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
               status: application.status,
               version: application.version,
               assignedRecruiterCompanyMemberId:
@@ -2193,7 +2206,7 @@ const cancelRecruiterInterviewProposal = async ({
       const application = await Application.findOne({
         _id: applicationId,
         jobId: job._id,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
       if (!application) {
         throw new AppError(404, "Application not found", { field: "applicationId" });
@@ -2284,7 +2297,7 @@ const listCandidateMyApplications = async ({
   // IDX-A05: Candidate My Applications by owner (+ optional status).
   const query = {
     candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   };
 
   if (statusFilter != null) {
@@ -2337,7 +2350,7 @@ const getCandidateMyApplication = async ({
   const application = await Application.findOne({
     _id: applicationId,
     candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   });
 
   if (!application) {
@@ -2854,7 +2867,7 @@ const commitAssignFromUnassigned = async ({
     {
       _id: applicationId,
       jobId,
-      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
       version: expectedVersion,
       assignedRecruiterCompanyMemberId: null,
@@ -3450,7 +3463,7 @@ const loadApplicationConversationHistoryContext = async ({
 
   if (
     !application ||
-    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+    !isLifecycleCompatibleApplicationSource(application.source)
   ) {
     throw new AppError(404, "Application not found", {
       field: "applicationId",
@@ -3640,7 +3653,7 @@ const commitApplicationWritableStateForNormalMessageSend = async ({
         {
           _id: applicationId,
           jobId,
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
           version: expectedVersion,
           assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
           status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
@@ -3841,7 +3854,7 @@ const commitNormalMessageSend = async ({
 
       if (
         !application ||
-        application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+        !isLifecycleCompatibleApplicationSource(application.source)
       ) {
         throw new AppError(404, "Application not found", {
           field: "applicationId",
@@ -3865,7 +3878,7 @@ const commitNormalMessageSend = async ({
 
       if (
         !application ||
-        application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+        !isLifecycleCompatibleApplicationSource(application.source)
       ) {
         throw new AppError(404, "Application not found", {
           field: "applicationId",
@@ -4092,7 +4105,7 @@ const commitAssignedAssigneeMutation = async ({
     {
       _id: applicationId,
       jobId,
-      source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+      source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       version: expectedVersion,
       assignedRecruiterCompanyMemberId: expectedAssigneeCompanyMemberId,
       status: { $in: [...APPLICATION_NON_TERMINAL_STATUSES] },
@@ -4193,10 +4206,9 @@ const firstAssignApplication = async ({
         });
       }
 
-      // BR-44: V10 Assign only covers Direct Applications.
-      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(409, "Only Direct Applications can be Assigned", {
-          field: "source",
+      if (!isLifecycleCompatibleApplicationSource(application.source)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
         });
       }
 
@@ -4533,15 +4545,10 @@ const executePrimaryCurrentAssigneeMutation = async ({
         });
       }
 
-      // BR-44: V10 assignment mutations only cover Direct Applications.
-      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(
-          409,
-          isUnassign
-            ? "Only Direct Applications can be unassigned"
-            : "Only Direct Applications can be reassigned",
-          { field: "source" },
-        );
+      if (!isLifecycleCompatibleApplicationSource(application.source)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
       }
 
       // BR-17: terminal Applications cannot change Assignee.
@@ -4848,10 +4855,9 @@ const automaticallyUnassignApplication = async ({
       });
     }
 
-    // BR-44: V10 assignment mutations only cover Direct Applications.
-    if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-      throw new AppError(409, "Only Direct Applications can be unassigned", {
-        field: "source",
+    if (!isLifecycleCompatibleApplicationSource(application.source)) {
+      throw new AppError(404, "Application not found", {
+        field: "applicationId",
       });
     }
 
@@ -5217,13 +5223,10 @@ const updateApplicationRecruitmentPipelineStatus = async ({
         });
       }
 
-      // BR-44: V10 Pipeline only covers Direct Applications.
-      if (application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION) {
-        throw new AppError(
-          409,
-          "Only Direct Applications can be updated in Recruitment Pipeline",
-          { field: "source" },
-        );
+      if (!isLifecycleCompatibleApplicationSource(application.source)) {
+        throw new AppError(404, "Application not found", {
+          field: "applicationId",
+        });
       }
 
       // BR-18: Unassigned Applications have no pipeline processing authority.
@@ -5294,7 +5297,7 @@ const updateApplicationRecruitmentPipelineStatus = async ({
         {
           _id: application._id,
           jobId: job._id,
-          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+          source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
           status: expectedStatus,
           version: expectedVersion,
           assignedRecruiterCompanyMemberId: context.membership._id,
@@ -5773,7 +5776,7 @@ const loadCandidateOwnedApplicationForSnapshotDelivery = async ({
   const application = await Application.findOne({
     _id: applicationId,
     candidateUserId,
-    source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
   });
 
   if (!application) {
@@ -5808,7 +5811,7 @@ const loadPrimaryManagedJobApplicationForSnapshotDelivery = async ({
 
   if (
     !application ||
-    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION ||
+    !isLifecycleCompatibleApplicationSource(application.source) ||
     application.jobId.toString() !== job._id.toString()
   ) {
     throw new AppError(404, "Application not found", {
@@ -5839,7 +5842,7 @@ const loadRecruiterMyApplicationForSnapshotDelivery = async ({
 
   if (
     !application ||
-    application.source !== APPLICATION_SOURCE.DIRECT_APPLICATION
+    !isLifecycleCompatibleApplicationSource(application.source)
   ) {
     throw new AppError(404, "Application not found", {
       field: "applicationId",
@@ -6251,6 +6254,14 @@ const replaceSubmittedCv = async ({
     applicationId,
   });
 
+  if (application.source === APPLICATION_SOURCE.RECRUITER_INVITATION) {
+    throw new AppError(
+      409,
+      "Invitation-source Applications cannot replace Submitted CV",
+      { field: "source" },
+    );
+  }
+
   if (application.status !== APPLICATION_STATUS.APPLIED) {
     throw new AppError(409, "Only APPLIED Applications can replace Submitted CV", {
       field: "status",
@@ -6282,6 +6293,7 @@ const replaceSubmittedCv = async ({
       {
         _id: application._id,
         candidateUserId,
+        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
         status: APPLICATION_STATUS.APPLIED,
         version: expectedVersion,
       },
@@ -6368,11 +6380,18 @@ const withdrawApplication = async ({
       const application = await Application.findOne({
         _id: applicationId,
         candidateUserId,
-        source: APPLICATION_SOURCE.DIRECT_APPLICATION,
+        source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES },
       }).session(session);
 
       if (!application) {
         throw new AppError(404, "Application not found", { field: "applicationId" });
+      }
+      if (application.source === APPLICATION_SOURCE.RECRUITER_INVITATION) {
+        throw new AppError(
+          409,
+          "Invitation-source Applications cannot be withdrawn",
+          { field: "source" },
+        );
       }
       if (application.status !== APPLICATION_STATUS.APPLIED) {
         throw new AppError(409, "Only APPLIED Applications can be withdrawn", {
@@ -6411,6 +6430,7 @@ const withdrawApplication = async ({
         {
           _id: application._id,
           candidateUserId,
+          source: APPLICATION_SOURCE.DIRECT_APPLICATION,
           status: APPLICATION_STATUS.APPLIED,
           version: expectedVersion,
         },
