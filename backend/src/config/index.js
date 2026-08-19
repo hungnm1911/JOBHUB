@@ -241,6 +241,23 @@ const notificationRecovery = Object.freeze({
   batchSize: notificationRecoveryBatchSize,
 });
 
+const jobInvitationExpirationIntervalMs = Number(
+  process.env.JOB_INVITATION_EXPIRATION_INTERVAL_MS || 60_000,
+);
+
+if (
+  !Number.isInteger(jobInvitationExpirationIntervalMs) ||
+  jobInvitationExpirationIntervalMs <= 0
+) {
+  throw new Error(
+    "JOB_INVITATION_EXPIRATION_INTERVAL_MS must be a positive integer",
+  );
+}
+
+const jobInvitationExpiration = Object.freeze({
+  intervalMs: jobInvitationExpirationIntervalMs,
+});
+
 const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:8000";
 
 export default Object.freeze({
@@ -256,5 +273,6 @@ export default Object.freeze({
   authToken,
   authSession,
   notificationRecovery,
+  jobInvitationExpiration,
   appBaseUrl,
 });

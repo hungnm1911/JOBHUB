@@ -23,6 +23,10 @@ import {
   closeRealtimeDistribution,
 } from "./src/services/realtime-distribution.service.js";
 import {
+  startJobInvitationExpirationWorker,
+  stopJobInvitationExpirationWorker,
+} from "./src/workers/job-invitation-expiration.worker.js";
+import {
   startNotificationRecoveryWorker,
   stopNotificationRecoveryWorker,
 } from "./src/workers/notification-recovery.worker.js";
@@ -139,6 +143,17 @@ const shutdown = async ({
   }
 
   try {
+    await stopJobInvitationExpirationWorker();
+  } catch (error) {
+    finalExitCode = 1;
+
+    console.error(
+      "Failed to stop Job Invitation expiration worker:",
+      error,
+    );
+  }
+
+  try {
     await disconnectDatabase();
   } catch (error) {
     finalExitCode = 1;
@@ -177,6 +192,7 @@ const startServer = async () => {
   httpServer = await startHttpServer();
   attachRealtimeDistribution(httpServer);
   startNotificationRecoveryWorker();
+  startJobInvitationExpirationWorker();
 
   httpServer.on("error", (error) => {
     console.error("HTTP server error:", error);

@@ -98,6 +98,16 @@ Application routes must be registered before `not-found.js`, and `error-handler.
 - The worker does not own Socket/realtime distribution and must not call Notification emit directly. Any realtime fan-out happens only after durable materialization inside the Notification → realtime-distribution boundary.
 - Recovery timing and batch controls, when configurable, are normalized only by `backend/src/config/index.js`; no worker may read `process.env` directly.
 
+### Job Invitation expiration scheduling
+
+- `backend/src/workers/job-invitation-expiration.worker.js` is the canonical scheduler and lifecycle owner for time-driven `PENDING → EXPIRED` catch-up.
+- `backend/index.js` may start and stop this worker as part of process lifecycle orchestration, but must not contain Invitation queries, expiration evaluation, retry loops, or transition rules.
+- The worker performs an immediate pass after database and Job Invitation collection/index readiness, followed by non-overlapping fixed-delay passes while the process is running.
+- Pass failures leave due Invitations pending for a later pass. Delayed materialization does not change `expiresAt` or current-state actionability.
+- The worker delegates expiration persistence to `backend/src/services/job-invitation.service.js` (`materializeDueExpiredJobInvitations`); it must not import Mongoose models, evaluate current state, or duplicate `PENDING → EXPIRED` decision logic.
+- Multiple process-local workers may run concurrently. The Invitation service owns idempotence via conditional `PENDING` updates; no worker lock, TTL index, or `JOB_INVITATION_EXPIRED` event is introduced.
+- Interval controls, when configurable, are normalized only by `backend/src/config/index.js`; no worker may read `process.env` directly.
+
 ### Realtime distribution
 
 - `backend/src/services/realtime-distribution.service.js` is the canonical Socket.IO and Notification realtime-distribution owner for V13 Slice 09.

@@ -1,5 +1,8 @@
 import JOB_INVITATION_STATUS from "../constants/job-invitation-status.js";
 import Application from "../models/application.model.js";
+import CandidateCV from "../models/candidate-cv.model.js";
+import Company from "../models/company.model.js";
+import CompanyMember from "../models/company-member.model.js";
 import Job from "../models/job.model.js";
 import JobInvitation from "../models/job-invitation.model.js";
 import User from "../models/user.model.js";
@@ -53,6 +56,7 @@ const acquireDocumentById = async ({ model, id, session }) => {
         timestamps: false,
       },
     );
+    acquired.updatedAt = before.updatedAt;
   }
 
   return acquired;
@@ -62,6 +66,8 @@ const acquireCandidateJobSerialization = async ({
   candidateUserId,
   jobId,
   session,
+  candidateCvId = null,
+  requireCandidateCv = true,
 } = {}) => {
   const job = await acquireDocumentById({
     model: Job,
@@ -85,7 +91,78 @@ const acquireCandidateJobSerialization = async ({
     });
   }
 
-  return { job, candidateUser };
+  if (!candidateCvId) {
+    return { job, candidateUser, candidateCv: null };
+  }
+
+  const candidateCv = await acquireDocumentById({
+    model: CandidateCV,
+    id: candidateCvId,
+    session,
+  });
+
+  if (!candidateCv && requireCandidateCv) {
+    throw new AppError(404, "Candidate CV not found", {
+      field: "candidateCvId",
+    });
+  }
+
+  return { job, candidateUser, candidateCv };
+};
+
+const acquireJobInvitationActionSerialization = async ({
+  invitation,
+  session,
+} = {}) => {
+  const jobIdentity = await Job.findById(invitation.jobId)
+    .select("companyId")
+    .session(session)
+    .lean();
+
+  if (!jobIdentity) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  // Match Send/Revoke eligibility order: Company → sender membership →
+  // sender User → Job → Candidate User → invited CandidateCV.
+  const company = await acquireDocumentById({
+    model: Company,
+    id: jobIdentity.companyId,
+    session,
+  });
+
+  const senderMembership = await acquireDocumentById({
+    model: CompanyMember,
+    id: invitation.sentByRecruiterCompanyMemberId,
+    session,
+  });
+
+  const senderUser =
+    senderMembership == null
+      ? null
+      : await acquireDocumentById({
+          model: User,
+          id: senderMembership.userId,
+          session,
+        });
+
+  const { job, candidateUser, candidateCv } =
+    await acquireCandidateJobSerialization({
+      candidateUserId: invitation.candidateUserId,
+      jobId: invitation.jobId,
+      candidateCvId: invitation.invitedCvId,
+      requireCandidateCv: false,
+      session,
+    });
+
+  return {
+    job,
+    candidateUser,
+    candidateCv,
+    company,
+    senderMembership,
+    senderUser,
+  };
 };
 
 const findApplicationForCandidateJob = async ({
@@ -237,6 +314,7 @@ export {
   PENDING_INVITATION_EXISTS_MESSAGE,
   REJECTED_INVITATION_EXISTS_MESSAGE,
   acquireCandidateJobSerialization,
+  acquireJobInvitationActionSerialization,
   assertCandidateJobAllowsDirectApply,
   assertCandidateJobAllowsSendInvitation,
   assertNoEffectivePendingInvitation,

@@ -2,60 +2,62 @@
 
 ## Current project state
 
-**V15 — Job Invitation và nhánh Recruiter săn ứng viên** is `IN PROGRESS`.
+**V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
+`COMPLETED AND VERIFIED`.
 Slice 01 — Persistence Kernel, Slice 02 — Send Job Invitation + Direct Apply
 Exclusion, Slice 03 — Candidate Invitation Read + Current-State Evaluation,
 Slice 04 — Candidate Reject Job Invitation, Slice 05 — Primary Invitation
 Management + Revoke, Slice 06 — Invitation Expiration + Invalidation
-Materialization, Slice 07 — Invitation-source Application Compatibility, and
-Slice 08 — Atomic Accept + Availability Handoff are `IMPLEMENTED AND VERIFIED`.
-Slice 08 closes `F04` and `F10` and covers `F11` Accept Notification obligations
-(`BR-34`, `BR-37`–`BR-49`, `BR-54`–`BR-60`; `TX-02`). Its approved canonical
-Product/Data contracts remain
-`docs/product/versions/v15-job-invitation-recruiter-sourcing.md` and
+Materialization, Slice 07 — Invitation-source Application Compatibility,
+Slice 08 — Atomic Accept + Availability Handoff, and Slice 09 — Acceptance +
+Concurrency Closure are `IMPLEMENTED AND VERIFIED`. Slice 09 closes `F01`–`F11`
+across `BR-01`–`BR-61` and `TX-01`–`TX-05` without adding business capability
+beyond the approved canonical contracts. Its approved Product/Data contracts
+remain `docs/product/versions/v15-job-invitation-recruiter-sourcing.md` and
 `docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`.
 
-Slice 08 completes Candidate Accept on the existing Invitation owner:
-authenticated Candidate owner of the exact Invitation may Accept only when the
-shared Slice 03 current-state evaluator still says the Invitation is
-effectively actionable. Persisted `PENDING` is not authority. If expiration,
-invalidation, or another terminal transition has an earlier effective time,
-Accept fails and creates no Application, Conversation, CandidateAvailability,
-or durable NotificationEvent. Successful Accept is one MongoDB transaction
-(`TX-02`): `PENDING → ACCEPTED` with `acceptedAt`; exactly one
-`source = RECRUITER_INVITATION` Application at `CONTACTED` for the Invitation
-Candidate–Job, `sourceInvitationId` provenance, initial Assignee = historical
-sender, and submitted snapshot as a deep copy of immutable `invitedCvSnapshot`
-(no live recapture, no fake `appliedAt`/Withdraw metadata); canonical V11
-Conversation create; no fake `CandidateAvailability`; required durable events
-`JOB_INVITATION_ACCEPTED` and `INVITED_APPLICATION_CREATED` for the historical
-sender plus existing V13 `INTERVIEW_AVAILABILITY_REQUESTED` for the Candidate.
-No synthetic `APPLICATION_ASSIGNED` or `APPLICATION_STATUS_CHANGED`. Candidate–
-Job Application uniqueness and `sourceInvitationId` uniqueness remain database
-protection. Inbox materialization and realtime stay outside the transaction.
-Historical sender is initial Assignee and sourcing attribution only; later
-Application authority continues on the V10 current-assignee lifecycle from
-Slice 07.
+Slice 09 is acceptance and concurrency closure on the existing Slice 01–08
+owners. It does not add a workflow, API, field, worker, or permission. Focused
+coverage proves Candidate–Job exclusion across concurrent Send/Send,
+Send/Direct Apply, Accept/Direct Apply, and Accept/Send; resend after real
+`EXPIRED`/`REVOKED`/`INVALIDATED` materialization; permanent Invitation block
+after `REJECTED` while Direct Apply remains allowed; existing Application
+blocking future Invitation; one terminal winner among Accept/Reject/Revoke and
+expiration/invalidation with no losing-action side effects; stale persisted
+`PENDING` is not Send/Direct Apply/Accept/Revoke authority; delayed
+materialization does not overwrite a committed terminal winner and keeps
+`invalidatedAt` as source-cause time; Job `CLOSED` maps to `EXPIRED`;
+Generated and Uploaded V14 Send eligibility plus immutable snapshots after
+live CV edits; Send binds `InvitedCvSnapshot` to the exact CandidateCV
+revision re-checked at TX-01 commit; Accept/Reject/Revoke serialize with
+authoritative invalidation sources at terminal commit; Accept-created `RECRUITER_INVITATION`
+Applications continue on
+canonical V10–V12 Assignment/Pipeline/Conversation/Availability/Interview
+owners without historical-sender authority; Direct Apply keeps V9 Replace/
+Withdraw while Invitation-source Applications do not; tenant/ownership
+boundaries deny Supporting, Company Manager, Platform Admin, foreign
+Candidate, and client `companyId` expansion; Notification reference matrix and
+V13 durability/recovery hold, with no `JOB_INVITATION_EXPIRED` and no
+synthetic `APPLICATION_ASSIGNED` / `APPLICATION_STATUS_CHANGED` on Accept.
+Sourcing KPI/report/dashboard, Company Manager Invitation management,
+Invitation audit/history, configurable lifetime, `EXPIRED` notification,
+Candidate Accept self-notification, a new realtime protocol, and V16 remain
+out of scope.
 
-Slice 08 does not implement sourcing KPI/reporting, Company Manager Invitation
-authority, an Invitation audit/history collection, a new realtime protocol, or
-source-specific Pipeline/Conversation/Availability models. Candidate Replace
-Submitted CV and Withdraw remain Direct Apply-only. Slice 07 compatibility,
-Slice 06 Expiration/Invalidation, Slice 05 Revoke, Slice 04 Reject, Slice 03
-read/current-state evaluation, Slice 02 Send, and Slice 01 persistence remain
-in place.
-
-Verification for this Slice 08 state: `cd backend && npm run verify:agent`
+Verification for this Slice 09 state: `cd backend && npm run verify:agent`
 passed on 2026-08-19 with ESLint 0 errors / the same 2 pre-existing V6
 `no-unused-vars` warnings, architecture rules `ARCH-001` through `ARCH-016`,
-146 passing test files, and 1,413 passing tests.
-Focused Slice 08 coverage is
+148 passing test files, and 1,449 passing tests.
+Focused Slice 09 coverage is
+`test/application/v15-slice09-acceptance-concurrency-closure.test.js`
+(33 tests). Slice 08 coverage remains
 `test/application/v15-slice08-atomic-accept-availability-handoff.test.js`
 (12 tests). Slice 07 coverage remains
 `test/application/v15-slice07-invitation-source-application-compatibility.test.js`
 (9 tests). Slice 06 coverage remains
 `test/application/v15-slice06-invitation-expiration-invalidation.test.js`
-(13 tests). Slice 05 coverage remains
+(13 tests), plus Day-15 production-runtime wiring in
+`test/application/v15-invitation-expiration-runtime.test.js` (3 tests). Slice 05 coverage remains
 `test/application/v15-slice05-primary-invitation-management.test.js`
 (13 tests). Slice 04 coverage remains
 `test/application/v15-slice04-candidate-reject-job-invitation.test.js`
@@ -66,11 +68,7 @@ Slice 02 coverage remains
 persistence suites remain
 `test/application/v15-slice01-persistence-kernel.test.js` and
 `test/notification/v15-slice01-invitation-notification-foundation.test.js`.
-
-Later-slice prerequisites remain deferred and are not authority for Slice 08:
-
-* Slice 09 Final Acceptance requires closure of the applicable prior-version
-  acceptance baselines.
+No further V15 business slice remains in the approved specification.
 
 **V14 — Candidate Search trên CV PUBLIC** is `COMPLETED AND VERIFIED`.
 Its approved canonical Product/Data contracts are tracked at
@@ -726,6 +724,88 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
 - **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
 
 ## Current V15 Job Invitation revision
+
+- **Implemented; verified:** V15 Final Acceptance finding — Day-15 Invitation
+  expiration has a production runtime trigger (`F07`; `BR-23`–`BR-25`; Data
+  time-driven `PENDING → EXPIRED` persistence):
+  `backend/src/workers/job-invitation-expiration.worker.js` follows the V13
+  Notification recovery start/stop pattern, is started from `backend/index.js`
+  after Job Invitation collection readiness, and delegates only to existing
+  `materializeDueExpiredJobInvitations`. A due `PENDING` Invitation is
+  eventually persisted `EXPIRED` without user traffic; not-yet-due and
+  terminal Invitations are unchanged; repeated passes are idempotent. No
+  `JOB_INVITATION_EXPIRED`, TTL deletion, second evaluator, or BR-23
+  timezone/day-count change. Focused regressions in
+  `test/application/v15-invitation-expiration-runtime.test.js` (3 tests).
+  The official backend gate passed (ESLint: 0 errors / 2 existing warnings
+  in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest:
+  148 files / 1,449 tests).
+
+- **Implemented; verified:** V15 Final Acceptance finding — Accept/Reject/Revoke
+  serialize with authoritative invalidation sources (`F04`–`F08`; `BR-16`,
+  `BR-31`–`BR-34`, `BR-47`; `TX-02`–`TX-05`): `acceptOwnJobInvitation`,
+  `rejectOwnJobInvitation`, and `revokePrimaryJobInvitation` reuse
+  `acquireJobInvitationActionSerialization` in
+  `candidate-job-serialization.service.js` to dummy-write the Job Company,
+  historical sender CompanyMember, historical sender User, Job, Candidate
+  User, and invited CandidateCV (Send-compatible order, restored `updatedAt`)
+  and evaluate `evaluateJobInvitationCurrentState` from those acquired
+  documents inside the same MongoDB transaction. A source mutation that
+  commits first cannot lose the terminal outcome to a stale Accept/Reject/
+  Revoke; a terminal action that commits first is kept and later invalidation
+  catch-up does not overwrite it. No global source+Invitation transaction,
+  no Day-15 trigger change, and no new persistence field. Focused regressions
+  in `test/application/v15-slice09-acceptance-concurrency-closure.test.js`
+  (33 tests). The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 147 files / 1,446 tests).
+
+- **Implemented; verified:** V15 Final Acceptance finding — Send binds exact
+  CandidateCV revision to persisted `InvitedCvSnapshot` (`F01`/`F02`;
+  `BR-10`–`BR-14`; Data snapshot/`TX-01`): `sendJobInvitation` still captures
+  the snapshot outside MongoDB (no Cloudinary/PDF work inside the transaction)
+  but TX-01 now reuses `acquireCandidateJobSerialization` to dummy-write
+  serialize the selected CandidateCV with restored `updatedAt`, re-checks V14
+  eligibility, and refuses commit when the re-checked document is not the
+  captured revision. Source mutation that wins first (content, `PUBLIC →
+  PRIVATE`, Generated `ACTIVE → DRAFT`, Archive) cannot commit a stale Send;
+  Send that wins first keeps the captured snapshot and later CandidateCV
+  mutations follow existing post-Send semantics. Accept/Reject/Revoke later
+  gained invalidation-source serialization (see the finding above). Focused
+  regressions in
+  `test/application/v15-slice09-acceptance-concurrency-closure.test.js`
+  (21 tests at that finding; 33 tests after invalidation-source serialization).
+  The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 147 files / 1,434 tests).
+
+- **Implemented; verified:** V15 Slice 09 — Acceptance + Concurrency Closure
+  (`F01`–`F11` closure; `BR-01`–`BR-61`; `TX-01`–`TX-05`): existing Slice 01–08
+  owners compose into one Invitation lifecycle without a new workflow, API,
+  field, worker, or business capability. Focused acceptance proves Candidate–
+  Job exclusion under concurrent Send/Accept/Direct Apply, resend after real
+  `EXPIRED`/`REVOKED`/`INVALIDATED`, permanent Invitation block after
+  `REJECTED`, existing Application blocking future Invitation, one terminal
+  winner among Accept/Reject/Revoke and expiration/invalidation with no
+  losing-action side effects, stale persisted `PENDING` without authority,
+  delayed materialization that does not change a committed terminal winner,
+  Job `CLOSED` → `EXPIRED` and source-cause `invalidatedAt`, Generated and
+  Uploaded V14 Send eligibility plus immutable snapshots, Accept-created
+  Application continuation on canonical V10–V12 owners without historical-
+  sender authority, source-specific Replace/Withdraw, tenant/ownership
+  denial for Supporting/Company Manager/Platform Admin/foreign Candidate/
+  client `companyId`, Notification reference matrix and V13 durability/
+  recovery, and absence of deferred V15 persistence. No production-owner
+  change was required; current Slice 01–08 behavior already matched the
+  canonical V15 contract. A later acceptance finding binds Send
+  `InvitedCvSnapshot` to the exact CandidateCV revision re-checked at TX-01
+  (see the Send snapshot-revision finding above). Focused coverage in
+  `test/application/v15-slice09-acceptance-concurrency-closure.test.js`
+  (13 tests at Slice 09 close; 21 tests after the snapshot-revision finding;
+  33 tests after invalidation-source serialization).
+  The official backend gate passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016;
+  Vitest: 147 files / 1,426 tests).
 
 - **Implemented; verified:** V15 Slice 08 — Atomic Accept + Availability
   Handoff (`F04` closure, `F10` closure, `F11`; `BR-34`, `BR-37`–`BR-49`,
@@ -2026,6 +2106,14 @@ the current V10 revision complete.
 - V6 Final Acceptance / regression closure is complete: F01–F05, BR-01–BR-33, and TX-01–TX-03 were rerun with the Slices 01–06 suites, S07 acceptance suite, and the five remediation suites. The focused baseline passed 12 files / 155 tests and the official backend gate passed. No known V6 business-blocking finding remains.
 - **V7 closure:** Final Acceptance / regression closure is complete across F01–F10, BR-01–BR-46, and TX-01. V7 is `COMPLETED AND VERIFIED`; no V7 business slice remains in the approved specification.
 - **V11 closure:** Final Acceptance / regression closure is complete across F01–F10, BR-01–BR-55, and TX-01–TX-08. V11 is `COMPLETED AND VERIFIED`; no V11 business slice remains in the approved Conversation/Chat specification. Realtime, notification, attachment, and related deferred capabilities stay outside V11 by product boundary.
+- **V15 closure:** Final Acceptance / regression closure is complete across
+  F01–F11, BR-01–BR-61, and TX-01–TX-05 after Slices 01–08 and the Slice 09
+  acceptance and concurrency suite. V15 is `COMPLETED AND VERIFIED`; no V15
+  business slice remains in the approved Job Invitation specification.
+  Sourcing KPI/report/dashboard, Company Manager Invitation management,
+  Invitation audit/history, configurable lifetime, `EXPIRED` notification,
+  Candidate Accept self-notification, and a new realtime protocol stay
+  outside V15 by product boundary.
 - **V14 closure:** Final Acceptance / regression closure is complete across F01–F06 and BR-01–BR-38 after Slices 01–06 and the Slice 07 dynamic-revocation and read-only acceptance suite. V14 is `COMPLETED AND VERIFIED`; no V14 business slice remains in the approved Candidate Search specification. Keyword/full-text search, Saved Search, Recruiter Download, Direct Message, and Job Invitation stay outside V14 by product boundary.
 - **Resolved in S09 / acceptance:** Fixed Harvard PDF renderer (including Unicode fidelity) and owner-scoped Uploaded PDF delivery via restricted Cloudinary `authenticated` delivery are established; Preview/Download do not persist public URLs or Generated PDF state.
 - **Resolved in S08:** Generated and Uploaded CVs share one owner-scoped common metadata mutation path; `PUBLIC` remains intent-only in V7 without search/access expansion.
@@ -2035,6 +2123,28 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V15 Final Acceptance finding — Day-15 Invitation expiration production
+  runtime trigger: focused coverage passed 3 tests in
+  `test/application/v15-invitation-expiration-runtime.test.js`. Then
+  `cd backend && npm run verify:agent` passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 148 files / 1,449 tests).
+- V15 Slice 09 Acceptance + Concurrency Closure: focused Slice 09 coverage
+  passed 33 tests in
+  `test/application/v15-slice09-acceptance-concurrency-closure.test.js`. Then
+  `cd backend && npm run verify:agent` passed (ESLint: 0 errors / 2 existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 147 files / 1,446 tests). Coverage includes Candidate–Job
+  exclusion under concurrent Send/Accept/Direct Apply, resend after real
+  `EXPIRED`/`REVOKED`/`INVALIDATED`, `REJECTED` Invitation block with Direct
+  Apply still allowed, one terminal winner among Accept/Reject/Revoke and
+  expiration/invalidation, stale `PENDING` without authority, delayed
+  materialization that does not change a committed winner, Job `CLOSED` →
+  `EXPIRED`, Generated/Uploaded snapshot lock, Send snapshot-versus-CandidateCV
+  revision races, Accept/Reject/Revoke versus concurrent invalidation-source
+  races, Accept-created Application
+  continuation on V10–V12 owners, tenant/ownership denial, Notification
+  reference matrix and V13 recovery, and deferred-scope absence.
 - V14 Slice 07 Dynamic Revocation + Read-only Acceptance Closure: focused
   Slice 07 coverage passed 11 tests in
   `test/auth/v14-candidate-search-acceptance.test.js`, and the combined V14

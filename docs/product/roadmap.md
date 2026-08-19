@@ -34,7 +34,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V12 | Interview Schedule | IN PROGRESS |
 | V13 | Notification và phân phối realtime | READY FOR IMPLEMENTATION |
 | V14 | Candidate Search trên CV PUBLIC | COMPLETED AND VERIFIED |
-| V15 | Job Invitation và nhánh Recruiter săn ứng viên | IN PROGRESS |
+| V15 | Job Invitation và nhánh Recruiter săn ứng viên | COMPLETED AND VERIFIED |
 | V16 | Saved Jobs | PLANNED |
 | V17 | Dashboard, thống kê và giám sát | PLANNED |
 
@@ -111,13 +111,15 @@ read-only acceptance suite. The required backend verification gate passed;
 V14 is therefore `COMPLETED AND VERIFIED` against the approved Candidate
 Search Product/Data contracts. Keyword/full-text search, Saved Search,
 Recruiter Download, Direct Message, and Job Invitation remain outside V14 by
-product boundary. V15 has approved Product/Data contracts and is `IN PROGRESS`;
-Slice 01 Persistence Kernel and Slice 02 Send Job Invitation + Direct Apply
-Exclusion are implemented and verified. This status does not authorize later
-V15 Candidate read/Accept/Reject/Revoke/expiration-worker/invalidation/Accept
-orchestration workflows or remove the recorded prerequisites for later slices.
-V16 and V17 must not be implemented merely from their roadmap
-titles.
+product boundary. V15 Final Acceptance / regression closure passed across
+F01–F11, BR-01–BR-61, and TX-01–TX-05 after Slices 01–08 and the Slice 09
+acceptance and concurrency suite. The required backend verification gate
+passed; V15 is therefore `COMPLETED AND VERIFIED` against the approved Job
+Invitation Product/Data contracts. Sourcing KPI/report/dashboard, Company
+Manager Invitation management, Invitation audit/history, configurable
+lifetime, `EXPIRED` notification, Candidate Accept self-notification, and a
+new realtime protocol remain outside V15 by product boundary. V16 and V17
+must not be implemented merely from their roadmap titles.
 
 V15 canonical specification:
 

@@ -104,7 +104,8 @@ Some expected file errors are currently formatted and returned directly by the c
 - `backend/src/config/index.js` is the canonical normalized application configuration provider.
 - `backend/index.js` consumes application configuration during runtime bootstrap, but does not own environment loading, parsing, validation, normalization, or defaults.
 - One-time data migrations required by an approved persistence contract are explicit database tooling. `backend/scripts/run-migration.js` owns migration invocation and connection orchestration, while versioned migration definitions live under `backend/src/database/migrations/`. Migrations are never run implicitly during application startup or seed execution.
-- V13 durable Notification recovery is the approved background-worker exception to request-only execution. `backend/src/workers/notification-recovery.worker.js` owns only the scheduling lifecycle for bounded, non-overlapping recovery passes and delegates materialization to `backend/src/services/notification.service.js`. `backend/index.js` starts the worker after MongoDB and required collection/index readiness, and stops it before disconnecting MongoDB during shutdown.
+- V13 durable Notification recovery is an approved background-worker exception to request-only execution. `backend/src/workers/notification-recovery.worker.js` owns only the scheduling lifecycle for bounded, non-overlapping recovery passes and delegates materialization to `backend/src/services/notification.service.js`. `backend/index.js` starts the worker after MongoDB and required collection/index readiness, and stops it before disconnecting MongoDB during shutdown.
+- V15 Job Invitation Day-15 expiration materialization is the second approved background-worker exception. `backend/src/workers/job-invitation-expiration.worker.js` owns only the scheduling lifecycle for bounded, non-overlapping catch-up passes and delegates persistence to `backend/src/services/job-invitation.service.js` (`materializeDueExpiredJobInvitations`). It does not own expiration evaluation, timezone/day-count semantics, or a second transition path. `backend/index.js` starts the worker after MongoDB and Job Invitation collection/index readiness, and stops it before disconnecting MongoDB during shutdown.
 - V13 Socket.IO realtime distribution is the approved transport exception for online fan-out. `backend/src/services/realtime-distribution.service.js` owns attaching Socket.IO to the process HTTP server, connection authentication, in-memory User→connection membership, and recipient-scoped Notification emit. `backend/index.js` attaches the Socket server after the HTTP server exists and closes it during graceful shutdown. This is not a new architectural layer and must not introduce Socket session/delivery persistence.
 - No repository layer is part of the current target architecture. Adding one requires explicit approval as an architecture change.
 
@@ -190,7 +191,17 @@ The approved V13 Notification recovery worker:
 - does not own Socket.IO or call Notification emit directly (any realtime fan-out happens only inside Notification materialization after durable writes); and
 - exposes start/stop lifecycle operations for the process entry point.
 
-Parallel application processes may run recovery passes concurrently. Correctness comes from the canonical unique indexes and idempotent Notification service, not from an in-memory or distributed worker lock. Exactly-once execution is not required.
+The approved V15 Job Invitation expiration worker:
+
+- performs one catch-up pass after startup readiness and then recurring fixed-delay passes;
+- never overlaps two passes within the same process;
+- calls `materializeDueExpiredJobInvitations` and does not access models or evaluate expiration itself;
+- leaves failed or partial materialization for a later pass;
+- does not persist retry telemetry, a scheduler lock, or TTL deletion;
+- does not create `JOB_INVITATION_EXPIRED`; and
+- exposes start/stop lifecycle operations for the process entry point.
+
+Parallel application processes may run these passes concurrently. Exact wall-clock precision and distributed exactly-once execution are not required. Authoritative Invitation actionability remains derived from `expiresAt` and the shared current-state evaluator.
 
 ### Models
 
@@ -234,7 +245,7 @@ The root entry point imports normalized application configuration as part of boo
 - Cross-cutting middleware does not absorb business workflows.
 - Generic utility modules do not become feature service substitutes.
 - New architectural layers or changes in ownership require explicit approval and corresponding documentation updates.
-- Background scheduling outside the approved V13 Notification recovery worker requires separate architectural approval.
+- Background scheduling outside the approved V13 Notification recovery worker and the approved V15 Job Invitation expiration worker requires separate architectural approval.
 - Socket.IO realtime distribution outside `backend/src/services/realtime-distribution.service.js`, or Notification realtime emit outside the Notification materialization → distributor boundary, requires separate architectural approval.
 
 Current deviations from these constraints are catalogued in [`source-of-truth.md`](source-of-truth.md). They are documentation of the existing state, not authorization to duplicate or extend the mismatch.

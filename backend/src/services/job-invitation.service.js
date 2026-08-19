@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import mongoose from "mongoose";
 
 import JOB_INVITATION_EXPIRATION from "../constants/job-invitation-expiration.js";
@@ -15,6 +16,7 @@ import {
   APPLICATION_EXISTS_MESSAGE,
   PENDING_INVITATION_EXISTS_MESSAGE,
   acquireCandidateJobSerialization,
+  acquireJobInvitationActionSerialization,
   assertCandidateJobAllowsSendInvitation,
   findApplicationForCandidateJob,
   findPendingInvitationForCandidateJob,
@@ -145,6 +147,35 @@ const toPublicSnapshotPdfFile = (pdfFile) => {
     sizeBytes: pdfFile.sizeBytes,
     pageCount: pdfFile.pageCount,
   };
+};
+
+const toDateMs = (value) => (value == null ? null : new Date(value).getTime());
+
+const toPlainGeneratedContent = (generatedContent) => {
+  if (generatedContent == null) {
+    return null;
+  }
+
+  return typeof generatedContent.toObject === "function"
+    ? generatedContent.toObject()
+    : generatedContent;
+};
+
+const isSameCandidateCvRevision = (capturedCv, currentCv) => {
+  return (
+    toDateMs(capturedCv.updatedAt) === toDateMs(currentCv.updatedAt) &&
+    capturedCv.name === currentCv.name &&
+    capturedCv.sourceType === currentCv.sourceType &&
+    capturedCv.status === currentCv.status &&
+    capturedCv.visibility === currentCv.visibility &&
+    toDateMs(capturedCv.archivedAt) === toDateMs(currentCv.archivedAt) &&
+    (capturedCv.uploadedFile?.storageKey ?? null) ===
+      (currentCv.uploadedFile?.storageKey ?? null) &&
+    isDeepStrictEqual(
+      toPlainGeneratedContent(capturedCv.generatedContent),
+      toPlainGeneratedContent(currentCv.generatedContent),
+    )
+  );
 };
 
 const toPublicInvitedCvSnapshot = (invitedCvSnapshot) => {
@@ -885,6 +916,7 @@ const sendJobInvitation = async ({
           await acquireCandidateJobSerialization({
             candidateUserId: candidateCv.candidateUserId,
             jobId: job._id,
+            candidateCvId: candidateCv._id,
             session,
           });
 
@@ -929,6 +961,16 @@ const sendJobInvitation = async ({
           throw new AppError(404, "Candidate CV not found", {
             field: "candidateCvId",
           });
+        }
+
+        if (!isSameCandidateCvRevision(candidateCv, currentCandidateCv)) {
+          throw new AppError(
+            409,
+            "Candidate CV changed before the invitation could be sent",
+            {
+              field: "candidateCvId",
+            },
+          );
         }
 
         const staleInvitationResult =
@@ -1092,6 +1134,31 @@ const getOwnJobInvitation = async ({
   };
 };
 
+const evaluateInvitationActionFromAcquiredSources = ({
+  invitation,
+  acquired,
+  now,
+}) => {
+  const evaluation = evaluateJobInvitationCurrentState({
+    invitation,
+    job: acquired.job,
+    company: acquired.company,
+    candidateUser: acquired.candidateUser,
+    invitedCv: acquired.candidateCv,
+    senderMembership: acquired.senderMembership,
+    senderUser: acquired.senderUser,
+    now,
+  });
+
+  if (!evaluation.isActionable) {
+    throw new AppError(409, "Job Invitation is no longer actionable", {
+      field: "invitationId",
+    });
+  }
+
+  return evaluation;
+};
+
 const rejectOwnJobInvitation = async ({
   candidateUser,
   invitationId,
@@ -1113,9 +1180,8 @@ const rejectOwnJobInvitation = async ({
       rejectedInvitation = null;
       notificationEvent = null;
 
-      await acquireCandidateJobSerialization({
-        candidateUserId: ownedInvitation.candidateUserId,
-        jobId: ownedInvitation.jobId,
+      const acquired = await acquireJobInvitationActionSerialization({
+        invitation: ownedInvitation,
         session,
       });
 
@@ -1131,27 +1197,13 @@ const rejectOwnJobInvitation = async ({
         });
       }
 
-      const resources = await loadJobInvitationCurrentStateResources(
-        [invitation],
-        { session },
-      );
-      const invitationResources = resourcesForInvitation(invitation, resources);
-      const evaluation = evaluateJobInvitationCurrentStateFromResources({
+      evaluateInvitationActionFromAcquiredSources({
         invitation,
-        resources,
+        acquired,
         now,
       });
 
-      if (!evaluation.isActionable) {
-        throw new AppError(409, "Job Invitation is no longer actionable", {
-          field: "invitationId",
-        });
-      }
-
-      if (
-        invitationResources.senderUser == null ||
-        invitationResources.job == null
-      ) {
+      if (acquired.senderUser == null || acquired.job == null) {
         throw new AppError(409, "Job Invitation is no longer actionable", {
           field: "invitationId",
         });
@@ -1189,8 +1241,8 @@ const rejectOwnJobInvitation = async ({
         jobInvitationId: rejectedInvitation._id,
         recipients: [
           {
-            recipientUserId: invitationResources.senderUser._id,
-            content: `A candidate rejected the job invitation for ${invitationResources.job.title}.`,
+            recipientUserId: acquired.senderUser._id,
+            content: `A candidate rejected the job invitation for ${acquired.job.title}.`,
           },
         ],
         session,
@@ -1238,9 +1290,8 @@ const acceptOwnJobInvitation = async ({
       createdApplication = null;
       notificationEvents.length = 0;
 
-      await acquireCandidateJobSerialization({
-        candidateUserId: ownedInvitation.candidateUserId,
-        jobId: ownedInvitation.jobId,
+      const acquired = await acquireJobInvitationActionSerialization({
+        invitation: ownedInvitation,
         session,
       });
 
@@ -1256,27 +1307,13 @@ const acceptOwnJobInvitation = async ({
         });
       }
 
-      const resources = await loadJobInvitationCurrentStateResources(
-        [invitation],
-        { session },
-      );
-      const invitationResources = resourcesForInvitation(invitation, resources);
-      const evaluation = evaluateJobInvitationCurrentStateFromResources({
+      evaluateInvitationActionFromAcquiredSources({
         invitation,
-        resources,
+        acquired,
         now,
       });
 
-      if (!evaluation.isActionable) {
-        throw new AppError(409, "Job Invitation is no longer actionable", {
-          field: "invitationId",
-        });
-      }
-
-      if (
-        invitationResources.senderUser == null ||
-        invitationResources.job == null
-      ) {
+      if (acquired.senderUser == null || acquired.job == null) {
         throw new AppError(409, "Job Invitation is no longer actionable", {
           field: "invitationId",
         });
@@ -1324,14 +1361,14 @@ const acceptOwnJobInvitation = async ({
       );
       const applicationOutcome = await createInvitationSourceApplicationOnAccept({
         invitation: acceptedInvitation,
-        job: invitationResources.job,
+        job: acquired.job,
         session,
       });
       createdApplication = applicationOutcome.application;
       notificationEvents.push(applicationOutcome.availabilityNotificationEvent);
 
-      const jobTitle = invitationResources.job.title;
-      const senderUserId = invitationResources.senderUser._id;
+      const jobTitle = acquired.job.title;
+      const senderUserId = acquired.senderUser._id;
 
       const { event: acceptedEvent } = await createNotificationEvent({
         eventKey: `job-invitation-accepted:${acceptedInvitation._id.toString()}`,
@@ -1588,11 +1625,11 @@ const revokePrimaryJobInvitation = async ({
         throw new AppError(403, "Recruiter account is not active");
       }
 
-      const { job: currentJob } = await acquireCandidateJobSerialization({
-        candidateUserId: managedInvitation.candidateUserId,
-        jobId: managedInvitation.jobId,
+      const acquired = await acquireJobInvitationActionSerialization({
+        invitation: managedInvitation,
         session,
       });
+      const currentJob = acquired.job;
 
       if (currentJob.companyId.toString() !== context.companyId.toString()) {
         throw new AppError(404, "Job not found", { field: "jobId" });
@@ -1615,27 +1652,13 @@ const revokePrimaryJobInvitation = async ({
         });
       }
 
-      const resources = await loadJobInvitationCurrentStateResources(
-        [invitation],
-        { session },
-      );
-      const invitationResources = resourcesForInvitation(invitation, resources);
-      const evaluation = evaluateJobInvitationCurrentStateFromResources({
+      evaluateInvitationActionFromAcquiredSources({
         invitation,
-        resources,
+        acquired,
         now,
       });
 
-      if (!evaluation.isActionable) {
-        throw new AppError(409, "Job Invitation is no longer actionable", {
-          field: "invitationId",
-        });
-      }
-
-      if (
-        invitationResources.candidateUser == null ||
-        invitationResources.job == null
-      ) {
+      if (acquired.candidateUser == null || acquired.job == null) {
         throw new AppError(409, "Job Invitation is no longer actionable", {
           field: "invitationId",
         });
@@ -1673,8 +1696,8 @@ const revokePrimaryJobInvitation = async ({
         jobInvitationId: revokedInvitation._id,
         recipients: [
           {
-            recipientUserId: invitationResources.candidateUser._id,
-            content: `Your job invitation for ${invitationResources.job.title} was revoked.`,
+            recipientUserId: acquired.candidateUser._id,
+            content: `Your job invitation for ${acquired.job.title} was revoked.`,
           },
         ],
         session,
