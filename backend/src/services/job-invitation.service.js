@@ -6,13 +6,16 @@ import NOTIFICATION_TYPE from "../constants/notification-type.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
+import CompanyMember from "../models/company-member.model.js";
 import Job from "../models/job.model.js";
 import JobInvitation from "../models/job-invitation.model.js";
 import AppError from "../utils/app-error.js";
 import { loadCurrentSearchEligibleCandidateCvById } from "./candidate-cv.service.js";
 import {
+  PENDING_INVITATION_EXISTS_MESSAGE,
   acquireCandidateJobSerialization,
   assertCandidateJobAllowsSendInvitation,
+  findPendingInvitationForCandidateJob,
 } from "./candidate-job-serialization.service.js";
 import { resolveRecruiterBusinessContext } from "./company.service.js";
 import {
@@ -27,6 +30,7 @@ import {
   isJobPubliclyEligible,
 } from "./job.service.js";
 import {
+  evaluateJobInvitationCurrentState,
   evaluateJobInvitationCurrentStateFromResources,
   isRecruiterOnJobTeam,
   loadJobInvitationCurrentStateResources,
@@ -362,6 +366,380 @@ const hydratePrimaryJobInvitationViews = async (invitations, options) => {
   );
 };
 
+const buildInvalidationNotificationRecipients = ({
+  invitation,
+  job,
+  senderUser,
+  senderMembership,
+}) => {
+  const jobTitle = job?.title ?? "a job";
+  const recipients = [
+    {
+      recipientUserId: invitation.candidateUserId,
+      content: `Your job invitation for ${jobTitle} is no longer valid.`,
+    },
+  ];
+  const senderUserId = senderUser?._id ?? senderMembership?.userId;
+
+  if (
+    senderUserId != null &&
+    senderUserId.toString() !== invitation.candidateUserId.toString()
+  ) {
+    recipients.push({
+      recipientUserId: senderUserId,
+      content: `A job invitation you sent for ${jobTitle} is no longer valid.`,
+    });
+  }
+
+  return recipients;
+};
+
+const persistExpiredJobInvitation = async ({ invitation, session = null }) => {
+  return JobInvitation.findOneAndUpdate(
+    {
+      _id: invitation._id,
+      status: JOB_INVITATION_STATUS.PENDING,
+    },
+    {
+      $set: {
+        status: JOB_INVITATION_STATUS.EXPIRED,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+      session,
+    },
+  );
+};
+
+const persistInvalidatedJobInvitation = async ({
+  invitation,
+  invalidatedAt,
+  invalidationReason,
+  session = null,
+}) => {
+  return JobInvitation.findOneAndUpdate(
+    {
+      _id: invitation._id,
+      status: JOB_INVITATION_STATUS.PENDING,
+    },
+    {
+      $set: {
+        status: JOB_INVITATION_STATUS.INVALIDATED,
+        invalidatedAt,
+        invalidationReason,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+      session,
+    },
+  );
+};
+
+const commitEvaluatedJobInvitationMaterialization = async ({
+  invitation,
+  evaluation,
+  resources,
+  session = null,
+}) => {
+  if (evaluation.currentStatus === JOB_INVITATION_STATUS.EXPIRED) {
+    const persisted = await persistExpiredJobInvitation({
+      invitation,
+      session,
+    });
+
+    if (!persisted) {
+      const current = await JobInvitation.findById(invitation._id).session(
+        session,
+      );
+      return {
+        invitation: current ?? invitation,
+        evaluation: evaluateJobInvitationCurrentState({
+          invitation: current ?? invitation,
+        }),
+        notificationEvent: null,
+        persisted: false,
+      };
+    }
+
+    return {
+      invitation: persisted,
+      evaluation,
+      notificationEvent: null,
+      persisted: true,
+    };
+  }
+
+  if (evaluation.currentStatus !== JOB_INVITATION_STATUS.INVALIDATED) {
+    return {
+      invitation,
+      evaluation,
+      notificationEvent: null,
+      persisted: false,
+    };
+  }
+
+  const invitationResources = resourcesForInvitation(invitation, resources);
+  const invalidatedAt =
+    evaluation.winningCause?.causeAt instanceof Date
+      ? evaluation.winningCause.causeAt
+      : invitation.updatedAt;
+  const persisted = await persistInvalidatedJobInvitation({
+    invitation,
+    invalidatedAt,
+    invalidationReason: evaluation.winningCause?.reason,
+    session,
+  });
+
+  if (!persisted) {
+    const current = await JobInvitation.findById(invitation._id).session(session);
+    return {
+      invitation: current ?? invitation,
+      evaluation: evaluateJobInvitationCurrentState({
+        invitation: current ?? invitation,
+      }),
+      notificationEvent: null,
+      persisted: false,
+    };
+  }
+
+  const { event: notificationEvent } = await createNotificationEvent({
+    eventKey: `job-invitation-invalidated:${persisted._id.toString()}`,
+    type: NOTIFICATION_TYPE.JOB_INVITATION_INVALIDATED,
+    actorUserId: null,
+    jobInvitationId: persisted._id,
+    recipients: buildInvalidationNotificationRecipients({
+      invitation: persisted,
+      job: invitationResources.job,
+      senderUser: invitationResources.senderUser,
+      senderMembership: invitationResources.senderMembership,
+    }),
+    session,
+  });
+
+  return {
+    invitation: persisted,
+    evaluation,
+    notificationEvent,
+    persisted: true,
+  };
+};
+
+const materializeJobInvitationIfDue = async ({
+  invitation,
+  session = null,
+  now = new Date(),
+} = {}) => {
+  const run = async (activeSession) => {
+    const currentInvitation = await JobInvitation.findById(invitation._id).session(
+      activeSession,
+    );
+
+    if (currentInvitation == null) {
+      return {
+        invitation,
+        evaluation: evaluateJobInvitationCurrentState({ invitation, now }),
+        notificationEvent: null,
+        persisted: false,
+      };
+    }
+
+    if (currentInvitation.status !== JOB_INVITATION_STATUS.PENDING) {
+      return {
+        invitation: currentInvitation,
+        evaluation: evaluateJobInvitationCurrentState({
+          invitation: currentInvitation,
+          now,
+        }),
+        notificationEvent: null,
+        persisted: false,
+      };
+    }
+
+    const resources = await loadJobInvitationCurrentStateResources(
+      [currentInvitation],
+      { session: activeSession },
+    );
+    const evaluation = evaluateJobInvitationCurrentStateFromResources({
+      invitation: currentInvitation,
+      resources,
+      now,
+    });
+
+    if (evaluation.isActionable) {
+      return {
+        invitation: currentInvitation,
+        evaluation,
+        notificationEvent: null,
+        persisted: false,
+      };
+    }
+
+    return commitEvaluatedJobInvitationMaterialization({
+      invitation: currentInvitation,
+      evaluation,
+      resources,
+      session: activeSession,
+    });
+  };
+
+  if (session) {
+    return run(session);
+  }
+
+  const materializationSession = await mongoose.startSession();
+  let result;
+
+  try {
+    await materializationSession.withTransaction(async () => {
+      result = await run(materializationSession);
+    });
+  } finally {
+    await materializationSession.endSession();
+  }
+
+  if (result?.notificationEvent) {
+    try {
+      await materializeNotificationEvent({
+        eventId: result.notificationEvent._id,
+      });
+    } catch {
+      // The persisted event obligation remains pending for canonical recovery.
+    }
+  }
+
+  return result;
+};
+
+const materializePendingJobInvitations = async ({
+  filter = {},
+  now = new Date(),
+} = {}) => {
+  const invitations = await JobInvitation.find({
+    ...filter,
+    status: JOB_INVITATION_STATUS.PENDING,
+  });
+  const materialized = [];
+  const failed = [];
+
+  for (const invitation of invitations) {
+    try {
+      materialized.push(
+        await materializeJobInvitationIfDue({
+          invitation,
+          now,
+        }),
+      );
+    } catch (error) {
+      failed.push({
+        invitationId: invitation._id,
+        error,
+      });
+    }
+  }
+
+  return { materialized, failed };
+};
+
+const materializePendingJobInvitationsBestEffort = async (args = {}) => {
+  try {
+    return await materializePendingJobInvitations(args);
+  } catch {
+    return { materialized: [], failed: [] };
+  }
+};
+
+const materializeDueExpiredJobInvitations = async ({
+  now = new Date(),
+} = {}) => {
+  return materializePendingJobInvitations({
+    filter: {
+      expiresAt: {
+        $lte: now,
+      },
+    },
+    now,
+  });
+};
+
+const materializePendingJobInvitationsForCompany = async ({
+  companyId,
+  now = new Date(),
+} = {}) => {
+  const jobs = await Job.find({ companyId }).select("_id");
+
+  if (jobs.length === 0) {
+    return { materialized: [], failed: [] };
+  }
+
+  return materializePendingJobInvitations({
+    filter: {
+      jobId: { $in: jobs.map((job) => job._id) },
+    },
+    now,
+  });
+};
+
+const materializePendingJobInvitationsForUser = async ({
+  userId,
+  now = new Date(),
+} = {}) => {
+  const memberships = await CompanyMember.find({ userId }).select("_id");
+
+  return materializePendingJobInvitations({
+    filter: {
+      $or: [
+        { candidateUserId: userId },
+        {
+          sentByRecruiterCompanyMemberId: {
+            $in: memberships.map((membership) => membership._id),
+          },
+        },
+      ],
+    },
+    now,
+  });
+};
+
+const materializeStalePendingInvitationForCandidateJob = async ({
+  candidateUserId,
+  jobId,
+  session = null,
+  now = new Date(),
+} = {}) => {
+  const pendingInvitation = await findPendingInvitationForCandidateJob({
+    candidateUserId,
+    jobId,
+    session,
+  });
+
+  if (!pendingInvitation) {
+    return {
+      invitation: null,
+      evaluation: null,
+      notificationEvent: null,
+      persisted: false,
+    };
+  }
+
+  const result = await materializeJobInvitationIfDue({
+    invitation: pendingInvitation,
+    session,
+    now,
+  });
+
+  if (result.evaluation?.isActionable) {
+    throw new AppError(409, PENDING_INVITATION_EXISTS_MESSAGE, {
+      field: "jobId",
+    });
+  }
+
+  return result;
+};
+
 const normalizeGreetingMessage = (greetingMessage) => {
   if (greetingMessage == null) {
     return null;
@@ -445,6 +823,7 @@ const sendJobInvitation = async ({
   await assertCandidateJobAllowsSendInvitation({
     candidateUserId: candidateCv.candidateUserId,
     jobId: job._id,
+    now,
   });
 
   const normalizedGreeting = normalizeGreetingMessage(greetingMessage);
@@ -457,11 +836,13 @@ const sendJobInvitation = async ({
 
   const session = await mongoose.startSession();
   let invitation;
-  let notificationEvent;
+  const notificationEvents = [];
 
   try {
     try {
       await session.withTransaction(async () => {
+        notificationEvents.length = 0;
+
         const operationalCompany =
           await acquireOperationalCompanyForAssigneeEligibilityTx({
             companyId: context.companyId,
@@ -548,10 +929,23 @@ const sendJobInvitation = async ({
           });
         }
 
+        const staleInvitationResult =
+          await materializeStalePendingInvitationForCandidateJob({
+            candidateUserId: candidateUser._id,
+            jobId: currentJob._id,
+            session,
+            now,
+          });
+
+        if (staleInvitationResult.notificationEvent) {
+          notificationEvents.push(staleInvitationResult.notificationEvent);
+        }
+
         await assertCandidateJobAllowsSendInvitation({
           candidateUserId: candidateUser._id,
           jobId: currentJob._id,
           session,
+          now,
         });
 
         const sentAt = now;
@@ -577,7 +971,7 @@ const sendJobInvitation = async ({
           { session },
         );
 
-        ({ event: notificationEvent } = await createNotificationEvent({
+        const { event: receivedEvent } = await createNotificationEvent({
           eventKey: `job-invitation-received:${invitation._id.toString()}`,
           type: NOTIFICATION_TYPE.JOB_INVITATION_RECEIVED,
           actorUserId: senderUser._id,
@@ -589,16 +983,19 @@ const sendJobInvitation = async ({
             },
           ],
           session,
-        }));
+        });
+        notificationEvents.push(receivedEvent);
       });
     } finally {
       await session.endSession();
     }
 
-    try {
-      await materializeNotificationEvent({ eventId: notificationEvent._id });
-    } catch {
-      // The persisted event obligation remains pending for canonical recovery.
+    for (const event of notificationEvents) {
+      try {
+        await materializeNotificationEvent({ eventId: event._id });
+      } catch {
+        // The persisted event obligation remains pending for canonical recovery.
+      }
     }
 
     return toPublicJobInvitation(invitation);
@@ -1135,6 +1532,13 @@ export {
   getPrimaryJobInvitation,
   listOwnJobInvitations,
   listPrimaryJobInvitations,
+  materializeDueExpiredJobInvitations,
+  materializeJobInvitationIfDue,
+  materializePendingJobInvitations,
+  materializePendingJobInvitationsBestEffort,
+  materializePendingJobInvitationsForCompany,
+  materializePendingJobInvitationsForUser,
+  materializeStalePendingInvitationForCandidateJob,
   rejectOwnJobInvitation,
   revokePrimaryJobInvitation,
   sendJobInvitation,

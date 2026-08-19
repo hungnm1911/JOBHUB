@@ -2046,6 +2046,17 @@ const archiveOwnCandidateCv = async ({
     );
   }
 
+  try {
+    const { materializePendingJobInvitationsBestEffort } = await import(
+      "./job-invitation.service.js"
+    );
+    await materializePendingJobInvitationsBestEffort({
+      filter: { invitedCvId: updatedCv._id },
+    });
+  } catch {
+    // Archive already committed; Invitation catch-up remains eventual.
+  }
+
   return toPublicCandidateCvDetail(updatedCv);
 };
 

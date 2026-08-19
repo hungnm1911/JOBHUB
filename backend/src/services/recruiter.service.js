@@ -629,6 +629,17 @@ const lockRecruiter = async ({
     await session.endSession();
   }
 
+  try {
+    const { materializePendingJobInvitationsBestEffort } = await import(
+      "./job-invitation.service.js"
+    );
+    await materializePendingJobInvitationsBestEffort({
+      filter: { sentByRecruiterCompanyMemberId: lockedMembership._id },
+    });
+  } catch {
+    // Recruiter lock already committed; Invitation catch-up remains eventual.
+  }
+
   return toPublicRecruiter(user, lockedMembership);
 };
 
@@ -849,6 +860,17 @@ const terminateRecruiter = async ({
     });
   } finally {
     await session.endSession();
+  }
+
+  try {
+    const { materializePendingJobInvitationsBestEffort } = await import(
+      "./job-invitation.service.js"
+    );
+    await materializePendingJobInvitationsBestEffort({
+      filter: { sentByRecruiterCompanyMemberId: terminatedMembership._id },
+    });
+  } catch {
+    // Recruiter terminate already committed; Invitation catch-up remains eventual.
   }
 
   return toPublicRecruiter(user, terminatedMembership);

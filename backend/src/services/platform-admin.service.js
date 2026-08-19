@@ -513,6 +513,32 @@ const automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss
     });
   };
 
+const materializePendingJobInvitationsAfterUserSourceBestEffort = async ({
+  userId,
+} = {}) => {
+  try {
+    const { materializePendingJobInvitationsForUser } = await import(
+      "./job-invitation.service.js"
+    );
+    await materializePendingJobInvitationsForUser({ userId });
+  } catch {
+    // Source lifecycle already committed; Invitation catch-up remains eventual.
+  }
+};
+
+const materializePendingJobInvitationsAfterCompanySourceBestEffort = async ({
+  companyId,
+} = {}) => {
+  try {
+    const { materializePendingJobInvitationsForCompany } = await import(
+      "./job-invitation.service.js"
+    );
+    await materializePendingJobInvitationsForCompany({ companyId });
+  } catch {
+    // Source lifecycle already committed; Invitation catch-up remains eventual.
+  }
+};
+
 const lockAccount = async ({ targetUserId, actorUserId }) => {
   if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
     throw new AppError(400, "Invalid account id", {
@@ -554,6 +580,9 @@ const lockAccount = async ({ targetUserId, actorUserId }) => {
     await automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss(
       { targetUser },
     );
+    await materializePendingJobInvitationsAfterUserSourceBestEffort({
+      userId: targetUser._id,
+    });
     return toPublicUser(targetUser);
   }
 
@@ -579,6 +608,9 @@ const lockAccount = async ({ targetUserId, actorUserId }) => {
   await automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss(
     { targetUser },
   );
+  await materializePendingJobInvitationsAfterUserSourceBestEffort({
+    userId: targetUser._id,
+  });
 
   return toPublicUser(targetUser);
 };
@@ -640,6 +672,10 @@ const lockCompany = async ({ companyId }) => {
     await session.endSession();
   }
 
+  await materializePendingJobInvitationsAfterCompanySourceBestEffort({
+    companyId: company._id,
+  });
+
   return {
     company: toPublicCompany(company, manager._id),
     manager: toPublicUser(manager),
@@ -697,6 +733,9 @@ const terminateAccount = async ({ targetUserId, actorUserId }) => {
     await automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss(
       { targetUser },
     );
+    await materializePendingJobInvitationsAfterUserSourceBestEffort({
+      userId: targetUser._id,
+    });
     return toPublicUser(targetUser);
   }
 
@@ -722,6 +761,9 @@ const terminateAccount = async ({ targetUserId, actorUserId }) => {
   await automaticallyUnassignRecruiterApplicationsAfterPlatformUserEligibilityLoss(
     { targetUser },
   );
+  await materializePendingJobInvitationsAfterUserSourceBestEffort({
+    userId: targetUser._id,
+  });
 
   return toPublicUser(targetUser);
 };

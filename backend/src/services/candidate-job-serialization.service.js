@@ -4,6 +4,10 @@ import Job from "../models/job.model.js";
 import JobInvitation from "../models/job-invitation.model.js";
 import User from "../models/user.model.js";
 import AppError from "../utils/app-error.js";
+import {
+  evaluateJobInvitationCurrentStateFromResources,
+  loadJobInvitationCurrentStateResources,
+} from "./job-invitation-current-state.service.js";
 
 const APPLICATION_EXISTS_MESSAGE =
   "Application already exists for this Candidate and Job";
@@ -110,13 +114,52 @@ const findPendingInvitationForCandidateJob = async ({
     candidateUserId,
     jobId,
     status: JOB_INVITATION_STATUS.PENDING,
-  }).select("_id");
+  });
 
   if (session) {
     query.session(session);
   }
 
   return query;
+};
+
+const assertNoEffectivePendingInvitation = async ({
+  candidateUserId,
+  jobId,
+  session = null,
+  now = new Date(),
+} = {}) => {
+  const pendingInvitation = await findPendingInvitationForCandidateJob({
+    candidateUserId,
+    jobId,
+    session,
+  });
+
+  if (!pendingInvitation) {
+    return null;
+  }
+
+  const resources = await loadJobInvitationCurrentStateResources(
+    [pendingInvitation],
+    { session },
+  );
+  const evaluation = evaluateJobInvitationCurrentStateFromResources({
+    invitation: pendingInvitation,
+    resources,
+    now,
+  });
+
+  if (evaluation.isActionable) {
+    throw new AppError(409, PENDING_INVITATION_EXISTS_MESSAGE, {
+      field: "jobId",
+    });
+  }
+
+  return {
+    invitation: pendingInvitation,
+    evaluation,
+    resources,
+  };
 };
 
 const findRejectedInvitationForCandidateJob = async ({
@@ -141,6 +184,7 @@ const assertCandidateJobAllowsDirectApply = async ({
   candidateUserId,
   jobId,
   session = null,
+  now = new Date(),
 } = {}) => {
   const existingApplication = await findApplicationForCandidateJob({
     candidateUserId,
@@ -154,28 +198,25 @@ const assertCandidateJobAllowsDirectApply = async ({
     });
   }
 
-  const pendingInvitation = await findPendingInvitationForCandidateJob({
+  return assertNoEffectivePendingInvitation({
     candidateUserId,
     jobId,
     session,
+    now,
   });
-
-  if (pendingInvitation) {
-    throw new AppError(409, PENDING_INVITATION_EXISTS_MESSAGE, {
-      field: "jobId",
-    });
-  }
 };
 
 const assertCandidateJobAllowsSendInvitation = async ({
   candidateUserId,
   jobId,
   session = null,
+  now = new Date(),
 } = {}) => {
   await assertCandidateJobAllowsDirectApply({
     candidateUserId,
     jobId,
     session,
+    now,
   });
 
   const rejectedInvitation = await findRejectedInvitationForCandidateJob({
@@ -198,6 +239,7 @@ export {
   acquireCandidateJobSerialization,
   assertCandidateJobAllowsDirectApply,
   assertCandidateJobAllowsSendInvitation,
+  assertNoEffectivePendingInvitation,
   findApplicationForCandidateJob,
   findPendingInvitationForCandidateJob,
   findRejectedInvitationForCandidateJob,

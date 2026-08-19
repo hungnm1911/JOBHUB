@@ -66,6 +66,7 @@ import {
   isOwningCompanyActiveForPublicEligibility,
   toPublicJob,
 } from "./job.service.js";
+import { materializeStalePendingInvitationForCandidateJob } from "./job-invitation.service.js";
 
 const deleteApplicationSubmittedCvSnapshotFile = (publicId) => {
   return deleteCvSnapshotFile({
@@ -6042,6 +6043,7 @@ const directApplyToJob = async ({
   actorUser,
   jobId,
   candidateCvId,
+  now = new Date(),
 }) => {
   assertCandidateActor(actorUser);
 
@@ -6049,7 +6051,7 @@ const directApplyToJob = async ({
     throw new AppError(403, "Candidates may only apply for themselves");
   }
 
-  const job = await loadJobAcceptingDirectApplications(jobId);
+  const job = await loadJobAcceptingDirectApplications(jobId, now);
   const candidateCv = await loadEligibleCandidateCvForDirectApply({
     candidateUserId,
     candidateCvId,
@@ -6058,6 +6060,7 @@ const directApplyToJob = async ({
   await assertCandidateJobAllowsDirectApply({
     candidateUserId,
     jobId: job._id,
+    now,
   });
 
   let uploadedSnapshotStorageKey = null;
@@ -6075,10 +6078,12 @@ const directApplyToJob = async ({
 
     const session = await mongoose.startSession();
     let application;
-    let notificationEvent;
+    const notificationEvents = [];
 
     try {
       await session.withTransaction(async () => {
+        notificationEvents.length = 0;
+
         const { job: currentJob } = await acquireCandidateJobSerialization({
           candidateUserId,
           jobId: job._id,
@@ -6089,7 +6094,20 @@ const directApplyToJob = async ({
           candidateUserId,
           jobId: currentJob._id,
           session,
+          now,
         });
+
+        const staleInvitationResult =
+          await materializeStalePendingInvitationForCandidateJob({
+            candidateUserId,
+            jobId: currentJob._id,
+            session,
+            now,
+          });
+
+        if (staleInvitationResult.notificationEvent) {
+          notificationEvents.push(staleInvitationResult.notificationEvent);
+        }
 
         const primaryRecruiter = await CompanyMember.findOne({
           _id: currentJob.primaryRecruiterCompanyMemberId,
@@ -6140,23 +6158,26 @@ const directApplyToJob = async ({
           `A new application for ${currentJob.title} is awaiting assignment.`,
         );
 
-        ({ event: notificationEvent } = await createNotificationEvent({
+        const { event: createdApplicationEvent } = await createNotificationEvent({
           eventKey: `direct-application-created:${application._id.toString()}`,
           type: NOTIFICATION_TYPE.DIRECT_APPLICATION_CREATED,
           actorUserId: candidateUserId,
           applicationId: application._id,
           recipients: [...recipientsByUserId.values()],
           session,
-        }));
+        });
+        notificationEvents.push(createdApplicationEvent);
       });
     } finally {
       await session.endSession();
     }
 
-    try {
-      await materializeNotificationEvent({ eventId: notificationEvent._id });
-    } catch {
-      // The persisted event obligation remains pending for canonical recovery.
+    for (const event of notificationEvents) {
+      try {
+        await materializeNotificationEvent({ eventId: event._id });
+      } catch {
+        // The persisted event obligation remains pending for canonical recovery.
+      }
     }
 
     return toPublicApplication(application);
