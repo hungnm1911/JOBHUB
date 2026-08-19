@@ -1,7 +1,10 @@
 import {
   getOwnJobInvitation,
+  getPrimaryJobInvitation,
   listOwnJobInvitations,
+  listPrimaryJobInvitations,
   rejectOwnJobInvitation,
+  revokePrimaryJobInvitation,
   sendJobInvitation,
 } from "../services/job-invitation.service.js";
 
@@ -70,9 +73,56 @@ const rejectOwnJobInvitationHandler = async (request, response, next) => {
   }
 };
 
+const listPrimaryJobInvitationsHandler = async (request, response, next) => {
+  try {
+    const result = await listPrimaryJobInvitations({
+      recruiterUser: request.auth.user,
+      clientCompanyId: readClientCompanyId(request),
+      jobId: request.params.jobId,
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getPrimaryJobInvitationHandler = async (request, response, next) => {
+  try {
+    const result = await getPrimaryJobInvitation({
+      recruiterUser: request.auth.user,
+      clientCompanyId: readClientCompanyId(request),
+      jobId: request.params.jobId,
+      invitationId: request.params.invitationId,
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const revokePrimaryJobInvitationHandler = async (request, response, next) => {
+  try {
+    const result = await revokePrimaryJobInvitation({
+      recruiterUser: request.auth.user,
+      clientCompanyId: readClientCompanyId(request),
+      jobId: request.params.jobId,
+      invitationId: request.params.invitationId,
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   getOwnJobInvitationHandler,
+  getPrimaryJobInvitationHandler,
   listOwnJobInvitationsHandler,
+  listPrimaryJobInvitationsHandler,
   rejectOwnJobInvitationHandler,
+  revokePrimaryJobInvitationHandler,
   sendJobInvitationHandler,
 };

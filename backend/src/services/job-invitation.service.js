@@ -225,6 +225,21 @@ const toCandidateVisibleSender = ({ membership, user } = {}) => {
   };
 };
 
+const toInvitationTerminalMetadata = (invitation, evaluation) => {
+  return {
+    acceptedAt: invitation.acceptedAt ?? null,
+    rejectedAt: invitation.rejectedAt ?? null,
+    revokedAt: invitation.revokedAt ?? null,
+    invalidatedAt: invitation.invalidatedAt ?? null,
+    invalidationReason:
+      evaluation.currentStatus === JOB_INVITATION_STATUS.INVALIDATED
+        ? (invitation.invalidationReason ??
+          evaluation.winningCause?.reason ??
+          null)
+        : (invitation.invalidationReason ?? null),
+  };
+};
+
 const toCandidateJobInvitationView = (
   invitation,
   evaluation,
@@ -249,16 +264,48 @@ const toCandidateJobInvitationView = (
     canReject: evaluation.canReject,
     sentAt: invitation.sentAt,
     expiresAt: invitation.expiresAt,
-    acceptedAt: invitation.acceptedAt ?? null,
-    rejectedAt: invitation.rejectedAt ?? null,
-    revokedAt: invitation.revokedAt ?? null,
-    invalidatedAt: invitation.invalidatedAt ?? null,
-    invalidationReason:
-      evaluation.currentStatus === JOB_INVITATION_STATUS.INVALIDATED
-        ? (invitation.invalidationReason ??
-          evaluation.winningCause?.reason ??
-          null)
-        : (invitation.invalidationReason ?? null),
+    ...toInvitationTerminalMetadata(invitation, evaluation),
+    createdAt: invitation.createdAt,
+    updatedAt: invitation.updatedAt,
+  };
+};
+
+const toPrimaryVisibleCandidate = (candidateUser) => {
+  if (candidateUser == null) {
+    return null;
+  }
+
+  return {
+    id: candidateUser._id.toString(),
+    fullName: candidateUser.fullName,
+    avatarUrl: candidateUser.avatarUrl ?? null,
+  };
+};
+
+const toPrimaryJobInvitationView = (
+  invitation,
+  evaluation,
+  { candidateUser, senderMembership, senderUser } = {},
+) => {
+  return {
+    id: invitation._id.toString(),
+    candidateUserId: invitation.candidateUserId.toString(),
+    invitedCvId: invitation.invitedCvId.toString(),
+    jobId: invitation.jobId.toString(),
+    sentByRecruiterCompanyMemberId:
+      invitation.sentByRecruiterCompanyMemberId.toString(),
+    candidate: toPrimaryVisibleCandidate(candidateUser),
+    sender: toCandidateVisibleSender({
+      membership: senderMembership,
+      user: senderUser,
+    }),
+    greetingMessage: invitation.greetingMessage ?? null,
+    invitedCvSnapshot: toPublicInvitedCvSnapshot(invitation.invitedCvSnapshot),
+    status: evaluation.currentStatus,
+    canRevoke: evaluation.isActionable,
+    sentAt: invitation.sentAt,
+    expiresAt: invitation.expiresAt,
+    ...toInvitationTerminalMetadata(invitation, evaluation),
     createdAt: invitation.createdAt,
     updatedAt: invitation.updatedAt,
   };
@@ -274,8 +321,9 @@ const assertCandidateInvitationActor = (user) => {
   }
 };
 
-const hydrateCandidateJobInvitationViews = async (
+const hydrateJobInvitationViews = async (
   invitations,
+  toView,
   { now = new Date(), session } = {},
 ) => {
   if (invitations.length === 0) {
@@ -294,8 +342,24 @@ const hydrateCandidateJobInvitationViews = async (
       now,
     });
 
-    return toCandidateJobInvitationView(invitation, evaluation, invitationResources);
+    return toView(invitation, evaluation, invitationResources);
   });
+};
+
+const hydrateCandidateJobInvitationViews = async (invitations, options) => {
+  return hydrateJobInvitationViews(
+    invitations,
+    toCandidateJobInvitationView,
+    options,
+  );
+};
+
+const hydratePrimaryJobInvitationViews = async (invitations, options) => {
+  return hydrateJobInvitationViews(
+    invitations,
+    toPrimaryJobInvitationView,
+    options,
+  );
 };
 
 const normalizeGreetingMessage = (greetingMessage) => {
@@ -752,11 +816,327 @@ const rejectOwnJobInvitation = async ({
   };
 };
 
+const assertRecruiterInvitationActor = (user) => {
+  if (!user || user.role !== USER_ROLE.COMPANY_STAFF) {
+    throw new AppError(403, "Recruiter access required");
+  }
+
+  if (user.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(403, "Recruiter account is not active");
+  }
+};
+
+const assertCurrentPrimaryOfJob = ({ job, recruiterCompanyMemberId }) => {
+  if (
+    job?.primaryRecruiterCompanyMemberId?.toString() !==
+    recruiterCompanyMemberId?.toString()
+  ) {
+    throw new AppError(
+      403,
+      "Only the current Primary Recruiter can manage Job Invitations",
+      { field: "jobId" },
+    );
+  }
+};
+
+const loadCurrentPrimaryManagedJob = async ({
+  recruiterUser,
+  clientCompanyId,
+  jobId,
+  session = null,
+}) => {
+  assertRecruiterInvitationActor(recruiterUser);
+
+  const context = await resolveRecruiterBusinessContext({
+    user: recruiterUser,
+    clientCompanyId,
+    session,
+  });
+
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  const query = Job.findById(jobId);
+  if (session) {
+    query.session(session);
+  }
+
+  const job = await query;
+
+  if (!job || job.companyId.toString() !== context.companyId.toString()) {
+    throw new AppError(404, "Job not found", { field: "jobId" });
+  }
+
+  assertCurrentPrimaryOfJob({
+    job,
+    recruiterCompanyMemberId: context.membership._id,
+  });
+
+  return { context, job };
+};
+
+const loadJobInvitationForManagedJob = async ({
+  jobId,
+  invitationId,
+  session = null,
+}) => {
+  if (!mongoose.isValidObjectId(invitationId)) {
+    throw new AppError(404, "Job Invitation not found", {
+      field: "invitationId",
+    });
+  }
+
+  const query = JobInvitation.findOne({
+    _id: invitationId,
+    jobId,
+  });
+
+  if (session) {
+    query.session(session);
+  }
+
+  const invitation = await query;
+
+  if (!invitation) {
+    throw new AppError(404, "Job Invitation not found", {
+      field: "invitationId",
+    });
+  }
+
+  return invitation;
+};
+
+const listPrimaryJobInvitations = async ({
+  recruiterUser,
+  clientCompanyId,
+  jobId,
+  now = new Date(),
+} = {}) => {
+  const { job } = await loadCurrentPrimaryManagedJob({
+    recruiterUser,
+    clientCompanyId,
+    jobId,
+  });
+
+  const invitations = await JobInvitation.find({
+    jobId: job._id,
+  }).sort({ createdAt: -1, _id: -1 });
+
+  return {
+    invitations: await hydratePrimaryJobInvitationViews(invitations, { now }),
+  };
+};
+
+const getPrimaryJobInvitation = async ({
+  recruiterUser,
+  clientCompanyId,
+  jobId,
+  invitationId,
+  now = new Date(),
+} = {}) => {
+  const { job } = await loadCurrentPrimaryManagedJob({
+    recruiterUser,
+    clientCompanyId,
+    jobId,
+  });
+
+  const invitation = await loadJobInvitationForManagedJob({
+    jobId: job._id,
+    invitationId,
+  });
+
+  const [view] = await hydratePrimaryJobInvitationViews([invitation], {
+    now,
+  });
+
+  return {
+    invitation: view,
+  };
+};
+
+const revokePrimaryJobInvitation = async ({
+  recruiterUser,
+  clientCompanyId,
+  jobId,
+  invitationId,
+  now = new Date(),
+} = {}) => {
+  const { context, job } = await loadCurrentPrimaryManagedJob({
+    recruiterUser,
+    clientCompanyId,
+    jobId,
+  });
+
+  const managedInvitation = await loadJobInvitationForManagedJob({
+    jobId: job._id,
+    invitationId,
+  });
+
+  const session = await mongoose.startSession();
+  let revokedInvitation;
+  let notificationEvent;
+
+  try {
+    await session.withTransaction(async () => {
+      revokedInvitation = null;
+      notificationEvent = null;
+
+      const operationalCompany =
+        await acquireOperationalCompanyForAssigneeEligibilityTx({
+          companyId: context.companyId,
+          session,
+        });
+
+      if (!operationalCompany) {
+        throw new AppError(409, "Company is not operational", {
+          field: "companyId",
+        });
+      }
+
+      const membership =
+        await acquireActiveRecruiterMembershipForTeamResponsibilityTx({
+          recruiterCompanyMemberId: context.membership._id,
+          companyId: context.companyId,
+          session,
+        });
+
+      if (!membership) {
+        throw new AppError(
+          403,
+          "Only the current Primary Recruiter can manage Job Invitations",
+          { field: "jobId" },
+        );
+      }
+
+      const actorUser = await acquireActiveUserForAssigneeEligibilityTx({
+        userId: recruiterUser._id,
+        session,
+      });
+
+      if (!actorUser) {
+        throw new AppError(403, "Recruiter account is not active");
+      }
+
+      const { job: currentJob } = await acquireCandidateJobSerialization({
+        candidateUserId: managedInvitation.candidateUserId,
+        jobId: managedInvitation.jobId,
+        session,
+      });
+
+      if (currentJob.companyId.toString() !== context.companyId.toString()) {
+        throw new AppError(404, "Job not found", { field: "jobId" });
+      }
+
+      assertCurrentPrimaryOfJob({
+        job: currentJob,
+        recruiterCompanyMemberId: membership._id,
+      });
+
+      const invitation = await loadJobInvitationForManagedJob({
+        jobId: currentJob._id,
+        invitationId: managedInvitation._id,
+        session,
+      });
+
+      if (invitation.status !== JOB_INVITATION_STATUS.PENDING) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      const resources = await loadJobInvitationCurrentStateResources(
+        [invitation],
+        { session },
+      );
+      const invitationResources = resourcesForInvitation(invitation, resources);
+      const evaluation = evaluateJobInvitationCurrentStateFromResources({
+        invitation,
+        resources,
+        now,
+      });
+
+      if (!evaluation.isActionable) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      if (
+        invitationResources.candidateUser == null ||
+        invitationResources.job == null
+      ) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      revokedInvitation = await JobInvitation.findOneAndUpdate(
+        {
+          _id: invitation._id,
+          jobId: currentJob._id,
+          status: JOB_INVITATION_STATUS.PENDING,
+        },
+        {
+          $set: {
+            status: JOB_INVITATION_STATUS.REVOKED,
+            revokedAt: now,
+          },
+        },
+        {
+          returnDocument: "after",
+          runValidators: true,
+          session,
+        },
+      );
+
+      if (!revokedInvitation) {
+        throw new AppError(409, "Job Invitation is no longer actionable", {
+          field: "invitationId",
+        });
+      }
+
+      ({ event: notificationEvent } = await createNotificationEvent({
+        eventKey: `job-invitation-revoked:${revokedInvitation._id.toString()}`,
+        type: NOTIFICATION_TYPE.JOB_INVITATION_REVOKED,
+        actorUserId: actorUser._id,
+        jobInvitationId: revokedInvitation._id,
+        recipients: [
+          {
+            recipientUserId: invitationResources.candidateUser._id,
+            content: `Your job invitation for ${invitationResources.job.title} was revoked.`,
+          },
+        ],
+        session,
+      }));
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  try {
+    await materializeNotificationEvent({ eventId: notificationEvent._id });
+  } catch {
+    // The persisted event obligation remains pending for canonical recovery.
+  }
+
+  const [view] = await hydratePrimaryJobInvitationViews([revokedInvitation], {
+    now,
+  });
+
+  return {
+    invitation: view,
+  };
+};
+
 export {
   deriveInvitationExpiresAt,
   getOwnJobInvitation,
+  getPrimaryJobInvitation,
   listOwnJobInvitations,
+  listPrimaryJobInvitations,
   rejectOwnJobInvitation,
+  revokePrimaryJobInvitation,
   sendJobInvitation,
   toPublicJobInvitation,
 };

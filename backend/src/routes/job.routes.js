@@ -1,6 +1,11 @@
 import express from "express";
 
-import { sendJobInvitationHandler } from "../controllers/job-invitation.controller.js";
+import {
+  getPrimaryJobInvitationHandler,
+  listPrimaryJobInvitationsHandler,
+  revokePrimaryJobInvitationHandler,
+  sendJobInvitationHandler,
+} from "../controllers/job-invitation.controller.js";
 import {
   approveAndPublishJobHandler,
   closePublishedJobHandler,
@@ -239,6 +244,27 @@ router.post(
   authorizeRecruiterBusinessAccess,
   validateSendJobInvitation,
   sendJobInvitationHandler,
+);
+
+router.get(
+  "/:jobId/invitations",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  listPrimaryJobInvitationsHandler,
+);
+
+router.get(
+  "/:jobId/invitations/:invitationId",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  getPrimaryJobInvitationHandler,
+);
+
+router.post(
+  "/:jobId/invitations/:invitationId/revoke",
+  authenticateAccess,
+  authorizeRecruiterBusinessAccess,
+  revokePrimaryJobInvitationHandler,
 );
 
 router.get(
