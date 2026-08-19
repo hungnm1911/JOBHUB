@@ -1,4 +1,8 @@
-import { sendJobInvitation } from "../services/job-invitation.service.js";
+import {
+  getOwnJobInvitation,
+  listOwnJobInvitations,
+  sendJobInvitation,
+} from "../services/job-invitation.service.js";
 
 const readClientCompanyId = (request) => {
   return (
@@ -27,4 +31,33 @@ const sendJobInvitationHandler = async (request, response, next) => {
   }
 };
 
-export { sendJobInvitationHandler };
+const listOwnJobInvitationsHandler = async (request, response, next) => {
+  try {
+    const result = await listOwnJobInvitations({
+      candidateUser: request.auth.user,
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getOwnJobInvitationHandler = async (request, response, next) => {
+  try {
+    const result = await getOwnJobInvitation({
+      candidateUser: request.auth.user,
+      invitationId: request.params.invitationId,
+    });
+
+    return response.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export {
+  getOwnJobInvitationHandler,
+  listOwnJobInvitationsHandler,
+  sendJobInvitationHandler,
+};

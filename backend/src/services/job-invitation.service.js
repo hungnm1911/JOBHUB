@@ -27,6 +27,12 @@ import {
   isJobPubliclyEligible,
 } from "./job.service.js";
 import {
+  evaluateJobInvitationCurrentStateFromResources,
+  isRecruiterOnJobTeam,
+  loadJobInvitationCurrentStateResources,
+  resourcesForInvitation,
+} from "./job-invitation-current-state.service.js";
+import {
   createNotificationEvent,
   materializeNotificationEvent,
 } from "./notification.service.js";
@@ -172,16 +178,124 @@ const toPublicJobInvitation = (invitation) => {
   };
 };
 
-const isRecruiterOnJobTeam = ({ job, recruiterCompanyMemberId }) => {
-  const memberId = recruiterCompanyMemberId.toString();
-
-  if (job.primaryRecruiterCompanyMemberId?.toString() === memberId) {
-    return true;
+const toCandidateVisibleCompany = (company) => {
+  if (company == null) {
+    return null;
   }
 
-  return (job.supportingRecruiterCompanyMemberIds ?? []).some(
-    (id) => id.toString() === memberId,
-  );
+  return {
+    id: company._id.toString(),
+    name: company.name,
+    logoUrl: company.logoUrl ?? null,
+  };
+};
+
+const toCandidateVisibleJob = (job) => {
+  if (job == null) {
+    return null;
+  }
+
+  return {
+    id: job._id.toString(),
+    companyId: job.companyId.toString(),
+    title: job.title,
+    jobDescription: job.jobDescription,
+    requiredSkills: job.requiredSkills,
+    salaryText: job.salaryText,
+    location: job.location,
+    employmentType: job.employmentType,
+    workModes: job.workModes,
+    applicationDeadline: job.applicationDeadline,
+    status: job.status,
+    publishedAt: job.publishedAt,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+};
+
+const toCandidateVisibleSender = ({ membership, user } = {}) => {
+  if (membership == null && user == null) {
+    return null;
+  }
+
+  return {
+    fullName: user?.fullName ?? null,
+    avatarUrl: user?.avatarUrl ?? null,
+    jobTitle: membership?.jobTitle ?? null,
+  };
+};
+
+const toCandidateJobInvitationView = (
+  invitation,
+  evaluation,
+  { job, company, senderMembership, senderUser } = {},
+) => {
+  return {
+    id: invitation._id.toString(),
+    jobId: invitation.jobId.toString(),
+    invitedCvId: invitation.invitedCvId.toString(),
+    sentByRecruiterCompanyMemberId:
+      invitation.sentByRecruiterCompanyMemberId.toString(),
+    job: toCandidateVisibleJob(job),
+    company: toCandidateVisibleCompany(company),
+    sender: toCandidateVisibleSender({
+      membership: senderMembership,
+      user: senderUser,
+    }),
+    greetingMessage: invitation.greetingMessage ?? null,
+    invitedCvSnapshot: toPublicInvitedCvSnapshot(invitation.invitedCvSnapshot),
+    status: evaluation.currentStatus,
+    canAccept: evaluation.canAccept,
+    canReject: evaluation.canReject,
+    sentAt: invitation.sentAt,
+    expiresAt: invitation.expiresAt,
+    acceptedAt: invitation.acceptedAt ?? null,
+    rejectedAt: invitation.rejectedAt ?? null,
+    revokedAt: invitation.revokedAt ?? null,
+    invalidatedAt: invitation.invalidatedAt ?? null,
+    invalidationReason:
+      evaluation.currentStatus === JOB_INVITATION_STATUS.INVALIDATED
+        ? (invitation.invalidationReason ??
+          evaluation.winningCause?.reason ??
+          null)
+        : (invitation.invalidationReason ?? null),
+    createdAt: invitation.createdAt,
+    updatedAt: invitation.updatedAt,
+  };
+};
+
+const assertCandidateInvitationActor = (user) => {
+  if (!user || user.role !== USER_ROLE.CANDIDATE) {
+    throw new AppError(403, "Candidate access required");
+  }
+
+  if (user.status !== USER_STATUS.ACTIVE) {
+    throw new AppError(403, "Candidate account is not active");
+  }
+};
+
+const hydrateCandidateJobInvitationViews = async (
+  invitations,
+  { now = new Date(), session } = {},
+) => {
+  if (invitations.length === 0) {
+    return [];
+  }
+
+  const resources = await loadJobInvitationCurrentStateResources(invitations, {
+    session,
+  });
+
+  return invitations.map((invitation) => {
+    const invitationResources = resourcesForInvitation(invitation, resources);
+    const evaluation = evaluateJobInvitationCurrentStateFromResources({
+      invitation,
+      resources,
+      now,
+    });
+
+    return toCandidateJobInvitationView(invitation, evaluation, invitationResources);
+  });
 };
 
 const normalizeGreetingMessage = (greetingMessage) => {
@@ -448,4 +562,58 @@ const sendJobInvitation = async ({
   }
 };
 
-export { deriveInvitationExpiresAt, sendJobInvitation, toPublicJobInvitation };
+const listOwnJobInvitations = async ({
+  candidateUser,
+  now = new Date(),
+} = {}) => {
+  assertCandidateInvitationActor(candidateUser);
+
+  const invitations = await JobInvitation.find({
+    candidateUserId: candidateUser._id,
+  }).sort({ createdAt: -1, _id: -1 });
+
+  return {
+    invitations: await hydrateCandidateJobInvitationViews(invitations, { now }),
+  };
+};
+
+const getOwnJobInvitation = async ({
+  candidateUser,
+  invitationId,
+  now = new Date(),
+} = {}) => {
+  assertCandidateInvitationActor(candidateUser);
+
+  if (!mongoose.isValidObjectId(invitationId)) {
+    throw new AppError(404, "Job Invitation not found", {
+      field: "invitationId",
+    });
+  }
+
+  const invitation = await JobInvitation.findOne({
+    _id: invitationId,
+    candidateUserId: candidateUser._id,
+  });
+
+  if (!invitation) {
+    throw new AppError(404, "Job Invitation not found", {
+      field: "invitationId",
+    });
+  }
+
+  const [view] = await hydrateCandidateJobInvitationViews([invitation], {
+    now,
+  });
+
+  return {
+    invitation: view,
+  };
+};
+
+export {
+  deriveInvitationExpiresAt,
+  getOwnJobInvitation,
+  listOwnJobInvitations,
+  sendJobInvitation,
+  toPublicJobInvitation,
+};
