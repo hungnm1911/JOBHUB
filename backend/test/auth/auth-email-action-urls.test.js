@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import config from "../../src/config/index.js";
-import buildAuthActionUrl from "../../src/utils/auth-action-url.js";
+import buildAuthActionUrl, {
+  buildAuthActionUrlFromBase,
+} from "../../src/utils/auth-action-url.js";
 import buildCompanyApprovalConfirmationEmail from "../../src/utils/company-approval-confirmation-email.js";
 import buildRecruiterActivationEmail from "../../src/utils/recruiter-activation-email.js";
 
@@ -33,5 +35,33 @@ describe("auth email action URLs", () => {
     expect(activation.html).toContain(
       `${config.appBaseUrl}/api/auth/activate-recruiter?token=abc123`,
     );
+  });
+
+  it("does not double-prefix /api when APP_BASE_URL already ends with /api", () => {
+    const rawToken = "abc123";
+    const expected =
+      "http://localhost:8000/api/auth/reset-password?token=abc123";
+
+    expect(
+      buildAuthActionUrlFromBase(
+        "http://localhost:8000/api",
+        "reset-password",
+        rawToken,
+      ),
+    ).toBe(expected);
+    expect(
+      buildAuthActionUrlFromBase(
+        "http://localhost:8000/api/",
+        "reset-password",
+        rawToken,
+      ),
+    ).toBe(expected);
+    expect(
+      buildAuthActionUrlFromBase(
+        "http://localhost:8000/",
+        "reset-password",
+        rawToken,
+      ),
+    ).toBe(expected);
   });
 });
