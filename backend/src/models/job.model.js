@@ -1,0 +1,459 @@
+import mongoose from "mongoose";
+
+import EMPLOYMENT_TYPE from "../constants/employment-type.js";
+import JOB_STATUS from "../constants/job-status.js";
+import LOCATION from "../constants/location.js";
+import WORK_MODE from "../constants/work-mode.js";
+
+const { Schema, model } = mongoose;
+
+const LOCATION_VALUES = Object.values(LOCATION);
+const EMPLOYMENT_TYPE_VALUES = Object.values(EMPLOYMENT_TYPE);
+const WORK_MODE_VALUES = Object.values(WORK_MODE);
+
+const isNonEmptyTrimmedString = (value) => {
+  return typeof value === "string" && value.trim() !== "";
+};
+
+const hasDistinctObjectIds = (values) => {
+  if (!Array.isArray(values)) {
+    return false;
+  }
+
+  const seen = new Set();
+
+  for (const value of values) {
+    const key = value?.toString();
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+  }
+
+  return true;
+};
+
+const hasDistinctStrings = (values) => {
+  if (!Array.isArray(values)) {
+    return false;
+  }
+
+  return new Set(values).size === values.length;
+};
+
+const assertJobRecruitmentTeamInvariants = (job) => {
+  const errors = [];
+  const supporting = job?.supportingRecruiterCompanyMemberIds;
+
+  if (supporting == null) {
+    errors.push("supportingRecruiterCompanyMemberIds is required");
+  } else if (!Array.isArray(supporting)) {
+    errors.push("supportingRecruiterCompanyMemberIds must be an array");
+  } else {
+    if (!hasDistinctObjectIds(supporting)) {
+      errors.push(
+        "supportingRecruiterCompanyMemberIds must not contain duplicates",
+      );
+    }
+
+    const primaryId = job.primaryRecruiterCompanyMemberId;
+
+    if (primaryId != null && supporting.length > 0) {
+      const primaryKey = primaryId.toString();
+
+      if (supporting.some((value) => value?.toString() === primaryKey)) {
+        errors.push(
+          "Primary Recruiter must not appear in supportingRecruiterCompanyMemberIds",
+        );
+      }
+    }
+  }
+
+  return errors;
+};
+
+// Database-level guard for query-write paths where document-context validators
+// do not see the merged final team state (Data Contract 10.1).
+const JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR = Object.freeze({
+  $and: [
+    {
+      $jsonSchema: {
+        bsonType: "object",
+        required: [
+          "primaryRecruiterCompanyMemberId",
+          "supportingRecruiterCompanyMemberIds",
+        ],
+        properties: {
+          primaryRecruiterCompanyMemberId: {
+            bsonType: "objectId",
+          },
+          supportingRecruiterCompanyMemberIds: {
+            bsonType: "array",
+            items: {
+              bsonType: "objectId",
+            },
+          },
+        },
+      },
+    },
+    {
+      $expr: {
+        $eq: [
+          { $size: "$supportingRecruiterCompanyMemberIds" },
+          {
+            $size: {
+              $setUnion: ["$supportingRecruiterCompanyMemberIds"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      $expr: {
+        $not: {
+          $in: [
+            "$primaryRecruiterCompanyMemberId",
+            "$supportingRecruiterCompanyMemberIds",
+          ],
+        },
+      },
+    },
+  ],
+});
+
+const jobSchema = new Schema(
+  {
+    companyId: {
+      type: Schema.Types.ObjectId,
+      ref: "Company",
+      required: true,
+      immutable: true,
+    },
+
+    createdByCompanyMemberId: {
+      type: Schema.Types.ObjectId,
+      ref: "CompanyMember",
+      required: true,
+      immutable: true,
+    },
+
+    primaryRecruiterCompanyMemberId: {
+      type: Schema.Types.ObjectId,
+      ref: "CompanyMember",
+      required: true,
+    },
+
+    supportingRecruiterCompanyMemberIds: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: "CompanyMember",
+        },
+      ],
+      default: [],
+      required: true,
+      validate: [
+        {
+          validator: hasDistinctObjectIds,
+          message:
+            "supportingRecruiterCompanyMemberIds must not contain duplicates",
+        },
+        {
+          validator(values) {
+            if (!Array.isArray(values) || values.length === 0) {
+              return true;
+            }
+
+            const primaryId = this.primaryRecruiterCompanyMemberId;
+
+            if (primaryId == null) {
+              return true;
+            }
+
+            const primaryKey = primaryId.toString();
+
+            return values.every(
+              (value) => value?.toString() !== primaryKey,
+            );
+          },
+          message:
+            "Primary Recruiter must not appear in supportingRecruiterCompanyMemberIds",
+        },
+      ],
+    },
+
+    title: {
+      type: String,
+      default: null,
+      trim: true,
+      validate: {
+        validator(value) {
+          return value == null || isNonEmptyTrimmedString(value);
+        },
+        message: "Job title must be a non-empty string when provided",
+      },
+    },
+
+    jobDescription: {
+      type: String,
+      default: null,
+      trim: true,
+      validate: {
+        validator(value) {
+          return value == null || isNonEmptyTrimmedString(value);
+        },
+        message: "Job description must be a non-empty string when provided",
+      },
+    },
+
+    requiredSkills: {
+      type: [
+        {
+          type: String,
+          trim: true,
+          validate: {
+            validator(value) {
+              return isNonEmptyTrimmedString(value);
+            },
+            message: "Each required skill must be a non-empty string",
+          },
+        },
+      ],
+      default: [],
+    },
+
+    salaryText: {
+      type: String,
+      default: null,
+      trim: true,
+      validate: {
+        validator(value) {
+          return value == null || isNonEmptyTrimmedString(value);
+        },
+        message: "Salary text must be a non-empty string when provided",
+      },
+    },
+
+    fieldCategoryIds: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: "Category",
+        },
+      ],
+      default: [],
+      validate: {
+        validator: hasDistinctObjectIds,
+        message: "fieldCategoryIds must not contain duplicates",
+      },
+    },
+
+    positionCategoryIds: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: "Category",
+        },
+      ],
+      default: [],
+      validate: {
+        validator: hasDistinctObjectIds,
+        message: "positionCategoryIds must not contain duplicates",
+      },
+    },
+
+    location: {
+      type: String,
+      default: null,
+      enum: {
+        values: [...LOCATION_VALUES, null],
+        message: "location must be a canonical Location value when provided",
+      },
+    },
+
+    employmentType: {
+      type: String,
+      default: null,
+      enum: {
+        values: [...EMPLOYMENT_TYPE_VALUES, null],
+        message:
+          "employmentType must be a canonical EmploymentType value when provided",
+      },
+    },
+
+    workModes: {
+      type: [
+        {
+          type: String,
+          enum: {
+            values: WORK_MODE_VALUES,
+            message: "workModes must use canonical WorkMode values",
+          },
+        },
+      ],
+      default: [],
+      validate: {
+        validator: hasDistinctStrings,
+        message: "workModes must not contain duplicates",
+      },
+    },
+
+    experienceLevelId: {
+      type: Schema.Types.ObjectId,
+      ref: "ExperienceLevel",
+      default: null,
+    },
+
+    applicationDeadline: {
+      type: Date,
+      default: null,
+    },
+
+    status: {
+      type: String,
+      required: true,
+      enum: Object.values(JOB_STATUS),
+      default: JOB_STATUS.DRAFT,
+    },
+
+    publishedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    timestamps: true,
+    versionKey: false,
+    collection: "jobs",
+  },
+);
+
+jobSchema.index({ companyId: 1, status: 1 });
+jobSchema.index({
+  companyId: 1,
+  primaryRecruiterCompanyMemberId: 1,
+});
+jobSchema.index({
+  companyId: 1,
+  supportingRecruiterCompanyMemberIds: 1,
+});
+jobSchema.index({
+  companyId: 1,
+  primaryRecruiterCompanyMemberId: 1,
+  status: 1,
+});
+jobSchema.index({
+  primaryRecruiterCompanyMemberId: 1,
+  status: 1,
+  applicationDeadline: 1,
+});
+jobSchema.index({
+  supportingRecruiterCompanyMemberIds: 1,
+  status: 1,
+  applicationDeadline: 1,
+});
+
+// V8 Job Discovery Indexes
+jobSchema.index(
+  { status: 1, publishedAt: -1 },
+  { name: "job_discovery_newest_idx" }
+);
+jobSchema.index(
+  { status: 1, applicationDeadline: 1 },
+  { name: "job_discovery_expiring_idx" }
+);
+jobSchema.index(
+  { status: 1, fieldCategoryIds: 1, applicationDeadline: 1 },
+  { name: "job_discovery_field_category_idx" }
+);
+jobSchema.index(
+  { status: 1, positionCategoryIds: 1, applicationDeadline: 1 },
+  { name: "job_discovery_position_category_idx" }
+);
+jobSchema.index(
+  { status: 1, location: 1, applicationDeadline: 1 },
+  { name: "job_discovery_location_idx" }
+);
+jobSchema.index(
+  { status: 1, employmentType: 1, applicationDeadline: 1 },
+  { name: "job_discovery_employment_type_idx" }
+);
+jobSchema.index(
+  { status: 1, experienceLevelId: 1, applicationDeadline: 1 },
+  { name: "job_discovery_experience_idx" }
+);
+jobSchema.index(
+  { status: 1, workModes: 1, applicationDeadline: 1 },
+  { name: "job_discovery_work_mode_idx" }
+);
+
+jobSchema.pre("validate", function validateJobRecruitmentTeam() {
+  const errors = assertJobRecruitmentTeamInvariants(this);
+
+  if (errors.length > 0) {
+    throw new Error(errors.join("; "));
+  }
+});
+
+const Job = model("Job", jobSchema);
+
+const ensureJobCollectionInvariants = async (
+  connection = mongoose.connection,
+) => {
+  if (connection.readyState !== 1) {
+    throw new Error(
+      "MongoDB connection must be ready before ensuring Job collection invariants",
+    );
+  }
+
+  await Job.init();
+
+  const collectionName = Job.collection.collectionName;
+  const applyValidator = () =>
+    connection.db.command({
+      collMod: collectionName,
+      validator: JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+
+  try {
+    await applyValidator();
+    return;
+  } catch (error) {
+    const isMissingNamespace =
+      error?.code === 26 ||
+      error?.codeName === "NamespaceNotFound" ||
+      /ns does not exist/i.test(error?.message ?? "");
+
+    if (!isMissingNamespace) {
+      throw error;
+    }
+  }
+
+  try {
+    await connection.db.createCollection(collectionName, {
+      validator: JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+  } catch (error) {
+    const collectionAlreadyExists =
+      error?.codeName === "NamespaceExists" ||
+      /already exists/i.test(error?.message ?? "");
+
+    if (!collectionAlreadyExists) {
+      throw error;
+    }
+
+    await applyValidator();
+  }
+};
+
+export {
+  assertJobRecruitmentTeamInvariants,
+  ensureJobCollectionInvariants,
+};
+export default Job;
