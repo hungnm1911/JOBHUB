@@ -10,6 +10,7 @@ import companyStaffAccessProbeRouter from "./company-staff-access-probe.routes.j
 import fileRouter from "./file.routes.js";
 import helloWorldRoutes from "./hello-world.routes.js";
 import jobRouter from "./job.routes.js";
+import jobDiscoveryRouter from "./job-discovery.routes.js";
 import notificationRouter from "./notification.routes.js";
 import platformAdminRouter from "./platform-admin.routes.js";
 import recruiterRouter from "./recruiter.routes.js";
@@ -22,6 +23,7 @@ router.use("/candidate", candidateRouter);
 router.use("/company", companyRouter);
 router.use("/company/recruiters", recruiterRouter);
 router.use("/jobs", jobRouter);
+router.use("/job-discovery", jobDiscoveryRouter);
 router.use("/notifications", notificationRouter);
 router.use("/platform-admin", platformAdminRouter);
 

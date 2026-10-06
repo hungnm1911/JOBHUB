@@ -1,0 +1,7 @@
+const JOB_DISCOVERY_SORT = Object.freeze({
+  NEWEST: "NEWEST",
+  RELEVANCE: "RELEVANCE",
+  EXPIRING_SOON: "EXPIRING_SOON",
+});
+
+export default JOB_DISCOVERY_SORT;

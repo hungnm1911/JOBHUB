@@ -354,6 +354,38 @@ jobSchema.index({
   status: 1,
   applicationDeadline: 1,
 });
+jobSchema.index(
+  { status: 1, publishedAt: -1 },
+  { name: "job_discovery_newest_idx" },
+);
+jobSchema.index(
+  { status: 1, applicationDeadline: 1 },
+  { name: "job_discovery_expiring_idx" },
+);
+jobSchema.index(
+  { status: 1, fieldCategoryIds: 1, applicationDeadline: 1 },
+  { name: "job_discovery_field_category_idx" },
+);
+jobSchema.index(
+  { status: 1, positionCategoryIds: 1, applicationDeadline: 1 },
+  { name: "job_discovery_position_category_idx" },
+);
+jobSchema.index(
+  { status: 1, location: 1, applicationDeadline: 1 },
+  { name: "job_discovery_location_idx" },
+);
+jobSchema.index(
+  { status: 1, employmentType: 1, applicationDeadline: 1 },
+  { name: "job_discovery_employment_type_idx" },
+);
+jobSchema.index(
+  { status: 1, experienceLevelId: 1, applicationDeadline: 1 },
+  { name: "job_discovery_experience_idx" },
+);
+jobSchema.index(
+  { status: 1, workModes: 1, applicationDeadline: 1 },
+  { name: "job_discovery_work_mode_idx" },
+);
 
 jobSchema.pre("validate", function validateJobRecruitmentTeam() {
   const errors = assertJobRecruitmentTeamInvariants(this);

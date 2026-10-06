@@ -1,14 +1,9 @@
 # V8 — Job Discovery Data Model
 
 > **File:** `docs/data/versions/v8-job-discovery-data-model.md`
-> **Vai trò:** Planning draft Persistence / Data Contract — chưa có implementation authority khi V8 `PENDING`
 > **Ngôn ngữ:** Tiếng Việt
 > **Product authority:** `docs/product/versions/v8-job-discovery.md`
 
-> **Governance status:** V8 hiện `PENDING` theo `docs/product/roadmap.md` và
-> `docs/PROJECT_STATUS.md`. Nội dung này chỉ trở thành canonical persistence
-> contract cho implementation sau khi được review, approved và roadmap chuyển
-> V8 ra khỏi `PENDING`.
 
 ---
 
