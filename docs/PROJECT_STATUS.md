@@ -4,7 +4,8 @@
 
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `IN PROGRESS`. Slice 01 — Location Catalog Foundation (F01; BR-01–BR-09,
-BR-21–BR-23) is `IMPLEMENTED AND VERIFIED`; Slices 02–06 are not started.
+BR-21–BR-23) and Slice 02 — Job Location V4.1 (F02; BR-03–BR-10,
+BR-21–BR-24) are `IMPLEMENTED AND VERIFIED`; Slices 03–06 are not started.
 The approved canonical contracts are
 `docs/product/versions/v4.1-vietnam-location-migration.md` and
 `docs/data/versions/v4.1-vietnam-location-migration-data-model.md`.
@@ -43,10 +44,33 @@ Raw Ward/Commune data is never read into the normalized catalog. Public
 `GET /api/locations/provinces/:provinceCode/district-level-units` expose the
 catalog. Provider network/timeout/non-2xx/malformed responses fail closed with
 `502`; there is no cache, fallback, static catalog, or persistence change.
-Job and CandidateCV structured representations are deferred to Slices 02 and 03. Scalar-to-
+Slice 02 replaces the scalar `Job.location` with the embedded Data Contract
+representation `location { provinceCode, districtCode }` (default `null` for
+DRAFT `UNSET`; `districtCode = null` is Province-only) and adds the canonical
+`{ status, location.provinceCode, applicationDeadline }` and
+`{ status, location.provinceCode, location.districtCode, applicationDeadline }`
+indexes. Create/edit DRAFT accept only `{ provinceCode, districtCode? } | null`,
+call `validateLocation` after the existing Recruiter/Primary/tenant/DRAFT checks,
+and replace Location as one unit so a Province change never keeps the previous
+District. Legacy literals, `FOREIGN`, `REMOTE`, `ALL`, District-only, unknown
+codes, and cross-Province Districts are rejected; provider failure fails closed
+with no write. Submit/approve still require exactly one Location; Province-only
+is complete, and the gate checks the persisted structured shape without calling
+the provider. `toPublicJobLocation` projects `{ provinceCode, districtCode }`
+consistently for internal Job reads, lifecycle responses, Job Discovery list/detail,
+Candidate Application Job views, and Candidate Invitation Job views. Job
+ownership, tenant, edit authority, lifecycle, and WorkMode are unchanged.
+Interim state until Slices 04–05: un-migrated legacy scalar Job Locations
+are not migrated, read as `location: null`, and fail submit/approve
+completeness; the legacy `job_discovery_location_idx` and the V8 legacy
+`locations` Discovery filter remain and do not match structured Jobs. Focused
+coverage: `test/job/v41-slice02-job-location.test.js` (23 tests); V5/V8 Job
+fixtures migrated to structured Locations. Verification: `npm run verify:agent`
+passed (lint 0 errors, ARCH-001–ARCH-016, 151 files / 1507 tests).
+CandidateCV structured representation is deferred to Slice 03. Scalar-to-
 structured migration, legacy `FOREIGN` inventory/remediation, and cutover
 verification are deferred to Slice 04. Discovery and Candidate Search
-integration remain deferred to Slices 05 and 06 respectively.
+hierarchy filtering remain deferred to Slices 05 and 06 respectively.
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.

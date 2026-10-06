@@ -12,7 +12,6 @@ import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
 import JOB_DISCOVERY_VISIBILITY from "../../src/constants/job-discovery-visibility.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import { migrate as migrateExperienceLevels } from "../../src/database/migrations/v4-experience-level-dataset.js";
@@ -31,6 +30,10 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  TEST_LOCATION,
+} from "../helpers/location-provider.js";
 import {
   createFieldCategory,
   createPositionCategory,
@@ -91,7 +94,7 @@ describe("V8 — Job Discovery", () => {
     title = "Backend Engineer",
     jobDescription = "Build reliable recruitment APIs.",
     requiredSkills = ["Node.js", "MongoDB"],
-    location = LOCATION.HA_NOI,
+    location = provinceOnlyLocation(TEST_LOCATION.HA_NOI),
     workModes = [WORK_MODE.HYBRID],
     employmentType = EMPLOYMENT_TYPE.FULL_TIME,
     applicationDeadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -222,7 +225,7 @@ describe("V8 — Job Discovery", () => {
       catalog,
       title: "Platform API Engineer",
       requiredSkills: ["Node.js"],
-      location: LOCATION.HA_NOI,
+      location: provinceOnlyLocation(TEST_LOCATION.HA_NOI),
       workModes: [WORK_MODE.REMOTE],
     });
     await createJob({
@@ -231,7 +234,7 @@ describe("V8 — Job Discovery", () => {
       catalog,
       title: "Frontend Engineer",
       requiredSkills: ["React"],
-      location: LOCATION.HO_CHI_MINH,
+      location: provinceOnlyLocation(TEST_LOCATION.HO_CHI_MINH),
       fieldCategoryIds: [catalog.engineering.id],
       positionCategoryIds: [catalog.frontend.id],
     });
@@ -252,7 +255,6 @@ describe("V8 — Job Discovery", () => {
         categories: JSON.stringify({
           [catalog.engineering.id]: [catalog.backend.id],
         }),
-        locations: LOCATION.HA_NOI,
         workModes: WORK_MODE.REMOTE,
       });
 

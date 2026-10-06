@@ -11,7 +11,6 @@ import {
 import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
-import LOCATION from "../../src/constants/location.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import Job from "../../src/models/job.model.js";
 import { assertCompanyManagerJobApprovalAuthority } from "../../src/services/job.service.js";
@@ -28,6 +27,7 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import { provinceOnlyLocation } from "../helpers/location-provider.js";
 
 describe("V5 Slice 05 — Company Manager pending-review access (F05)", () => {
   beforeAll(async () => {
@@ -58,7 +58,7 @@ describe("V5 Slice 05 — Company Manager pending-review access (F05)", () => {
       jobDescription: "Submitted Job Description for Manager review.",
       requiredSkills: ["Node.js", "MongoDB"],
       salaryText: "Negotiate",
-      location: LOCATION.HA_NOI,
+      location: provinceOnlyLocation(),
       employmentType: EMPLOYMENT_TYPE.FULL_TIME,
       workModes: [WORK_MODE.HYBRID],
       ...overrides,
@@ -122,7 +122,7 @@ describe("V5 Slice 05 — Company Manager pending-review access (F05)", () => {
         jobDescription: "Submitted Job Description for Manager review.",
         requiredSkills: ["Node.js", "MongoDB"],
         salaryText: "Negotiate",
-        location: LOCATION.HA_NOI,
+        location: provinceOnlyLocation(),
         employmentType: EMPLOYMENT_TYPE.FULL_TIME,
         workModes: [WORK_MODE.HYBRID],
         createdByCompanyMemberId: creator.membership._id.toString(),

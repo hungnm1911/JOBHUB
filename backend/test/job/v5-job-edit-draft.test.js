@@ -6,11 +6,11 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
-import LOCATION from "../../src/constants/location.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import Job from "../../src/models/job.model.js";
 import {
@@ -25,6 +25,10 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  stubLocationProvider,
+} from "../helpers/location-provider.js";
 
 describe("V5 Slice 02 — Edit DRAFT + content immutability (F02)", () => {
   beforeAll(async () => {
@@ -32,6 +36,7 @@ describe("V5 Slice 02 — Edit DRAFT + content immutability (F02)", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await clearDatabase();
   });
 
@@ -76,12 +81,14 @@ describe("V5 Slice 02 — Edit DRAFT + content immutability (F02)", () => {
       recruiter,
     );
 
+    stubLocationProvider();
+
     const response = await agent
       .patch(`/api/jobs/${job.id}`)
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
         title: "  Updated Backend Role  ",
-        location: LOCATION.HA_NOI,
+        location: provinceOnlyLocation(),
         employmentType: EMPLOYMENT_TYPE.FULL_TIME,
         workModes: [WORK_MODE.REMOTE],
         requiredSkills: ["Node.js"],
@@ -95,7 +102,7 @@ describe("V5 Slice 02 — Edit DRAFT + content immutability (F02)", () => {
       createdByCompanyMemberId: recruiter.membership._id.toString(),
       primaryRecruiterCompanyMemberId: recruiter.membership._id.toString(),
       title: "Updated Backend Role",
-      location: LOCATION.HA_NOI,
+      location: provinceOnlyLocation(),
       employmentType: EMPLOYMENT_TYPE.FULL_TIME,
       workModes: [WORK_MODE.REMOTE],
       requiredSkills: ["Node.js"],

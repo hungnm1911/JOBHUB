@@ -19,6 +19,7 @@ import ExperienceLevel from "../models/experience-level.model.js";
 import Job from "../models/job.model.js";
 import {
   resolveJobDiscoveryVisibility,
+  toPublicJobLocation,
 } from "./job.service.js";
 import AppError from "../utils/app-error.js";
 
@@ -322,7 +323,7 @@ const buildPublicJob = ({
     positionCategories: job.positionCategoryIds
       .map((id) => buildPublicCategory(categoryById.get(id.toString())))
       .filter(Boolean),
-    location: job.location,
+    location: toPublicJobLocation(job.location),
     workModes: job.workModes,
     employmentType: job.employmentType,
     experienceLevel: buildPublicExperienceLevel(

@@ -2,17 +2,19 @@ import mongoose from "mongoose";
 
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_STATUS from "../constants/job-status.js";
-import LOCATION from "../constants/location.js";
 import WORK_MODE from "../constants/work-mode.js";
 
 const { Schema, model } = mongoose;
 
-const LOCATION_VALUES = Object.values(LOCATION);
 const EMPLOYMENT_TYPE_VALUES = Object.values(EMPLOYMENT_TYPE);
 const WORK_MODE_VALUES = Object.values(WORK_MODE);
 
 const isNonEmptyTrimmedString = (value) => {
   return typeof value === "string" && value.trim() !== "";
+};
+
+const isNonEmptyString = (value) => {
+  return typeof value === "string" && value !== "";
 };
 
 const hasDistinctObjectIds = (values) => {
@@ -122,6 +124,36 @@ const JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR = Object.freeze({
     },
   ],
 });
+
+// V4.1 JobLocation: opaque Province Open API v1 codes. Existence and
+// District → Province membership belong to the semantic Location boundary.
+const jobLocationSchema = new Schema(
+  {
+    provinceCode: {
+      type: String,
+      required: true,
+      validate: {
+        validator: isNonEmptyString,
+        message: "location.provinceCode must be a non-empty string",
+      },
+    },
+
+    districtCode: {
+      type: String,
+      default: null,
+      validate: {
+        validator(value) {
+          return value == null || isNonEmptyString(value);
+        },
+        message:
+          "location.districtCode must be a non-empty string when provided",
+      },
+    },
+  },
+  {
+    _id: false,
+  },
+);
 
 const jobSchema = new Schema(
   {
@@ -265,12 +297,8 @@ const jobSchema = new Schema(
     },
 
     location: {
-      type: String,
+      type: jobLocationSchema,
       default: null,
-      enum: {
-        values: [...LOCATION_VALUES, null],
-        message: "location must be a canonical Location value when provided",
-      },
     },
 
     employmentType: {
@@ -373,6 +401,19 @@ jobSchema.index(
 jobSchema.index(
   { status: 1, location: 1, applicationDeadline: 1 },
   { name: "job_discovery_location_idx" },
+);
+jobSchema.index(
+  { status: 1, "location.provinceCode": 1, applicationDeadline: 1 },
+  { name: "job_discovery_location_province_idx" },
+);
+jobSchema.index(
+  {
+    status: 1,
+    "location.provinceCode": 1,
+    "location.districtCode": 1,
+    applicationDeadline: 1,
+  },
+  { name: "job_discovery_location_district_idx" },
 );
 jobSchema.index(
   { status: 1, employmentType: 1, applicationDeadline: 1 },

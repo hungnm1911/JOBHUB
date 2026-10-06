@@ -75,12 +75,14 @@ The approved business scope of the version has been implemented and the required
 V1 through V7 are `COMPLETED AND VERIFIED`.
 
 V4.1 has canonical Product/Data contracts and is `IN PROGRESS`; Slice 01 —
-Location Catalog Foundation is implemented and verified. Province Open API v1 and its pre-July-2025-merger dataset semantics
+Location Catalog Foundation and Slice 02 — Job Location V4.1 are implemented
+and verified. Province Open API v1 and its pre-July-2025-merger dataset semantics
 are the approved external authority. The canonical hierarchy is Province plus
 optional District-level unit using raw v1 Province/District records; raw
 Ward/Commune is excluded. Slice 01 uses direct live provider calls behind the
-canonical Location boundary, with no initial cache or fallback. The structured
-Job/CandidateCV cutover, legacy-data migration including removal of persisted
+canonical Location boundary, with no initial cache or fallback. Slice 02 cuts
+Job Location over to the structured representation. The structured CandidateCV
+cutover, legacy-data migration including removal of persisted
 `FOREIGN`, and downstream Discovery/Search integration remain gated by their
 documented slice dependencies.
 

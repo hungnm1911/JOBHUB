@@ -3,9 +3,11 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
@@ -14,7 +16,6 @@ import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
-import LOCATION from "../../src/constants/location.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import { migrate as migrateExperienceLevels } from "../../src/database/migrations/v4-experience-level-dataset.js";
 import CompanyMember from "../../src/models/company-member.model.js";
@@ -43,13 +44,22 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  stubLocationProvider,
+} from "../helpers/location-provider.js";
 
 describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", () => {
   beforeAll(async () => {
     await connectTestDatabase();
   });
 
+  beforeEach(() => {
+    stubLocationProvider();
+  });
+
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await clearDatabase();
   });
 
@@ -86,7 +96,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
       salaryText: "Negotiate",
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
-      location: LOCATION.HA_NOI,
+      location: provinceOnlyLocation(),
       employmentType: EMPLOYMENT_TYPE.FULL_TIME,
       workModes: [WORK_MODE.HYBRID],
       experienceLevelId: catalog.experienceLevelId,
@@ -155,7 +165,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
     expect(after.jobDescription).toBe(before.jobDescription);
     expect(after.requiredSkills).toEqual(before.requiredSkills);
     expect(after.salaryText).toBe(before.salaryText);
-    expect(after.location).toBe(before.location);
+    expect(after.location).toEqual(before.location);
     expect(after.employmentType).toBe(before.employmentType);
     expect(after.workModes).toEqual(before.workModes);
     expect(after.experienceLevelId.toString()).toBe(
@@ -241,7 +251,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
       salaryText: "Negotiate",
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
-      location: LOCATION.HA_NOI,
+      location: provinceOnlyLocation(),
       employmentType: EMPLOYMENT_TYPE.FULL_TIME,
       workModes: [WORK_MODE.HYBRID],
       experienceLevelId: catalog.experienceLevelId,
@@ -371,7 +381,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
       salaryText: "Negotiate",
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
-      location: LOCATION.HA_NOI,
+      location: provinceOnlyLocation(),
       employmentType: EMPLOYMENT_TYPE.FULL_TIME,
       workModes: [WORK_MODE.HYBRID],
       experienceLevelId: catalog.experienceLevelId,
