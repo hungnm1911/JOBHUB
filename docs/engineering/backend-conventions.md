@@ -87,6 +87,48 @@ Application routes must be registered before `not-found.js`, and `error-handler.
 - Seed scaffolding is not a migration runner and must not acquire migration responsibility.
 - A migration definition must not add business behavior beyond its approved persistence transition.
 
+### External Location reference data
+
+- V4.1 Location uses **Province Open API v1** at
+  `https://provinces.open-api.vn/api/v1/` as its canonical external source.
+  Its dataset semantics are the administrative geography before the July 2025
+  merger. Province Open API v2 and the post-merger 34-province dataset are not
+  V4.1 authority.
+- Raw v1 is three-level, but V4.1 uses only raw Province and raw District.
+  District `province_code` references Province `code`; raw District is the
+  canonical JOBHUB District-level unit. Raw Ward/Commune is excluded.
+- Provider numeric codes are normalized to canonical decimal strings and then
+  treated as opaque identifiers. Code shape must not be used to infer hierarchy.
+- The consumer-facing normalized catalog DTOs are limited to:
+
+  ```text
+  Province { code, name }
+  DistrictLevelUnit { code, name, provinceCode }
+  ```
+
+  Province `code`/`name` map from raw Province `code`/`name`.
+  DistrictLevelUnit `code`/`name`/`provinceCode` map from raw District
+  `code`/`name`/`province_code`. Raw `codename`, `division_type`, `phone_code`,
+  nested `districts`/`wards`, and all Ward records are omitted from these DTOs.
+- `backend/src/constants/location.js` remains legacy V4 transition data only.
+  It must not replace Province Open API v1 or act as a fallback canonical
+  vocabulary for new V4.1 behavior.
+- V4.1 must not add MongoDB `locations`, `provinces`, `districts`, or `wards` mirror
+  collections solely because the provider is external.
+- For the V4.1 demo scope, `backend/src/services/location.service.js` is the
+  stable consumer-facing Location boundary and calls Province Open API v1
+  directly for catalog reads and semantic validation. Slice 01 adds no cache,
+  provider fallback, static catalog, or MongoDB mirror. Provider failure fails
+  the catalog/validation operation closed.
+- Controllers, models, Job/CandidateCV owners, Job Discovery, and Candidate
+  Search must not call the provider directly. A later cache/provider wrapper
+  may be inserted behind `location.service.js` without changing canonical DTOs,
+  persisted fields, or consumer contracts.
+- Job Discovery and Candidate Search filter/sort from persisted
+  `provinceCode`/`districtCode`; they do not call Province Open API on their
+  query path. Provider access remains limited to catalog and semantic-validation
+  workflows.
+
 ### Background recovery
 
 - `backend/src/workers/notification-recovery.worker.js` is the canonical scheduler and lifecycle owner for V13 pending NotificationEvent recovery.

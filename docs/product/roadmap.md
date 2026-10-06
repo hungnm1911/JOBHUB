@@ -24,6 +24,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
 | V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
+| V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | IN PROGRESS |
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
 | V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
@@ -72,6 +73,16 @@ The approved business scope of the version has been implemented and the required
 ## Current project state
 
 V1 through V7 are `COMPLETED AND VERIFIED`.
+
+V4.1 has canonical Product/Data contracts and is `IN PROGRESS`; Slice 01 —
+Location Catalog Foundation is implemented and verified. Province Open API v1 and its pre-July-2025-merger dataset semantics
+are the approved external authority. The canonical hierarchy is Province plus
+optional District-level unit using raw v1 Province/District records; raw
+Ward/Commune is excluded. Slice 01 uses direct live provider calls behind the
+canonical Location boundary, with no initial cache or fallback. The structured
+Job/CandidateCV cutover, legacy-data migration including removal of persisted
+`FOREIGN`, and downstream Discovery/Search integration remain gated by their
+documented slice dependencies.
 
 V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression
@@ -208,6 +219,14 @@ V4 canonical specification:
 V4 canonical persistence contract:
 
 `docs/data/versions/v4-platform-standard-catalogs-data-model.md`
+
+V4.1 canonical specification:
+
+`docs/product/versions/v4.1-vietnam-location-migration.md`
+
+V4.1 canonical persistence contract:
+
+`docs/data/versions/v4.1-vietnam-location-migration-data-model.md`
 
 V3 canonical specification:
 

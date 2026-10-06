@@ -2,6 +2,52 @@
 
 ## Current project state
 
+**V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
+`IN PROGRESS`. Slice 01 — Location Catalog Foundation (F01; BR-01–BR-09,
+BR-21–BR-23) is `IMPLEMENTED AND VERIFIED`; Slices 02–06 are not started.
+The approved canonical contracts are
+`docs/product/versions/v4.1-vietnam-location-migration.md` and
+`docs/data/versions/v4.1-vietnam-location-migration-data-model.md`.
+
+Province Open API v1 at `https://provinces.open-api.vn/api/v1/` and its
+pre-July-2025-merger dataset semantics are the V4.1 external authority. Raw v1
+Province and District form the canonical JOBHUB `Province → optional
+District-level unit` hierarchy; raw Ward/Commune is excluded. The observed
+dataset has 63 Provinces and 696 District-level units, with unique codes in
+each entity type and every District resolving directly to one Province through
+`province_code`.
+
+The 2026-10-06 live benchmark made 10 independent calls to each of the Province
+list and four Province depth-2 detail endpoints (Hà Nội, Hà Giang, Đà Nẵng,
+Hồ Chí Minh): all 50 returned HTTP 200 with no timeout/error. District-list
+p50 values were approximately 106–109 ms; the maximum was 750 ms, well below
+the non-canonical 2-second demo UX threshold. Slice 01 therefore uses direct
+live v1 calls behind `backend/src/services/location.service.js`, without an
+initial cache, fallback, static catalog, or MongoDB mirror. Provider failure
+fails catalog/semantic validation closed. A future cache/provider wrapper may
+be added behind the same boundary without changing Product/API contracts or
+Job/CV/Search consumers. Job Discovery and Candidate Search filter/sort from
+persisted `provinceCode`/`districtCode` and do not call the provider.
+
+Slice 01 adds `backend/src/services/location.service.js` as the canonical
+Location boundary: `listProvinces` normalizes raw v1 Provinces to
+`Province { code, name }`; `listDistrictLevelUnitsByProvince` normalizes raw v1
+Districts of one Province to `DistrictLevelUnit { code, name, provinceCode }`;
+`validateLocation` checks Province existence, District-level unit existence,
+and District → Province membership (Province-only valid; District-only,
+`ALL`, Ward codes, `FOREIGN`, `REMOTE`, and legacy V4 literals rejected).
+Provider integer codes become decimal strings and are matched by exact string
+equality, because live v1 also accepts non-canonical forms such as `01`/`1.0`.
+Raw Ward/Commune data is never read into the normalized catalog. Public
+`GET /api/locations/provinces` and
+`GET /api/locations/provinces/:provinceCode/district-level-units` expose the
+catalog. Provider network/timeout/non-2xx/malformed responses fail closed with
+`502`; there is no cache, fallback, static catalog, or persistence change.
+Job and CandidateCV structured representations are deferred to Slices 02 and 03. Scalar-to-
+structured migration, legacy `FOREIGN` inventory/remediation, and cutover
+verification are deferred to Slice 04. Discovery and Candidate Search
+integration remain deferred to Slices 05 and 06 respectively.
+
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.
 Slice 01 — Persistence Kernel, Slice 02 — Send Job Invitation + Direct Apply
@@ -2085,6 +2131,12 @@ the current V10 revision complete.
 
 ## Deferred / not started
 
+- **V4.1 dependency-gated work:** Slice 02 Job Location and Slice 03 Candidate
+  preferred Locations wait for Slice 01. Slice 04 owns scalar-to-structured
+  migration, legacy `FOREIGN` inventory/remediation, and cutover verification
+  after Slices 02–03. Slice 05 Job Discovery and Slice 06 Candidate Search wait
+  for Slice 04. These are not Slice 01 readiness prerequisites and were not
+  implemented or pre-hardened.
 - **V13 later-slice gates:** V12 closure is deferred as the acceptance gate for
   V13 Slices 06–08 and does not block Slice 01. Slice 09–12 are implemented on
   the shared authenticated connection plane with durable HTTP resync for offline
@@ -2124,6 +2176,22 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V4.1 Slice 01 Location Catalog Foundation: focused coverage passed 26 tests
+  in `test/catalog/v41-location-catalog.test.js` (stubbed provider). Then
+  `cd backend && npm run verify:agent` passed on 2026-10-06 (ESLint: 0 errors /
+  2 existing warnings in `test/job/v6-acceptance.test.js`; architecture:
+  ARCH-001 through ARCH-016; Vitest: 150 files / 1,484 tests). A manual live
+  smoke check against Province Open API v1 returned 63 Provinces and 696
+  District-level units and the expected validation outcomes; live provider
+  calls are not part of the automated gate.
+- V4.1 Slice 01 Implementation Readiness: focused regression rerun passed 3
+  files / 62 tests after replacing only expired wall-clock fixtures in the
+  existing V12/V15 suites with fixed year-2099 dates. Then
+  `cd backend && npm run verify:agent` passed on 2026-10-06 (ESLint: 0 errors /
+  the same 2 pre-existing warnings in `test/job/v6-acceptance.test.js`;
+  architecture: ARCH-001 through ARCH-016; Vitest: 149 files / 1,458 tests).
+  No V4.1 Fxx behavior, verification-rule relaxation, persistence change, or
+  transaction change was introduced.
 - V15 Final Acceptance finding — Day-15 Invitation expiration production
   runtime trigger: focused coverage passed 3 tests in
   `test/application/v15-invitation-expiration-runtime.test.js`. Then

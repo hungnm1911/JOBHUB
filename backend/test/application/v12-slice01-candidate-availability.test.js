@@ -441,7 +441,7 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
       actorUser: candidate.user,
       applicationId: application._id,
       timezone: "UTC",
-      slots: [{ date: "2026-08-20", dayPart: "MORNING" }],
+      slots: [{ date: "2099-08-20", dayPart: "MORNING" }],
       now: new Date("2026-08-14T00:00:00.000Z"),
     });
     const agent = createTestAgent();
@@ -453,7 +453,7 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
       .post(`/api/jobs/${job._id}/applications/${application._id}/interview-proposals`)
       .set("Authorization", `Bearer ${token}`)
       .send({
-        date: "2026-08-20",
+        date: "2099-08-20",
         dayPart: "MORNING",
         expectedAvailabilityRevision: 0,
       });

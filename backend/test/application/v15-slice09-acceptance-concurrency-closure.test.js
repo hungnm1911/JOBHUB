@@ -1217,13 +1217,13 @@ describe("V15 Slice 09 — Acceptance + concurrency closure", () => {
         actorUser: context.candidate,
         applicationId,
         timezone: "Asia/Ho_Chi_Minh",
-        slots: [{ date: "2026-08-25", dayPart: "MORNING" }],
+        slots: [{ date: "2099-08-25", dayPart: "MORNING" }],
       });
       const proposal = await createFirstInterviewProposal({
         actorUser: context.supporting.user,
         jobId: context.job._id.toString(),
         applicationId,
-        date: "2026-08-25",
+        date: "2099-08-25",
         dayPart: "MORNING",
         expectedAvailabilityRevision: 0,
       });
