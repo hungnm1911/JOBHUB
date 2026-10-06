@@ -11,6 +11,7 @@ import JOB_STATUS, {
   OUTSTANDING_PRIMARY_JOB_STATUSES,
   PRE_PUBLICATION_DELETABLE_JOB_STATUSES,
 } from "../constants/job-status.js";
+import JOB_DISCOVERY_VISIBILITY from "../constants/job-discovery-visibility.js";
 import LOCATION from "../constants/location.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
@@ -809,6 +810,43 @@ const resolveEffectiveJobStatus = (job, now = new Date()) => {
 
 const isJobEffectivelyPublished = (job, now = new Date()) => {
   return resolveEffectiveJobStatus(job, now) === JOB_STATUS.PUBLISHED;
+};
+
+const resolveJobDiscoveryVisibility = ({
+  job,
+  company,
+  now = new Date(),
+} = {}) => {
+  if (!job || !isOwningCompanyActiveForPublicEligibility(company)) {
+    return JOB_DISCOVERY_VISIBILITY.INACCESSIBLE;
+  }
+
+  if (job.publishedAt == null) {
+    return JOB_DISCOVERY_VISIBILITY.INACCESSIBLE;
+  }
+
+  if (job.status === JOB_STATUS.PUBLISHED) {
+    const applicationDeadline = getJobApplicationDeadline(job);
+
+    if (applicationDeadline == null) {
+      return JOB_DISCOVERY_VISIBILITY.INACCESSIBLE;
+    }
+
+    if (now.getTime() < applicationDeadline.getTime()) {
+      return JOB_DISCOVERY_VISIBILITY.DISCOVERABLE;
+    }
+
+    return JOB_DISCOVERY_VISIBILITY.HISTORICAL_READ_ONLY;
+  }
+
+  if (
+    job.status === JOB_STATUS.CLOSED ||
+    job.status === JOB_STATUS.EXPIRED
+  ) {
+    return JOB_DISCOVERY_VISIBILITY.HISTORICAL_READ_ONLY;
+  }
+
+  return JOB_DISCOVERY_VISIBILITY.INACCESSIBLE;
 };
 
 // BR-30 / BR-31: same deadline rule as isJobEffectivelyPublished, evaluated by
@@ -3411,6 +3449,7 @@ export {
   removeSupportingRecruiter,
   replacePrimaryRecruiter,
   resolveEffectiveJobStatus,
+  resolveJobDiscoveryVisibility,
   submitDraftJob,
   toPublicJob,
   updateDraftJob,

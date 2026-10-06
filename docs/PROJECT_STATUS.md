@@ -684,12 +684,12 @@ non-terminal Recruitment Status can persist `UNASSIGNED`; no new V10
 persistence entity, field, collection, counter, history, index, migration, or
 backfill was added.
 
-**V8 — Job Discovery** is roadmap-status `PENDING`. Its Product and Data
-documents are planning drafts only: they are intentionally held for later
-versions, have no approval or implementation authority, and Slice 01 must not
-start. Before any V8 implementation, approve and track the reconciled V8
-contracts, and explicitly move V8 out of `PENDING` in both this document and
-the roadmap.
+**V8 — Job Discovery** is `IN PROGRESS`. Its approved Product and
+Data contracts are `docs/product/versions/v8-job-discovery.md` and
+`docs/data/versions/v8-job-discovery-data-model.md`. Implementation is
+starting against the approved read-only Job Discovery boundary; V8 does not
+add Job lifecycle mutation, Candidate–Job persistence, Saved Jobs, Apply,
+Application, or other deferred capabilities.
 
 **V9 — Candidate chủ động Apply và tạo Application** has Slice 01 — Application
 persistence foundation, Slice 02 — Direct Apply with Generated ACTIVE CV, Slice
@@ -2093,8 +2093,9 @@ the current V10 revision complete.
   Final Acceptance remains in progress only for recorded acceptance findings;
   Slice 07 terminal cancellation and Slice 08 Assignment/Interview-read
   compatibility are not deferred.
-- **V8 remains `PENDING`:** its Product/Data planning drafts are not approved
-  implementation authority.
+- **V8 implementation:** V8 is `IN PROGRESS`; its approved
+  Product/Data contracts define the Job Discovery boundary and implementation
+  is tracked separately from V8 completion verification.
 - **V9 deferred scope:** downstream pipeline states, My Applications,
   Invitation, Assigned Recruiter, Notification, Chat/Interview, and related
   history/snapshots remain out of implementation scope. V9 Slice 06 itself is
