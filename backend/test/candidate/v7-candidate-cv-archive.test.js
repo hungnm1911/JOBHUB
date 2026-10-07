@@ -13,7 +13,6 @@ import CANDIDATE_CV_SOURCE_TYPE from "../../src/constants/candidate-cv-source-ty
 import CANDIDATE_CV_STATUS from "../../src/constants/candidate-cv-status.js";
 import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility.js";
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
-import LOCATION from "../../src/constants/location.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
 import Category from "../../src/models/category.model.js";
 import {
@@ -31,6 +30,10 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  TEST_LOCATION,
+} from "../helpers/location-provider.js";
 
 const createFieldCategory = async (name = "Software Engineering") => {
   return Category.create({
@@ -56,7 +59,7 @@ const createUploadedCv = async ({
     visibility,
     categoryId,
     experienceLevelId: null,
-    preferredLocations: [LOCATION.HA_NOI],
+    preferredLocations: [provinceOnlyLocation(TEST_LOCATION.HA_NOI)],
     skillTags: ["Node.js"],
     employmentTypes: [],
     workModes: [],
@@ -131,7 +134,7 @@ const snapshotPreservedFields = (cv) => {
     visibility: cv.visibility,
     name: cv.name,
     categoryId: cv.categoryId.toString(),
-    preferredLocations: [...(cv.preferredLocations ?? [])],
+    preferredLocations: JSON.parse(JSON.stringify(cv.preferredLocations ?? [])),
     skillTags: [...(cv.skillTags ?? [])],
     generatedContent: cv.generatedContent
       ? JSON.parse(JSON.stringify(cv.generatedContent))

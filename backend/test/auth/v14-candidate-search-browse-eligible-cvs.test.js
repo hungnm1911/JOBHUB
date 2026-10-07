@@ -109,7 +109,6 @@ const createCandidateCv = async ({
     archivedAt,
     experienceLevelId: null,
     skillTags,
-    preferredLocations,
     employmentTypes,
     workModes,
     isDefault: false,
@@ -129,6 +128,15 @@ const createCandidateCv = async ({
   }
 
   const created = await CandidateCV.create(baseDoc);
+
+  // Legacy V4 literals model un-migrated CandidateCV data (V4.1 migration is a
+  // later slice); the structured V4.1 schema no longer accepts them.
+  if (preferredLocations.length > 0) {
+    await CandidateCV.collection.updateOne(
+      { _id: created._id },
+      { $set: { preferredLocations } },
+    );
+  }
 
   if (updatedAt) {
     await CandidateCV.updateOne(

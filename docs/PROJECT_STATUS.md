@@ -4,8 +4,10 @@
 
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `IN PROGRESS`. Slice 01 — Location Catalog Foundation (F01; BR-01–BR-09,
-BR-21–BR-23) and Slice 02 — Job Location V4.1 (F02; BR-03–BR-10,
-BR-21–BR-24) are `IMPLEMENTED AND VERIFIED`; Slices 03–06 are not started.
+BR-21–BR-23), Slice 02 — Job Location V4.1 (F02; BR-03–BR-10,
+BR-21–BR-24), and Slice 03 — Candidate Preferred Locations V4.1 (F03; BR-05,
+BR-06, BR-11–BR-14, BR-21–BR-24) are `IMPLEMENTED AND VERIFIED`; Slices 04–06
+are not started.
 The approved canonical contracts are
 `docs/product/versions/v4.1-vietnam-location-migration.md` and
 `docs/data/versions/v4.1-vietnam-location-migration-data-model.md`.
@@ -67,10 +69,36 @@ completeness; the legacy `job_discovery_location_idx` and the V8 legacy
 coverage: `test/job/v41-slice02-job-location.test.js` (23 tests); V5/V8 Job
 fixtures migrated to structured Locations. Verification: `npm run verify:agent`
 passed (lint 0 errors, ARCH-001–ARCH-016, 151 files / 1507 tests).
-CandidateCV structured representation is deferred to Slice 03. Scalar-to-
-structured migration, legacy `FOREIGN` inventory/remediation, and cutover
-verification are deferred to Slice 04. Discovery and Candidate Search
-hierarchy filtering remain deferred to Slices 05 and 06 respectively.
+Slice 03 replaces `CandidateCV.preferredLocations: String[]` with embedded
+`PreferredLocationSelection { provinceCode, districtCode }` (`districtCode =
+null` is Province-wide; no `ALL` fake District, names, Ward, or provider data)
+and adds the canonical `{ preferredLocations.provinceCode,
+preferredLocations.districtCode, updatedAt:-1, _id:-1 }` index with the V14
+PUBLIC/non-archived partial scope. One model-owned local invariant (distinct
+selections; Province-wide and District subset of the same Province never
+coexist) backs both the schema validator and `candidate-cv.service.js`.
+Generated create, Uploaded create (before PDF upload), and metadata update
+accept only `{ provinceCode, districtCode? }[]`, check local invariants, then
+call `validateLocation` per selection after the existing ownership/archive and
+other-field checks, and replace the whole set atomically; empty/omitted input
+makes no provider call, and provider failure fails closed (`502`, no write).
+Legacy literals, `FOREIGN`, `REMOTE`, `ALL`, District-only, unknown codes, and
+cross-Province Districts are rejected. My CVs and Candidate Search results
+project only structured selections. `displayLocation`, ownership, Generated/
+Uploaded lifecycle, Default, archive, and other metadata are unchanged. Interim
+state until Slices 04/06: un-migrated legacy literal arrays are not migrated
+and read as `[]`; the V14 legacy-literal Candidate Search `preferredLocations`
+filter keeps its literal predicate (via `$expr`, so it does not fail against the
+structured schema) and therefore matches only un-migrated legacy CVs, never
+structured selections; the legacy `{ preferredLocations:1, … }` index remains.
+Focused coverage: `test/candidate/v41-slice03-candidate-preferred-locations.test.js`
+(23 tests); V7/V14 CandidateCV fixtures migrated to structured selections or
+seeded as raw un-migrated legacy data. Verification: `npm run verify:agent`
+passed (lint 0 errors, ARCH-001–ARCH-016, 152 files / 1530 tests).
+Scalar-to-structured migration for Job and CandidateCV, legacy `FOREIGN`
+inventory/remediation, and cutover verification are deferred to Slice 04.
+Discovery and Candidate Search hierarchy filtering remain deferred to Slices 05
+and 06 respectively.
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.

@@ -12,7 +12,9 @@ import LOCATION from "../constants/location.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
-import CandidateCV from "../models/candidate-cv.model.js";
+import CandidateCV, {
+  findPreferredLocationSelectionsViolation,
+} from "../models/candidate-cv.model.js";
 import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import User from "../models/user.model.js";
@@ -20,6 +22,7 @@ import AppError from "../utils/app-error.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
+import { validateLocation } from "./location.service.js";
 
 const uploadOwnUploadedCandidateCvFile = (buffer) => {
   return uploadFileBuffer({
@@ -59,6 +62,24 @@ const hasPresentString = (value) => {
   return typeof value === "string" && value.trim() !== "";
 };
 
+// Canonical V4.1 preferred Location projection shared by every CandidateCV
+// read. A persisted value that is not a structured selection is not a V4.1
+// Location.
+const toPublicPreferredLocations = (preferredLocations) => {
+  return (preferredLocations ?? [])
+    .filter((selection) => {
+      return (
+        selection != null &&
+        typeof selection === "object" &&
+        hasPresentString(selection.provinceCode)
+      );
+    })
+    .map((selection) => ({
+      provinceCode: selection.provinceCode,
+      districtCode: selection.districtCode ?? null,
+    }));
+};
+
 const toPublicCandidateCvSummary = (candidateCv) => {
   return {
     id: candidateCv._id.toString(),
@@ -71,7 +92,9 @@ const toPublicCandidateCvSummary = (candidateCv) => {
     experienceLevelId: candidateCv.experienceLevelId
       ? candidateCv.experienceLevelId.toString()
       : null,
-    preferredLocations: [...(candidateCv.preferredLocations ?? [])],
+    preferredLocations: toPublicPreferredLocations(
+      candidateCv.preferredLocations,
+    ),
     skillTags: [...(candidateCv.skillTags ?? [])],
     employmentTypes: [...(candidateCv.employmentTypes ?? [])],
     workModes: [...(candidateCv.workModes ?? [])],
@@ -92,7 +115,9 @@ const toCandidateSearchResultSummary = (candidateCv, candidate) => {
       ? candidateCv.experienceLevelId.toString()
       : null,
     skillTags: [...(candidateCv.skillTags ?? [])],
-    preferredLocations: [...(candidateCv.preferredLocations ?? [])],
+    preferredLocations: toPublicPreferredLocations(
+      candidateCv.preferredLocations,
+    ),
     employmentTypes: [...(candidateCv.employmentTypes ?? [])],
     workModes: [...(candidateCv.workModes ?? [])],
   };
@@ -316,6 +341,71 @@ const normalizeSkillTags = (skillTags) => {
   });
 };
 
+const validatePreferredLocationSelection = async (selection, index) => {
+  try {
+    await validateLocation(selection);
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      error.statusCode === 400 &&
+      error.details?.field
+    ) {
+      throw new AppError(400, error.message, {
+        ...error.details,
+        field: `preferredLocations.${index}.${error.details.field}`,
+      });
+    }
+
+    throw error;
+  }
+};
+
+// V4.1 F03 / BR-05, BR-06, BR-11–BR-14, BR-21–BR-23: the selection set is
+// replaced as one unit; existence and District → Province membership are owned
+// by the canonical V4.1 Location boundary. Legacy literals are rejected.
+const normalizePreferredLocations = async (preferredLocations) => {
+  if (!Array.isArray(preferredLocations)) {
+    throw new AppError(400, "CandidateCV preferredLocations must be an array", {
+      field: "preferredLocations",
+    });
+  }
+
+  const selections = preferredLocations.map((selection, index) => {
+    if (
+      selection == null ||
+      typeof selection !== "object" ||
+      Array.isArray(selection)
+    ) {
+      throw new AppError(
+        400,
+        "preferredLocations items must be structured Locations with provinceCode and optional districtCode",
+        {
+          field: `preferredLocations.${index}`,
+        },
+      );
+    }
+
+    return {
+      provinceCode: selection.provinceCode ?? null,
+      districtCode: selection.districtCode ?? null,
+    };
+  });
+
+  const violation = findPreferredLocationSelectionsViolation(selections);
+
+  if (violation) {
+    throw new AppError(400, violation, {
+      field: "preferredLocations",
+    });
+  }
+
+  for (const [index, selection] of selections.entries()) {
+    await validatePreferredLocationSelection(selection, index);
+  }
+
+  return selections;
+};
+
 const createGeneratedDraftCandidateCv = async ({
   candidateUserId,
   actorUser,
@@ -360,18 +450,10 @@ const normalizeCandidateCvCreateMetadata = async (draft) => {
     draft?.experienceLevelId,
   );
 
-  const preferredLocations = draft?.preferredLocations ?? [];
   const employmentTypes = draft?.employmentTypes ?? [];
   const workModes = draft?.workModes ?? [];
   const skillTags = normalizeSkillTags(draft?.skillTags);
 
-  // BR-29 / BR-30: Location vocabulary excludes REMOTE; REMOTE belongs to WorkMode.
-  assertDistinctCanonicalValues({
-    values: preferredLocations,
-    allowedValues: LOCATION_VALUES,
-    field: "preferredLocations",
-    label: "Location",
-  });
   assertDistinctCanonicalValues({
     values: employmentTypes,
     allowedValues: EMPLOYMENT_TYPE_VALUES,
@@ -384,6 +466,11 @@ const normalizeCandidateCvCreateMetadata = async (draft) => {
     field: "workModes",
     label: "WorkMode",
   });
+
+  // V4.1 BR-22: REMOTE belongs to WorkMode, never to preferred Locations.
+  const preferredLocations = await normalizePreferredLocations(
+    draft?.preferredLocations ?? [],
+  );
 
   return {
     name,
@@ -1300,8 +1387,25 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     ...(requestedSkillTags.length > 0
       ? { skillTags: { $in: requestedSkillTags } }
       : {}),
+    // V4.1 interim until the Candidate Search Location cutover: legacy literal
+    // filters match only un-migrated legacy literal values, never structured
+    // selections; `$expr` keeps that predicate off the structured schema cast.
     ...(requestedPreferredLocations.length > 0
-      ? { preferredLocations: { $in: requestedPreferredLocations } }
+      ? {
+        $expr: {
+          $gt: [
+            {
+              $size: {
+                $setIntersection: [
+                  { $ifNull: ["$preferredLocations", []] },
+                  requestedPreferredLocations,
+                ],
+              },
+            },
+            0,
+          ],
+        },
+      }
       : {}),
     ...(requestedEmploymentTypes.length > 0
       ? { employmentTypes: { $in: requestedEmploymentTypes } }
@@ -1678,17 +1782,6 @@ const normalizeCandidateCvMetadataPatch = async (patch = {}) => {
     );
   }
 
-  if (Object.prototype.hasOwnProperty.call(patch, "preferredLocations")) {
-    const preferredLocations = patch.preferredLocations ?? [];
-    assertDistinctCanonicalValues({
-      values: preferredLocations,
-      allowedValues: LOCATION_VALUES,
-      field: "preferredLocations",
-      label: "Location",
-    });
-    updates.preferredLocations = preferredLocations;
-  }
-
   if (Object.prototype.hasOwnProperty.call(patch, "skillTags")) {
     updates.skillTags = normalizeSkillTags(patch.skillTags);
   }
@@ -1713,6 +1806,12 @@ const normalizeCandidateCvMetadataPatch = async (patch = {}) => {
       label: "WorkMode",
     });
     updates.workModes = workModes;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "preferredLocations")) {
+    updates.preferredLocations = await normalizePreferredLocations(
+      patch.preferredLocations ?? [],
+    );
   }
 
   if (Object.keys(updates).length === 0) {

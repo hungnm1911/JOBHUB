@@ -5,6 +5,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import CANDIDATE_CV_SOURCE_TYPE from "../../src/constants/candidate-cv-source-type.js";
@@ -14,7 +15,6 @@ import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
@@ -32,6 +32,11 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  stubLocationProvider,
+  TEST_LOCATION,
+} from "../helpers/location-provider.js";
 
 const createFieldCategory = async (name = "Software Engineering") => {
   return Category.create({
@@ -79,7 +84,7 @@ const createGeneratedCv = async ({
     visibility,
     categoryId,
     experienceLevelId: null,
-    preferredLocations: [LOCATION.HA_NOI],
+    preferredLocations: [provinceOnlyLocation(TEST_LOCATION.HA_NOI)],
     skillTags,
     employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
     workModes: [WORK_MODE.ONSITE],
@@ -122,7 +127,7 @@ const createUploadedCv = async ({
     visibility,
     categoryId,
     experienceLevelId: null,
-    preferredLocations: [LOCATION.HO_CHI_MINH],
+    preferredLocations: [provinceOnlyLocation(TEST_LOCATION.HO_CHI_MINH)],
     skillTags: ["PDF Tag"],
     employmentTypes: [EMPLOYMENT_TYPE.CONTRACT],
     workModes: [WORK_MODE.HYBRID],
@@ -145,6 +150,7 @@ describe("V7 Slice 08 — Rename + metadata + visibility (F07)", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await clearDatabase();
   });
 
@@ -153,6 +159,14 @@ describe("V7 Slice 08 — Rename + metadata + visibility (F07)", () => {
   });
 
   it("updates common metadata for Generated and Uploaded CVs without changing content or lifecycle", async () => {
+    stubLocationProvider();
+    const preferredLocations = [
+      {
+        provinceCode: TEST_LOCATION.HA_NOI,
+        districtCode: TEST_LOCATION.HA_NOI_BA_VI,
+      },
+      provinceOnlyLocation(TEST_LOCATION.HA_GIANG),
+    ];
     const { user } = await createVerifiedUser({
       email: "cv.meta.owner@example.com",
     });
@@ -185,7 +199,7 @@ describe("V7 Slice 08 — Rename + metadata + visibility (F07)", () => {
         visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
         categoryId: position._id.toString(),
         experienceLevelId: experienceLevel._id.toString(),
-        preferredLocations: [LOCATION.DA_NANG, LOCATION.FOREIGN],
+        preferredLocations,
         skillTags: ["Metadata Skill"],
         employmentTypes: [EMPLOYMENT_TYPE.PART_TIME],
         workModes: [WORK_MODE.REMOTE, WORK_MODE.HYBRID],
@@ -200,7 +214,7 @@ describe("V7 Slice 08 — Rename + metadata + visibility (F07)", () => {
       visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
       categoryId: position._id.toString(),
       experienceLevelId: experienceLevel._id.toString(),
-      preferredLocations: [LOCATION.DA_NANG, LOCATION.FOREIGN],
+      preferredLocations,
       skillTags: ["Metadata Skill"],
       employmentTypes: [EMPLOYMENT_TYPE.PART_TIME],
       workModes: [WORK_MODE.REMOTE, WORK_MODE.HYBRID],
@@ -365,7 +379,9 @@ describe("V7 Slice 08 — Rename + metadata + visibility (F07)", () => {
     expect(remoteWorkMode.body.cv.workModes).toEqual([WORK_MODE.REMOTE]);
 
     const persisted = await CandidateCV.findById(generated._id);
-    expect(persisted.preferredLocations).toEqual([LOCATION.HA_NOI]);
+    expect(persisted.toObject().preferredLocations).toEqual([
+      provinceOnlyLocation(TEST_LOCATION.HA_NOI),
+    ]);
     expect(persisted.status).toBe(CANDIDATE_CV_STATUS.DRAFT);
     expect(persisted.sourceType).toBe(CANDIDATE_CV_SOURCE_TYPE.GENERATED);
     expect(persisted.isDefault).toBe(false);

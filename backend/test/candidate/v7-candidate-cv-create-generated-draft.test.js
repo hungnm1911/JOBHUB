@@ -6,6 +6,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import CANDIDATE_CV_SOURCE_TYPE from "../../src/constants/candidate-cv-source-type.js";
@@ -14,7 +15,6 @@ import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
@@ -32,6 +32,11 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  stubLocationProvider,
+  TEST_LOCATION,
+} from "../helpers/location-provider.js";
 
 const createFieldCategory = async (name = "Software Engineering") => {
   return Category.create({
@@ -78,6 +83,7 @@ describe("V7 Slice 03 — Create Generated CV Draft (F03)", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await clearDatabase();
   });
 
@@ -158,6 +164,14 @@ describe("V7 Slice 03 — Create Generated CV Draft (F03)", () => {
     });
 
     it("accepts optional V4 metadata without synthesizing Harvard content from them", async () => {
+      stubLocationProvider();
+      const preferredLocations = [
+        provinceOnlyLocation(TEST_LOCATION.HA_NOI),
+        {
+          provinceCode: TEST_LOCATION.HO_CHI_MINH,
+          districtCode: TEST_LOCATION.HO_CHI_MINH_DISTRICT_1,
+        },
+      ];
       const { user } = await createVerifiedUser({
         email: "cv.draft.optional@example.com",
         fullName: "Optional Candidate",
@@ -181,7 +195,7 @@ describe("V7 Slice 03 — Create Generated CV Draft (F03)", () => {
             visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
           }),
           experienceLevelId: experienceLevel._id.toString(),
-          preferredLocations: [LOCATION.HA_NOI, LOCATION.FOREIGN],
+          preferredLocations,
           skillTags: ["Node.js", "MongoDB"],
           employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME, EMPLOYMENT_TYPE.CONTRACT],
           workModes: [WORK_MODE.HYBRID, WORK_MODE.REMOTE],
@@ -191,7 +205,7 @@ describe("V7 Slice 03 — Create Generated CV Draft (F03)", () => {
       expect(response.body.cv).toMatchObject({
         visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
         experienceLevelId: experienceLevel._id.toString(),
-        preferredLocations: [LOCATION.HA_NOI, LOCATION.FOREIGN],
+        preferredLocations,
         skillTags: ["Node.js", "MongoDB"],
         employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME, EMPLOYMENT_TYPE.CONTRACT],
         workModes: [WORK_MODE.HYBRID, WORK_MODE.REMOTE],
