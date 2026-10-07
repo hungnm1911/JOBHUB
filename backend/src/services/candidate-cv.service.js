@@ -8,11 +8,12 @@ import CATEGORY_LEVEL from "../constants/category-level.js";
 import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import CV_LANGUAGE_PROFICIENCY from "../constants/cv-language-proficiency.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
-import LOCATION from "../constants/location.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
-import CandidateCV from "../models/candidate-cv.model.js";
+import CandidateCV, {
+  findPreferredLocationSelectionsViolation,
+} from "../models/candidate-cv.model.js";
 import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import User from "../models/user.model.js";
@@ -20,6 +21,11 @@ import AppError from "../utils/app-error.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
+import {
+  normalizeLocationFilterSelections,
+  resolveLocationFilterSelections,
+  validateLocation,
+} from "./location.service.js";
 
 const uploadOwnUploadedCandidateCvFile = (buffer) => {
   return uploadFileBuffer({
@@ -46,7 +52,6 @@ const downloadOwnUploadedCandidateCvFile = (publicId) => {
   });
 };
 
-const LOCATION_VALUES = new Set(Object.values(LOCATION));
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
 const CATEGORY_LEVEL_VALUES = new Set(Object.values(CATEGORY_LEVEL));
@@ -57,6 +62,24 @@ const LANGUAGE_PROFICIENCY_VALUES = new Set(
 
 const hasPresentString = (value) => {
   return typeof value === "string" && value.trim() !== "";
+};
+
+// Canonical V4.1 preferred Location projection shared by every CandidateCV
+// read. A persisted value that is not a structured selection is not a V4.1
+// Location.
+const toPublicPreferredLocations = (preferredLocations) => {
+  return (preferredLocations ?? [])
+    .filter((selection) => {
+      return (
+        selection != null &&
+        typeof selection === "object" &&
+        hasPresentString(selection.provinceCode)
+      );
+    })
+    .map((selection) => ({
+      provinceCode: selection.provinceCode,
+      districtCode: selection.districtCode ?? null,
+    }));
 };
 
 const toPublicCandidateCvSummary = (candidateCv) => {
@@ -71,7 +94,9 @@ const toPublicCandidateCvSummary = (candidateCv) => {
     experienceLevelId: candidateCv.experienceLevelId
       ? candidateCv.experienceLevelId.toString()
       : null,
-    preferredLocations: [...(candidateCv.preferredLocations ?? [])],
+    preferredLocations: toPublicPreferredLocations(
+      candidateCv.preferredLocations,
+    ),
     skillTags: [...(candidateCv.skillTags ?? [])],
     employmentTypes: [...(candidateCv.employmentTypes ?? [])],
     workModes: [...(candidateCv.workModes ?? [])],
@@ -92,7 +117,9 @@ const toCandidateSearchResultSummary = (candidateCv, candidate) => {
       ? candidateCv.experienceLevelId.toString()
       : null,
     skillTags: [...(candidateCv.skillTags ?? [])],
-    preferredLocations: [...(candidateCv.preferredLocations ?? [])],
+    preferredLocations: toPublicPreferredLocations(
+      candidateCv.preferredLocations,
+    ),
     employmentTypes: [...(candidateCv.employmentTypes ?? [])],
     workModes: [...(candidateCv.workModes ?? [])],
   };
@@ -316,6 +343,71 @@ const normalizeSkillTags = (skillTags) => {
   });
 };
 
+const validatePreferredLocationSelection = async (selection, index) => {
+  try {
+    await validateLocation(selection);
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      error.statusCode === 400 &&
+      error.details?.field
+    ) {
+      throw new AppError(400, error.message, {
+        ...error.details,
+        field: `preferredLocations.${index}.${error.details.field}`,
+      });
+    }
+
+    throw error;
+  }
+};
+
+// V4.1 F03 / BR-05, BR-06, BR-11–BR-14, BR-21–BR-23: the selection set is
+// replaced as one unit; existence and District → Province membership are owned
+// by the canonical V4.1 Location boundary. Legacy literals are rejected.
+const normalizePreferredLocations = async (preferredLocations) => {
+  if (!Array.isArray(preferredLocations)) {
+    throw new AppError(400, "CandidateCV preferredLocations must be an array", {
+      field: "preferredLocations",
+    });
+  }
+
+  const selections = preferredLocations.map((selection, index) => {
+    if (
+      selection == null ||
+      typeof selection !== "object" ||
+      Array.isArray(selection)
+    ) {
+      throw new AppError(
+        400,
+        "preferredLocations items must be structured Locations with provinceCode and optional districtCode",
+        {
+          field: `preferredLocations.${index}`,
+        },
+      );
+    }
+
+    return {
+      provinceCode: selection.provinceCode ?? null,
+      districtCode: selection.districtCode ?? null,
+    };
+  });
+
+  const violation = findPreferredLocationSelectionsViolation(selections);
+
+  if (violation) {
+    throw new AppError(400, violation, {
+      field: "preferredLocations",
+    });
+  }
+
+  for (const [index, selection] of selections.entries()) {
+    await validatePreferredLocationSelection(selection, index);
+  }
+
+  return selections;
+};
+
 const createGeneratedDraftCandidateCv = async ({
   candidateUserId,
   actorUser,
@@ -360,18 +452,10 @@ const normalizeCandidateCvCreateMetadata = async (draft) => {
     draft?.experienceLevelId,
   );
 
-  const preferredLocations = draft?.preferredLocations ?? [];
   const employmentTypes = draft?.employmentTypes ?? [];
   const workModes = draft?.workModes ?? [];
   const skillTags = normalizeSkillTags(draft?.skillTags);
 
-  // BR-29 / BR-30: Location vocabulary excludes REMOTE; REMOTE belongs to WorkMode.
-  assertDistinctCanonicalValues({
-    values: preferredLocations,
-    allowedValues: LOCATION_VALUES,
-    field: "preferredLocations",
-    label: "Location",
-  });
   assertDistinctCanonicalValues({
     values: employmentTypes,
     allowedValues: EMPLOYMENT_TYPE_VALUES,
@@ -384,6 +468,11 @@ const normalizeCandidateCvCreateMetadata = async (draft) => {
     field: "workModes",
     label: "WorkMode",
   });
+
+  // V4.1 BR-22: REMOTE belongs to WorkMode, never to preferred Locations.
+  const preferredLocations = await normalizePreferredLocations(
+    draft?.preferredLocations ?? [],
+  );
 
   return {
     name,
@@ -1264,12 +1353,9 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     values: filters.skillTags,
     field: "skillTags",
   });
-  const requestedPreferredLocations = normalizeCandidateSearchFilterStringValues(
-    {
-      values: filters.preferredLocations,
-      field: "preferredLocations",
-      allowedValues: LOCATION_VALUES,
-    },
+  const requestedLocationSelections = normalizeLocationFilterSelections(
+    filters.preferredLocations,
+    { field: "preferredLocations" },
   );
   const requestedEmploymentTypes = normalizeCandidateSearchFilterStringValues({
     values: filters.employmentTypes,
@@ -1283,6 +1369,18 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
   });
   const categoryFilterIds =
     await resolveCandidateSearchCategoryFilterIds(requestedCategoryIds);
+  const locationFilterSelections = await resolveLocationFilterSelections(
+    requestedLocationSelections,
+  );
+
+  // A requested Location filter with no catalog-valid selection matches
+  // nothing; it must not fall back to "no Location restriction".
+  if (
+    requestedLocationSelections.length > 0 &&
+    locationFilterSelections.length === 0
+  ) {
+    return [];
+  }
 
   // V14 BR-10..BR-16 + BR-32:
   // - local CandidateCV predicate: PUBLIC + not archived;
@@ -1300,8 +1398,23 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     ...(requestedSkillTags.length > 0
       ? { skillTags: { $in: requestedSkillTags } }
       : {}),
-    ...(requestedPreferredLocations.length > 0
-      ? { preferredLocations: { $in: requestedPreferredLocations } }
+    // A Province-wide preference (`districtCode: null`) covers every District
+    // filter of its Province; one preference must satisfy one filter branch.
+    ...(locationFilterSelections.length > 0
+      ? {
+        preferredLocations: {
+          $elemMatch: {
+            $or: locationFilterSelections.map(
+              ({ provinceCode, districtCodes }) => ({
+                provinceCode,
+                ...(districtCodes.length > 0
+                  ? { districtCode: { $in: [null, ...districtCodes] } }
+                  : {}),
+              }),
+            ),
+          },
+        },
+      }
       : {}),
     ...(requestedEmploymentTypes.length > 0
       ? { employmentTypes: { $in: requestedEmploymentTypes } }
@@ -1678,17 +1791,6 @@ const normalizeCandidateCvMetadataPatch = async (patch = {}) => {
     );
   }
 
-  if (Object.prototype.hasOwnProperty.call(patch, "preferredLocations")) {
-    const preferredLocations = patch.preferredLocations ?? [];
-    assertDistinctCanonicalValues({
-      values: preferredLocations,
-      allowedValues: LOCATION_VALUES,
-      field: "preferredLocations",
-      label: "Location",
-    });
-    updates.preferredLocations = preferredLocations;
-  }
-
   if (Object.prototype.hasOwnProperty.call(patch, "skillTags")) {
     updates.skillTags = normalizeSkillTags(patch.skillTags);
   }
@@ -1713,6 +1815,12 @@ const normalizeCandidateCvMetadataPatch = async (patch = {}) => {
       label: "WorkMode",
     });
     updates.workModes = workModes;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "preferredLocations")) {
+    updates.preferredLocations = await normalizePreferredLocations(
+      patch.preferredLocations ?? [],
+    );
   }
 
   if (Object.keys(updates).length === 0) {

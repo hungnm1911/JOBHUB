@@ -14,7 +14,6 @@ import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
@@ -32,6 +31,10 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  TEST_LOCATION,
+} from "../helpers/location-provider.js";
 
 const createFieldCategory = async (name = "Software Engineering") => {
   return Category.create({
@@ -148,7 +151,13 @@ describe("V7 Slice 02 — CandidateCV foundation + My CVs read (F02)", () => {
           categoryId: category._id,
           name: "Harvard Draft",
           experienceLevelId: experienceLevel._id,
-          preferredLocations: [LOCATION.HA_NOI, LOCATION.FOREIGN],
+          preferredLocations: [
+            provinceOnlyLocation(TEST_LOCATION.HA_NOI),
+            {
+              provinceCode: TEST_LOCATION.HO_CHI_MINH,
+              districtCode: TEST_LOCATION.HO_CHI_MINH_DISTRICT_1,
+            },
+          ],
           skillTags: ["Node.js", "MongoDB"],
           employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
           workModes: [WORK_MODE.HYBRID, WORK_MODE.REMOTE],
@@ -176,9 +185,12 @@ describe("V7 Slice 02 — CandidateCV foundation + My CVs read (F02)", () => {
       expect(uploaded.sourceType).toBe(CANDIDATE_CV_SOURCE_TYPE.UPLOADED);
       expect(generated.status).toBe(CANDIDATE_CV_STATUS.DRAFT);
       expect(uploaded.status).toBe(CANDIDATE_CV_STATUS.ACTIVE);
-      expect(generated.preferredLocations).toEqual([
-        LOCATION.HA_NOI,
-        LOCATION.FOREIGN,
+      expect(generated.toObject().preferredLocations).toEqual([
+        provinceOnlyLocation(TEST_LOCATION.HA_NOI),
+        {
+          provinceCode: TEST_LOCATION.HO_CHI_MINH,
+          districtCode: TEST_LOCATION.HO_CHI_MINH_DISTRICT_1,
+        },
       ]);
       expect(generated.employmentTypes).toEqual([EMPLOYMENT_TYPE.FULL_TIME]);
       expect(generated.workModes).toEqual([WORK_MODE.HYBRID, WORK_MODE.REMOTE]);

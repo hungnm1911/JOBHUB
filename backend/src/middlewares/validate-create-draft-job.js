@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
-import LOCATION from "../constants/location.js";
 import WORK_MODE from "../constants/work-mode.js";
 import AppError from "../utils/app-error.js";
 
@@ -21,6 +20,13 @@ const objectIdString = z
   .string()
   .regex(/^[a-fA-F0-9]{24}$/, "Invalid ObjectId");
 
+const jobLocationInput = z
+  .object({
+    provinceCode: z.string().nullable().optional(),
+    districtCode: z.string().nullable().optional(),
+  })
+  .strict();
+
 const createDraftJobSchema = z
   .object({
     title: optionalNonEmptyString,
@@ -29,10 +35,7 @@ const createDraftJobSchema = z
     salaryText: optionalNonEmptyString,
     fieldCategoryIds: z.array(objectIdString).optional(),
     positionCategoryIds: z.array(objectIdString).optional(),
-    location: z
-      .enum(Object.values(LOCATION))
-      .nullable()
-      .optional(),
+    location: jobLocationInput.nullable().optional(),
     employmentType: z
       .enum(Object.values(EMPLOYMENT_TYPE))
       .nullable()

@@ -39,7 +39,7 @@ import {
 } from "../helpers/database.js";
 
 const NOW = new Date("2026-08-14T12:00:00.000Z");
-const FUTURE_DATE = "2026-08-20";
+const FUTURE_DATE = "2099-08-20";
 
 const createJob = async ({
   companyId,

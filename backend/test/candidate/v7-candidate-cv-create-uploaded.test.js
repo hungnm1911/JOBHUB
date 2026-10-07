@@ -16,7 +16,6 @@ import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
@@ -34,6 +33,11 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  stubLocationProvider,
+  TEST_LOCATION,
+} from "../helpers/location-provider.js";
 
 const createFieldCategory = async (name = "Software Engineering") => {
   return Category.create({
@@ -106,6 +110,7 @@ describe("V7 Slice 06 — Uploaded CV creation (F05)", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     await clearDatabase();
   });
@@ -172,6 +177,11 @@ describe("V7 Slice 06 — Uploaded CV creation (F05)", () => {
 
   describe("HTTP create Uploaded CV", () => {
     it("creates UPLOADED/ACTIVE with validated file metadata and canonical optional fields", async () => {
+      stubLocationProvider();
+      const preferredLocations = [
+        provinceOnlyLocation(TEST_LOCATION.HA_NOI),
+        provinceOnlyLocation(TEST_LOCATION.HO_CHI_MINH),
+      ];
       const uploadSpy = vi
         .spyOn(fileService, "uploadFileBuffer")
         .mockResolvedValue({
@@ -202,10 +212,7 @@ describe("V7 Slice 06 — Uploaded CV creation (F05)", () => {
         .field("visibility", CANDIDATE_CV_VISIBILITY.PUBLIC)
         .field("categoryId", position._id.toString())
         .field("experienceLevelId", experienceLevel._id.toString())
-        .field(
-          "preferredLocations",
-          JSON.stringify([LOCATION.HA_NOI, LOCATION.HO_CHI_MINH]),
-        )
+        .field("preferredLocations", JSON.stringify(preferredLocations))
         .field("skillTags", JSON.stringify(["Node.js", "PDF"]))
         .field(
           "employmentTypes",
@@ -229,7 +236,7 @@ describe("V7 Slice 06 — Uploaded CV creation (F05)", () => {
         visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
         categoryId: position._id.toString(),
         experienceLevelId: experienceLevel._id.toString(),
-        preferredLocations: [LOCATION.HA_NOI, LOCATION.HO_CHI_MINH],
+        preferredLocations,
         skillTags: ["Node.js", "PDF"],
         employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
         workModes: [WORK_MODE.REMOTE, WORK_MODE.HYBRID],

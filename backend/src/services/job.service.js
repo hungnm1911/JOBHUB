@@ -12,7 +12,6 @@ import JOB_STATUS, {
   PRE_PUBLICATION_DELETABLE_JOB_STATUSES,
 } from "../constants/job-status.js";
 import JOB_DISCOVERY_VISIBILITY from "../constants/job-discovery-visibility.js";
-import LOCATION from "../constants/location.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
@@ -28,9 +27,9 @@ import {
   resolveCompanyStaffBusinessContext,
   resolveRecruiterBusinessContext,
 } from "./company.service.js";
+import { validateLocation } from "./location.service.js";
 import AppError from "../utils/app-error.js";
 
-const LOCATION_VALUES = new Set(Object.values(LOCATION));
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
 
@@ -48,6 +47,32 @@ const DRAFT_CONTENT_FIELDS = Object.freeze([
   "applicationDeadline",
 ]);
 
+const isNonEmptyString = (value) => {
+  return typeof value === "string" && value !== "";
+};
+
+const isStructuredJobLocation = (location) => {
+  return (
+    location != null &&
+    typeof location === "object" &&
+    isNonEmptyString(location.provinceCode) &&
+    (location.districtCode == null || isNonEmptyString(location.districtCode))
+  );
+};
+
+// Embedded-document equality is field-order sensitive, so match JobLocation by
+// its component paths.
+const buildJobLocationMatch = (location) => {
+  if (location == null) {
+    return { location: null };
+  }
+
+  return {
+    "location.provinceCode": location.provinceCode,
+    "location.districtCode": location.districtCode ?? null,
+  };
+};
+
 // Minimal plain values for conditional Job writes. Array fields are copied so
 // Mongoose array subtypes do not affect MongoDB equality matching.
 const buildValidatedDraftContentMatch = (job) => {
@@ -58,11 +83,24 @@ const buildValidatedDraftContentMatch = (job) => {
     salaryText: job.salaryText,
     fieldCategoryIds: [...job.fieldCategoryIds],
     positionCategoryIds: [...job.positionCategoryIds],
-    location: job.location,
+    ...buildJobLocationMatch(job.location),
     employmentType: job.employmentType,
     workModes: [...job.workModes],
     experienceLevelId: job.experienceLevelId,
     applicationDeadline: job.applicationDeadline,
+  };
+};
+
+// Canonical V4.1 Job Location projection shared by every Job read. A persisted
+// value that is not a structured JobLocation is not a V4.1 Location.
+const toPublicJobLocation = (location) => {
+  if (!isStructuredJobLocation(location)) {
+    return null;
+  }
+
+  return {
+    provinceCode: location.provinceCode,
+    districtCode: location.districtCode ?? null,
   };
 };
 
@@ -79,7 +117,7 @@ const toPublicJob = (job) => {
     salaryText: job.salaryText,
     fieldCategoryIds: job.fieldCategoryIds.map((id) => id.toString()),
     positionCategoryIds: job.positionCategoryIds.map((id) => id.toString()),
-    location: job.location,
+    location: toPublicJobLocation(job.location),
     employmentType: job.employmentType,
     workModes: job.workModes,
     experienceLevelId:
@@ -218,18 +256,37 @@ const normalizeWorkModes = (values) => {
   return normalized;
 };
 
+// F02 / BR-10: one Location replaced as a whole unit, so a Province change never
+// keeps the previous District-level unit. Legacy scalar literals are rejected.
 const normalizeOptionalLocation = (value) => {
-  if (value == null || value === "") {
+  if (value == null) {
     return null;
   }
 
-  if (!LOCATION_VALUES.has(value)) {
-    throw new AppError(400, "location must be a canonical Location value", {
-      field: "location",
-    });
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new AppError(
+      400,
+      "location must be a structured Location with provinceCode and optional districtCode",
+      {
+        field: "location",
+      },
+    );
   }
 
-  return value;
+  return {
+    provinceCode: value.provinceCode ?? null,
+    districtCode: value.districtCode ?? null,
+  };
+};
+
+// BR-03–BR-08 / BR-21–BR-23: existence and District → Province membership are
+// owned by the canonical V4.1 Location boundary.
+const assertDraftLocationCanonical = async (content) => {
+  if (content.location == null) {
+    return;
+  }
+
+  await validateLocation(content.location);
 };
 
 const normalizeOptionalEmploymentType = (value) => {
@@ -333,6 +390,7 @@ const createDraftJob = async ({
   });
 
   const draftContent = buildDraftContent(content);
+  await assertDraftLocationCanonical(draftContent);
 
   // BR-04 / BR-05 / BR-06 / BR-07 / BR-08 / BR-42: DRAFT with creator =
   // Primary; Supporting empty at creation (V6 BR-03).
@@ -506,6 +564,8 @@ const updateDraftJob = async ({
     return toPublicJob(job);
   }
 
+  await assertDraftLocationCanonical(contentPatch);
+
   // Content-mutation boundary: only DRAFT content fields; ownership,
   // creator, Primary, status, and publishedAt stay outside this operation.
   const updatedJob = await Job.findOneAndUpdate(
@@ -581,7 +641,8 @@ const assertJobContentCompleteForLifecycle = (job) => {
   }
 
   // BR-12 / BR-13: exactly one Location and one Employment Type.
-  if (job.location == null || job.location === "") {
+  // V4.1 BR-07: Province-only is a completed Location.
+  if (job.location == null) {
     throw new AppError(400, "Job location is required before submit", {
       field: "location",
     });
@@ -619,11 +680,16 @@ const assertJobContentCompleteForLifecycle = (job) => {
 };
 
 const assertJobFixedVocabularyIntegrity = (job) => {
-  // BR-12 / BR-16: Location is the fixed platform vocabulary (REMOTE excluded).
-  if (!LOCATION_VALUES.has(job.location)) {
-    throw new AppError(400, "Job location must be a canonical Location value", {
-      field: "location",
-    });
+  // V4.1 F02: Location must be a structured Province / optional District-level
+  // unit; codes were semantically validated when persisted (Data §10.2).
+  if (!isStructuredJobLocation(job.location)) {
+    throw new AppError(
+      400,
+      "Job location must be a canonical V4.1 Location",
+      {
+        field: "location",
+      },
+    );
   }
 
   // BR-13 / BR-16.
@@ -3452,6 +3518,7 @@ export {
   resolveJobDiscoveryVisibility,
   submitDraftJob,
   toPublicJob,
+  toPublicJobLocation,
   updateDraftJob,
   assertRecruiterCandidateSearchJobMembership,
 };

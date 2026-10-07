@@ -3,16 +3,17 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
-import LOCATION from "../../src/constants/location.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import { migrate as migrateExperienceLevels } from "../../src/database/migrations/v4-experience-level-dataset.js";
 import ExperienceLevel from "../../src/models/experience-level.model.js";
@@ -39,13 +40,22 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  stubLocationProvider,
+} from "../helpers/location-provider.js";
 
 describe("V5 Slice 12 — DRAFT privacy + pre-publication delete authority (F03, F12)", () => {
   beforeAll(async () => {
     await connectTestDatabase();
   });
 
+  beforeEach(() => {
+    stubLocationProvider();
+  });
+
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await clearDatabase();
   });
 
@@ -82,7 +92,7 @@ describe("V5 Slice 12 — DRAFT privacy + pre-publication delete authority (F03,
       salaryText: "Negotiate",
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
-      location: LOCATION.HA_NOI,
+      location: provinceOnlyLocation(),
       employmentType: EMPLOYMENT_TYPE.FULL_TIME,
       workModes: [WORK_MODE.HYBRID],
       experienceLevelId: catalog.experienceLevelId,

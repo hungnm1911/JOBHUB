@@ -6,12 +6,11 @@ import CANDIDATE_CV_VISIBILITY from "../constants/candidate-cv-visibility.js";
 import CV_LANGUAGE_PROFICIENCY from "../constants/cv-language-proficiency.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import HARVARD_CV_SECTION from "../constants/harvard-cv-section.js";
-import LOCATION from "../constants/location.js";
 import WORK_MODE from "../constants/work-mode.js";
+import { isNotForbiddenLocationProvinceCode } from "./job.model.js";
 
 const { Schema, model } = mongoose;
 
-const LOCATION_VALUES = Object.values(LOCATION);
 const EMPLOYMENT_TYPE_VALUES = Object.values(EMPLOYMENT_TYPE);
 const WORK_MODE_VALUES = Object.values(WORK_MODE);
 const LANGUAGE_PROFICIENCY_VALUES = Object.values(CV_LANGUAGE_PROFICIENCY);
@@ -31,6 +30,44 @@ const hasDistinctStrings = (values) => {
 
 const hasPresentSubdocument = (value) => {
   return value != null && typeof value === "object";
+};
+
+// Data V4.1 §6.2 / §7.2: selections are distinct by Province-wide or exact
+// District-level unit identity, and a Province is either Province-wide or a
+// District-level unit subset, never both.
+const findPreferredLocationSelectionsViolation = (selections) => {
+  const identities = new Set();
+  const provinceWideCodes = new Set();
+  const districtSubsetProvinceCodes = new Set();
+
+  for (const selection of selections ?? []) {
+    const provinceCode = selection?.provinceCode;
+    const districtCode = selection?.districtCode ?? null;
+    const identity =
+      districtCode == null
+        ? `PROVINCE:${provinceCode}`
+        : `DISTRICT:${provinceCode}:${districtCode}`;
+
+    if (identities.has(identity)) {
+      return "preferredLocations must not contain duplicate selections";
+    }
+
+    identities.add(identity);
+
+    if (districtCode == null) {
+      provinceWideCodes.add(provinceCode);
+    } else {
+      districtSubsetProvinceCodes.add(provinceCode);
+    }
+  }
+
+  for (const provinceCode of provinceWideCodes) {
+    if (districtSubsetProvinceCodes.has(provinceCode)) {
+      return "preferredLocations must not combine a Province-wide selection with District-level unit selections of the same Province";
+    }
+  }
+
+  return null;
 };
 
 const cvPersonalInfoSchema = new Schema(
@@ -346,6 +383,42 @@ const uploadedCvFileSchema = new Schema(
   },
 );
 
+// V4.1 PreferredLocationSelection: opaque Province Open API v1 codes. Existence
+// and District → Province membership belong to the semantic Location boundary.
+const preferredLocationSelectionSchema = new Schema(
+  {
+    provinceCode: {
+      type: String,
+      required: true,
+      validate: [
+        {
+          validator: isNonEmptyTrimmedString,
+          message: "preferredLocations.provinceCode must be a non-empty string",
+        },
+        {
+          validator: isNotForbiddenLocationProvinceCode,
+          message: "preferredLocations.provinceCode must not be FOREIGN",
+        },
+      ],
+    },
+    districtCode: {
+      type: String,
+      default: null,
+      validate: {
+        validator(value) {
+          return value == null || isNonEmptyTrimmedString(value);
+        },
+        message:
+          "preferredLocations.districtCode must be a non-empty string when provided",
+      },
+    },
+  },
+  {
+    _id: false,
+    versionKey: false,
+  },
+);
+
 const assertCandidateCvLocalInvariants = (candidateCv) => {
   const errors = [];
   const hasGeneratedContent = hasPresentSubdocument(candidateCv.generatedContent);
@@ -563,19 +636,14 @@ const candidateCvSchema = new Schema(
     },
 
     preferredLocations: {
-      type: [
-        {
-          type: String,
-          enum: {
-            values: LOCATION_VALUES,
-            message: "preferredLocations must use canonical Location values",
-          },
-        },
-      ],
+      type: [preferredLocationSelectionSchema],
       default: [],
       validate: {
-        validator: hasDistinctStrings,
-        message: "preferredLocations must not contain duplicates",
+        validator(selections) {
+          return findPreferredLocationSelectionsViolation(selections) == null;
+        },
+        message:
+          "preferredLocations must contain distinct selections and must not combine Province-wide and District-level unit selections of the same Province",
       },
     },
 
@@ -716,7 +784,12 @@ candidateCvSchema.index(
   },
 );
 candidateCvSchema.index(
-  { preferredLocations: 1, updatedAt: -1, _id: -1 },
+  {
+    "preferredLocations.provinceCode": 1,
+    "preferredLocations.districtCode": 1,
+    updatedAt: -1,
+    _id: -1,
+  },
   {
     partialFilterExpression: {
       visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
@@ -802,6 +875,7 @@ export {
   assertCandidateCvLocalInvariants,
   candidateCvSchema,
   ensureCandidateCvCollectionInvariants,
+  findPreferredLocationSelectionsViolation,
   generatedCvContentSchema,
 };
 

@@ -3,6 +3,7 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -13,7 +14,6 @@ import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js"
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import { migrate as migrateExperienceLevels } from "../../src/database/migrations/v4-experience-level-dataset.js";
@@ -38,13 +38,22 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  stubLocationProvider,
+} from "../helpers/location-provider.js";
 
 describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
   beforeAll(async () => {
     await connectTestDatabase();
   });
 
+  beforeEach(() => {
+    stubLocationProvider();
+  });
+
   afterEach(async () => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     await clearDatabase();
   });
@@ -82,7 +91,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       salaryText: "Negotiate",
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
-      location: LOCATION.HA_NOI,
+      location: provinceOnlyLocation(),
       employmentType: EMPLOYMENT_TYPE.FULL_TIME,
       workModes: [WORK_MODE.HYBRID],
       experienceLevelId: catalog.experienceLevelId,

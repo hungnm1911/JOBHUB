@@ -14,7 +14,6 @@ import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
@@ -36,6 +35,13 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  TEST_LOCATION,
+} from "../helpers/location-provider.js";
+
+const HA_NOI_ALL = provinceOnlyLocation(TEST_LOCATION.HA_NOI);
+const HO_CHI_MINH_ALL = provinceOnlyLocation(TEST_LOCATION.HO_CHI_MINH);
 
 const createFieldCategory = async (name = "Software Engineering") => {
   return Category.create({
@@ -166,7 +172,12 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       { categoryId: 1, updatedAt: -1, _id: -1 },
       { experienceLevelId: 1, updatedAt: -1, _id: -1 },
       { skillTags: 1, updatedAt: -1, _id: -1 },
-      { preferredLocations: 1, updatedAt: -1, _id: -1 },
+      {
+        "preferredLocations.provinceCode": 1,
+        "preferredLocations.districtCode": 1,
+        updatedAt: -1,
+        _id: -1,
+      },
       { employmentTypes: 1, updatedAt: -1, _id: -1 },
       { workModes: 1, updatedAt: -1, _id: -1 },
     ];
@@ -623,7 +634,7 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       categoryId: category._id,
       name: "CV Location Only",
       skillTags: [],
-      preferredLocations: [LOCATION.HA_NOI],
+      preferredLocations: [HA_NOI_ALL],
       employmentTypes: [],
       workModes: [],
     });
@@ -667,7 +678,10 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
     const locationFiltered = await listCandidateSearchEligibleCandidateCvs({
       actorUser: recruiter.user,
       filters: {
-        preferredLocations: [LOCATION.HA_NOI, LOCATION.DA_NANG],
+        preferredLocations: [
+          { provinceCode: TEST_LOCATION.HA_NOI },
+          { provinceCode: TEST_LOCATION.HA_GIANG },
+        ],
       },
     });
     expect(locationFiltered).toHaveLength(1);
@@ -716,7 +730,7 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       categoryId: position._id,
       name: "Target CV 6 groups",
       skillTags: ["nodejs", "mongodb"],
-      preferredLocations: [LOCATION.HA_NOI],
+      preferredLocations: [HA_NOI_ALL],
       employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
       workModes: [WORK_MODE.HYBRID],
     });
@@ -730,7 +744,7 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       categoryId: position._id,
       name: "Wrong Skill",
       skillTags: ["reactjs"],
-      preferredLocations: [LOCATION.HA_NOI],
+      preferredLocations: [HA_NOI_ALL],
       employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
       workModes: [WORK_MODE.HYBRID],
     });
@@ -744,7 +758,7 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       categoryId: position._id,
       name: "Wrong Experience",
       skillTags: ["nodejs"],
-      preferredLocations: [LOCATION.HA_NOI],
+      preferredLocations: [HA_NOI_ALL],
       employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
       workModes: [WORK_MODE.HYBRID],
     });
@@ -759,7 +773,7 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
         categoryIds: [field._id.toString()],
         experienceLevelIds: [experience._id.toString()],
         skillTags: ["nodejs"],
-        preferredLocations: [LOCATION.HA_NOI],
+        preferredLocations: [{ provinceCode: TEST_LOCATION.HA_NOI }],
         employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
         workModes: [WORK_MODE.HYBRID],
       },
@@ -785,7 +799,7 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       categoryId: category._id,
       name: "Slice04 HTTP Matched",
       skillTags: ["nodejs"],
-      preferredLocations: [LOCATION.HA_NOI],
+      preferredLocations: [HA_NOI_ALL],
       employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
       workModes: [WORK_MODE.REMOTE],
     });
@@ -795,7 +809,7 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       categoryId: category._id,
       name: "Slice04 HTTP Unmatched",
       skillTags: ["reactjs"],
-      preferredLocations: [LOCATION.DA_NANG],
+      preferredLocations: [HO_CHI_MINH_ALL],
       employmentTypes: [EMPLOYMENT_TYPE.CONTRACT],
       workModes: [WORK_MODE.ONSITE],
     });
@@ -809,7 +823,7 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       .get("/api/jobs/candidate-search/cvs")
       .query({
         skillTags: "nodejs",
-        preferredLocations: LOCATION.HA_NOI,
+        preferredLocations: TEST_LOCATION.HA_NOI,
         employmentTypes: EMPLOYMENT_TYPE.FULL_TIME,
         workModes: WORK_MODE.REMOTE,
       })

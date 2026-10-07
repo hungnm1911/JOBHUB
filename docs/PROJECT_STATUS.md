@@ -2,6 +2,287 @@
 
 ## Current project state
 
+**V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
+`COMPLETED / ACCEPTED` as of 2026-10-07. Slice 01 — Location Catalog Foundation
+(F01; BR-01–BR-09,
+BR-21–BR-23), Slice 02 — Job Location V4.1 (F02; BR-03–BR-10,
+BR-21–BR-24), Slice 03 — Candidate Preferred Locations V4.1 (F03; BR-05,
+BR-06, BR-11–BR-14, BR-21–BR-24), Slice 04 — Legacy Location Migration &
+Cutover (F06; BR-01, BR-02, BR-21–BR-24), Slice 05 — Job Discovery
+Location Hierarchy Filter (F04; BR-13–BR-18, BR-21, BR-24), and Slice 06 —
+Candidate Search Location Hierarchy Filter (F05; BR-13–BR-16, BR-19–BR-21,
+BR-24) are `IMPLEMENTED AND VERIFIED`. F01–F06 each have an implemented slice.
+The three V4.1 acceptance bug fixes (Bug Fix 01 — Candidate Search
+cross-Province/unknown District membership, Bug Fix 02 — `FOREIGN` persistence
+schema validation, Bug Fix 03 — Slice 04 read-only preflight) are closed and
+verified. The V4.1 Final Data Cutover was applied to the dev database on
+2026-10-07: the Slice 04 migration migrated all 6 legacy records (3 Jobs,
+3 CandidateCVs), no persisted legacy Location, blocked record, or unresolved
+`FOREIGN` remains, and the legacy Location indexes are dropped (see the Final
+Data Cutover record below). Final Acceptance independently reconciled Product,
+Data, Engineering, implementation, tests, and runtime behavior across F01–F06
+and BR-01–BR-24; no blocking or high finding remains.
+The approved canonical contracts are
+`docs/product/versions/v4.1-vietnam-location-migration.md` and
+`docs/data/versions/v4.1-vietnam-location-migration-data-model.md`.
+
+Province Open API v1 at `https://provinces.open-api.vn/api/v1/` and its
+pre-July-2025-merger dataset semantics are the V4.1 external authority. Raw v1
+Province and District form the canonical JOBHUB `Province → optional
+District-level unit` hierarchy; raw Ward/Commune is excluded. The observed
+dataset has 63 Provinces and 696 District-level units, with unique codes in
+each entity type and every District resolving directly to one Province through
+`province_code`.
+
+The 2026-10-06 live benchmark made 10 independent calls to each of the Province
+list and four Province depth-2 detail endpoints (Hà Nội, Hà Giang, Đà Nẵng,
+Hồ Chí Minh): all 50 returned HTTP 200 with no timeout/error. District-list
+p50 values were approximately 106–109 ms; the maximum was 750 ms, well below
+the non-canonical 2-second demo UX threshold. Slice 01 therefore uses direct
+live v1 calls behind `backend/src/services/location.service.js`, without an
+initial cache, fallback, static catalog, or MongoDB mirror. Provider failure
+fails catalog/semantic validation closed. A future cache/provider wrapper may
+be added behind the same boundary without changing Product/API contracts or
+Job/CV/Search consumers. Job Discovery and Candidate Search filter/sort from
+persisted `provinceCode`/`districtCode`; only Candidate Search District-subset
+filters resolve District → Province membership once per request through the
+Location boundary (see Slice 06).
+
+Slice 01 adds `backend/src/services/location.service.js` as the canonical
+Location boundary: `listProvinces` normalizes raw v1 Provinces to
+`Province { code, name }`; `listDistrictLevelUnitsByProvince` normalizes raw v1
+Districts of one Province to `DistrictLevelUnit { code, name, provinceCode }`;
+`validateLocation` checks Province existence, District-level unit existence,
+and District → Province membership (Province-only valid; District-only,
+`ALL`, Ward codes, `FOREIGN`, `REMOTE`, and legacy V4 literals rejected).
+Provider integer codes become decimal strings and are matched by exact string
+equality, because live v1 also accepts non-canonical forms such as `01`/`1.0`.
+Raw Ward/Commune data is never read into the normalized catalog. Public
+`GET /api/locations/provinces` and
+`GET /api/locations/provinces/:provinceCode/district-level-units` expose the
+catalog. Provider network/timeout/non-2xx/malformed responses fail closed with
+`502`; there is no cache, fallback, static catalog, or persistence change.
+Slice 02 replaces the scalar `Job.location` with the embedded Data Contract
+representation `location { provinceCode, districtCode }` (default `null` for
+DRAFT `UNSET`; `districtCode = null` is Province-only) and adds the canonical
+`{ status, location.provinceCode, applicationDeadline }` and
+`{ status, location.provinceCode, location.districtCode, applicationDeadline }`
+indexes. Create/edit DRAFT accept only `{ provinceCode, districtCode? } | null`,
+call `validateLocation` after the existing Recruiter/Primary/tenant/DRAFT checks,
+and replace Location as one unit so a Province change never keeps the previous
+District. Legacy literals, `FOREIGN`, `REMOTE`, `ALL`, District-only, unknown
+codes, and cross-Province Districts are rejected; provider failure fails closed
+with no write. Submit/approve still require exactly one Location; Province-only
+is complete, and the gate checks the persisted structured shape without calling
+the provider. `toPublicJobLocation` projects `{ provinceCode, districtCode }`
+consistently for internal Job reads, lifecycle responses, Job Discovery list/detail,
+Candidate Application Job views, and Candidate Invitation Job views. Job
+ownership, tenant, edit authority, lifecycle, and WorkMode are unchanged.
+Interim state until Slices 04–05: un-migrated legacy scalar Job Locations
+are not migrated, read as `location: null`, and fail submit/approve
+completeness; the legacy `job_discovery_location_idx` and the V8 legacy
+`locations` Discovery filter remain and do not match structured Jobs. Focused
+coverage: `test/job/v41-slice02-job-location.test.js` (23 tests); V5/V8 Job
+fixtures migrated to structured Locations. Verification: `npm run verify:agent`
+passed (lint 0 errors, ARCH-001–ARCH-016, 151 files / 1507 tests).
+Slice 03 replaces `CandidateCV.preferredLocations: String[]` with embedded
+`PreferredLocationSelection { provinceCode, districtCode }` (`districtCode =
+null` is Province-wide; no `ALL` fake District, names, Ward, or provider data)
+and adds the canonical `{ preferredLocations.provinceCode,
+preferredLocations.districtCode, updatedAt:-1, _id:-1 }` index with the V14
+PUBLIC/non-archived partial scope. One model-owned local invariant (distinct
+selections; Province-wide and District subset of the same Province never
+coexist) backs both the schema validator and `candidate-cv.service.js`.
+Generated create, Uploaded create (before PDF upload), and metadata update
+accept only `{ provinceCode, districtCode? }[]`, check local invariants, then
+call `validateLocation` per selection after the existing ownership/archive and
+other-field checks, and replace the whole set atomically; empty/omitted input
+makes no provider call, and provider failure fails closed (`502`, no write).
+Legacy literals, `FOREIGN`, `REMOTE`, `ALL`, District-only, unknown codes, and
+cross-Province Districts are rejected. My CVs and Candidate Search results
+project only structured selections. `displayLocation`, ownership, Generated/
+Uploaded lifecycle, Default, archive, and other metadata are unchanged. Interim
+state until Slices 04/06: un-migrated legacy literal arrays are not migrated
+and read as `[]`; the V14 legacy-literal Candidate Search `preferredLocations`
+filter keeps its literal predicate (via `$expr`, so it does not fail against the
+structured schema) and therefore matches only un-migrated legacy CVs, never
+structured selections; the legacy `{ preferredLocations:1, … }` index remains.
+Focused coverage: `test/candidate/v41-slice03-candidate-preferred-locations.test.js`
+(23 tests); V7/V14 CandidateCV fixtures migrated to structured selections or
+seeded as raw un-migrated legacy data. Verification: `npm run verify:agent`
+passed (lint 0 errors, ARCH-001–ARCH-016, 152 files / 1530 tests).
+Slice 04 adds the explicit versioned migration
+`backend/src/database/migrations/v41-legacy-location-cutover.js` (run through
+`scripts/run-migration.js`; `--preflight` is a read-only inventory). Each of the
+63 legacy V4 Vietnam literals maps to one distinct Province Open API v1 Province
+code, keyed by `constants/location.js`; the table equals the live v1 Province
+list in order (each v1 `codename` without its `tinh_`/`thanh_pho_` prefix is the
+legacy literal) and the migration checks every target against `listProvinces`
+before writing, failing closed. Legacy Job literals become Province-only
+`{ provinceCode, districtCode: null }`; legacy CandidateCV literals become
+Province-wide selections with canonical duplicates removed in first-seen order;
+no District is inferred and structured/unset/empty records are untouched.
+`FOREIGN`, unmapped literals (including `REMOTE` and aliases), malformed values,
+and a legacy Province that would coexist with a District subset of the same
+Province are inventoried and block the run before any write; the migration does
+not remediate them. Each legacy record is migrated by one conditional
+single-document write (no global or provider transaction; `updatedAt`
+unchanged), so a failed document stays fully legacy and completion is blocked.
+Only after zero-legacy verification are the legacy `job_discovery_location_idx`
+and CandidateCV `{ preferredLocations, updatedAt, _id }` indexes dropped; the
+models no longer declare them. Re-running is idempotent and makes no provider
+call when no legacy data remains. Once the migration has run, the Slice 02/03
+interim `location: null` / `preferredLocations: []` reads of legacy data no
+longer occur. Focused coverage:
+`test/catalog/v41-slice04-legacy-location-cutover.test.js` (14 tests).
+The configured dev database preflight (2026-10-07, read-only) found 3 legacy
+Jobs (all `HA_NOI`) and 3 legacy CandidateCVs (`HA_NOI`, `HO_CHI_MINH`,
+`DA_NANG`), 0 blocked, 0 `FOREIGN`; the migration was subsequently applied
+there by the V4.1 Final Data Cutover (below). Candidate Search hierarchy
+filtering was delivered by Slice 06.
+Slice 05 replaces the V8 legacy-literal `locations` Discovery predicate with
+the V4.1 hierarchy over persisted `location.provinceCode` /
+`location.districtCode`. The approved query encoding on
+`GET /api/job-discovery/jobs` mirrors `categories`: repeatable
+`<provinceCode>[:<districtCode>|<districtCode>...]` groups separated by `;`, or
+a JSON array `[{ provinceCode, districtCodes? }]`; no Districts means
+Province / ALL. Province / ALL matches Province-only Jobs and Jobs in any
+District of that Province; a District subset matches only Jobs with that exact
+Province + District (never Province-only Jobs); Provinces and Districts within
+one Province combine with OR, and the Location group stays ANDed with keyword
+and the other V8 groups. Validation is structural only (`400`, field
+`locations`): codes must be canonical decimal strings (`isCanonicalLocationCode`
+in `location.service.js`), so legacy literals, `FOREIGN`, `REMOTE`, `ALL`,
+`01`/`1.0`, District-without-Province, extra levels, and the same Province as
+both ALL and a subset are rejected. Discovery makes no provider call, so a
+well-formed unknown or cross-Province code matches no Job instead of being
+semantically rejected (approved interpretation of the F04 rejection cases).
+Discovery no longer imports `constants/location.js`. Visibility, authorization,
+keyword, RELEVANCE/NEWEST/EXPIRING_SOON, pagination, and response shape are
+unchanged; no index, persistence, or Candidate Search change. Focused coverage:
+`test/job/v41-slice05-job-discovery-location-filter.test.js` (28 tests).
+Verification: `npm run verify:agent` passed (lint 0 errors, ARCH-001–ARCH-016,
+154 files / 1572 tests).
+Slice 06 replaces the V4.1 interim `$expr` legacy-literal Candidate Search
+predicate (and its `constants/location.js` vocabulary) with hierarchy matching
+over persisted `preferredLocations[].provinceCode` / `districtCode`. The V14
+`preferredLocations` query of `GET /api/jobs/candidate-search/cvs` keeps its
+name but now uses the Slice 05 encoding (no comma splitting); the grammar is
+shared, not duplicated: `parseLocationFilterQuery` moved to
+`backend/src/utils/location-filter-query.js` and structural validation to
+`normalizeLocationFilterSelections` in `location.service.js`, reused unchanged
+by Job Discovery. Willingness semantics: a Province / ALL filter matches
+Province-wide and any District preference of that Province; a District filter
+matches Province-wide preferences of its Province and the exact District, never
+another District of the same Province; Provinces and Districts combine with OR;
+one persisted preference (`$elemMatch`) must satisfy one filter branch; the
+Location group stays ANDed with V14 eligibility and the other five groups.
+Validation is structural only (`400`, field `preferredLocations`), so legacy
+literals, comma lists, `FOREIGN`, `REMOTE`, `ALL`, and lenient codes are
+rejected. V4.1 acceptance bug fix (2026-10-07): the original structural-only
+predicate let a Province-wide preference of P match `P:<District of another
+Province>` or `P:<unknown District>`. Product F04/F05 now state that well-formed
+unknown codes and cross-Province Districts are not rejections but match
+nothing, while valid groups keep their OR results; Data §10.2 and the
+engineering contracts allow Candidate Search, only when a District subset is
+present, to call `resolveLocationFilterSelections` in `location.service.js`
+once per request (after structural and other filter validation) to keep only
+District codes belonging to their Province. An emptied subset is dropped, never
+widened to Province / ALL; a filter whose every selection resolves empty
+returns no Candidates; provider failure fails closed (`502`); Province / ALL
+filters and Job Discovery stay provider-free (Job Discovery already matched
+nothing for invalid pairs through exact persisted pairs). V14
+authorization, eligibility/visibility/archive, `updatedAt desc, _id desc` order
+(no pagination), and the result shape are unchanged; no index or persistence
+change. `constants/location.js` now has no runtime consumer (Slice 04 migration
+input domain only). Focused coverage:
+`test/candidate/v41-slice06-candidate-search-location-filter.test.js` (40
+tests); V14 browse/acceptance fixtures moved to structured Locations and the
+Slice 03 interim legacy-filter assertion retired. Verification:
+`npm run verify:agent` passed (lint 0 errors, ARCH-001–ARCH-016, 155 files /
+1612 tests). After the acceptance bug fix the Slice 06 file has 48 tests
+(cross-Province/unknown-District regression, mixed multi-Province membership,
+provider-call scope, `502` fail-closed) and Slice 05 has 30;
+`npm run verify:agent` passed (lint 0 errors, ARCH-001–ARCH-016, 155 files /
+1622 tests). The Slice 02 `FOREIGN` schema and Slice 03 migration-preflight
+bug-fix slices are untouched.
+V4.1 acceptance bug fix (2026-10-07, `FOREIGN` persistence): the embedded
+`Job.location.provinceCode` and `CandidateCV.preferredLocations[].provinceCode`
+schemas only required a non-empty string, so `{ provinceCode: "FOREIGN" }`
+passed `document.validate()` and `findOneAndUpdate(..., { runValidators: true })`;
+only the semantic catalog lookup rejected it. Data §10.1 assigns this forbidden
+legacy representation to schema/document validation, so both schemas now reuse
+`isNotForbiddenLocationProvinceCode` exported from `job.model.js`. `REMOTE`,
+catalog existence, District membership, service validation, search/filter,
+indexes, and the Slice 04 migration are unchanged. Focused regressions in the
+Slice 02 (24 tests) and Slice 03 (24 tests) files; `npm run verify:agent`
+passed (lint 0 errors, ARCH-001–ARCH-016, 155 files / 1624 tests). The Slice 03
+migration-preflight bug-fix slice and Slice 01 search semantics are untouched.
+V4.1 acceptance bug fix (2026-10-07, Slice 04 read-only preflight): importing
+the Job/CandidateCV models schedules Mongoose `Model.init()`, so the
+`scripts/run-migration.js` connection (default auto-create/auto-index) created
+missing collections and built every schema index before `preflight` or the
+`migrate` blocker check ran; the migration's explicit `Model.init()` only
+awaited that side effect. `connectDatabase` now accepts scoped connection
+options; the runner opens preflight with `MODEL_AUTO_INIT_DISABLED_OPTIONS`
+and the V4.1 migration exports the same `connectionOptions`. `preflight` and
+`verify` no longer initialize models, and `migrate` builds Job/CandidateCV
+schema indexes only after the blocker and catalog checks pass, before document
+writes; legacy indexes are still dropped only after zero-legacy verification.
+Mapping, blocking, per-document atomicity, idempotence, and other migrations'
+connections are unchanged. Regressions: the new CLI-level
+`test/catalog/v41-slice04-migration-read-only-preflight.test.js` (5 tests,
+fresh runner process, oplog + metadata comparison; 4 failed before the fix
+with 40–48 index/collection writes) and oplog phase assertions in the Slice 04
+file (20 tests). `npm run verify:agent` passed (lint 0 errors,
+ARCH-001–ARCH-016, 156 files / 1635 tests). The migration has not been applied
+to any environment by this fix.
+V4.1 Final Data Cutover (2026-10-07, dev database `jobhub` on the
+`jobhub-dev` cluster, `NODE_ENV=development`): with no code, Product, or Data
+contract change, the canonical runner was used as the only writer
+(`node scripts/run-migration.js v41-legacy-location-cutover`). Before: the
+read-only `--preflight` reported Jobs 3 total / 0 canonical / 3 legacy /
+0 blocked and CandidateCVs 3 / 0 / 3 / 0 (`legacyCount 6`, `blockedCount 0`,
+`unresolvedForeignCount 0`); all legacy literals (`HA_NOI`, `HO_CHI_MINH`,
+`DA_NANG`) mapped to Province Open API v1 Provinces `1`, `79`, `48`, and all
+63 mapping targets existed in the live catalog; the legacy
+`job_discovery_location_idx` and CandidateCV
+`preferredLocations_1_updatedAt_-1__id_-1` indexes and the three canonical
+Location indexes were all present. These six legacy records then serialized
+as `location: null` / `preferredLocations: []`. The migration exited 0 and
+its built-in `verify` passed. After: `--preflight` reports Jobs 3 / 3 / 0 / 0
+and CandidateCVs 3 / 3 / 0 / 0 (`legacyCount 0`, `blockedCount 0`,
+`unresolvedForeignCount 0`); raw counts are 0 scalar-string Job Locations,
+0 string CandidateCV preferred Locations, and 0 `FOREIGN`. The 3 Jobs persist
+and serialize `{ provinceCode: "1", districtCode: null }`, and the CandidateCVs
+persist and serialize Province-wide selections `[1, 79, 48]`, `[1]`, and `[1]`
+(no District inferred; `updatedAt` unchanged). The two legacy Location indexes
+are dropped (Job indexes 17 → 16; CandidateCV indexes 11 → 10), while
+`job_discovery_location_province_idx`,
+`job_discovery_location_district_idx`, and the CandidateCV
+`preferredLocations.provinceCode_1_preferredLocations.districtCode_1_updatedAt_-1__id_-1`
+index remain. Only `Job` and `CandidateCV` persist Location. The cutover is
+complete on dev, and no persisted legacy Location remains there.
+
+V4.1 Final Acceptance (2026-10-07): verdict `V4.1 ACCEPTED`. The review covered
+Slices 01–06, acceptance Bug Fix 01–03, Final Data Cutover evidence, canonical
+Location persistence and projections, request/response contracts, hierarchy
+matching, migration completeness, and index cutover. Product F04/F05 currently
+define well-formed unknown Province/District codes and cross-Province District
+pairs as non-rejections that contribute no match; malformed selections,
+District-without-Province, and `FOREIGN` are rejected. Job Discovery satisfies
+this with exact structured predicates and no provider call. Candidate Search
+resolves District membership before building its predicate, so
+`HO_CHI_MINH:BA_DINH` cannot match a Candidate preference of
+`HO_CHI_MINH / ALL`; an invalid-only filter returns an empty result and never
+widens to Province / ALL. The seven focused V4.1 files passed 177/177 tests,
+including the cross-Province/unknown-District runtime regressions and migration
+read-only/write-phase checks. The official `cd backend && npm run verify:agent`
+gate passed with ESLint 0 errors (the two pre-existing V6 test warnings),
+ARCH-001–ARCH-016, and Vitest 156 files / 1,635 tests. No Product/Data contract
+was changed by acceptance, no migration was rerun, and no V4.1 work remains
+deferred.
+
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.
 Slice 01 — Persistence Kernel, Slice 02 — Send Job Invitation + Direct Apply
@@ -2124,6 +2405,57 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V4.1 Final Acceptance (2026-10-07): seven focused V4.1 files passed 177/177
+  tests. The independently rerun `cd backend && npm run verify:agent` passed:
+  ESLint 0 errors (the 2 pre-existing warnings in
+  `test/job/v6-acceptance.test.js`), architecture ARCH-001 through ARCH-016,
+  and Vitest 156 files / 1,635 tests. No database migration was rerun during
+  Final Acceptance; the recorded Final Data Cutover evidence below was used.
+- V4.1 Final Data Cutover (dev): read-only
+  `node scripts/run-migration.js v41-legacy-location-cutover --preflight`
+  before (`legacyCount 6`, `blockedCount 0`, `unresolvedForeignCount 0`),
+  `node scripts/run-migration.js v41-legacy-location-cutover` (exit 0,
+  built-in `verify` passed), and `--preflight` after (`legacyCount 0`,
+  `blockedCount 0`, `unresolvedForeignCount 0`; canonical Location indexes
+  present, legacy Location indexes absent). Then `cd backend && npm run
+  verify:agent` passed on 2026-10-07 (ESLint: 0 errors / the 2 pre-existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 156 files / 1,635 tests).
+- V4.1 Slice 05 Job Discovery Location Hierarchy Filter: focused coverage
+  passed 28 tests in `test/job/v41-slice05-job-discovery-location-filter.test.js`
+  together with the existing V8 suite (2 files / 36 tests; provider stubbed and
+  asserted never called). Then `cd backend && npm run verify:agent` passed on
+  2026-10-07 (ESLint: 0 errors / the 2 pre-existing warnings in
+  `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016;
+  Vitest: 154 files / 1,572 tests).
+- V4.1 Slice 04 Legacy Location Migration & Cutover: focused coverage passed
+  14 tests in `test/catalog/v41-slice04-legacy-location-cutover.test.js`
+  (stubbed provider); adjacent V4.1 Slice 01–03, V8, and V14 suites passed
+  9 files / 130 tests. Then `cd backend && npm run verify:agent` passed on
+  2026-10-07 (ESLint: 0 errors / the 2 pre-existing warnings in
+  `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016;
+  Vitest: 153 files / 1,544 tests). The legacy → Province mapping was compared
+  manually against the live Province Open API v1 Province list (63 entries,
+  identical order/set). A read-only `--preflight` run against the configured
+  dev database found 6 mappable legacy records, 0 blocked, and 0 `FOREIGN`;
+  the migration was not applied to that database at that time (it was later
+  applied by the V4.1 Final Data Cutover entry above).
+- V4.1 Slice 01 Location Catalog Foundation: focused coverage passed 26 tests
+  in `test/catalog/v41-location-catalog.test.js` (stubbed provider). Then
+  `cd backend && npm run verify:agent` passed on 2026-10-06 (ESLint: 0 errors /
+  2 existing warnings in `test/job/v6-acceptance.test.js`; architecture:
+  ARCH-001 through ARCH-016; Vitest: 150 files / 1,484 tests). A manual live
+  smoke check against Province Open API v1 returned 63 Provinces and 696
+  District-level units and the expected validation outcomes; live provider
+  calls are not part of the automated gate.
+- V4.1 Slice 01 Implementation Readiness: focused regression rerun passed 3
+  files / 62 tests after replacing only expired wall-clock fixtures in the
+  existing V12/V15 suites with fixed year-2099 dates. Then
+  `cd backend && npm run verify:agent` passed on 2026-10-06 (ESLint: 0 errors /
+  the same 2 pre-existing warnings in `test/job/v6-acceptance.test.js`;
+  architecture: ARCH-001 through ARCH-016; Vitest: 149 files / 1,458 tests).
+  No V4.1 Fxx behavior, verification-rule relaxation, persistence change, or
+  transaction change was introduced.
 - V15 Final Acceptance finding — Day-15 Invitation expiration production
   runtime trigger: focused coverage passed 3 tests in
   `test/application/v15-invitation-expiration-runtime.test.js`. Then

@@ -9,7 +9,6 @@ import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_DISCOVERY_SORT from "../constants/job-discovery-sort.js";
 import JOB_DISCOVERY_VISIBILITY from "../constants/job-discovery-visibility.js";
 import JOB_STATUS from "../constants/job-status.js";
-import LOCATION from "../constants/location.js";
 import USER_ROLE from "../constants/user-role.js";
 import WORK_MODE from "../constants/work-mode.js";
 import Category from "../models/category.model.js";
@@ -19,14 +18,15 @@ import ExperienceLevel from "../models/experience-level.model.js";
 import Job from "../models/job.model.js";
 import {
   resolveJobDiscoveryVisibility,
+  toPublicJobLocation,
 } from "./job.service.js";
+import { normalizeLocationFilterSelections } from "./location.service.js";
 import AppError from "../utils/app-error.js";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
-const LOCATION_VALUES = new Set(Object.values(LOCATION));
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
 
@@ -322,7 +322,7 @@ const buildPublicJob = ({
     positionCategories: job.positionCategoryIds
       .map((id) => buildPublicCategory(categoryById.get(id.toString())))
       .filter(Boolean),
-    location: job.location,
+    location: toPublicJobLocation(job.location),
     workModes: job.workModes,
     employmentType: job.employmentType,
     experienceLevel: buildPublicExperienceLevel(
@@ -453,7 +453,7 @@ const buildDiscoveryFilter = ({
   keyword,
   companyIdsMatchingKeyword,
   fieldFilters,
-  locations,
+  locationSelections,
   workModes,
   employmentTypes,
   experienceLevelIds,
@@ -490,8 +490,15 @@ const buildDiscoveryFilter = ({
     });
   }
 
-  if (locations.length > 0) {
-    conditions.push({ location: { $in: locations } });
+  if (locationSelections.length > 0) {
+    conditions.push({
+      $or: locationSelections.map(({ provinceCode, districtCodes }) => ({
+        "location.provinceCode": provinceCode,
+        ...(districtCodes.length > 0
+          ? { "location.districtCode": { $in: districtCodes } }
+          : {}),
+      })),
+    });
   }
 
   if (workModes.length > 0) {
@@ -517,9 +524,10 @@ const listJobDiscoveryJobs = async ({
   await assertJobDiscoveryActor(actorUser);
 
   const keyword = normalizeKeyword(filters.keyword);
-  const locations = normalizeArray(filters.locations, "locations", {
-    allowedValues: LOCATION_VALUES,
-  });
+  const locationSelections = normalizeLocationFilterSelections(
+    filters.locations,
+    { field: "locations" },
+  );
   const workModes = normalizeArray(filters.workModes, "workModes", {
     allowedValues: WORK_MODE_VALUES,
   });
@@ -609,7 +617,7 @@ const listJobDiscoveryJobs = async ({
     keyword,
     companyIdsMatchingKeyword,
     fieldFilters,
-    locations,
+    locationSelections,
     workModes,
     employmentTypes,
     experienceLevelIds,

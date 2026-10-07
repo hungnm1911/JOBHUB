@@ -4,6 +4,7 @@ import {
   listJobDiscoveryJobs,
 } from "../services/job-discovery.service.js";
 import AppError from "../utils/app-error.js";
+import { parseLocationFilterQuery } from "../utils/location-filter-query.js";
 
 const normalizeQueryArray = (value) => {
   if (value == null) {
@@ -96,7 +97,7 @@ const getPublicJobsHandler = async (request, response, next) => {
       filters: {
         keyword: request.query.keyword,
         categories: parseCategories(request.query.categories),
-        locations: normalizeQueryArray(request.query.locations),
+        locations: parseLocationFilterQuery(request.query.locations, "locations"),
         workModes: normalizeQueryArray(request.query.workModes),
         employmentTypes: normalizeQueryArray(request.query.employmentTypes),
         experienceLevels: normalizeQueryArray(

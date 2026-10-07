@@ -32,6 +32,7 @@ import {
   acquireActiveUserForAssigneeEligibilityTx,
   acquireOperationalCompanyForAssigneeEligibilityTx,
   isJobPubliclyEligible,
+  toPublicJobLocation,
 } from "./job.service.js";
 import {
   evaluateJobInvitationCurrentState,
@@ -239,7 +240,7 @@ const toCandidateVisibleJob = (job) => {
     jobDescription: job.jobDescription,
     requiredSkills: job.requiredSkills,
     salaryText: job.salaryText,
-    location: job.location,
+    location: toPublicJobLocation(job.location),
     employmentType: job.employmentType,
     workModes: job.workModes,
     applicationDeadline: job.applicationDeadline,

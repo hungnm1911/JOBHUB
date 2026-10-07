@@ -16,7 +16,6 @@ import CANDIDATE_CV_VISIBILITY from "../../src/constants/candidate-cv-visibility
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
@@ -33,6 +32,10 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  TEST_LOCATION,
+} from "../helpers/location-provider.js";
 
 const createFieldCategory = async (name = "Software Engineering") => {
   return Category.create({
@@ -94,7 +97,7 @@ const createUploadedCv = async ({
     visibility,
     categoryId,
     experienceLevelId,
-    preferredLocations: [LOCATION.HA_NOI],
+    preferredLocations: [provinceOnlyLocation(TEST_LOCATION.HA_NOI)],
     skillTags: ["Node.js"],
     employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
     workModes: [WORK_MODE.HYBRID],
@@ -167,7 +170,7 @@ describe("V7 Slice 07 — Replace Uploaded PDF (F06)", () => {
       visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
       categoryId: category._id.toString(),
       experienceLevelId: experienceLevel._id.toString(),
-      preferredLocations: [LOCATION.HA_NOI],
+      preferredLocations: [provinceOnlyLocation(TEST_LOCATION.HA_NOI)],
       skillTags: ["Node.js"],
       employmentTypes: [EMPLOYMENT_TYPE.FULL_TIME],
       workModes: [WORK_MODE.HYBRID],

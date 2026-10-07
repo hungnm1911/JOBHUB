@@ -2,13 +2,19 @@ import { z } from "zod";
 
 import CANDIDATE_CV_VISIBILITY from "../constants/candidate-cv-visibility.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
-import LOCATION from "../constants/location.js";
 import WORK_MODE from "../constants/work-mode.js";
 import AppError from "../utils/app-error.js";
 
 const objectIdString = z
   .string()
   .regex(/^[a-fA-F0-9]{24}$/, "Invalid ObjectId");
+
+const preferredLocationSelectionInput = z
+  .object({
+    provinceCode: z.string().nullable().optional(),
+    districtCode: z.string().nullable().optional(),
+  })
+  .strict();
 
 const uniqueEnumArray = (values, fieldLabel) => {
   return z
@@ -41,10 +47,7 @@ const createGeneratedDraftCvSchema = z
     }),
     categoryId: objectIdString,
     experienceLevelId: objectIdString.nullable().optional(),
-    preferredLocations: uniqueEnumArray(
-      Object.values(LOCATION),
-      "preferredLocations",
-    ),
+    preferredLocations: z.array(preferredLocationSelectionInput).optional(),
     skillTags: z
       .array(
         z

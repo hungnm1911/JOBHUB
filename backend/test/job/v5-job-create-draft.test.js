@@ -6,11 +6,11 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import Job from "../../src/models/job.model.js";
@@ -27,6 +27,10 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  stubLocationProvider,
+} from "../helpers/location-provider.js";
 
 describe("V5 Slice 01 — Job foundation + create DRAFT (F01)", () => {
   beforeAll(async () => {
@@ -34,6 +38,7 @@ describe("V5 Slice 01 — Job foundation + create DRAFT (F01)", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await clearDatabase();
   });
 
@@ -116,13 +121,14 @@ describe("V5 Slice 01 — Job foundation + create DRAFT (F01)", () => {
         email: recruiter.user.email,
         password: DEFAULT_PASSWORD,
       });
+      stubLocationProvider();
 
       const response = await agent
         .post("/api/jobs")
         .set("Authorization", `Bearer ${accessToken}`)
         .send({
           title: "  Backend Engineer  ",
-          location: LOCATION.HA_NOI,
+          location: provinceOnlyLocation(),
           employmentType: EMPLOYMENT_TYPE.FULL_TIME,
           workModes: [WORK_MODE.HYBRID, WORK_MODE.REMOTE],
           requiredSkills: ["Node.js"],
@@ -131,7 +137,7 @@ describe("V5 Slice 01 — Job foundation + create DRAFT (F01)", () => {
       expect(response.status).toBe(201);
       expect(response.body.job).toMatchObject({
         title: "Backend Engineer",
-        location: LOCATION.HA_NOI,
+        location: provinceOnlyLocation(),
         employmentType: EMPLOYMENT_TYPE.FULL_TIME,
         workModes: [WORK_MODE.HYBRID, WORK_MODE.REMOTE],
         requiredSkills: ["Node.js"],
