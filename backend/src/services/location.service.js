@@ -161,6 +161,16 @@ const isNonEmptyString = (value) => {
   return typeof value === "string" && value !== "";
 };
 
+// Canonical code form is String(provider integer code); lenient forms such as
+// `01` or `1.0` are not canonical.
+const CANONICAL_LOCATION_CODE_PATTERN = /^(0|[1-9]\d*)$/;
+
+const isCanonicalLocationCode = (value) => {
+  return (
+    typeof value === "string" && CANONICAL_LOCATION_CODE_PATTERN.test(value)
+  );
+};
+
 const listProvinces = async () => {
   return fetchProvinces();
 };
@@ -274,6 +284,7 @@ const validateLocation = async ({ provinceCode, districtCode = null } = {}) => {
 export {
   LOCATION_PROVIDER_BASE_URL,
   LOCATION_VALIDATION_REASON,
+  isCanonicalLocationCode,
   listDistrictLevelUnitsByProvince,
   listProvinces,
   validateLocation,

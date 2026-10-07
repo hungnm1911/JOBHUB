@@ -6,9 +6,10 @@
 `IN PROGRESS`. Slice 01 — Location Catalog Foundation (F01; BR-01–BR-09,
 BR-21–BR-23), Slice 02 — Job Location V4.1 (F02; BR-03–BR-10,
 BR-21–BR-24), Slice 03 — Candidate Preferred Locations V4.1 (F03; BR-05,
-BR-06, BR-11–BR-14, BR-21–BR-24), and Slice 04 — Legacy Location Migration &
-Cutover (F06; BR-01, BR-02, BR-21–BR-24) are `IMPLEMENTED AND VERIFIED`;
-Slices 05–06 are not started.
+BR-06, BR-11–BR-14, BR-21–BR-24), Slice 04 — Legacy Location Migration &
+Cutover (F06; BR-01, BR-02, BR-21–BR-24), and Slice 05 — Job Discovery
+Location Hierarchy Filter (F04; BR-13–BR-18, BR-21, BR-24) are
+`IMPLEMENTED AND VERIFIED`; Slice 06 is not started.
 The approved canonical contracts are
 `docs/product/versions/v4.1-vietnam-location-migration.md` and
 `docs/data/versions/v4.1-vietnam-location-migration-data-model.md`.
@@ -123,10 +124,32 @@ longer occur. Focused coverage:
 The configured dev database preflight (2026-10-07, read-only) found 3 legacy
 Jobs (all `HA_NOI`) and 3 legacy CandidateCVs (`HA_NOI`, `HO_CHI_MINH`,
 `DA_NANG`), 0 blocked, 0 `FOREIGN`; applying the migration there is an explicit
-operator step. Interim until Slices 05/06: the V8 legacy `locations` Discovery
-filter and the V14 legacy-literal Candidate Search filter are unchanged and
-match no migrated record; Discovery and Candidate Search hierarchy filtering
-remain deferred to Slices 05 and 06 respectively.
+operator step. Interim until Slice 06: the V14 legacy-literal Candidate Search
+filter is unchanged and matches no migrated record; Candidate Search hierarchy
+filtering remains deferred to Slice 06.
+Slice 05 replaces the V8 legacy-literal `locations` Discovery predicate with
+the V4.1 hierarchy over persisted `location.provinceCode` /
+`location.districtCode`. The approved query encoding on
+`GET /api/job-discovery/jobs` mirrors `categories`: repeatable
+`<provinceCode>[:<districtCode>|<districtCode>...]` groups separated by `;`, or
+a JSON array `[{ provinceCode, districtCodes? }]`; no Districts means
+Province / ALL. Province / ALL matches Province-only Jobs and Jobs in any
+District of that Province; a District subset matches only Jobs with that exact
+Province + District (never Province-only Jobs); Provinces and Districts within
+one Province combine with OR, and the Location group stays ANDed with keyword
+and the other V8 groups. Validation is structural only (`400`, field
+`locations`): codes must be canonical decimal strings (`isCanonicalLocationCode`
+in `location.service.js`), so legacy literals, `FOREIGN`, `REMOTE`, `ALL`,
+`01`/`1.0`, District-without-Province, extra levels, and the same Province as
+both ALL and a subset are rejected. Discovery makes no provider call, so a
+well-formed unknown or cross-Province code matches no Job instead of being
+semantically rejected (approved interpretation of the F04 rejection cases).
+Discovery no longer imports `constants/location.js`. Visibility, authorization,
+keyword, RELEVANCE/NEWEST/EXPIRING_SOON, pagination, and response shape are
+unchanged; no index, persistence, or Candidate Search change. Focused coverage:
+`test/job/v41-slice05-job-discovery-location-filter.test.js` (28 tests).
+Verification: `npm run verify:agent` passed (lint 0 errors, ARCH-001–ARCH-016,
+154 files / 1572 tests).
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.
@@ -2255,6 +2278,13 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V4.1 Slice 05 Job Discovery Location Hierarchy Filter: focused coverage
+  passed 28 tests in `test/job/v41-slice05-job-discovery-location-filter.test.js`
+  together with the existing V8 suite (2 files / 36 tests; provider stubbed and
+  asserted never called). Then `cd backend && npm run verify:agent` passed on
+  2026-10-07 (ESLint: 0 errors / the 2 pre-existing warnings in
+  `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016;
+  Vitest: 154 files / 1,572 tests).
 - V4.1 Slice 04 Legacy Location Migration & Cutover: focused coverage passed
   14 tests in `test/catalog/v41-slice04-legacy-location-cutover.test.js`
   (stubbed provider); adjacent V4.1 Slice 01–03, V8, and V14 suites passed
