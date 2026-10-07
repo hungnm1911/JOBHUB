@@ -233,6 +233,32 @@ describe("V4.1 Slice 05 — Job Discovery Location hierarchy filter", () => {
       expect(
         await listJobIds(agent, { locations: TEST_LOCATION.UNKNOWN_PROVINCE }),
       ).toEqual([]);
+      expect(
+        await listJobIds(agent, {
+          locations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.UNKNOWN_DISTRICT}`,
+        }),
+      ).toEqual([]);
+      expect(
+        await listJobIds(agent, {
+          locations: `${TEST_LOCATION.UNKNOWN_PROVINCE}:${TEST_LOCATION.HA_NOI_BA_DINH}`,
+        }),
+      ).toEqual([]);
+    });
+
+    it("invalid Districts and groups contribute nothing while valid ones keep their results", async () => {
+      const { agent, createJob } = await createContext();
+      const jobs = await seedHierarchyJobs(createJob);
+
+      expect(
+        await listJobIds(agent, {
+          locations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_DINH}|${TEST_LOCATION.UNKNOWN_DISTRICT}|${TEST_LOCATION.HO_CHI_MINH_DISTRICT_1}`,
+        }),
+      ).toEqual(idsOf(jobs.haNoiBaDinh));
+      expect(
+        await listJobIds(agent, {
+          locations: `${TEST_LOCATION.HO_CHI_MINH};${TEST_LOCATION.HA_GIANG}:${TEST_LOCATION.HA_NOI_BA_DINH};${TEST_LOCATION.UNKNOWN_PROVINCE}`,
+        }),
+      ).toEqual(idsOf(jobs.hoChiMinhOnly, jobs.hoChiMinhDistrict1));
     });
   });
 
@@ -275,6 +301,25 @@ describe("V4.1 Slice 05 — Job Discovery Location hierarchy filter", () => {
       expect(repeatedResponse.status).toBe(200);
       expect(repeatedResponse.body.jobs.map((job) => job.id).sort()).toEqual(
         expected,
+      );
+    });
+
+    it("mixes Province / ALL groups with a multi-District subset across three Provinces", async () => {
+      const { agent, createJob } = await createContext();
+      const jobs = await seedHierarchyJobs(createJob);
+
+      expect(
+        await listJobIds(agent, {
+          locations: `${TEST_LOCATION.HO_CHI_MINH};${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_DINH}|${TEST_LOCATION.HA_NOI_BA_VI};${TEST_LOCATION.HA_GIANG}`,
+        }),
+      ).toEqual(
+        idsOf(
+          jobs.hoChiMinhOnly,
+          jobs.hoChiMinhDistrict1,
+          jobs.haNoiBaDinh,
+          jobs.haNoiBaVi,
+          jobs.haGiangCity,
+        ),
       );
     });
 

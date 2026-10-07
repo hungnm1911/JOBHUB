@@ -37,14 +37,16 @@ import {
   disconnectTestDatabase,
 } from "../helpers/database.js";
 import {
+  jsonResponse,
   stubLocationProvider,
   TEST_LOCATION,
 } from "../helpers/location-provider.js";
 
 const SEARCH_PATH = "/api/jobs/candidate-search/cvs";
 
-// Province Open API v1 code of Quận Hoàn Kiếm (Hà Nội). Search never validates
-// codes against the provider, so it is not part of the stub dataset.
+// Province Open API v1 code of Quận Hoàn Kiếm (Hà Nội). Only seeded as a
+// persisted preference, never used as a filter District, so it is not part of
+// the stub dataset.
 const HA_NOI_HOAN_KIEM = "2";
 
 const selection = (provinceCode, districtCode = null) => ({
@@ -243,6 +245,18 @@ describe("V4.1 Slice 06 — Candidate Search Location hierarchy filter (F05)", (
         "Hồ Chí Minh / Quận 1",
         [HO_CHI_MINH_DISTRICT_1],
         TEST_LOCATION.HA_NOI,
+        false,
+      ],
+      [
+        "Hồ Chí Minh / ALL",
+        [HO_CHI_MINH_ALL],
+        `${TEST_LOCATION.HO_CHI_MINH}:${TEST_LOCATION.HA_NOI_BA_DINH}`,
+        false,
+      ],
+      [
+        "Hồ Chí Minh / ALL",
+        [HO_CHI_MINH_ALL],
+        `${TEST_LOCATION.HO_CHI_MINH}:${TEST_LOCATION.UNKNOWN_DISTRICT}`,
         false,
       ],
     ])(
@@ -466,31 +480,149 @@ describe("V4.1 Slice 06 — Candidate Search Location hierarchy filter (F05)", (
     ).toEqual([]);
   });
 
-  it("structural-only: a well-formed unknown or cross-Province District never matches exact-District Candidates; Province-wide Candidates of that Province still match", async () => {
-    const context = await createContext();
-    const haNoiAll = await context.createCv({
-      name: "HN ALL",
-      preferredLocations: [HA_NOI_ALL],
-    });
-    await context.createCv({
-      name: "HN Ba Dinh",
-      preferredLocations: [HA_NOI_BA_DINH],
-    });
-    const hoChiMinhAll = await context.createCv({
-      name: "HCM ALL",
-      preferredLocations: [HO_CHI_MINH_ALL],
+  describe("Province / District membership of the filter", () => {
+    const seedMembershipCvs = async (createCv) => ({
+      none: await createCv({ name: "No preference" }),
+      haNoiAll: await createCv({ name: "HN ALL", preferredLocations: [HA_NOI_ALL] }),
+      haNoiBaDinh: await createCv({
+        name: "HN Ba Dinh",
+        preferredLocations: [HA_NOI_BA_DINH],
+      }),
+      haNoiBaVi: await createCv({
+        name: "HN Ba Vi",
+        preferredLocations: [HA_NOI_BA_VI],
+      }),
+      haNoiHoanKiem: await createCv({
+        name: "HN Hoan Kiem",
+        preferredLocations: [HA_NOI_HOAN_KIEM_ONLY],
+      }),
+      hoChiMinhAll: await createCv({
+        name: "HCM ALL",
+        preferredLocations: [HO_CHI_MINH_ALL],
+      }),
+      hoChiMinhDistrict1: await createCv({
+        name: "HCM District 1",
+        preferredLocations: [HO_CHI_MINH_DISTRICT_1],
+      }),
+      haGiangAll: await createCv({
+        name: "HG ALL",
+        preferredLocations: [selection(TEST_LOCATION.HA_GIANG)],
+      }),
+      haGiangCity: await createCv({
+        name: "HG City",
+        preferredLocations: [HA_GIANG_CITY],
+      }),
     });
 
-    expect(
-      await searchIds(context, {
-        preferredLocations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.UNKNOWN_DISTRICT}`,
-      }),
-    ).toEqual(idsOf(haNoiAll));
-    expect(
-      await searchIds(context, {
-        preferredLocations: `${TEST_LOCATION.HO_CHI_MINH}:${TEST_LOCATION.HA_NOI_BA_DINH}`,
-      }),
-    ).toEqual(idsOf(hoChiMinhAll));
+    it("a Province-wide Candidate does not match its Province paired with another Province's District", async () => {
+      const context = await createContext();
+      await seedMembershipCvs(context.createCv);
+
+      expect(
+        await searchIds(context, {
+          preferredLocations: `${TEST_LOCATION.HO_CHI_MINH}:${TEST_LOCATION.HA_NOI_BA_DINH}`,
+        }),
+      ).toEqual([]);
+      expect(
+        await searchIds(context, {
+          preferredLocations: JSON.stringify([
+            {
+              provinceCode: TEST_LOCATION.HO_CHI_MINH,
+              districtCodes: [TEST_LOCATION.HA_NOI_BA_DINH],
+            },
+          ]),
+        }),
+      ).toEqual([]);
+    });
+
+    it("a well-formed unknown District matches nothing with 200", async () => {
+      const context = await createContext();
+      await seedMembershipCvs(context.createCv);
+
+      expect(
+        await searchIds(context, {
+          preferredLocations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.UNKNOWN_DISTRICT}`,
+        }),
+      ).toEqual([]);
+    });
+
+    it("an invalid District contributes nothing while valid Districts of the same Province still match", async () => {
+      const context = await createContext();
+      const cvs = await seedMembershipCvs(context.createCv);
+
+      expect(
+        await searchIds(context, {
+          preferredLocations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_DINH}|${TEST_LOCATION.UNKNOWN_DISTRICT}|${TEST_LOCATION.HO_CHI_MINH_DISTRICT_1}`,
+        }),
+      ).toEqual(idsOf(cvs.haNoiAll, cvs.haNoiBaDinh));
+    });
+
+    it("mixes Province / ALL groups with District-subset groups across Provinces", async () => {
+      const context = await createContext();
+      const cvs = await seedMembershipCvs(context.createCv);
+      const expected = idsOf(
+        cvs.hoChiMinhAll,
+        cvs.hoChiMinhDistrict1,
+        cvs.haNoiAll,
+        cvs.haNoiBaDinh,
+        cvs.haNoiBaVi,
+        cvs.haGiangAll,
+        cvs.haGiangCity,
+      );
+
+      expect(
+        await searchIds(context, {
+          preferredLocations: `${TEST_LOCATION.HO_CHI_MINH};${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_DINH}|${TEST_LOCATION.HA_NOI_BA_VI};${TEST_LOCATION.HA_GIANG}`,
+        }),
+      ).toEqual(expected);
+
+      const repeated = await context.agent
+        .get(
+          `${SEARCH_PATH}?preferredLocations=${TEST_LOCATION.HO_CHI_MINH}&preferredLocations=${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_DINH}&preferredLocations=${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_VI}&preferredLocations=${TEST_LOCATION.HA_GIANG}`,
+        )
+        .set("Authorization", `Bearer ${context.accessToken}`);
+
+      expect(repeated.status).toBe(200);
+      expect(repeated.body.cvs.map((cv) => cv.cvId).sort()).toEqual(expected);
+
+      expect(
+        await searchIds(context, {
+          preferredLocations: JSON.stringify([
+            { provinceCode: TEST_LOCATION.HO_CHI_MINH },
+            {
+              provinceCode: TEST_LOCATION.HA_NOI,
+              districtCodes: [
+                TEST_LOCATION.HA_NOI_BA_DINH,
+                TEST_LOCATION.HA_NOI_BA_VI,
+              ],
+            },
+            { provinceCode: TEST_LOCATION.HA_GIANG, districtCodes: [] },
+          ]),
+        }),
+      ).toEqual(expected);
+    });
+
+    it("invalid groups contribute nothing to the OR while valid groups keep their results", async () => {
+      const context = await createContext();
+      const cvs = await seedMembershipCvs(context.createCv);
+
+      expect(
+        await searchIds(context, {
+          preferredLocations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_VI};${TEST_LOCATION.HA_GIANG}:${TEST_LOCATION.HA_NOI_BA_DINH};${TEST_LOCATION.HO_CHI_MINH}:${TEST_LOCATION.UNKNOWN_DISTRICT};${TEST_LOCATION.UNKNOWN_PROVINCE}:${TEST_LOCATION.HA_NOI_BA_DINH}`,
+        }),
+      ).toEqual(idsOf(cvs.haNoiAll, cvs.haNoiBaVi));
+    });
+
+    it("a filter whose every group is invalid matches nothing instead of lifting the Location restriction", async () => {
+      const context = await createContext();
+      await seedMembershipCvs(context.createCv);
+
+      expect(
+        await searchIds(context, {
+          preferredLocations: `${TEST_LOCATION.HO_CHI_MINH}:${TEST_LOCATION.HA_NOI_BA_DINH};${TEST_LOCATION.HA_GIANG}:${TEST_LOCATION.UNKNOWN_DISTRICT}`,
+        }),
+      ).toEqual([]);
+    });
   });
 
   it("ANDs the Location group with every other V14 filter group", async () => {
@@ -679,7 +811,7 @@ describe("V4.1 Slice 06 — Candidate Search Location hierarchy filter (F05)", (
     }
   });
 
-  it("never calls the Location provider on the Candidate Search path", async () => {
+  it("calls the Location boundary only to resolve District membership of District filters", async () => {
     const context = await createContext();
     await context.createCv({
       name: "HN Ba Dinh",
@@ -687,19 +819,44 @@ describe("V4.1 Slice 06 — Candidate Search Location hierarchy filter (F05)", (
     });
 
     await searchIds(context, {});
-    await searchIds(context, { preferredLocations: TEST_LOCATION.HA_NOI });
     await searchIds(context, {
-      preferredLocations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_DINH};${TEST_LOCATION.HO_CHI_MINH}`,
+      preferredLocations: `${TEST_LOCATION.HA_NOI};${TEST_LOCATION.HO_CHI_MINH}`,
     });
     await searchIds(context, {
       preferredLocations: TEST_LOCATION.UNKNOWN_PROVINCE,
     });
-    await searchIds(context, {
-      preferredLocations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.UNKNOWN_DISTRICT}`,
-    });
     await search(context, { preferredLocations: "HA_NOI" });
 
     expect(providerFetch).not.toHaveBeenCalled();
+
+    await searchIds(context, {
+      preferredLocations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_DINH};${TEST_LOCATION.HO_CHI_MINH}`,
+    });
+
+    expect(providerFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed with 502 when the Location provider is unavailable for a District filter", async () => {
+    providerFetch = stubLocationProvider({
+      "/d/": () => jsonResponse({ detail: "unavailable" }, 503),
+    });
+    const context = await createContext();
+    const haNoiAll = await context.createCv({
+      name: "HN ALL",
+      preferredLocations: [HA_NOI_ALL],
+    });
+
+    const districtFilter = await search(context, {
+      preferredLocations: `${TEST_LOCATION.HA_NOI}:${TEST_LOCATION.HA_NOI_BA_DINH}`,
+    });
+
+    expect(districtFilter.status).toBe(502);
+    expect(districtFilter.body.error.details).toMatchObject({
+      reason: "LOCATION_PROVIDER_UNAVAILABLE",
+    });
+    expect(
+      await searchIds(context, { preferredLocations: TEST_LOCATION.HA_NOI }),
+    ).toEqual(idsOf(haNoiAll));
   });
 
   it.each([

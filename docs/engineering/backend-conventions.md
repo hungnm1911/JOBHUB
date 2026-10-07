@@ -125,9 +125,13 @@ Application routes must be registered before `not-found.js`, and `error-handler.
   may be inserted behind `location.service.js` without changing canonical DTOs,
   persisted fields, or consumer contracts.
 - Job Discovery and Candidate Search filter/sort from persisted
-  `provinceCode`/`districtCode`; they do not call Province Open API on their
-  query path. Provider access remains limited to catalog and semantic-validation
-  workflows.
+  `provinceCode`/`districtCode` and never revalidate persisted records. Provider
+  access remains limited to catalog and semantic-validation workflows; the only
+  search-path semantic step is Candidate Search resolving District → Province
+  membership of a District-subset filter once per request through
+  `resolveLocationFilterSelections` (unknown or cross-Province Districts match
+  nothing; provider failure fails closed). Job Discovery makes no Location
+  boundary call.
 
 ### Background recovery
 

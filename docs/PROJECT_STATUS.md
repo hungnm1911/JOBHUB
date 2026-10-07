@@ -36,7 +36,9 @@ initial cache, fallback, static catalog, or MongoDB mirror. Provider failure
 fails catalog/semantic validation closed. A future cache/provider wrapper may
 be added behind the same boundary without changing Product/API contracts or
 Job/CV/Search consumers. Job Discovery and Candidate Search filter/sort from
-persisted `provinceCode`/`districtCode` and do not call the provider.
+persisted `provinceCode`/`districtCode`; only Candidate Search District-subset
+filters resolve District → Province membership once per request through the
+Location boundary (see Slice 06).
 
 Slice 01 adds `backend/src/services/location.service.js` as the canonical
 Location boundary: `listProvinces` normalizes raw v1 Provinces to
@@ -170,10 +172,19 @@ one persisted preference (`$elemMatch`) must satisfy one filter branch; the
 Location group stays ANDed with V14 eligibility and the other five groups.
 Validation is structural only (`400`, field `preferredLocations`), so legacy
 literals, comma lists, `FOREIGN`, `REMOTE`, `ALL`, and lenient codes are
-rejected. Candidate Search makes no provider call: a well-formed unknown
-Province matches nothing, and a well-formed unknown or cross-Province District
-never matches exact-District preferences while Province-wide preferences of
-that Province still match (approved F05 interpretation, 2026-10-07). V14
+rejected. V4.1 acceptance bug fix (2026-10-07): the original structural-only
+predicate let a Province-wide preference of P match `P:<District of another
+Province>` or `P:<unknown District>`. Product F04/F05 now state that well-formed
+unknown codes and cross-Province Districts are not rejections but match
+nothing, while valid groups keep their OR results; Data §10.2 and the
+engineering contracts allow Candidate Search, only when a District subset is
+present, to call `resolveLocationFilterSelections` in `location.service.js`
+once per request (after structural and other filter validation) to keep only
+District codes belonging to their Province. An emptied subset is dropped, never
+widened to Province / ALL; a filter whose every selection resolves empty
+returns no Candidates; provider failure fails closed (`502`); Province / ALL
+filters and Job Discovery stay provider-free (Job Discovery already matched
+nothing for invalid pairs through exact persisted pairs). V14
 authorization, eligibility/visibility/archive, `updatedAt desc, _id desc` order
 (no pagination), and the result shape are unchanged; no index or persistence
 change. `constants/location.js` now has no runtime consumer (Slice 04 migration
@@ -182,7 +193,24 @@ input domain only). Focused coverage:
 tests); V14 browse/acceptance fixtures moved to structured Locations and the
 Slice 03 interim legacy-filter assertion retired. Verification:
 `npm run verify:agent` passed (lint 0 errors, ARCH-001–ARCH-016, 155 files /
-1612 tests).
+1612 tests). After the acceptance bug fix the Slice 06 file has 48 tests
+(cross-Province/unknown-District regression, mixed multi-Province membership,
+provider-call scope, `502` fail-closed) and Slice 05 has 30;
+`npm run verify:agent` passed (lint 0 errors, ARCH-001–ARCH-016, 155 files /
+1622 tests). The Slice 02 `FOREIGN` schema and Slice 03 migration-preflight
+bug-fix slices are untouched.
+V4.1 acceptance bug fix (2026-10-07, `FOREIGN` persistence): the embedded
+`Job.location.provinceCode` and `CandidateCV.preferredLocations[].provinceCode`
+schemas only required a non-empty string, so `{ provinceCode: "FOREIGN" }`
+passed `document.validate()` and `findOneAndUpdate(..., { runValidators: true })`;
+only the semantic catalog lookup rejected it. Data §10.1 assigns this forbidden
+legacy representation to schema/document validation, so both schemas now reuse
+`isNotForbiddenLocationProvinceCode` exported from `job.model.js`. `REMOTE`,
+catalog existence, District membership, service validation, search/filter,
+indexes, and the Slice 04 migration are unchanged. Focused regressions in the
+Slice 02 (24 tests) and Slice 03 (24 tests) files; `npm run verify:agent`
+passed (lint 0 errors, ARCH-001–ARCH-016, 155 files / 1624 tests). The Slice 03
+migration-preflight bug-fix slice and Slice 01 search semantics are untouched.
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.

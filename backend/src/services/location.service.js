@@ -177,8 +177,8 @@ const createInvalidLocationFilterError = (message, field) => {
   return new AppError(400, message, { field });
 };
 
-// Structural validation only: search paths never call the Location provider, so
-// a well-formed but unknown or cross-Province code simply matches nothing.
+// Structural validation only; a well-formed but unknown or cross-Province code
+// is not an input error and must match nothing.
 const normalizeLocationFilterSelections = (locationSelections, { field }) => {
   if (locationSelections == null) {
     return [];
@@ -257,6 +257,35 @@ const normalizeLocationFilterSelections = (locationSelections, { field }) => {
       districtCodes: [...districtCodes],
     }),
   );
+};
+
+// Keeps only District codes that belong to their Province in the canonical
+// catalog. A District subset left empty is dropped, never widened to
+// Province / ALL. Province / ALL selections need no catalog lookup.
+const resolveLocationFilterSelections = async (locationSelections) => {
+  if (!locationSelections.some(({ districtCodes }) => districtCodes.length > 0)) {
+    return locationSelections;
+  }
+
+  const allDistrictLevelUnits = await fetchAllDistrictLevelUnits();
+  const provinceCodeByDistrictCode = new Map(
+    allDistrictLevelUnits.map(({ code, provinceCode }) => [code, provinceCode]),
+  );
+
+  return locationSelections.flatMap(({ provinceCode, districtCodes }) => {
+    if (districtCodes.length === 0) {
+      return [{ provinceCode, districtCodes }];
+    }
+
+    const memberDistrictCodes = districtCodes.filter(
+      (districtCode) =>
+        provinceCodeByDistrictCode.get(districtCode) === provinceCode,
+    );
+
+    return memberDistrictCodes.length > 0
+      ? [{ provinceCode, districtCodes: memberDistrictCodes }]
+      : [];
+  });
 };
 
 const listProvinces = async () => {
@@ -376,5 +405,6 @@ export {
   listDistrictLevelUnitsByProvince,
   listProvinces,
   normalizeLocationFilterSelections,
+  resolveLocationFilterSelections,
   validateLocation,
 };

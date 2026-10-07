@@ -721,6 +721,60 @@ describe("V4.1 Slice 02 — Job Location V4.1 (F02)", () => {
       expect(raw.location).not.toHaveProperty("_id");
     });
 
+    it("rejects FOREIGN as a persisted Province code at document and update validation (Data §10.1, BR-21)", async () => {
+      const context = await createRecruiterContext();
+      const base = {
+        companyId: context.manager.company._id,
+        createdByCompanyMemberId: context.recruiter.membership._id,
+        primaryRecruiterCompanyMemberId: context.recruiter.membership._id,
+      };
+
+      for (const location of [
+        { provinceCode: "FOREIGN", districtCode: null },
+        { provinceCode: "FOREIGN", districtCode: TEST_LOCATION.HA_NOI_BA_VI },
+      ]) {
+        const error = await new Job({ ...base, location })
+          .validate()
+          .catch((caught) => caught);
+
+        expect(error).toBeInstanceOf(mongoose.Error.ValidationError);
+        expect(error.errors).toHaveProperty(["location.provinceCode"]);
+        await expect(Job.create({ ...base, location })).rejects.toThrow(
+          mongoose.Error.ValidationError,
+        );
+      }
+
+      expect(await Job.countDocuments()).toBe(0);
+
+      // Catalog existence (including REMOTE) stays with the semantic boundary.
+      for (const location of [
+        { provinceCode: TEST_LOCATION.HA_NOI, districtCode: null },
+        HA_NOI_BA_VI,
+        { provinceCode: "REMOTE", districtCode: null },
+      ]) {
+        await expect(
+          new Job({ ...base, location }).validate(),
+        ).resolves.toBeUndefined();
+      }
+
+      const created = await Job.create({ ...base, location: HA_NOI_BA_VI });
+
+      for (const update of [
+        { $set: { location: { provinceCode: "FOREIGN", districtCode: null } } },
+        { $set: { "location.provinceCode": "FOREIGN" } },
+      ]) {
+        await expect(
+          Job.findOneAndUpdate({ _id: created._id }, update, {
+            returnDocument: "after",
+            runValidators: true,
+          }),
+        ).rejects.toThrow(mongoose.Error.ValidationError);
+        expect(
+          (await Job.collection.findOne({ _id: created._id })).location,
+        ).toEqual(HA_NOI_BA_VI);
+      }
+    });
+
     it("declares the canonical V4.1 Job Location discovery indexes (Data §5.4)", async () => {
       await Job.init();
 

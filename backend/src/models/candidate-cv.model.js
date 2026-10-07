@@ -7,6 +7,7 @@ import CV_LANGUAGE_PROFICIENCY from "../constants/cv-language-proficiency.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import HARVARD_CV_SECTION from "../constants/harvard-cv-section.js";
 import WORK_MODE from "../constants/work-mode.js";
+import { isNotForbiddenLocationProvinceCode } from "./job.model.js";
 
 const { Schema, model } = mongoose;
 
@@ -389,10 +390,16 @@ const preferredLocationSelectionSchema = new Schema(
     provinceCode: {
       type: String,
       required: true,
-      validate: {
-        validator: isNonEmptyTrimmedString,
-        message: "preferredLocations.provinceCode must be a non-empty string",
-      },
+      validate: [
+        {
+          validator: isNonEmptyTrimmedString,
+          message: "preferredLocations.provinceCode must be a non-empty string",
+        },
+        {
+          validator: isNotForbiddenLocationProvinceCode,
+          message: "preferredLocations.provinceCode must not be FOREIGN",
+        },
+      ],
     },
     districtCode: {
       type: String,

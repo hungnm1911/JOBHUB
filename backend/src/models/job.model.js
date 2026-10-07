@@ -17,6 +17,12 @@ const isNonEmptyString = (value) => {
   return typeof value === "string" && value !== "";
 };
 
+// Data V4.1 §10.1: `FOREIGN` is a forbidden legacy representation owned by
+// local schema validation; catalog existence stays with the semantic boundary.
+const isNotForbiddenLocationProvinceCode = (value) => {
+  return value !== "FOREIGN";
+};
+
 const hasDistinctObjectIds = (values) => {
   if (!Array.isArray(values)) {
     return false;
@@ -132,10 +138,16 @@ const jobLocationSchema = new Schema(
     provinceCode: {
       type: String,
       required: true,
-      validate: {
-        validator: isNonEmptyString,
-        message: "location.provinceCode must be a non-empty string",
-      },
+      validate: [
+        {
+          validator: isNonEmptyString,
+          message: "location.provinceCode must be a non-empty string",
+        },
+        {
+          validator: isNotForbiddenLocationProvinceCode,
+          message: "location.provinceCode must not be FOREIGN",
+        },
+      ],
     },
 
     districtCode: {
@@ -490,5 +502,6 @@ const ensureJobCollectionInvariants = async (
 export {
   assertJobRecruitmentTeamInvariants,
   ensureJobCollectionInvariants,
+  isNotForbiddenLocationProvinceCode,
 };
 export default Job;

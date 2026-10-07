@@ -784,6 +784,66 @@ describe("V4.1 Slice 03 — Candidate preferred Locations V4.1 (F03)", () => {
       ).toEqual([HA_NOI_ALL, HO_CHI_MINH_ALL]);
     });
 
+    it("rejects FOREIGN as a persisted preferred Province code at document and update validation (Data §10.1, BR-21)", async () => {
+      const { user, category } = await createCandidateContext();
+      const base = baseFields(user._id, category._id);
+      const foreignAll = { provinceCode: "FOREIGN", districtCode: null };
+
+      for (const [preferredLocations, invalidPath] of [
+        [[foreignAll], "preferredLocations.0.provinceCode"],
+        [[HA_NOI_ALL, foreignAll], "preferredLocations.1.provinceCode"],
+        [
+          [{ provinceCode: "FOREIGN", districtCode: TEST_LOCATION.HA_NOI_BA_VI }],
+          "preferredLocations.0.provinceCode",
+        ],
+      ]) {
+        const error = await new CandidateCV({ ...base, preferredLocations })
+          .validate()
+          .catch((caught) => caught);
+
+        expect(error).toBeInstanceOf(mongoose.Error.ValidationError);
+        expect(error.errors).toHaveProperty([invalidPath]);
+        await expect(
+          CandidateCV.create({ ...base, preferredLocations }),
+        ).rejects.toThrow(mongoose.Error.ValidationError);
+      }
+
+      expect(await CandidateCV.countDocuments()).toBe(0);
+
+      // Catalog existence (including REMOTE) stays with the semantic boundary.
+      for (const preferredLocations of [
+        [HA_NOI_ALL],
+        [HA_NOI_BA_DINH, HA_NOI_BA_VI],
+        [HO_CHI_MINH_ALL, HA_GIANG_CITY],
+        [{ provinceCode: "REMOTE", districtCode: null }],
+      ]) {
+        await expect(
+          new CandidateCV({ ...base, preferredLocations }).validate(),
+        ).resolves.toBeUndefined();
+      }
+
+      const created = await CandidateCV.create({
+        ...base,
+        preferredLocations: [HA_NOI_ALL, HA_GIANG_CITY],
+      });
+
+      for (const update of [
+        { $set: { preferredLocations: [HA_NOI_ALL, foreignAll] } },
+        { $set: { "preferredLocations.0.provinceCode": "FOREIGN" } },
+      ]) {
+        await expect(
+          CandidateCV.findOneAndUpdate({ _id: created._id }, update, {
+            returnDocument: "after",
+            runValidators: true,
+          }),
+        ).rejects.toThrow(mongoose.Error.ValidationError);
+        expect(
+          (await CandidateCV.collection.findOne({ _id: created._id }))
+            .preferredLocations,
+        ).toEqual([HA_NOI_ALL, HA_GIANG_CITY]);
+      }
+    });
+
     it("declares the canonical Candidate Search Location index with the V14 partial scope", async () => {
       await CandidateCV.syncIndexes();
       const indexes = await CandidateCV.collection.indexes();

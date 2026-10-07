@@ -23,6 +23,7 @@ import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
 import {
   normalizeLocationFilterSelections,
+  resolveLocationFilterSelections,
   validateLocation,
 } from "./location.service.js";
 
@@ -1368,6 +1369,18 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
   });
   const categoryFilterIds =
     await resolveCandidateSearchCategoryFilterIds(requestedCategoryIds);
+  const locationFilterSelections = await resolveLocationFilterSelections(
+    requestedLocationSelections,
+  );
+
+  // A requested Location filter with no catalog-valid selection matches
+  // nothing; it must not fall back to "no Location restriction".
+  if (
+    requestedLocationSelections.length > 0 &&
+    locationFilterSelections.length === 0
+  ) {
+    return [];
+  }
 
   // V14 BR-10..BR-16 + BR-32:
   // - local CandidateCV predicate: PUBLIC + not archived;
@@ -1387,11 +1400,11 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
       : {}),
     // A Province-wide preference (`districtCode: null`) covers every District
     // filter of its Province; one preference must satisfy one filter branch.
-    ...(requestedLocationSelections.length > 0
+    ...(locationFilterSelections.length > 0
       ? {
         preferredLocations: {
           $elemMatch: {
-            $or: requestedLocationSelections.map(
+            $or: locationFilterSelections.map(
               ({ provinceCode, districtCodes }) => ({
                 provinceCode,
                 ...(districtCodes.length > 0
