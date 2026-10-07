@@ -4,6 +4,7 @@ import {
   listJobDiscoveryJobs,
 } from "../services/job-discovery.service.js";
 import AppError from "../utils/app-error.js";
+import { parseLocationFilterQuery } from "../utils/location-filter-query.js";
 
 const normalizeQueryArray = (value) => {
   if (value == null) {
@@ -89,66 +90,6 @@ const parseCategories = (value) => {
   return branches;
 };
 
-const createInvalidLocationsQueryError = () => {
-  return new AppError(400, "Invalid locations query", { field: "locations" });
-};
-
-const parseLocations = (value) => {
-  if (value == null) {
-    return [];
-  }
-
-  const rawValues = normalizeQueryArray(value);
-  const selections = [];
-
-  for (const rawValue of rawValues) {
-    if (typeof rawValue !== "string") {
-      throw createInvalidLocationsQueryError();
-    }
-
-    const trimmed = rawValue.trim();
-
-    if (trimmed === "") {
-      continue;
-    }
-
-    if (trimmed.startsWith("[")) {
-      let parsed;
-
-      try {
-        parsed = JSON.parse(trimmed);
-      } catch {
-        throw createInvalidLocationsQueryError();
-      }
-
-      if (!Array.isArray(parsed)) {
-        throw createInvalidLocationsQueryError();
-      }
-
-      selections.push(...parsed);
-      continue;
-    }
-
-    for (const branch of trimmed.split(";")) {
-      const [provinceCode, districts = "", ...rest] = branch.split(":");
-
-      if (rest.length > 0) {
-        throw createInvalidLocationsQueryError();
-      }
-
-      selections.push({
-        provinceCode: provinceCode.trim(),
-        districtCodes: districts
-          .split("|")
-          .map((districtCode) => districtCode.trim())
-          .filter(Boolean),
-      });
-    }
-  }
-
-  return selections;
-};
-
 const getPublicJobsHandler = async (request, response, next) => {
   try {
     const result = await listJobDiscoveryJobs({
@@ -156,7 +97,7 @@ const getPublicJobsHandler = async (request, response, next) => {
       filters: {
         keyword: request.query.keyword,
         categories: parseCategories(request.query.categories),
-        locations: parseLocations(request.query.locations),
+        locations: parseLocationFilterQuery(request.query.locations, "locations"),
         workModes: normalizeQueryArray(request.query.workModes),
         employmentTypes: normalizeQueryArray(request.query.employmentTypes),
         experienceLevels: normalizeQueryArray(

@@ -8,7 +8,6 @@ import CATEGORY_LEVEL from "../constants/category-level.js";
 import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import CV_LANGUAGE_PROFICIENCY from "../constants/cv-language-proficiency.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
-import LOCATION from "../constants/location.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
@@ -22,7 +21,10 @@ import AppError from "../utils/app-error.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
-import { validateLocation } from "./location.service.js";
+import {
+  normalizeLocationFilterSelections,
+  validateLocation,
+} from "./location.service.js";
 
 const uploadOwnUploadedCandidateCvFile = (buffer) => {
   return uploadFileBuffer({
@@ -49,7 +51,6 @@ const downloadOwnUploadedCandidateCvFile = (publicId) => {
   });
 };
 
-const LOCATION_VALUES = new Set(Object.values(LOCATION));
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
 const CATEGORY_LEVEL_VALUES = new Set(Object.values(CATEGORY_LEVEL));
@@ -1351,12 +1352,9 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     values: filters.skillTags,
     field: "skillTags",
   });
-  const requestedPreferredLocations = normalizeCandidateSearchFilterStringValues(
-    {
-      values: filters.preferredLocations,
-      field: "preferredLocations",
-      allowedValues: LOCATION_VALUES,
-    },
+  const requestedLocationSelections = normalizeLocationFilterSelections(
+    filters.preferredLocations,
+    { field: "preferredLocations" },
   );
   const requestedEmploymentTypes = normalizeCandidateSearchFilterStringValues({
     values: filters.employmentTypes,
@@ -1387,23 +1385,21 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     ...(requestedSkillTags.length > 0
       ? { skillTags: { $in: requestedSkillTags } }
       : {}),
-    // V4.1 interim until the Candidate Search Location cutover: legacy literal
-    // filters match only un-migrated legacy literal values, never structured
-    // selections; `$expr` keeps that predicate off the structured schema cast.
-    ...(requestedPreferredLocations.length > 0
+    // A Province-wide preference (`districtCode: null`) covers every District
+    // filter of its Province; one preference must satisfy one filter branch.
+    ...(requestedLocationSelections.length > 0
       ? {
-        $expr: {
-          $gt: [
-            {
-              $size: {
-                $setIntersection: [
-                  { $ifNull: ["$preferredLocations", []] },
-                  requestedPreferredLocations,
-                ],
-              },
-            },
-            0,
-          ],
+        preferredLocations: {
+          $elemMatch: {
+            $or: requestedLocationSelections.map(
+              ({ provinceCode, districtCodes }) => ({
+                provinceCode,
+                ...(districtCodes.length > 0
+                  ? { districtCode: { $in: [null, ...districtCodes] } }
+                  : {}),
+              }),
+            ),
+          },
         },
       }
       : {}),

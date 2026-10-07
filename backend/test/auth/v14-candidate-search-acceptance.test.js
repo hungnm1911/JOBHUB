@@ -19,7 +19,6 @@ import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js"
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
-import LOCATION from "../../src/constants/location.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
@@ -53,6 +52,10 @@ import {
   createTestAgent,
   disconnectTestDatabase,
 } from "../helpers/database.js";
+import {
+  provinceOnlyLocation,
+  TEST_LOCATION,
+} from "../helpers/location-provider.js";
 
 const SEARCH_PATH = "/api/jobs/candidate-search/cvs";
 const previewPath = (cvId) => `${SEARCH_PATH}/${cvId}/preview`;
@@ -130,7 +133,7 @@ const createCandidateCv = async ({
   archivedAt = null,
   name = "Candidate CV",
   skillTags = ["nodejs"],
-  preferredLocations = [LOCATION.HA_NOI],
+  preferredLocations = [provinceOnlyLocation(TEST_LOCATION.HA_NOI)],
   employmentTypes = [EMPLOYMENT_TYPE.FULL_TIME],
   workModes = [WORK_MODE.REMOTE],
 } = {}) => {
@@ -144,6 +147,7 @@ const createCandidateCv = async ({
     archivedAt,
     experienceLevelId: null,
     skillTags,
+    preferredLocations,
     employmentTypes,
     workModes,
     isDefault: false,
@@ -162,18 +166,7 @@ const createCandidateCv = async ({
     };
   }
 
-  const created = await CandidateCV.create(baseDoc);
-
-  // Legacy V4 literals model un-migrated CandidateCV data (V4.1 migration is a
-  // later slice); the structured V4.1 schema no longer accepts them.
-  if (preferredLocations.length > 0) {
-    await CandidateCV.collection.updateOne(
-      { _id: created._id },
-      { $set: { preferredLocations } },
-    );
-  }
-
-  return created;
+  return CandidateCV.create(baseDoc);
 };
 
 const authHeader = (accessToken) => ({
@@ -738,7 +731,7 @@ describe("V14 Slice 07 — Dynamic revocation + read-only acceptance closure (F0
 
       const listed = await searchCvs(agent, accessToken, {
         skillTags: "nodejs",
-        preferredLocations: LOCATION.HA_NOI,
+        preferredLocations: TEST_LOCATION.HA_NOI,
         employmentTypes: EMPLOYMENT_TYPE.FULL_TIME,
         workModes: WORK_MODE.REMOTE,
       });

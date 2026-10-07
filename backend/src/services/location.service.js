@@ -171,6 +171,94 @@ const isCanonicalLocationCode = (value) => {
   );
 };
 
+const LOCATION_FILTER_SELECTION_KEYS = new Set(["provinceCode", "districtCodes"]);
+
+const createInvalidLocationFilterError = (message, field) => {
+  return new AppError(400, message, { field });
+};
+
+// Structural validation only: search paths never call the Location provider, so
+// a well-formed but unknown or cross-Province code simply matches nothing.
+const normalizeLocationFilterSelections = (locationSelections, { field }) => {
+  if (locationSelections == null) {
+    return [];
+  }
+
+  if (!Array.isArray(locationSelections)) {
+    throw createInvalidLocationFilterError(`${field} must be an array`, field);
+  }
+
+  const selectionByProvinceCode = new Map();
+
+  for (const entry of locationSelections) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw createInvalidLocationFilterError(
+        `Each ${field} entry must be an object`,
+        field,
+      );
+    }
+
+    if (
+      Object.keys(entry).some((key) => !LOCATION_FILTER_SELECTION_KEYS.has(key))
+    ) {
+      throw createInvalidLocationFilterError(
+        `${field} entries only accept provinceCode and districtCodes`,
+        field,
+      );
+    }
+
+    const { provinceCode } = entry;
+    const districtCodes = entry.districtCodes ?? [];
+
+    if (!isCanonicalLocationCode(provinceCode)) {
+      throw createInvalidLocationFilterError(
+        `${field} entries require a canonical provinceCode`,
+        field,
+      );
+    }
+
+    if (
+      !Array.isArray(districtCodes) ||
+      !districtCodes.every(isCanonicalLocationCode)
+    ) {
+      throw createInvalidLocationFilterError(
+        `${field} districtCodes must be canonical District-level unit codes`,
+        field,
+      );
+    }
+
+    const selection = selectionByProvinceCode.get(provinceCode) ?? {
+      provinceCode,
+      allDistricts: false,
+      districtCodes: new Set(),
+    };
+
+    if (districtCodes.length === 0) {
+      selection.allDistricts = true;
+    }
+
+    for (const districtCode of districtCodes) {
+      selection.districtCodes.add(districtCode);
+    }
+
+    if (selection.allDistricts && selection.districtCodes.size > 0) {
+      throw createInvalidLocationFilterError(
+        "A Province selection cannot be both ALL and a District-level unit subset",
+        field,
+      );
+    }
+
+    selectionByProvinceCode.set(provinceCode, selection);
+  }
+
+  return [...selectionByProvinceCode.values()].map(
+    ({ provinceCode, districtCodes }) => ({
+      provinceCode,
+      districtCodes: [...districtCodes],
+    }),
+  );
+};
+
 const listProvinces = async () => {
   return fetchProvinces();
 };
@@ -287,5 +375,6 @@ export {
   isCanonicalLocationCode,
   listDistrictLevelUnitsByProvince,
   listProvinces,
+  normalizeLocationFilterSelections,
   validateLocation,
 };

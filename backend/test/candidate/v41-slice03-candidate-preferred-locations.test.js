@@ -709,22 +709,13 @@ describe("V4.1 Slice 03 — Candidate preferred Locations V4.1 (F03)", () => {
       expect(results[0].preferredLocations).toEqual(preferredLocations);
     });
 
-    it("interim (until Slices 04/06): un-migrated legacy literals are not projected and the legacy Search filter never matches structured selections", async () => {
+    it("does not project un-migrated legacy literals as V4.1 Locations", async () => {
       const context = await createCandidateContext();
-      const structured = await createGeneratedDraft(context, {
-        name: "Structured",
-        visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
-        preferredLocations: [HA_NOI_ALL],
-      });
       const legacy = await createGeneratedDraft(context, {
         name: "Legacy",
         visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
       });
 
-      await CandidateCV.updateMany(
-        {},
-        { $set: { status: CANDIDATE_CV_STATUS.ACTIVE } },
-      );
       await CandidateCV.collection.updateOne(
         { _id: new mongoose.Types.ObjectId(legacy.body.cv.id) },
         { $set: { preferredLocations: ["HA_NOI", "FOREIGN"] } },
@@ -736,15 +727,6 @@ describe("V4.1 Slice 03 — Candidate preferred Locations V4.1 (F03)", () => {
 
       expect(detail.status).toBe(200);
       expect(detail.body.cv.preferredLocations).toEqual([]);
-
-      const recruiter = await createSearchRecruiter();
-      const filtered = await listCandidateSearchEligibleCandidateCvs({
-        actorUser: recruiter.user,
-        filters: { preferredLocations: ["HA_NOI"] },
-      });
-
-      expect(filtered.map((cv) => cv.cvId)).toEqual([legacy.body.cv.id]);
-      expect(filtered.map((cv) => cv.cvId)).not.toContain(structured.body.cv.id);
     });
   });
 

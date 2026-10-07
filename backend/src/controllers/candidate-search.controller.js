@@ -2,6 +2,7 @@ import {
   listCandidateSearchEligibleCandidateCvs,
   previewSearchEligibleCandidateCv,
 } from "../services/candidate-cv.service.js";
+import { parseLocationFilterQuery } from "../utils/location-filter-query.js";
 
 const normalizeQueryArray = (value) => {
   if (value == null) {
@@ -39,8 +40,9 @@ const listCandidateSearchEligibleCandidateCvsHandler = async (
       request.query?.experienceLevelIds,
     );
     const skillTags = normalizeQueryArray(request.query?.skillTags);
-    const preferredLocations = normalizeQueryArray(
+    const preferredLocations = parseLocationFilterQuery(
       request.query?.preferredLocations,
+      "preferredLocations",
     );
     const employmentTypes = normalizeQueryArray(request.query?.employmentTypes);
     const workModes = normalizeQueryArray(request.query?.workModes);

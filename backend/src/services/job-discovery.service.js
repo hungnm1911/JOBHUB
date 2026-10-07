@@ -20,14 +20,13 @@ import {
   resolveJobDiscoveryVisibility,
   toPublicJobLocation,
 } from "./job.service.js";
-import { isCanonicalLocationCode } from "./location.service.js";
+import { normalizeLocationFilterSelections } from "./location.service.js";
 import AppError from "../utils/app-error.js";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
-const LOCATION_SELECTION_KEYS = new Set(["provinceCode", "districtCodes"]);
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
 
@@ -203,83 +202,6 @@ const resolveCategoryBranches = async (categoryBranches) => {
       positionIds,
     };
   });
-};
-
-const createInvalidLocationsError = (message) => {
-  return new AppError(400, message, { field: "locations" });
-};
-
-// Structural validation only: Discovery never calls the Location provider, so a
-// well-formed but unknown or cross-Province code simply matches no Job.
-const normalizeLocationSelections = (locationSelections) => {
-  if (locationSelections == null) {
-    return [];
-  }
-
-  if (!Array.isArray(locationSelections)) {
-    throw createInvalidLocationsError("locations must be an array");
-  }
-
-  const selectionByProvinceCode = new Map();
-
-  for (const entry of locationSelections) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      throw createInvalidLocationsError("Each locations entry must be an object");
-    }
-
-    if (Object.keys(entry).some((key) => !LOCATION_SELECTION_KEYS.has(key))) {
-      throw createInvalidLocationsError(
-        "locations entries only accept provinceCode and districtCodes",
-      );
-    }
-
-    const { provinceCode } = entry;
-    const districtCodes = entry.districtCodes ?? [];
-
-    if (!isCanonicalLocationCode(provinceCode)) {
-      throw createInvalidLocationsError(
-        "locations entries require a canonical provinceCode",
-      );
-    }
-
-    if (
-      !Array.isArray(districtCodes) ||
-      !districtCodes.every(isCanonicalLocationCode)
-    ) {
-      throw createInvalidLocationsError(
-        "locations districtCodes must be canonical District-level unit codes",
-      );
-    }
-
-    const selection = selectionByProvinceCode.get(provinceCode) ?? {
-      provinceCode,
-      allDistricts: false,
-      districtCodes: new Set(),
-    };
-
-    if (districtCodes.length === 0) {
-      selection.allDistricts = true;
-    }
-
-    for (const districtCode of districtCodes) {
-      selection.districtCodes.add(districtCode);
-    }
-
-    if (selection.allDistricts && selection.districtCodes.size > 0) {
-      throw createInvalidLocationsError(
-        "A Province selection cannot be both ALL and a District-level unit subset",
-      );
-    }
-
-    selectionByProvinceCode.set(provinceCode, selection);
-  }
-
-  return [...selectionByProvinceCode.values()].map(
-    ({ provinceCode, districtCodes }) => ({
-      provinceCode,
-      districtCodes: [...districtCodes],
-    }),
-  );
 };
 
 const assertJobDiscoveryActor = async (user) => {
@@ -602,7 +524,10 @@ const listJobDiscoveryJobs = async ({
   await assertJobDiscoveryActor(actorUser);
 
   const keyword = normalizeKeyword(filters.keyword);
-  const locationSelections = normalizeLocationSelections(filters.locations);
+  const locationSelections = normalizeLocationFilterSelections(
+    filters.locations,
+    { field: "locations" },
+  );
   const workModes = normalizeArray(filters.workModes, "workModes", {
     allowedValues: WORK_MODE_VALUES,
   });

@@ -7,9 +7,13 @@
 BR-21–BR-23), Slice 02 — Job Location V4.1 (F02; BR-03–BR-10,
 BR-21–BR-24), Slice 03 — Candidate Preferred Locations V4.1 (F03; BR-05,
 BR-06, BR-11–BR-14, BR-21–BR-24), Slice 04 — Legacy Location Migration &
-Cutover (F06; BR-01, BR-02, BR-21–BR-24), and Slice 05 — Job Discovery
-Location Hierarchy Filter (F04; BR-13–BR-18, BR-21, BR-24) are
-`IMPLEMENTED AND VERIFIED`; Slice 06 is not started.
+Cutover (F06; BR-01, BR-02, BR-21–BR-24), Slice 05 — Job Discovery
+Location Hierarchy Filter (F04; BR-13–BR-18, BR-21, BR-24), and Slice 06 —
+Candidate Search Location Hierarchy Filter (F05; BR-13–BR-16, BR-19–BR-21,
+BR-24) are `IMPLEMENTED AND VERIFIED`. F01–F06 each have an implemented slice;
+V4.1 stays `IN PROGRESS` until human acceptance of Business/Data Completion
+(including the explicit operator run of the Slice 04 migration on each
+environment).
 The approved canonical contracts are
 `docs/product/versions/v4.1-vietnam-location-migration.md` and
 `docs/data/versions/v4.1-vietnam-location-migration-data-model.md`.
@@ -150,6 +154,35 @@ unchanged; no index, persistence, or Candidate Search change. Focused coverage:
 `test/job/v41-slice05-job-discovery-location-filter.test.js` (28 tests).
 Verification: `npm run verify:agent` passed (lint 0 errors, ARCH-001–ARCH-016,
 154 files / 1572 tests).
+Slice 06 replaces the V4.1 interim `$expr` legacy-literal Candidate Search
+predicate (and its `constants/location.js` vocabulary) with hierarchy matching
+over persisted `preferredLocations[].provinceCode` / `districtCode`. The V14
+`preferredLocations` query of `GET /api/jobs/candidate-search/cvs` keeps its
+name but now uses the Slice 05 encoding (no comma splitting); the grammar is
+shared, not duplicated: `parseLocationFilterQuery` moved to
+`backend/src/utils/location-filter-query.js` and structural validation to
+`normalizeLocationFilterSelections` in `location.service.js`, reused unchanged
+by Job Discovery. Willingness semantics: a Province / ALL filter matches
+Province-wide and any District preference of that Province; a District filter
+matches Province-wide preferences of its Province and the exact District, never
+another District of the same Province; Provinces and Districts combine with OR;
+one persisted preference (`$elemMatch`) must satisfy one filter branch; the
+Location group stays ANDed with V14 eligibility and the other five groups.
+Validation is structural only (`400`, field `preferredLocations`), so legacy
+literals, comma lists, `FOREIGN`, `REMOTE`, `ALL`, and lenient codes are
+rejected. Candidate Search makes no provider call: a well-formed unknown
+Province matches nothing, and a well-formed unknown or cross-Province District
+never matches exact-District preferences while Province-wide preferences of
+that Province still match (approved F05 interpretation, 2026-10-07). V14
+authorization, eligibility/visibility/archive, `updatedAt desc, _id desc` order
+(no pagination), and the result shape are unchanged; no index or persistence
+change. `constants/location.js` now has no runtime consumer (Slice 04 migration
+input domain only). Focused coverage:
+`test/candidate/v41-slice06-candidate-search-location-filter.test.js` (40
+tests); V14 browse/acceptance fixtures moved to structured Locations and the
+Slice 03 interim legacy-filter assertion retired. Verification:
+`npm run verify:agent` passed (lint 0 errors, ARCH-001–ARCH-016, 155 files /
+1612 tests).
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.
