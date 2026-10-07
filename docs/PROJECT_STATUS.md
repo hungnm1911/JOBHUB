@@ -211,6 +211,25 @@ indexes, and the Slice 04 migration are unchanged. Focused regressions in the
 Slice 02 (24 tests) and Slice 03 (24 tests) files; `npm run verify:agent`
 passed (lint 0 errors, ARCH-001–ARCH-016, 155 files / 1624 tests). The Slice 03
 migration-preflight bug-fix slice and Slice 01 search semantics are untouched.
+V4.1 acceptance bug fix (2026-10-07, Slice 04 read-only preflight): importing
+the Job/CandidateCV models schedules Mongoose `Model.init()`, so the
+`scripts/run-migration.js` connection (default auto-create/auto-index) created
+missing collections and built every schema index before `preflight` or the
+`migrate` blocker check ran; the migration's explicit `Model.init()` only
+awaited that side effect. `connectDatabase` now accepts scoped connection
+options; the runner opens preflight with `MODEL_AUTO_INIT_DISABLED_OPTIONS`
+and the V4.1 migration exports the same `connectionOptions`. `preflight` and
+`verify` no longer initialize models, and `migrate` builds Job/CandidateCV
+schema indexes only after the blocker and catalog checks pass, before document
+writes; legacy indexes are still dropped only after zero-legacy verification.
+Mapping, blocking, per-document atomicity, idempotence, and other migrations'
+connections are unchanged. Regressions: the new CLI-level
+`test/catalog/v41-slice04-migration-read-only-preflight.test.js` (5 tests,
+fresh runner process, oplog + metadata comparison; 4 failed before the fix
+with 40–48 index/collection writes) and oplog phase assertions in the Slice 04
+file (20 tests). `npm run verify:agent` passed (lint 0 errors,
+ARCH-001–ARCH-016, 156 files / 1635 tests). The migration has not been applied
+to any environment by this fix.
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.

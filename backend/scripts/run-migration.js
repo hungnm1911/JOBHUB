@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import {
   connectDatabase,
   disconnectDatabase,
+  MODEL_AUTO_INIT_DISABLED_OPTIONS,
 } from "../src/config/mongodb.js";
 
 const getErrorMessage = (error) => {
@@ -41,6 +42,7 @@ const loadMigration = async (migrationName) => {
   }
 
   return {
+    connectionOptions: migrationModule.connectionOptions ?? {},
     migrate: migrationModule.migrate,
     migrationPath,
     name: migrationModule.name ?? migrationName,
@@ -64,7 +66,7 @@ const runPreflight = async (migrationName) => {
     );
   }
 
-  const connection = await connectDatabase();
+  const connection = await connectDatabase(MODEL_AUTO_INIT_DISABLED_OPTIONS);
 
   try {
     console.log(`Running preflight (read-only): ${migration.name}`);
@@ -80,7 +82,7 @@ const runPreflight = async (migrationName) => {
 
 const runMigration = async (migrationName) => {
   const migration = await loadMigration(migrationName);
-  const connection = await connectDatabase();
+  const connection = await connectDatabase(migration.connectionOptions);
 
   try {
     console.log(`Running migration: ${migration.name}`);

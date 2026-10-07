@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+import { MODEL_AUTO_INIT_DISABLED_OPTIONS } from "../../config/mongodb.js";
 import LOCATION from "../../constants/location.js";
 import CandidateCV, {
   findPreferredLocationSelectionsViolation,
@@ -8,6 +9,10 @@ import Job from "../../models/job.model.js";
 import { listProvinces } from "../../services/location.service.js";
 
 const name = "v41-legacy-location-cutover";
+
+// Collections and indexes are created only by the explicit cutover phase of
+// `migrate`, never as a side effect of connecting.
+const connectionOptions = MODEL_AUTO_INIT_DISABLED_OPTIONS;
 
 // Data V4.1 §8.9/§8.10: every legacy V4 Vietnam literal maps to exactly one
 // Province Open API v1 Province code (pre-July-2025 dataset). `FOREIGN` has no
@@ -471,15 +476,14 @@ const findIndexProblems = async () => {
   return problems;
 };
 
-const initializeModels = async () => {
-  await Job.init();
-  await CandidateCV.init();
+const ensureSchemaIndexes = async () => {
+  await Job.createIndexes();
+  await CandidateCV.createIndexes();
 };
 
 const preflight = async (connection = mongoose.connection) => {
   assertConnectionReady(connection, "preflight");
   assertLegacyMappingCoversVocabulary();
-  await initializeModels();
 
   return toInventoryReport(await scanInventory());
 };
@@ -515,7 +519,6 @@ const assertCutoverComplete = async () => {
 const migrate = async (connection = mongoose.connection) => {
   assertConnectionReady(connection, "migration");
   assertLegacyMappingCoversVocabulary();
-  await initializeModels();
 
   const inventory = await scanInventory();
   const preflightReport = toInventoryReport(inventory);
@@ -530,6 +533,8 @@ const migrate = async (connection = mongoose.connection) => {
   if (preflightReport.legacyCount > 0) {
     await assertMappingTargetsExistInCatalog();
   }
+
+  await ensureSchemaIndexes();
 
   const writeResults = {};
 
@@ -584,7 +589,6 @@ const migrate = async (connection = mongoose.connection) => {
 
 const verify = async (connection = mongoose.connection) => {
   assertConnectionReady(connection, "verification");
-  await initializeModels();
 
   const report = await assertCutoverComplete();
 
@@ -593,6 +597,7 @@ const verify = async (connection = mongoose.connection) => {
 
 export {
   BLOCKED_REASON,
+  connectionOptions,
   LEGACY_CANDIDATE_CV_LOCATION_INDEX_KEY,
   LEGACY_JOB_LOCATION_INDEX_KEY,
   LEGACY_LOCATION_PROVINCE_CODE,

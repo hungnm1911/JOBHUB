@@ -150,6 +150,102 @@ const snapshotAll = async () => {
   };
 };
 
+const TARGET_COLLECTIONS = Object.freeze(["jobs", "candidate_cvs"]);
+const CANONICAL_JOB_INDEX_NAMES = Object.freeze([
+  "job_discovery_location_province_idx",
+  "job_discovery_location_district_idx",
+]);
+const CANONICAL_CANDIDATE_CV_INDEX_NAME =
+  "preferredLocations.provinceCode_1_preferredLocations.districtCode_1_updatedAt_-1__id_-1";
+
+const dropCanonicalLocationIndexes = async () => {
+  for (const indexName of CANONICAL_JOB_INDEX_NAMES) {
+    await Job.collection.dropIndex(indexName);
+  }
+  await CandidateCV.collection.dropIndex(CANONICAL_CANDIDATE_CV_INDEX_NAME);
+};
+
+const snapshotDatabaseState = async () => {
+  const { db } = mongoose.connection;
+  const collections = await db
+    .listCollections({ name: { $in: TARGET_COLLECTIONS } })
+    .toArray();
+
+  return Promise.all(
+    collections
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(async (info) => ({
+        info,
+        indexes: await db.collection(info.name).indexes(),
+        documents: await db
+          .collection(info.name)
+          .find({})
+          .sort({ _id: 1 })
+          .toArray(),
+      })),
+  );
+};
+
+const oplog = () => {
+  return mongoose.connection.getClient().db("local").collection("oplog.rs");
+};
+
+const describeOplogWrite = (entry) => {
+  if (entry.op === "c") {
+    const [command] = Object.keys(entry.o);
+
+    return {
+      kind: command,
+      collection: entry.o[command],
+      indexes: entry.o.name
+        ? [entry.o.name]
+        : entry.o.indexes?.map((index) => index.name) ??
+          (entry.o.index ? [entry.o.index] : []),
+    };
+  }
+
+  return {
+    kind: { i: "insert", u: "update", d: "delete" }[entry.op] ?? entry.op,
+    collection: entry.ns.slice(entry.ns.indexOf(".") + 1),
+  };
+};
+
+// Every document, collection, and index mutation is replicated through the
+// oplog of the test replica set, so it records the exact write order.
+const captureDatabaseWrites = async (operation) => {
+  const databaseName = mongoose.connection.db.databaseName;
+  const [latest] = await oplog()
+    .find({})
+    .sort({ $natural: -1 })
+    .limit(1)
+    .toArray();
+  let error = null;
+
+  try {
+    await operation();
+  } catch (caught) {
+    error = caught;
+  }
+
+  const entries = await oplog()
+    .find({ ts: { $gt: latest.ts }, ns: { $regex: `^${databaseName}\\.` } })
+    .sort({ $natural: 1 })
+    .toArray();
+
+  return {
+    error,
+    writes: entries
+      .map(describeOplogWrite)
+      .filter((write) => TARGET_COLLECTIONS.includes(write.collection)),
+  };
+};
+
+const isIndexCreation = (write) => {
+  return ["createIndexes", "startIndexBuild", "commitIndexBuild"].includes(
+    write.kind,
+  );
+};
+
 describe("V4.1 Slice 04 — Legacy Location Migration & Cutover (F06)", () => {
   let providerFetch;
 
@@ -159,6 +255,8 @@ describe("V4.1 Slice 04 — Legacy Location Migration & Cutover (F06)", () => {
 
   beforeEach(async () => {
     providerFetch = stubFullProvinceCatalog();
+    await Job.createIndexes();
+    await CandidateCV.createIndexes();
     await createLegacyIndexes();
   });
 
@@ -330,8 +428,13 @@ describe("V4.1 Slice 04 — Legacy Location Migration & Cutover (F06)", () => {
 
       providerFetch.mockClear();
 
-      const second = await migrate();
+      let second;
+      const { error, writes } = await captureDatabaseWrites(async () => {
+        second = await migrate();
+      });
 
+      expect(error).toBeNull();
+      expect(writes).toEqual([]);
       expect(first.jobs.migrated).toBe(1);
       expect(first.candidateCvs.migrated).toBe(1);
       expect(second.jobs.migrated).toBe(0);
@@ -578,10 +681,17 @@ describe("V4.1 Slice 04 — Legacy Location Migration & Cutover (F06)", () => {
 
       const failingBefore = await rawCandidateCv(failingCvId);
 
-      await expect(migrate()).rejects.toThrow(
+      const { error, writes } = await captureDatabaseWrites(() => migrate());
+
+      expect(error?.message).toMatch(
         /migration incomplete; legacy indexes retained: 1 legacy and 0 unresolvable/,
       );
-
+      expect(writes.filter((write) => write.kind === "dropIndexes")).toEqual(
+        [],
+      );
+      expect(
+        writes.filter((write) => write.kind === "update"),
+      ).toEqual([{ kind: "update", collection: "jobs" }]);
       expect(await rawCandidateCv(failingCvId)).toEqual(failingBefore);
       expect((await rawJob(healthyJobId)).location).toEqual(HA_NOI_ALL);
       expect(await indexNames(Job.collection)).toContain(LEGACY_JOB_INDEX_NAME);
@@ -604,6 +714,126 @@ describe("V4.1 Slice 04 — Legacy Location Migration & Cutover (F06)", () => {
       expect(resumed.candidateCvs.migrated).toBe(1);
       expect((await rawCandidateCv(failingCvId)).preferredLocations).toEqual([
         HA_NOI_ALL,
+        HO_CHI_MINH_ALL,
+      ]);
+      await expect(verify()).resolves.toMatchObject({ ok: true });
+    });
+  });
+
+  describe("read / write / index-cleanup phase boundary", () => {
+    it("preflight on a database without canonical Location indexes performs no write and keeps legacy indexes", async () => {
+      await dropCanonicalLocationIndexes();
+      await seedJob(LOCATION.HA_NOI);
+      await seedJob(LOCATION.FOREIGN);
+      await seedCandidateCv([LOCATION.HO_CHI_MINH]);
+      const before = await snapshotDatabaseState();
+
+      let report;
+      const { error, writes } = await captureDatabaseWrites(async () => {
+        report = await preflight();
+      });
+
+      expect(error).toBeNull();
+      expect(writes).toEqual([]);
+      expect(await snapshotDatabaseState()).toEqual(before);
+      expect(await indexNames(Job.collection)).toContain(LEGACY_JOB_INDEX_NAME);
+      expect(await indexNames(CandidateCV.collection)).toContain(
+        LEGACY_CANDIDATE_CV_INDEX_NAME,
+      );
+      expect(report).toMatchObject({
+        legacyCount: 2,
+        blockedCount: 1,
+        unresolvedForeignCount: 1,
+      });
+    });
+
+    it.each([
+      ["FOREIGN", () => seedJob(LOCATION.FOREIGN), /\(1 FOREIGN\)/],
+      ["an unmapped literal", () => seedCandidateCv(["HANOI"]), /\(0 FOREIGN\)/],
+      [
+        "a malformed value",
+        () => seedJob({ districtCode: TEST_LOCATION.HA_NOI_BA_VI }),
+        /\(0 FOREIGN\)/,
+      ],
+    ])(
+      "a migration blocked by %s performs zero document, index, or metadata writes",
+      async (_label, seedBlocker, foreignCount) => {
+        await dropCanonicalLocationIndexes();
+        await seedJob(LOCATION.HA_NOI);
+        await seedCandidateCv([LOCATION.HO_CHI_MINH]);
+        await seedBlocker();
+        const before = await snapshotDatabaseState();
+
+        const { error, writes } = await captureDatabaseWrites(() => migrate());
+
+        expect(error?.message).toMatch(/blocked before any write/);
+        expect(error?.message).toMatch(foreignCount);
+        expect(writes).toEqual([]);
+        expect(await snapshotDatabaseState()).toEqual(before);
+        expect(providerFetch).not.toHaveBeenCalled();
+      },
+    );
+
+    it("a Province catalog validation failure performs zero writes", async () => {
+      await dropCanonicalLocationIndexes();
+      await seedJob(LOCATION.HA_NOI);
+      const before = await snapshotDatabaseState();
+
+      vi.unstubAllGlobals();
+      stubLocationProvider({
+        "/p/": () => jsonResponse({ detail: "upstream error" }, 500),
+      });
+
+      const { error, writes } = await captureDatabaseWrites(() => migrate());
+
+      expect(error?.message).toMatch(/provider is unavailable/);
+      expect(writes).toEqual([]);
+      expect(await snapshotDatabaseState()).toEqual(before);
+    });
+
+    it("builds canonical indexes only after the blocker checks pass, then writes documents, and drops legacy indexes only after zero-legacy verification", async () => {
+      await dropCanonicalLocationIndexes();
+      const jobId = await seedJob(LOCATION.HA_NOI);
+      const cvId = await seedCandidateCv([LOCATION.HO_CHI_MINH]);
+
+      const { error, writes } = await captureDatabaseWrites(() => migrate());
+
+      expect(error).toBeNull();
+
+      const updates = writes
+        .map((write, position) => ({ write, position }))
+        .filter(({ write }) => write.kind === "update");
+      const drops = writes
+        .map((write, position) => ({ write, position }))
+        .filter(({ write }) => write.kind === "dropIndexes");
+      const createdIndexes = writes
+        .filter(isIndexCreation)
+        .flatMap((write) => write.indexes);
+
+      expect(createdIndexes).toEqual(
+        expect.arrayContaining([
+          ...CANONICAL_JOB_INDEX_NAMES,
+          CANONICAL_CANDIDATE_CV_INDEX_NAME,
+        ]),
+      );
+      expect(writes.findLastIndex(isIndexCreation)).toBeLessThan(
+        updates[0].position,
+      );
+      expect(updates.map(({ write }) => write.collection)).toEqual([
+        "jobs",
+        "candidate_cvs",
+      ]);
+      expect(drops.map(({ write }) => write)).toEqual([
+        { kind: "dropIndexes", collection: "jobs", indexes: [LEGACY_JOB_INDEX_NAME] },
+        {
+          kind: "dropIndexes",
+          collection: "candidate_cvs",
+          indexes: [LEGACY_CANDIDATE_CV_INDEX_NAME],
+        },
+      ]);
+      expect(drops[0].position).toBeGreaterThan(updates.at(-1).position);
+      expect((await rawJob(jobId)).location).toEqual(HA_NOI_ALL);
+      expect((await rawCandidateCv(cvId)).preferredLocations).toEqual([
         HO_CHI_MINH_ALL,
       ]);
       await expect(verify()).resolves.toMatchObject({ ok: true });

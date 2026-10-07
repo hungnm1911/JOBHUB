@@ -2,6 +2,13 @@ import mongoose from "mongoose";
 
 import config from "../config/index.js";
 
+// Compiling a model schedules `Model.init()`, which on connect creates missing
+// collections and builds schema indexes unless the connection disables both.
+const MODEL_AUTO_INIT_DISABLED_OPTIONS = Object.freeze({
+  autoCreate: false,
+  autoIndex: false,
+});
+
 let areConnectionListenersRegistered = false;
 let isDisconnectingIntentionally = false;
 
@@ -42,7 +49,7 @@ const registerConnectionListeners = () => {
   areConnectionListenersRegistered = true;
 };
 
-const connectDatabase = async () => {
+const connectDatabase = async (connectionOptions = {}) => {
   if (mongoose.connection.readyState === 1) {
     return mongoose.connection;
   }
@@ -53,6 +60,7 @@ const connectDatabase = async () => {
       {
         serverSelectionTimeoutMS:
           config.database.serverSelectionTimeoutMS,
+        ...connectionOptions,
       },
     );
 
@@ -97,4 +105,5 @@ const disconnectDatabase = async () => {
 export {
   connectDatabase,
   disconnectDatabase,
+  MODEL_AUTO_INIT_DISABLED_OPTIONS,
 };
