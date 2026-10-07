@@ -777,15 +777,6 @@ candidateCvSchema.index(
   },
 );
 candidateCvSchema.index(
-  { preferredLocations: 1, updatedAt: -1, _id: -1 },
-  {
-    partialFilterExpression: {
-      visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
-      archivedAt: null,
-    },
-  },
-);
-candidateCvSchema.index(
   {
     "preferredLocations.provinceCode": 1,
     "preferredLocations.districtCode": 1,

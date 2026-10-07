@@ -174,7 +174,12 @@ describe("V14 Slice 02 — Browse eligible Candidate CV list + stable sort (F02,
       { categoryId: 1, updatedAt: -1, _id: -1 },
       { experienceLevelId: 1, updatedAt: -1, _id: -1 },
       { skillTags: 1, updatedAt: -1, _id: -1 },
-      { preferredLocations: 1, updatedAt: -1, _id: -1 },
+      {
+        "preferredLocations.provinceCode": 1,
+        "preferredLocations.districtCode": 1,
+        updatedAt: -1,
+        _id: -1,
+      },
       { employmentTypes: 1, updatedAt: -1, _id: -1 },
       { workModes: 1, updatedAt: -1, _id: -1 },
     ];

@@ -5,9 +5,10 @@
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `IN PROGRESS`. Slice 01 — Location Catalog Foundation (F01; BR-01–BR-09,
 BR-21–BR-23), Slice 02 — Job Location V4.1 (F02; BR-03–BR-10,
-BR-21–BR-24), and Slice 03 — Candidate Preferred Locations V4.1 (F03; BR-05,
-BR-06, BR-11–BR-14, BR-21–BR-24) are `IMPLEMENTED AND VERIFIED`; Slices 04–06
-are not started.
+BR-21–BR-24), Slice 03 — Candidate Preferred Locations V4.1 (F03; BR-05,
+BR-06, BR-11–BR-14, BR-21–BR-24), and Slice 04 — Legacy Location Migration &
+Cutover (F06; BR-01, BR-02, BR-21–BR-24) are `IMPLEMENTED AND VERIFIED`;
+Slices 05–06 are not started.
 The approved canonical contracts are
 `docs/product/versions/v4.1-vietnam-location-migration.md` and
 `docs/data/versions/v4.1-vietnam-location-migration-data-model.md`.
@@ -95,10 +96,37 @@ Focused coverage: `test/candidate/v41-slice03-candidate-preferred-locations.test
 (23 tests); V7/V14 CandidateCV fixtures migrated to structured selections or
 seeded as raw un-migrated legacy data. Verification: `npm run verify:agent`
 passed (lint 0 errors, ARCH-001–ARCH-016, 152 files / 1530 tests).
-Scalar-to-structured migration for Job and CandidateCV, legacy `FOREIGN`
-inventory/remediation, and cutover verification are deferred to Slice 04.
-Discovery and Candidate Search hierarchy filtering remain deferred to Slices 05
-and 06 respectively.
+Slice 04 adds the explicit versioned migration
+`backend/src/database/migrations/v41-legacy-location-cutover.js` (run through
+`scripts/run-migration.js`; `--preflight` is a read-only inventory). Each of the
+63 legacy V4 Vietnam literals maps to one distinct Province Open API v1 Province
+code, keyed by `constants/location.js`; the table equals the live v1 Province
+list in order (each v1 `codename` without its `tinh_`/`thanh_pho_` prefix is the
+legacy literal) and the migration checks every target against `listProvinces`
+before writing, failing closed. Legacy Job literals become Province-only
+`{ provinceCode, districtCode: null }`; legacy CandidateCV literals become
+Province-wide selections with canonical duplicates removed in first-seen order;
+no District is inferred and structured/unset/empty records are untouched.
+`FOREIGN`, unmapped literals (including `REMOTE` and aliases), malformed values,
+and a legacy Province that would coexist with a District subset of the same
+Province are inventoried and block the run before any write; the migration does
+not remediate them. Each legacy record is migrated by one conditional
+single-document write (no global or provider transaction; `updatedAt`
+unchanged), so a failed document stays fully legacy and completion is blocked.
+Only after zero-legacy verification are the legacy `job_discovery_location_idx`
+and CandidateCV `{ preferredLocations, updatedAt, _id }` indexes dropped; the
+models no longer declare them. Re-running is idempotent and makes no provider
+call when no legacy data remains. Once the migration has run, the Slice 02/03
+interim `location: null` / `preferredLocations: []` reads of legacy data no
+longer occur. Focused coverage:
+`test/catalog/v41-slice04-legacy-location-cutover.test.js` (14 tests).
+The configured dev database preflight (2026-10-07, read-only) found 3 legacy
+Jobs (all `HA_NOI`) and 3 legacy CandidateCVs (`HA_NOI`, `HO_CHI_MINH`,
+`DA_NANG`), 0 blocked, 0 `FOREIGN`; applying the migration there is an explicit
+operator step. Interim until Slices 05/06: the V8 legacy `locations` Discovery
+filter and the V14 legacy-literal Candidate Search filter are unchanged and
+match no migrated record; Discovery and Candidate Search hierarchy filtering
+remain deferred to Slices 05 and 06 respectively.
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.
@@ -2183,12 +2211,11 @@ the current V10 revision complete.
 
 ## Deferred / not started
 
-- **V4.1 dependency-gated work:** Slice 02 Job Location and Slice 03 Candidate
-  preferred Locations wait for Slice 01. Slice 04 owns scalar-to-structured
-  migration, legacy `FOREIGN` inventory/remediation, and cutover verification
-  after Slices 02–03. Slice 05 Job Discovery and Slice 06 Candidate Search wait
-  for Slice 04. These are not Slice 01 readiness prerequisites and were not
-  implemented or pre-hardened.
+- **V4.1 dependency-gated work:** Slices 01–04 are implemented. Slice 05 Job
+  Discovery and Slice 06 Candidate Search hierarchy filtering are not started.
+  Business remediation of any persisted `FOREIGN` or unmapped legacy value is
+  not defined by the V4.1 Product/Data contracts; the Slice 04 migration only
+  inventories and blocks on such records.
 - **V13 later-slice gates:** V12 closure is deferred as the acceptance gate for
   V13 Slices 06–08 and does not block Slice 01. Slice 09–12 are implemented on
   the shared authenticated connection plane with durable HTTP resync for offline
@@ -2228,6 +2255,17 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V4.1 Slice 04 Legacy Location Migration & Cutover: focused coverage passed
+  14 tests in `test/catalog/v41-slice04-legacy-location-cutover.test.js`
+  (stubbed provider); adjacent V4.1 Slice 01–03, V8, and V14 suites passed
+  9 files / 130 tests. Then `cd backend && npm run verify:agent` passed on
+  2026-10-07 (ESLint: 0 errors / the 2 pre-existing warnings in
+  `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016;
+  Vitest: 153 files / 1,544 tests). The legacy → Province mapping was compared
+  manually against the live Province Open API v1 Province list (63 entries,
+  identical order/set). A read-only `--preflight` run against the configured
+  dev database found 6 mappable legacy records, 0 blocked, and 0 `FOREIGN`;
+  the migration was not applied to that database.
 - V4.1 Slice 01 Location Catalog Foundation: focused coverage passed 26 tests
   in `test/catalog/v41-location-catalog.test.js` (stubbed provider). Then
   `cd backend && npm run verify:agent` passed on 2026-10-06 (ESLint: 0 errors /

@@ -399,10 +399,6 @@ jobSchema.index(
   { name: "job_discovery_position_category_idx" },
 );
 jobSchema.index(
-  { status: 1, location: 1, applicationDeadline: 1 },
-  { name: "job_discovery_location_idx" },
-);
-jobSchema.index(
   { status: 1, "location.provinceCode": 1, applicationDeadline: 1 },
   { name: "job_discovery_location_province_idx" },
 );

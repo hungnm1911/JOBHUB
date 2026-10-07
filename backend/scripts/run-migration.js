@@ -44,11 +44,38 @@ const loadMigration = async (migrationName) => {
     migrate: migrationModule.migrate,
     migrationPath,
     name: migrationModule.name ?? migrationName,
+    preflight:
+      typeof migrationModule.preflight === "function"
+        ? migrationModule.preflight
+        : null,
     verify:
       typeof migrationModule.verify === "function"
         ? migrationModule.verify
         : null,
   };
+};
+
+const runPreflight = async (migrationName) => {
+  const migration = await loadMigration(migrationName);
+
+  if (!migration.preflight) {
+    throw new Error(
+      `Migration "${migrationName}" does not export a preflight(connection) function`,
+    );
+  }
+
+  const connection = await connectDatabase();
+
+  try {
+    console.log(`Running preflight (read-only): ${migration.name}`);
+    const report = await migration.preflight(connection);
+
+    console.log(JSON.stringify(report, null, 2));
+
+    return report;
+  } finally {
+    await disconnectDatabase();
+  }
 };
 
 const runMigration = async (migrationName) => {
@@ -73,12 +100,17 @@ const runMigration = async (migrationName) => {
 };
 
 const main = async () => {
-  const migrationName = process.argv[2];
+  const [migrationName, mode] = process.argv.slice(2);
 
-  if (!migrationName) {
+  if (!migrationName || (mode != null && mode !== "--preflight")) {
     throw new Error(
-      "Usage: node scripts/run-migration.js <migration-name>",
+      "Usage: node scripts/run-migration.js <migration-name> [--preflight]",
     );
+  }
+
+  if (mode === "--preflight") {
+    await runPreflight(migrationName);
+    return;
   }
 
   await runMigration(migrationName);
@@ -91,4 +123,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   });
 }
 
-export { loadMigration, resolveMigrationModulePath, runMigration };
+export {
+  loadMigration,
+  resolveMigrationModulePath,
+  runMigration,
+  runPreflight,
+};
