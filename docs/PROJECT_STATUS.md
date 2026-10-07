@@ -3,17 +3,25 @@
 ## Current project state
 
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
-`IN PROGRESS`. Slice 01 — Location Catalog Foundation (F01; BR-01–BR-09,
+`COMPLETED / ACCEPTED` as of 2026-10-07. Slice 01 — Location Catalog Foundation
+(F01; BR-01–BR-09,
 BR-21–BR-23), Slice 02 — Job Location V4.1 (F02; BR-03–BR-10,
 BR-21–BR-24), Slice 03 — Candidate Preferred Locations V4.1 (F03; BR-05,
 BR-06, BR-11–BR-14, BR-21–BR-24), Slice 04 — Legacy Location Migration &
 Cutover (F06; BR-01, BR-02, BR-21–BR-24), Slice 05 — Job Discovery
 Location Hierarchy Filter (F04; BR-13–BR-18, BR-21, BR-24), and Slice 06 —
 Candidate Search Location Hierarchy Filter (F05; BR-13–BR-16, BR-19–BR-21,
-BR-24) are `IMPLEMENTED AND VERIFIED`. F01–F06 each have an implemented slice;
-V4.1 stays `IN PROGRESS` until human acceptance of Business/Data Completion
-(including the explicit operator run of the Slice 04 migration on each
-environment).
+BR-24) are `IMPLEMENTED AND VERIFIED`. F01–F06 each have an implemented slice.
+The three V4.1 acceptance bug fixes (Bug Fix 01 — Candidate Search
+cross-Province/unknown District membership, Bug Fix 02 — `FOREIGN` persistence
+schema validation, Bug Fix 03 — Slice 04 read-only preflight) are closed and
+verified. The V4.1 Final Data Cutover was applied to the dev database on
+2026-10-07: the Slice 04 migration migrated all 6 legacy records (3 Jobs,
+3 CandidateCVs), no persisted legacy Location, blocked record, or unresolved
+`FOREIGN` remains, and the legacy Location indexes are dropped (see the Final
+Data Cutover record below). Final Acceptance independently reconciled Product,
+Data, Engineering, implementation, tests, and runtime behavior across F01–F06
+and BR-01–BR-24; no blocking or high finding remains.
 The approved canonical contracts are
 `docs/product/versions/v4.1-vietnam-location-migration.md` and
 `docs/data/versions/v4.1-vietnam-location-migration-data-model.md`.
@@ -129,10 +137,9 @@ longer occur. Focused coverage:
 `test/catalog/v41-slice04-legacy-location-cutover.test.js` (14 tests).
 The configured dev database preflight (2026-10-07, read-only) found 3 legacy
 Jobs (all `HA_NOI`) and 3 legacy CandidateCVs (`HA_NOI`, `HO_CHI_MINH`,
-`DA_NANG`), 0 blocked, 0 `FOREIGN`; applying the migration there is an explicit
-operator step. Interim until Slice 06: the V14 legacy-literal Candidate Search
-filter is unchanged and matches no migrated record; Candidate Search hierarchy
-filtering remains deferred to Slice 06.
+`DA_NANG`), 0 blocked, 0 `FOREIGN`; the migration was subsequently applied
+there by the V4.1 Final Data Cutover (below). Candidate Search hierarchy
+filtering was delivered by Slice 06.
 Slice 05 replaces the V8 legacy-literal `locations` Discovery predicate with
 the V4.1 hierarchy over persisted `location.provinceCode` /
 `location.districtCode`. The approved query encoding on
@@ -230,6 +237,51 @@ with 40–48 index/collection writes) and oplog phase assertions in the Slice 04
 file (20 tests). `npm run verify:agent` passed (lint 0 errors,
 ARCH-001–ARCH-016, 156 files / 1635 tests). The migration has not been applied
 to any environment by this fix.
+V4.1 Final Data Cutover (2026-10-07, dev database `jobhub` on the
+`jobhub-dev` cluster, `NODE_ENV=development`): with no code, Product, or Data
+contract change, the canonical runner was used as the only writer
+(`node scripts/run-migration.js v41-legacy-location-cutover`). Before: the
+read-only `--preflight` reported Jobs 3 total / 0 canonical / 3 legacy /
+0 blocked and CandidateCVs 3 / 0 / 3 / 0 (`legacyCount 6`, `blockedCount 0`,
+`unresolvedForeignCount 0`); all legacy literals (`HA_NOI`, `HO_CHI_MINH`,
+`DA_NANG`) mapped to Province Open API v1 Provinces `1`, `79`, `48`, and all
+63 mapping targets existed in the live catalog; the legacy
+`job_discovery_location_idx` and CandidateCV
+`preferredLocations_1_updatedAt_-1__id_-1` indexes and the three canonical
+Location indexes were all present. These six legacy records then serialized
+as `location: null` / `preferredLocations: []`. The migration exited 0 and
+its built-in `verify` passed. After: `--preflight` reports Jobs 3 / 3 / 0 / 0
+and CandidateCVs 3 / 3 / 0 / 0 (`legacyCount 0`, `blockedCount 0`,
+`unresolvedForeignCount 0`); raw counts are 0 scalar-string Job Locations,
+0 string CandidateCV preferred Locations, and 0 `FOREIGN`. The 3 Jobs persist
+and serialize `{ provinceCode: "1", districtCode: null }`, and the CandidateCVs
+persist and serialize Province-wide selections `[1, 79, 48]`, `[1]`, and `[1]`
+(no District inferred; `updatedAt` unchanged). The two legacy Location indexes
+are dropped (Job indexes 17 → 16; CandidateCV indexes 11 → 10), while
+`job_discovery_location_province_idx`,
+`job_discovery_location_district_idx`, and the CandidateCV
+`preferredLocations.provinceCode_1_preferredLocations.districtCode_1_updatedAt_-1__id_-1`
+index remain. Only `Job` and `CandidateCV` persist Location. The cutover is
+complete on dev, and no persisted legacy Location remains there.
+
+V4.1 Final Acceptance (2026-10-07): verdict `V4.1 ACCEPTED`. The review covered
+Slices 01–06, acceptance Bug Fix 01–03, Final Data Cutover evidence, canonical
+Location persistence and projections, request/response contracts, hierarchy
+matching, migration completeness, and index cutover. Product F04/F05 currently
+define well-formed unknown Province/District codes and cross-Province District
+pairs as non-rejections that contribute no match; malformed selections,
+District-without-Province, and `FOREIGN` are rejected. Job Discovery satisfies
+this with exact structured predicates and no provider call. Candidate Search
+resolves District membership before building its predicate, so
+`HO_CHI_MINH:BA_DINH` cannot match a Candidate preference of
+`HO_CHI_MINH / ALL`; an invalid-only filter returns an empty result and never
+widens to Province / ALL. The seven focused V4.1 files passed 177/177 tests,
+including the cross-Province/unknown-District runtime regressions and migration
+read-only/write-phase checks. The official `cd backend && npm run verify:agent`
+gate passed with ESLint 0 errors (the two pre-existing V6 test warnings),
+ARCH-001–ARCH-016, and Vitest 156 files / 1,635 tests. No Product/Data contract
+was changed by acceptance, no migration was rerun, and no V4.1 work remains
+deferred.
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.
@@ -2314,11 +2366,6 @@ the current V10 revision complete.
 
 ## Deferred / not started
 
-- **V4.1 dependency-gated work:** Slices 01–04 are implemented. Slice 05 Job
-  Discovery and Slice 06 Candidate Search hierarchy filtering are not started.
-  Business remediation of any persisted `FOREIGN` or unmapped legacy value is
-  not defined by the V4.1 Product/Data contracts; the Slice 04 migration only
-  inventories and blocks on such records.
 - **V13 later-slice gates:** V12 closure is deferred as the acceptance gate for
   V13 Slices 06–08 and does not block Slice 01. Slice 09–12 are implemented on
   the shared authenticated connection plane with durable HTTP resync for offline
@@ -2358,6 +2405,22 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V4.1 Final Acceptance (2026-10-07): seven focused V4.1 files passed 177/177
+  tests. The independently rerun `cd backend && npm run verify:agent` passed:
+  ESLint 0 errors (the 2 pre-existing warnings in
+  `test/job/v6-acceptance.test.js`), architecture ARCH-001 through ARCH-016,
+  and Vitest 156 files / 1,635 tests. No database migration was rerun during
+  Final Acceptance; the recorded Final Data Cutover evidence below was used.
+- V4.1 Final Data Cutover (dev): read-only
+  `node scripts/run-migration.js v41-legacy-location-cutover --preflight`
+  before (`legacyCount 6`, `blockedCount 0`, `unresolvedForeignCount 0`),
+  `node scripts/run-migration.js v41-legacy-location-cutover` (exit 0,
+  built-in `verify` passed), and `--preflight` after (`legacyCount 0`,
+  `blockedCount 0`, `unresolvedForeignCount 0`; canonical Location indexes
+  present, legacy Location indexes absent). Then `cd backend && npm run
+  verify:agent` passed on 2026-10-07 (ESLint: 0 errors / the 2 pre-existing
+  warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through
+  ARCH-016; Vitest: 156 files / 1,635 tests).
 - V4.1 Slice 05 Job Discovery Location Hierarchy Filter: focused coverage
   passed 28 tests in `test/job/v41-slice05-job-discovery-location-filter.test.js`
   together with the existing V8 suite (2 files / 36 tests; provider stubbed and
@@ -2375,7 +2438,8 @@ the current V10 revision complete.
   manually against the live Province Open API v1 Province list (63 entries,
   identical order/set). A read-only `--preflight` run against the configured
   dev database found 6 mappable legacy records, 0 blocked, and 0 `FOREIGN`;
-  the migration was not applied to that database.
+  the migration was not applied to that database at that time (it was later
+  applied by the V4.1 Final Data Cutover entry above).
 - V4.1 Slice 01 Location Catalog Foundation: focused coverage passed 26 tests
   in `test/catalog/v41-location-catalog.test.js` (stubbed provider). Then
   `cd backend && npm run verify:agent` passed on 2026-10-06 (ESLint: 0 errors /

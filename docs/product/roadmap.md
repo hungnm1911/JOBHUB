@@ -24,7 +24,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
 | V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
-| V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | IN PROGRESS |
+| V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | COMPLETED / ACCEPTED |
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
 | V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
@@ -68,23 +68,28 @@ Implementation of the version has started but its complete business scope has no
 
 The approved business scope of the version has been implemented and the required repository verification has passed.
 
+### COMPLETED / ACCEPTED
+
+The approved business and data scope has passed a recorded Final Acceptance
+Review in addition to implementation and repository verification.
+
 ---
 
 ## Current project state
 
 V1 through V7 are `COMPLETED AND VERIFIED`.
 
-V4.1 has canonical Product/Data contracts and is `IN PROGRESS`; Slice 01 —
-Location Catalog Foundation and Slice 02 — Job Location V4.1 are implemented
-and verified. Province Open API v1 and its pre-July-2025-merger dataset semantics
-are the approved external authority. The canonical hierarchy is Province plus
-optional District-level unit using raw v1 Province/District records; raw
-Ward/Commune is excluded. Slice 01 uses direct live provider calls behind the
-canonical Location boundary, with no initial cache or fallback. Slice 02 cuts
-Job Location over to the structured representation. The structured CandidateCV
-cutover, legacy-data migration including removal of persisted
-`FOREIGN`, and downstream Discovery/Search integration remain gated by their
-documented slice dependencies.
+V4.1 has canonical Product/Data contracts and is `COMPLETED / ACCEPTED` as of
+2026-10-07. Final Acceptance passed across F01–F06 and BR-01–BR-24 after Slices
+01–06 and acceptance Bug Fix 01–03. Province Open API v1 and its
+pre-July-2025-merger dataset semantics are the approved external authority. The
+canonical hierarchy is Province plus optional District-level unit using raw v1
+Province/District records; raw Ward/Commune is excluded. The Final Data Cutover
+completed successfully on the dev database: no persisted legacy Location,
+blocked record, or unresolved `FOREIGN` remains, legacy Location indexes are
+dropped, and canonical indexes remain. Final Acceptance independently reran all
+seven V4.1 focused files (177 tests) and the official backend gate (156 files /
+1,635 tests) with no Product/Data-contract blocker or high finding.
 
 V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression
