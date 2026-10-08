@@ -231,7 +231,7 @@ const createPublishedJob = async ({
     title: "Backend Engineer",
     jobDescription: "Build APIs",
     requiredSkills: ["Node.js"],
-    salaryText: "1000-2000",
+    salary: { type: "RANGE", minAmount: 1000, maxAmount: 2000, period: "MONTH" },
     fieldCategoryIds: [],
     positionCategoryIds: [],
     location: null,

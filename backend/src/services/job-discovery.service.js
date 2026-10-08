@@ -19,6 +19,7 @@ import Job from "../models/job.model.js";
 import {
   resolveJobDiscoveryVisibility,
   toPublicJobLocation,
+  toPublicJobSalary,
 } from "./job.service.js";
 import { normalizeLocationFilterSelections } from "./location.service.js";
 import AppError from "../utils/app-error.js";
@@ -325,7 +326,7 @@ const buildPublicJob = ({
     experienceLevel: buildPublicExperienceLevel(
       experienceLevelById.get(job.experienceLevelId?.toString()),
     ),
-    salaryText: job.salaryText,
+    salary: toPublicJobSalary(job.salary),
     publishedAt: job.publishedAt,
     applicationDeadline: job.applicationDeadline,
     status: job.status,

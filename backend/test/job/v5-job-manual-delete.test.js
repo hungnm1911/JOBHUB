@@ -86,7 +86,7 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
       title: "Backend Engineer",
       jobDescription: "Build Job lifecycle APIs.",
       requiredSkills: ["Node.js", "MongoDB"],
-      salaryText: "Negotiate",
+      salary: { type: "NEGOTIABLE" },
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
       location: provinceOnlyLocation(),

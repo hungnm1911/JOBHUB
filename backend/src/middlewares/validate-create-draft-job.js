@@ -27,12 +27,22 @@ const jobLocationInput = z
   })
   .strict();
 
+const jobSalaryInput = z
+  .object({
+    type: z.string(),
+    minAmount: z.number().nullable().optional(),
+    maxAmount: z.number().nullable().optional(),
+    period: z.string().nullable().optional(),
+    customPeriodLabel: z.string().nullable().optional(),
+  })
+  .strict();
+
 const createDraftJobSchema = z
   .object({
     title: optionalNonEmptyString,
     jobDescription: optionalNonEmptyString,
     requiredSkills: z.array(z.string().trim().min(1)).optional(),
-    salaryText: optionalNonEmptyString,
+    salary: jobSalaryInput.nullable().optional(),
     fieldCategoryIds: z.array(objectIdString).optional(),
     positionCategoryIds: z.array(objectIdString).optional(),
     location: jobLocationInput.nullable().optional(),

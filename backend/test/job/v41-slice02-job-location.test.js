@@ -147,7 +147,7 @@ describe("V4.1 Slice 02 — Job Location V4.1 (F02)", () => {
       title: "Backend Engineer",
       jobDescription: "Build Job lifecycle APIs.",
       requiredSkills: ["Node.js"],
-      salaryText: "Negotiate",
+      salary: { type: "NEGOTIABLE" },
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
       location: provinceOnlyLocation(),

@@ -19,7 +19,7 @@ import Category from "../models/category.model.js";
 import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
-import Job from "../models/job.model.js";
+import Job, { getJobSalaryInvariantErrors } from "../models/job.model.js";
 import User from "../models/user.model.js";
 import {
   assertSameCompanyTenant,
@@ -37,7 +37,7 @@ const DRAFT_CONTENT_FIELDS = Object.freeze([
   "title",
   "jobDescription",
   "requiredSkills",
-  "salaryText",
+  "salary",
   "fieldCategoryIds",
   "positionCategoryIds",
   "location",
@@ -73,6 +73,20 @@ const buildJobLocationMatch = (location) => {
   };
 };
 
+const buildJobSalaryMatch = (salary) => {
+  if (salary == null) {
+    return { salary: null };
+  }
+
+  return {
+    "salary.type": salary.type,
+    "salary.minAmount": salary.minAmount ?? null,
+    "salary.maxAmount": salary.maxAmount ?? null,
+    "salary.period": salary.period ?? null,
+    "salary.customPeriodLabel": salary.customPeriodLabel ?? null,
+  };
+};
+
 // Minimal plain values for conditional Job writes. Array fields are copied so
 // Mongoose array subtypes do not affect MongoDB equality matching.
 const buildValidatedDraftContentMatch = (job) => {
@@ -80,7 +94,7 @@ const buildValidatedDraftContentMatch = (job) => {
     title: job.title,
     jobDescription: job.jobDescription,
     requiredSkills: [...job.requiredSkills],
-    salaryText: job.salaryText,
+    ...buildJobSalaryMatch(job.salary),
     fieldCategoryIds: [...job.fieldCategoryIds],
     positionCategoryIds: [...job.positionCategoryIds],
     ...buildJobLocationMatch(job.location),
@@ -104,6 +118,23 @@ const toPublicJobLocation = (location) => {
   };
 };
 
+// V4.2 BR-01 / BR-08: the only Salary projection shared by every Job read.
+// Display text is derived by presentation layers from this value; legacy
+// `salaryText` is not a V4.2 Salary and is never projected.
+const toPublicJobSalary = (salary) => {
+  if (salary == null || getJobSalaryInvariantErrors(salary).length > 0) {
+    return null;
+  }
+
+  return {
+    type: salary.type,
+    minAmount: salary.minAmount ?? null,
+    maxAmount: salary.maxAmount ?? null,
+    period: salary.period ?? null,
+    customPeriodLabel: salary.customPeriodLabel ?? null,
+  };
+};
+
 const toPublicJob = (job) => {
   return {
     id: job._id.toString(),
@@ -114,7 +145,7 @@ const toPublicJob = (job) => {
     title: job.title,
     jobDescription: job.jobDescription,
     requiredSkills: job.requiredSkills,
-    salaryText: job.salaryText,
+    salary: toPublicJobSalary(job.salary),
     fieldCategoryIds: job.fieldCategoryIds.map((id) => id.toString()),
     positionCategoryIds: job.positionCategoryIds.map((id) => id.toString()),
     location: toPublicJobLocation(job.location),
@@ -279,6 +310,41 @@ const normalizeOptionalLocation = (value) => {
   };
 };
 
+// V4.2 F01 / BR-02–BR-07: one Structured Salary replaced as a whole unit;
+// `null` keeps or returns the DRAFT to NOT_DECLARED (Data §8.2).
+const normalizeOptionalSalary = (value) => {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new AppError(400, "salary must be a Structured Salary", {
+      field: "salary",
+    });
+  }
+
+  const customPeriodLabel =
+    typeof value.customPeriodLabel === "string"
+      ? normalizeOptionalTrimmedString(value.customPeriodLabel)
+      : value.customPeriodLabel ?? null;
+  const salary = {
+    type: value.type ?? null,
+    minAmount: value.minAmount ?? null,
+    maxAmount: value.maxAmount ?? null,
+    period: value.period ?? null,
+    customPeriodLabel,
+  };
+  const errors = getJobSalaryInvariantErrors(salary);
+
+  if (errors.length > 0) {
+    throw new AppError(400, errors.join("; "), {
+      field: "salary",
+    });
+  }
+
+  return salary;
+};
+
 // BR-03–BR-08 / BR-21–BR-23: existence and District → Province membership are
 // owned by the canonical V4.1 Location boundary.
 const assertDraftLocationCanonical = async (content) => {
@@ -327,10 +393,11 @@ const normalizeDraftContentField = (field, value) => {
   switch (field) {
     case "title":
     case "jobDescription":
-    case "salaryText":
       return normalizeOptionalTrimmedString(value);
     case "requiredSkills":
       return normalizeRequiredSkills(value);
+    case "salary":
+      return normalizeOptionalSalary(value);
     case "fieldCategoryIds":
     case "positionCategoryIds":
       return normalizeObjectIdArray(value, field);
@@ -609,7 +676,13 @@ const assertJobContentCompleteForLifecycle = (job) => {
   // BR-10: business completeness gate (not schema-required on DRAFT).
   assertRequiredSubmitString(job.title, "title");
   assertRequiredSubmitString(job.jobDescription, "jobDescription");
-  assertRequiredSubmitString(job.salaryText, "salaryText");
+
+  // V4.2 State Matrix §7.1: a Job cannot leave DRAFT with NOT_DECLARED Salary.
+  if (job.salary == null) {
+    throw new AppError(400, "Job salary is required before submit", {
+      field: "salary",
+    });
+  }
 
   if (!Array.isArray(job.requiredSkills) || job.requiredSkills.length === 0) {
     throw new AppError(400, "Job requiredSkills is required before submit", {
@@ -680,6 +753,13 @@ const assertJobContentCompleteForLifecycle = (job) => {
 };
 
 const assertJobFixedVocabularyIntegrity = (job) => {
+  // V4.2 F01: persisted Salary must match the Structured Salary matrix.
+  if (toPublicJobSalary(job.salary) == null) {
+    throw new AppError(400, "Job salary must be a canonical V4.2 Salary", {
+      field: "salary",
+    });
+  }
+
   // V4.1 F02: Location must be a structured Province / optional District-level
   // unit; codes were semantically validated when persisted (Data §10.2).
   if (!isStructuredJobLocation(job.location)) {
@@ -3519,6 +3599,7 @@ export {
   submitDraftJob,
   toPublicJob,
   toPublicJobLocation,
+  toPublicJobSalary,
   updateDraftJob,
   assertRecruiterCandidateSearchJobMembership,
 };

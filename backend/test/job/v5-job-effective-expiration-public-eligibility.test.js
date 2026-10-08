@@ -93,7 +93,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
       title: "Backend Engineer",
       jobDescription: "Build Job lifecycle APIs.",
       requiredSkills: ["Node.js", "MongoDB"],
-      salaryText: "Negotiate",
+      salary: { type: "NEGOTIABLE" },
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
       location: provinceOnlyLocation(),
@@ -164,7 +164,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
     expect(after.title).toBe(before.title);
     expect(after.jobDescription).toBe(before.jobDescription);
     expect(after.requiredSkills).toEqual(before.requiredSkills);
-    expect(after.salaryText).toBe(before.salaryText);
+    expect(after.salary).toEqual(before.salary);
     expect(after.location).toEqual(before.location);
     expect(after.employmentType).toBe(before.employmentType);
     expect(after.workModes).toEqual(before.workModes);
@@ -248,7 +248,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
       title: "Eligible Job",
       jobDescription: "Public opportunity",
       requiredSkills: ["Node.js"],
-      salaryText: "Negotiate",
+      salary: { type: "NEGOTIABLE" },
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
       location: provinceOnlyLocation(),
@@ -378,7 +378,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
       title: "Owner A Job",
       jobDescription: "Must not become eligible via foreign Company B",
       requiredSkills: ["Node.js"],
-      salaryText: "Negotiate",
+      salary: { type: "NEGOTIABLE" },
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
       location: provinceOnlyLocation(),

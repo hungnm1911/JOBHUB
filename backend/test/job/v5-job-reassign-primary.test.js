@@ -88,7 +88,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       title: "Backend Engineer",
       jobDescription: "Build Job lifecycle APIs.",
       requiredSkills: ["Node.js", "MongoDB"],
-      salaryText: "Negotiate",
+      salary: { type: "NEGOTIABLE" },
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
       location: provinceOnlyLocation(),

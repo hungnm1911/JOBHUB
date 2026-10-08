@@ -46,6 +46,31 @@ state changes; Job Discovery's `escapeRegex` moved to the shared
 coverage has 9 tests, the focused Slice 03 plus V14/V4.1 Candidate Search and
 Job regression set passed 33 files / 399 tests, and the official backend gate
 passed 159 files / 1,654 tests.
+Slice 04 — Structured Salary Runtime Foundation (F01; BR-01–BR-08) is
+`IMPLEMENTED AND VERIFIED`. `Job.salary` is the embedded Data Contract
+`salary { type, minAmount, maxAmount, period, customPeriodLabel }` (default
+`null` = `NOT_DECLARED`; no `_id`, no currency; amounts are VND integers) with
+local enums `constants/salary-type.js` and `constants/salary-period.js`. One
+model-owned invariant (`getJobSalaryInvariantErrors`, the §7.2 Type matrix plus
+`ETC` ⇒ non-empty `customPeriodLabel`, non-`ETC` ⇒ `null`) backs both the
+schema validator and `job.service.js`. Create/edit DRAFT accept only a strict
+`salary` object or `null`, replace it as one unit, and keep Primary/tenant/
+DRAFT-only edit rules unchanged; `salaryText` and any currency key are rejected
+input. Submit and approve revalidation require a valid Structured Salary
+(`NEGOTIABLE` completes; `NOT_DECLARED` does not); content immutability after
+DRAFT is unchanged. `toPublicJobSalary` is the only Salary projection for
+internal Job reads, lifecycle responses, Job Discovery list/detail, Candidate
+Application Job views, and Candidate Invitation Job views; no display string is
+persisted or returned. Interim state until Slice 05: the model no longer
+declares `salaryText`, but persisted legacy `salaryText` values are neither
+deleted nor converted; legacy Jobs project `salary: null`, never project
+`salaryText`, and fail submit/approve completeness until a Structured Salary is
+declared. The schema-level "non-DRAFT requires Salary" guard (Data §10.1) is
+deferred to Slice 05 Final Cutover; Slice 04 enforces it at the service
+lifecycle gate. No Salary filter index (Slice 06). Focused coverage:
+`test/job/v42-slice04-structured-salary.test.js` (13 tests); existing Job/
+Application/Notification fixtures migrated from `salaryText` to structured
+`salary`. The official backend gate passed 160 files / 1,667 tests.
 
 The approved V4.2 implementation sequence is:
 
@@ -62,7 +87,7 @@ Slices 03–04 may start independently after the completed governance gate.
 Slices 05 and 06 each depend on Slice 04. Slice 06 may be implemented and
 tested after Slice 04, but its production activation and business completion
 also depend on Slice 05 Final Cutover. Slice 07 depends on Slices 01–06. The
-next implementation focus is Slice 04.
+next implementation focus is Slice 05.
 
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `COMPLETED / ACCEPTED` as of 2026-10-07. Slice 01 — Location Catalog Foundation

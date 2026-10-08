@@ -2,12 +2,16 @@ import mongoose from "mongoose";
 
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_STATUS from "../constants/job-status.js";
+import SALARY_PERIOD from "../constants/salary-period.js";
+import SALARY_TYPE from "../constants/salary-type.js";
 import WORK_MODE from "../constants/work-mode.js";
 
 const { Schema, model } = mongoose;
 
 const EMPLOYMENT_TYPE_VALUES = Object.values(EMPLOYMENT_TYPE);
 const WORK_MODE_VALUES = Object.values(WORK_MODE);
+const SALARY_TYPE_VALUES = Object.values(SALARY_TYPE);
+const SALARY_PERIOD_VALUES = Object.values(SALARY_PERIOD);
 
 const isNonEmptyTrimmedString = (value) => {
   return typeof value === "string" && value.trim() !== "";
@@ -167,6 +171,134 @@ const jobLocationSchema = new Schema(
   },
 );
 
+// V4.2 Structured Salary type/amount/period matrix (Data §5.6, §7.2). Amounts
+// are VND integers; no currency is persisted. Shared by schema validation and
+// the Job service so both enforce one local invariant.
+const getJobSalaryInvariantErrors = (salary) => {
+  if (salary == null) {
+    return [];
+  }
+
+  if (typeof salary !== "object" || Array.isArray(salary)) {
+    return ["salary must be a Structured Salary"];
+  }
+
+  const { type, minAmount, maxAmount, period, customPeriodLabel } = salary;
+
+  if (!SALARY_TYPE_VALUES.includes(type)) {
+    return ["salary.type must be a canonical SalaryType value"];
+  }
+
+  const errors = [];
+
+  for (const [field, amount] of [
+    ["minAmount", minAmount],
+    ["maxAmount", maxAmount],
+  ]) {
+    if (amount != null && !Number.isSafeInteger(amount)) {
+      errors.push(`salary.${field} must be an integer VND amount`);
+    }
+  }
+
+  if (type === SALARY_TYPE.NEGOTIABLE) {
+    if (minAmount != null || maxAmount != null) {
+      errors.push("NEGOTIABLE salary must not have amounts");
+    }
+
+    if (period != null) {
+      errors.push("NEGOTIABLE salary must not have a period");
+    }
+
+    if (customPeriodLabel != null) {
+      errors.push("NEGOTIABLE salary must not have a customPeriodLabel");
+    }
+
+    return errors;
+  }
+
+  switch (type) {
+    case SALARY_TYPE.FIXED:
+      if (minAmount == null || maxAmount == null || minAmount !== maxAmount) {
+        errors.push("FIXED salary requires equal minAmount and maxAmount");
+      }
+      break;
+    case SALARY_TYPE.RANGE:
+      if (minAmount == null || maxAmount == null) {
+        errors.push("RANGE salary requires minAmount and maxAmount");
+      } else if (minAmount > maxAmount) {
+        errors.push("RANGE salary minAmount must not exceed maxAmount");
+      }
+      break;
+    case SALARY_TYPE.FROM:
+      if (minAmount == null || maxAmount != null) {
+        errors.push("FROM salary requires only minAmount");
+      }
+      break;
+    case SALARY_TYPE.UP_TO:
+      if (minAmount != null || maxAmount == null) {
+        errors.push("UP_TO salary requires only maxAmount");
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (period == null) {
+    errors.push("Numeric salary requires a period");
+  } else if (!SALARY_PERIOD_VALUES.includes(period)) {
+    errors.push("salary.period must be a canonical SalaryPeriod value");
+  } else if (period === SALARY_PERIOD.ETC) {
+    if (!isNonEmptyTrimmedString(customPeriodLabel)) {
+      errors.push("ETC salary period requires a non-empty customPeriodLabel");
+    }
+  } else if (customPeriodLabel != null) {
+    errors.push("customPeriodLabel is only allowed for ETC salary period");
+  }
+
+  return errors;
+};
+
+const jobSalarySchema = new Schema(
+  {
+    type: {
+      type: String,
+      required: true,
+      enum: {
+        values: SALARY_TYPE_VALUES,
+        message: "salary.type must be a canonical SalaryType value",
+      },
+    },
+
+    minAmount: {
+      type: Number,
+      default: null,
+    },
+
+    maxAmount: {
+      type: Number,
+      default: null,
+    },
+
+    period: {
+      type: String,
+      default: null,
+      enum: {
+        values: [...SALARY_PERIOD_VALUES, null],
+        message: "salary.period must be a canonical SalaryPeriod value",
+      },
+    },
+
+    customPeriodLabel: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
 const jobSchema = new Schema(
   {
     companyId: {
@@ -268,15 +400,16 @@ const jobSchema = new Schema(
       default: [],
     },
 
-    salaryText: {
-      type: String,
+    salary: {
+      type: jobSalarySchema,
       default: null,
-      trim: true,
       validate: {
         validator(value) {
-          return value == null || isNonEmptyTrimmedString(value);
+          return getJobSalaryInvariantErrors(value).length === 0;
         },
-        message: "Salary text must be a non-empty string when provided",
+        message(props) {
+          return getJobSalaryInvariantErrors(props.value).join("; ");
+        },
       },
     },
 
@@ -502,6 +635,7 @@ const ensureJobCollectionInvariants = async (
 export {
   assertJobRecruitmentTeamInvariants,
   ensureJobCollectionInvariants,
+  getJobSalaryInvariantErrors,
   isNotForbiddenLocationProvinceCode,
 };
 export default Job;
