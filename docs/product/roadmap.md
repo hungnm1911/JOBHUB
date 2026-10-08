@@ -107,7 +107,11 @@ Salary, strict Salary guard active). The independent Final Acceptance rerun
 found no Critical, High, or Medium finding across F01–F05 and BR-01–BR-26.
 The strict Salary guard is applied only by the
 `v42-legacy-salary-cutover` migration; backend startup only verifies it, so a
-new database must run that migration once before the first startup.
+new database must run that migration once before the first startup. Phase
+closure documentation has reconciled the final implementation, regression,
+cutover, and ownership evidence; the mandatory Salary/Category indexes remain
+declared in source, while their materialization on dev is a non-blocking
+environment follow-up and is not claimed as completed deployment evidence.
 
 V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression

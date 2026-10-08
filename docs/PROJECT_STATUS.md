@@ -191,8 +191,10 @@ does not yet have `job_discovery_salary_range_idx`,
 they are declared and built by the normal backend startup (`Job.init()` /
 model init), which has not run on dev since Slices 01 and 06, so query results
 are correct but those indexes must not be claimed present on dev until a
-startup is confirmed; (2) `docs/engineering/source-of-truth.md` has no row for
-the Slice 04 Structured Salary owners; (3) zero/negative Salary amounts are
+startup is confirmed; (2) at that review point,
+`docs/engineering/source-of-truth.md` had no row for the Slice 04 Structured
+Salary owners (resolved by the Phase Closure Documentation record below); (3)
+zero/negative Salary amounts are
 accepted because no canonical contract sets a lower bound — any change needs an
 approved contract change.
 V4.2 Final Acceptance Bugfix Slice 04 — complete canonical persisted Salary
@@ -276,10 +278,39 @@ instructions; passes after the migration). Deferred non-blocking Low items:
 (1) the cutover pre-checks only Salary readiness before applying the full
 validator, which also carries the V6 Recruitment Team rules, so a pre-existing
 team-rule violation would pass the migration and then be rejected by startup
-with a generic not-cut-over message; (2) `source-of-truth.md` still has no row
-for the Slice 04 Structured Salary owners; (3) presence of
-`job_discovery_salary_range_idx` and the Category catalog indexes on dev is
-still unconfirmed until a normal backend startup.
+with a generic not-cut-over message; (2) at that review point,
+`source-of-truth.md` still had no row for the Slice 04 Structured Salary owners
+(resolved by the Phase Closure Documentation record below); (3) presence of
+`job_discovery_salary_range_idx` and the Category catalog indexes on dev was
+then unconfirmed and is resolved to the read-only inventory result below.
+
+V4.2 Phase Closure Documentation (2026-10-08) records the final independent
+read-only acceptance rerun against the current worktree as `V4.2 COMPLETED AND
+VERIFIED`. No Critical, High, or Medium finding remains across F01–F05,
+BR-01–BR-26, or the applicable Data §8–§10 atomicity and persistence
+boundaries. The review re-verified Structured Salary shape/lifecycle/cutover,
+all shared Job Salary projections, Salary filtering compatibility, both public
+catalogs, and Candidate skill keyword composition. The focused V4.2/V6 set
+passed 11 files / 118 tests. The requested `npm run verify:agent` execution
+passed lint (0 errors; 2 pre-existing warnings) and ARCH-001–ARCH-016; its
+default-parallel test phase was environment-constrained when concurrent
+MongoMemoryServer workers exhausted the `/tmp` free-space threshold (160/166
+files and 1,612 assertions had passed, with no assertion failure). The complete
+suite was therefore rerun with one worker and passed 166 files / 1,730 tests.
+The dev read-only Salary preflight independently confirmed 3 Jobs, 0
+`salaryText`, 0 unresolved/invalid Salary, 0 non-DRAFT Job without valid
+Salary, and `strictSalaryGuardActive: true`; the canonical six-member
+Experience Level dataset is also present. A read-only index inventory confirmed
+that `job_discovery_salary_range_idx`, `category_field_catalog_name_idx`, and
+`category_position_catalog_name_idx` are declared in source but are not yet
+materialized on dev. Their dev activation remains a non-blocking operational
+follow-up and must not be claimed complete until rechecked after normal model
+initialization. The Slice 04 Structured Salary owner is now recorded in
+`docs/engineering/source-of-truth.md`. Remaining non-blocking follow-ups are
+the dev index materialization above and the fact that Salary cutover preflight
+does not separately diagnose a pre-existing V6 Recruitment Team violation
+before applying the combined Job validator. No production deployment or
+migration state is inferred from dev evidence.
 
 The approved V4.2 implementation sequence is:
 
