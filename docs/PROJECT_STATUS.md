@@ -105,6 +105,25 @@ strict guard active. Focused coverage: `test/job/v42-slice05-legacy-salary-cutov
 (10 tests); 34 existing test files' non-DRAFT Job fixtures now carry a
 Structured Salary, and the Slice 04 legacy-approve test now asserts the guard
 rejects that state. The official backend gate passed 161 files / 1,677 tests.
+Slice 06 — Salary Range Filtering (F02; BR-09–BR-14; Data §5.5, §5.7, §7.3,
+§10.2) is `IMPLEMENTED AND VERIFIED`. `GET /api/job-discovery/jobs` accepts
+optional `salaryPeriod`, `salaryMin`, `salaryMax`; all absent/blank leaves
+Discovery unchanged, while any present requires all three (no one-sided or
+period-less filter). `salaryPeriod` must be `HOUR`/`DAY`/`WEEK`/`MONTH`/`SHIFT`
+(`ETC` or any other value returns `400`); bounds must be integer VND amounts
+with `salaryMin <= salaryMax`. The Salary group is ANDed with the existing
+groups and matches only the same period, `FIXED` inside the range or `RANGE`
+overlapping it, all boundaries inclusive; `FROM`, `UP_TO`, `NEGOTIABLE`, `ETC`,
+and undeclared Salary never match, and `customPeriodLabel` is never read.
+The Job model declares the Data §5.7 compound index
+`job_discovery_salary_range_idx` (non-partial), built by the existing startup
+`Job.init()`. No Salary sorting, conversion, currency, or persisted state
+change. Production activation still requires the Slice 05 preflight →
+remediation → cutover + verify sequence on any database holding legacy Salary.
+Focused coverage: `test/job/v42-slice06-job-discovery-salary-filter.test.js`
+(10 tests); the focused plus V8/V4.1 Discovery and V4.2 Salary regression set
+passed 6 files / 92 tests, and the official backend gate passed 162 files /
+1,687 tests.
 
 The approved V4.2 implementation sequence is:
 
@@ -121,7 +140,7 @@ Slices 03–04 may start independently after the completed governance gate.
 Slices 05 and 06 each depend on Slice 04. Slice 06 may be implemented and
 tested after Slice 04, but its production activation and business completion
 also depend on Slice 05 Final Cutover. Slice 07 depends on Slices 01–06. The
-next implementation focus is Slice 06.
+next implementation focus is Slice 07.
 
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `COMPLETED / ACCEPTED` as of 2026-10-07. Slice 01 — Location Catalog Foundation

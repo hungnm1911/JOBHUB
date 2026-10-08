@@ -574,6 +574,16 @@ jobSchema.index(
   { status: 1, workModes: 1, applicationDeadline: 1 },
   { name: "job_discovery_work_mode_idx" },
 );
+jobSchema.index(
+  {
+    status: 1,
+    "salary.period": 1,
+    "salary.type": 1,
+    "salary.minAmount": 1,
+    "salary.maxAmount": 1,
+  },
+  { name: "job_discovery_salary_range_idx" },
+);
 
 jobSchema.pre("validate", function validateJobRecruitmentTeam() {
   const errors = assertJobRecruitmentTeamInvariants(this);
