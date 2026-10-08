@@ -421,6 +421,7 @@ describe("V14 Slice 07 — Dynamic revocation + read-only acceptance closure (F0
         employeeCode: "NV-V14-S07-LAST-S-S",
       });
       const proofJob = await Job.create({
+        salary: { type: "NEGOTIABLE" },
         companyId: manager.company._id,
         createdByCompanyMemberId: primary.membership._id,
         primaryRecruiterCompanyMemberId: primary.membership._id,

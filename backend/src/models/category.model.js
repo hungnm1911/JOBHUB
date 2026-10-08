@@ -88,6 +88,14 @@ categorySchema.index(
   { parentCategoryId: 1, normalizedName: 1 },
   { unique: true },
 );
+categorySchema.index(
+  { level: 1, name: 1, _id: 1 },
+  { name: "category_field_catalog_name_idx" },
+);
+categorySchema.index(
+  { parentCategoryId: 1, name: 1, _id: 1 },
+  { name: "category_position_catalog_name_idx" },
+);
 
 const Category = model("Category", categorySchema);
 

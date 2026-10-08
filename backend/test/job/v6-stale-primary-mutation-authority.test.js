@@ -42,6 +42,7 @@ const createPublishedJob = async ({
   title = "Stale Primary Authority Job",
 }) =>
   Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId: primaryMemberId,
     primaryRecruiterCompanyMemberId: primaryMemberId,

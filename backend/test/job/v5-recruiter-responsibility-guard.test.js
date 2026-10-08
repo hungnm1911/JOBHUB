@@ -31,6 +31,7 @@ const createPrimaryJob = async ({
   publishedAt = null,
 }) => {
   return Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId: membershipId,
     primaryRecruiterCompanyMemberId: membershipId,

@@ -40,6 +40,7 @@ const createPublishedJob = async ({
   title = "Forced Transfer Atomicity Job",
 }) =>
   Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId: primaryMemberId,
     primaryRecruiterCompanyMemberId: primaryMemberId,

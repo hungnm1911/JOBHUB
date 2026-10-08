@@ -68,6 +68,7 @@ import {
   isOwningCompanyActiveForPublicEligibility,
   toPublicJob,
   toPublicJobLocation,
+  toPublicJobSalary,
 } from "./job.service.js";
 import { materializeStalePendingInvitationForCandidateJob } from "./job-invitation.service.js";
 
@@ -891,7 +892,7 @@ const toCandidateMyApplicationJob = (job) => {
     title: job.title,
     jobDescription: job.jobDescription,
     requiredSkills: job.requiredSkills,
-    salaryText: job.salaryText,
+    salary: toPublicJobSalary(job.salary),
     location: toPublicJobLocation(job.location),
     employmentType: job.employmentType,
     workModes: job.workModes,

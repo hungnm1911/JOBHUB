@@ -86,7 +86,7 @@ describe("V5 Slice 10 — Manual close Job (F09 / TX-02)", () => {
       title: "Backend Engineer",
       jobDescription: "Build Job lifecycle APIs.",
       requiredSkills: ["Node.js", "MongoDB"],
-      salaryText: "Negotiate",
+      salary: { type: "NEGOTIABLE" },
       fieldCategoryIds: [catalog.field.id],
       positionCategoryIds: [catalog.position.id],
       location: provinceOnlyLocation(),
@@ -152,7 +152,7 @@ describe("V5 Slice 10 — Manual close Job (F09 / TX-02)", () => {
     expect(after.title).toBe(before.title);
     expect(after.jobDescription).toBe(before.jobDescription);
     expect(after.requiredSkills).toEqual(before.requiredSkills);
-    expect(after.salaryText).toBe(before.salaryText);
+    expect(after.salary).toEqual(before.salary);
     expect(after.location).toEqual(before.location);
     expect(after.employmentType).toBe(before.employmentType);
     expect(after.workModes).toEqual(before.workModes);
@@ -394,6 +394,7 @@ describe("V5 Slice 10 — Manual close Job (F09 / TX-02)", () => {
 
     for (const status of [JOB_STATUS.CLOSED, JOB_STATUS.EXPIRED]) {
       const job = await Job.create({
+        salary: { type: "NEGOTIABLE" },
         companyId: manager.company._id,
         createdByCompanyMemberId: primary.membership._id,
         primaryRecruiterCompanyMemberId: primary.membership._id,
@@ -583,7 +584,7 @@ describe("V5 Slice 10 — Manual close Job (F09 / TX-02)", () => {
       title: "Past Deadline Published Job",
       jobDescription: "Should not close after deadline.",
       requiredSkills: ["Node.js"],
-      salaryText: "Negotiate",
+      salary: { type: "NEGOTIABLE" },
       applicationDeadline: pastDeadline,
       publishedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
     });

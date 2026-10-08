@@ -2,6 +2,334 @@
 
 ## Current project state
 
+**V4.2 — Structured Salary, Metadata Catalog & Candidate Skill Keyword Search**
+is `COMPLETED / ACCEPTED` as of 2026-10-08. A later Final Acceptance review
+had found two blockers (strict Salary guard activation ownership;
+service-boundary Salary validation); they were fixed in Bugfix Slice 05 and
+the independent Final Acceptance rerun accepted V4.2 (see the records at the
+end of this V4.2 block). The approved canonical
+contracts are
+`docs/product/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword.md`
+and
+`docs/data/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword-data-model.md`.
+The Product contract now explicitly requires a non-empty custom period label
+for Salary period `ETC`; this label only describes the Salary unit and does not
+make `ETC` filterable or create cross-period semantics. Slice 01 — Public
+Category Catalog Read (F03; BR-15–BR-18) is `IMPLEMENTED AND VERIFIED`.
+Public `GET /api/categories/fields` and
+`GET /api/categories/fields/:fieldId/positions` read the existing canonical
+Category collection without authentication, order results deterministically by
+`name` then `_id`, reject missing/non-FIELD parents, and return an empty
+POSITION set for a valid FIELD with no children. The Category model declares
+the approved FIELD and POSITION catalog read indexes; Category hierarchy and
+Platform Admin mutation behavior are unchanged. Focused Slice 01 coverage has
+5 tests, the focused Slice 01 plus V4 regression set passed 23 tests, and the
+official backend gate passed 157 files / 1,640 tests.
+Slice 02 — Public Experience Level Catalog Read (F04; BR-19–BR-21) is
+`IMPLEMENTED AND VERIFIED`. Public `GET /api/experience-levels` returns
+`{ experienceLevels: [{ id, code }] }` from the existing canonical
+`experience_levels` dataset without authentication, ordered by the canonical
+`constants/experience-level.js` order, independent of Job/CandidateCV usage.
+`id` remains the identifier used by existing Job/CV/Search contracts; no
+metadata fields, schema, index, or dataset changes were made, and the read path
+does not initialize the dataset (the `v4-experience-level-dataset` migration
+remains its only initializer). Focused Slice 02 coverage has 5 tests, the
+focused Slice 02 plus V4/V4.2 catalog regression set passed 21 tests, and the
+official backend gate passed 158 files / 1,645 tests.
+Slice 03 — Candidate Skill Keyword Search (F05; BR-22–BR-26) is
+`IMPLEMENTED AND VERIFIED`. The existing Recruiter
+`GET /api/jobs/candidate-search/cvs` accepts an optional `keyword` that
+matches only `CandidateCV.skillTags` as a trimmed, literal (regex-escaped),
+case-insensitive substring with ANY semantics; a non-string `keyword` returns
+`400`, and an absent/blank keyword leaves results unchanged. When combined with
+the unchanged exact, case-sensitive `$in` structured `skillTags` filter, both
+conditions must hold; eligibility, authorization, other filter groups, and the
+`updatedAt` desc, `_id` desc sort are unchanged. No schema, index, or persisted
+state changes; Job Discovery's `escapeRegex` moved to the shared
+`backend/src/utils/escape-regex.js` without behavior change. Focused Slice 03
+coverage has 9 tests, the focused Slice 03 plus V14/V4.1 Candidate Search and
+Job regression set passed 33 files / 399 tests, and the official backend gate
+passed 159 files / 1,654 tests.
+Slice 04 — Structured Salary Runtime Foundation (F01; BR-01–BR-08) is
+`IMPLEMENTED AND VERIFIED`. `Job.salary` is the embedded Data Contract
+`salary { type, minAmount, maxAmount, period, customPeriodLabel }` (default
+`null` = `NOT_DECLARED`; no `_id`, no currency; amounts are VND integers) with
+local enums `constants/salary-type.js` and `constants/salary-period.js`. One
+model-owned invariant (`getJobSalaryInvariantErrors`, the §7.2 Type matrix plus
+`ETC` ⇒ non-empty `customPeriodLabel`, non-`ETC` ⇒ `null`) backs both the
+schema validator and `job.service.js`. Create/edit DRAFT accept only a strict
+`salary` object or `null`, replace it as one unit, and keep Primary/tenant/
+DRAFT-only edit rules unchanged; `salaryText` and any currency key are rejected
+input. Submit and approve revalidation require a valid Structured Salary
+(`NEGOTIABLE` completes; `NOT_DECLARED` does not); content immutability after
+DRAFT is unchanged. `toPublicJobSalary` is the only Salary projection for
+internal Job reads, lifecycle responses, Job Discovery list/detail, Candidate
+Application Job views, and Candidate Invitation Job views; no display string is
+persisted or returned. Interim state until Slice 05: the model no longer
+declares `salaryText`, but persisted legacy `salaryText` values are neither
+deleted nor converted; legacy Jobs project `salary: null`, never project
+`salaryText`, and fail submit/approve completeness until a Structured Salary is
+declared. The schema-level "non-DRAFT requires Salary" guard (Data §10.1) is
+deferred to Slice 05 Final Cutover; Slice 04 enforces it at the service
+lifecycle gate. No Salary filter index (Slice 06). Focused coverage:
+`test/job/v42-slice04-structured-salary.test.js` (13 tests); existing Job/
+Application/Notification fixtures migrated from `salaryText` to structured
+`salary`. The official backend gate passed 160 files / 1,667 tests.
+Slice 05 — Legacy Salary Preflight & Final Cutover (F01; BR-01, BR-03, BR-08;
+Data §7.1, §8.4, §9.3, §10.1, §16) is `IMPLEMENTED AND VERIFIED`, and the V4.2
+Salary Final Data Cutover was applied to the dev database on 2026-10-08. The
+explicit migration `backend/src/database/migrations/v42-legacy-salary-cutover.js`
+(`node scripts/run-migration.js v42-legacy-salary-cutover [--preflight]`)
+reports legacy `salaryText` totals (DRAFT / non-DRAFT), deterministic
+conversions by target, unresolved records by reason, non-DRAFT Jobs without a
+valid Structured Salary, and whether the strict guard is active. It maps only
+explicit `FIXED`/`RANGE`/`FROM`/`UP_TO` text with VND and a canonical non-`ETC`
+period (e.g. `20 - 30 million VND/month`), explicit negotiable wording
+(`Negotiable`, `Thỏa thuận`), empty text on a DRAFT (`NOT_DECLARED`), and drops
+stale `salaryText` beside an existing valid Salary without rewriting it. Any
+unresolved record blocks before any write; each conversion is one conditional
+document write (Salary set + `salaryText` unset); reruns are no-ops. After
+zero-legacy verification it applies `JOB_COLLECTION_VALIDATOR` (now including
+`status = DRAFT OR salary is an object`) via `ensureJobCollectionInvariants`,
+and `verify` requires zero `salaryText`, zero non-DRAFT Jobs without valid
+Salary, and the active strict validator. The Job schema also rejects saving a
+non-DRAFT Job with `salary = null`. Because `ensureJobCollectionInvariants` also
+runs at server startup, this migration must complete before deploying this code
+to a database holding legacy Salary records (superseded by Bugfix Slice 05:
+startup now only verifies the guard and fails closed). Dev preflight (2026-10-08,
+`jobhub`): 3 Jobs, all legacy non-DRAFT (2 `PUBLISHED`, 1 `CLOSED`) with
+`salaryText = "20 - 30 million VND"`; 0 deterministic, 3
+`UNRECOGNIZED_SALARY_TEXT` (no Salary Period stated), so the migration was not
+run on them. The product owner explicitly approved per-record remediation
+`RANGE 20,000,000–30,000,000 VND / MONTH` for those 3 Job IDs; it was applied as
+one conditional single-document write per Job (Salary set + `salaryText` unset).
+The cutover then ran (`node scripts/run-migration.js v42-legacy-salary-cutover`,
+`migrate` + `verify` passed), and a final read-only preflight reports 0 legacy
+`salaryText`, 0 unresolved, 0 non-DRAFT Jobs without valid Salary, and the
+strict guard active. Focused coverage: `test/job/v42-slice05-legacy-salary-cutover.test.js`
+(10 tests); 34 existing test files' non-DRAFT Job fixtures now carry a
+Structured Salary, and the Slice 04 legacy-approve test now asserts the guard
+rejects that state. The official backend gate passed 161 files / 1,677 tests.
+Slice 06 — Salary Range Filtering (F02; BR-09–BR-14; Data §5.5, §5.7, §7.3,
+§10.2) is `IMPLEMENTED AND VERIFIED`. `GET /api/job-discovery/jobs` accepts
+optional `salaryPeriod`, `salaryMin`, `salaryMax`; all absent/blank leaves
+Discovery unchanged, while any present requires all three (no one-sided or
+period-less filter). `salaryPeriod` must be `HOUR`/`DAY`/`WEEK`/`MONTH`/`SHIFT`
+(`ETC` or any other value returns `400`); bounds must be integer VND amounts
+with `salaryMin <= salaryMax`. The Salary group is ANDed with the existing
+groups and matches only the same period, `FIXED` inside the range or `RANGE`
+overlapping it, all boundaries inclusive; `FROM`, `UP_TO`, `NEGOTIABLE`, `ETC`,
+and undeclared Salary never match, and `customPeriodLabel` is never read.
+The Job model declares the Data §5.7 compound index
+`job_discovery_salary_range_idx` (non-partial), built by the existing startup
+`Job.init()`. No Salary sorting, conversion, currency, or persisted state
+change. Production activation still requires the Slice 05 preflight →
+remediation → cutover + verify sequence on any database holding legacy Salary.
+Focused coverage: `test/job/v42-slice06-job-discovery-salary-filter.test.js`
+(10 tests); the focused plus V8/V4.1 Discovery and V4.2 Salary regression set
+passed 6 files / 92 tests, and the official backend gate passed 162 files /
+1,687 tests.
+V4.2 Final Acceptance Bugfix Slice 01 — canonical Structured Salary shape
+invariant (Data §5.3, §16) is `IMPLEMENTED AND VERIFIED`.
+`getJobSalaryInvariantErrors` previously checked only the five known fields,
+so a persisted Salary with `currency` or an unknown field read through the raw
+driver (cutover classifier, `toPublicJobSalary`) was judged valid. It now
+rejects every key outside `type`, `minAmount`, `maxAmount`, `period`,
+`customPeriodLabel` (including `currency: null` and an embedded `_id`), reading
+keys from `toObject()` for Mongoose subdocuments; the Type matrix and
+absent-as-`null` handling are unchanged. HTTP create/edit was already strict.
+Coverage was added to `test/job/v42-slice04-structured-salary.test.js`
+(now 19 tests). The official backend gate passed 162 files / 1,693 tests.
+V4.2 Final Acceptance Bugfix Slice 02 — canonical Structured Salary on raw
+persistence (Data §5.3, §7.1, §7.2, §10.1, §16) is `IMPLEMENTED AND VERIFIED`.
+`JOB_COLLECTION_VALIDATOR` previously only required a non-DRAFT `salary` to be
+a BSON object, so raw driver writes could persist `currency`, unknown fields,
+or Type-matrix violations. It now accepts, for every Job status, only
+`salary` null/absent or a Structured Salary with exactly the five canonical
+fields, canonical enums, safe-integer amounts, the §7.2 Type matrix, and the
+`ETC` label rule (trimmed with the same whitespace set as
+`getJobSalaryInvariantErrors`); the non-DRAFT Salary requirement is unchanged.
+No Salary semantics, lifecycle, API, migration, or index change. Focused
+coverage: `test/job/v42-bugfix02-salary-collection-validator.test.js`
+(10 tests, including validator/helper parity on persisted BSON edge cases).
+The official backend gate passed 163 files / 1,703 tests.
+V4.2 Final Acceptance Bugfix Slice 03 — Cutover Verification & Acceptance
+Closure (Data §8.4, §10.1, §16) is `IMPLEMENTED AND VERIFIED`. Investigation
+found no code defect in `v42-legacy-salary-cutover.js`: preflight/`verify`
+already judge persisted Salary through `getJobSalaryInvariantErrors` (which
+rejects `currency` and unknown fields since Bugfix Slice 01) and certify the
+guard only when the stored validator equals `JOB_COLLECTION_VALIDATOR` with
+`strict`/`error`. The gap was missing regression evidence and an unverified
+dev state: after Bugfix Slice 02 the dev `jobs` validator was still the
+pre-Bugfix 02 one, so the guard was not active. No source change. New
+coverage `test/job/v42-bugfix03-cutover-verification.test.js` (5 tests):
+canonical Salary passes preflight and `verify`; a persisted non-DRAFT or DRAFT
+Salary with `currency` or an unknown field is `INVALID_SALARY` and `verify`
+fails even with the strict guard active; `migrate` blocks before any write
+instead of remediating it; a stale or non-`strict` validator is not certified,
+and the existing cutover flow refreshes it. Mutation checks (helper ignoring
+extra fields; guard check ignoring validator content/level) made 4 of the 5
+tests fail, then were reverted. Focused V4.2 Salary set: 5 files / 54 tests;
+official backend gate: 164 files / 1,708 tests. Dev (`jobhub`, 2026-10-08):
+read-only preflight showed 3 Jobs, 0 `salaryText`, 0 unresolved/invalid
+Salary, 0 non-DRAFT without valid Salary, guard inactive; an independent
+read-only query confirmed every persisted Salary has exactly the five
+canonical keys. `node scripts/run-migration.js v42-legacy-salary-cutover`
+(0 conversions) re-applied the current validator and `verify` passed; the
+final read-only preflight reports 0 / 0 / 0 and `strictSalaryGuardActive:
+true`.
+V4.2 Final Acceptance (rerun 2026-10-08, independent read-only review) is
+`ACCEPTED`: no Critical, High, or Medium finding; the three previous findings
+(helper extra fields, raw-persistence validator, cutover/dev re-verification)
+are resolved; F01–F05 / BR-01–BR-26 are met in implementation and tests. The
+review independently ran the V4.2 focused set (8 files / 73 tests), the
+official backend gate (164 files / 1,708 tests), and the dev read-only
+preflight (0 `salaryText`, 0 unresolved, 0 non-DRAFT without valid Salary,
+strict guard active). Deferred non-blocking Low items: (1) the dev database
+does not yet have `job_discovery_salary_range_idx`,
+`category_field_catalog_name_idx`, or `category_position_catalog_name_idx`;
+they are declared and built by the normal backend startup (`Job.init()` /
+model init), which has not run on dev since Slices 01 and 06, so query results
+are correct but those indexes must not be claimed present on dev until a
+startup is confirmed; (2) at that review point,
+`docs/engineering/source-of-truth.md` had no row for the Slice 04 Structured
+Salary owners (resolved by the Phase Closure Documentation record below); (3)
+zero/negative Salary amounts are
+accepted because no canonical contract sets a lower bound — any change needs an
+approved contract change.
+V4.2 Final Acceptance Bugfix Slice 04 — complete canonical persisted Salary
+shape (Data §5.2, §5.3, §9.1, §10.1, §16) is `IMPLEMENTED AND VERIFIED`.
+`getJobSalaryInvariantErrors` treated a missing Salary key as `null`,
+`JOB_COLLECTION_VALIDATOR` did not require the root `salary` and required only
+`salary.type`, and the cutover classifier treated a DRAFT without a `salary`
+field as canonical, so a Job without `salary`, `{ type: "NEGOTIABLE" }`, or any
+Type missing a non-applicable key could be persisted and certified. Now every
+persisted Job must have `salary`, which is `null` or an object with exactly
+the five canonical keys (non-applicable keys persist `null`); the helper
+reports each missing key, the validator requires root `salary` and all five
+keys, and cutover reports a sparse Salary as `INVALID_SALARY` and a DRAFT
+without `salary` as `MISSING_SALARY`, so `migrate` blocks and `verify` fails.
+The Type/period matrix, HTTP create/update (input is normalized to the full
+shape), and Salary filtering are unchanged. Coverage:
+`test/job/v42-bugfix04-complete-salary-shape.test.js` (11 tests, 8 failed
+before the fix); Bugfix 02 / Slice 04 assertions that accepted sparse or
+absent Salary were tightened, the Slice 04 legacy-state seed and the V6
+backfill V5 fixture now use bypass validation / `salary: null`. Focused V4.2
+Salary set plus V6 read: 7 files / 88 tests; official backend gate: 165 files
+/ 1,719 tests. Dev (`jobhub`, read-only preflight): 3 Jobs, 0 unresolved,
+0 non-DRAFT without valid Salary, `strictSalaryGuardActive: false` because the
+stored validator predates this fix; it is re-applied by the existing cutover
+run or backend startup (`ensureJobCollectionInvariants`), not yet performed
+(superseded by Bugfix Slice 05: only the cutover migration applies it).
+V4.2 Final Acceptance Bugfix Slice 05 — strict Salary guard activation
+ownership and service-boundary Salary validation (BR-01, BR-04; Data §5.3,
+§8.4, §10.1, §14, §16) is `IMPLEMENTED AND VERIFIED`. Root causes: (1) the
+model-owned `ensureJobCollectionInvariants` applied the current
+`JOB_COLLECTION_VALIDATOR` by `collMod` and was called by backend startup, the
+historical V6 backfill migration, and the V4.2 cutover, so startup or V6 could
+activate the strict Salary guard over a database never cut over (`collMod`
+does not check existing documents); (2) `normalizeOptionalSalary` copied only
+the five canonical keys, silently dropping `currency`, `_id`, or unknown keys
+before `getJobSalaryInvariantErrors`, and draft content building ignored a
+top-level `salaryText`, so direct service callers persisted them as canonical
+VND Salary (HTTP was already strict through Zod). Fix: the helper is removed;
+`v42-legacy-salary-cutover.js` privately owns `applyStrictSalaryGuard` (only
+after its existing zero-legacy/zero-invalid gate; `verify` requires the guard
+active); `job.model.js` exposes the read-only `isJobCollectionValidatorActive`
+(also used by the cutover report) and `assertJobCollectionInvariantsActive`,
+which startup now calls instead — it never mutates the validator and fails
+closed with the preflight/migration instructions when the validator is
+missing/stale or any Job has `salaryText` or violates the validator; V6 no
+longer touches the validator. The Job service rejects unsupported Salary keys
+before normalizing and rejects top-level `salaryText` on create/update (`400`,
+no write); valid sparse input still persists all five keys. The test database
+helper now applies the guard through the V4.2 `migrate`. No Salary semantics,
+amount bound, filtering, HTTP contract, or remediation change. Coverage:
+`test/job/v42-bugfix05-guard-ownership-service-boundary.test.js` (11 tests).
+Before the fix a reproduction showed startup's Job step and V6 activating the
+guard on a legacy database and the service persisting `currency`, an unknown
+key, and `salaryText`; a mutation re-adding `collMod` to the startup verifier
+failed 3 startup tests. Focused V4.2/V6/V5 set: 10 files / 115 tests; official
+backend gate (`npm run verify:agent`): lint 0 errors (2 pre-existing
+warnings), ARCH-001–ARCH-016 passed, 166 files / 1,730 tests. Dev (`jobhub`):
+read-only preflight showed 3 Jobs, 0 `salaryText`, 0 unresolved/invalid,
+0 non-DRAFT without valid Salary, guard inactive (pre-Bugfix 04 validator);
+`node scripts/run-migration.js v42-legacy-salary-cutover` (0 conversions,
+`migrate` + `verify` passed) re-applied it; final read-only preflight reports
+0 / 0 / 0 and `strictSalaryGuardActive: true`, and a run of
+`assertJobCollectionInvariantsActive` on dev with Mongoose auto-create/
+auto-index disabled (no collection, index, or validator write) passed.
+Operational consequence: a new database must run
+`node scripts/run-migration.js v42-legacy-salary-cutover` once before the
+first backend startup; startup otherwise fails closed with these instructions.
+V4.2 Final Acceptance (rerun 2026-10-08 after Bugfix Slice 05, independent
+read-only review) is `ACCEPTED`: no Critical, High, or Medium finding; both
+Bugfix Slice 05 blockers are resolved at the root cause (the private
+`applyStrictSalaryGuard` in the cutover migration is the only `jobs`
+validator writer in `backend/src`; startup and V6 never mutate it; the Job
+service rejects unsupported Salary keys and `salaryText` without writing).
+The review independently ran the V4.2 Job focused set plus V6 read (8 files /
+99 tests), the V4.2 catalog/candidate set (4 files / 30 tests), the official
+backend gate (lint 0 errors / 2 pre-existing warnings, ARCH-001–ARCH-016,
+166 files / 1,730 tests), the dev read-only preflight (0 `salaryText`,
+0 unresolved, 0 non-DRAFT without valid Salary, strict guard active), and an
+in-memory fresh-database bootstrap check (startup refuses with actionable
+instructions; passes after the migration). Deferred non-blocking Low items:
+(1) the cutover pre-checks only Salary readiness before applying the full
+validator, which also carries the V6 Recruitment Team rules, so a pre-existing
+team-rule violation would pass the migration and then be rejected by startup
+with a generic not-cut-over message; (2) at that review point,
+`source-of-truth.md` still had no row for the Slice 04 Structured Salary owners
+(resolved by the Phase Closure Documentation record below); (3) presence of
+`job_discovery_salary_range_idx` and the Category catalog indexes on dev was
+then unconfirmed and is resolved to the read-only inventory result below.
+
+V4.2 Phase Closure Documentation (2026-10-08) records the final independent
+read-only acceptance rerun against the current worktree as `V4.2 COMPLETED AND
+VERIFIED`. No Critical, High, or Medium finding remains across F01–F05,
+BR-01–BR-26, or the applicable Data §8–§10 atomicity and persistence
+boundaries. The review re-verified Structured Salary shape/lifecycle/cutover,
+all shared Job Salary projections, Salary filtering compatibility, both public
+catalogs, and Candidate skill keyword composition. The focused V4.2/V6 set
+passed 11 files / 118 tests. The requested `npm run verify:agent` execution
+passed lint (0 errors; 2 pre-existing warnings) and ARCH-001–ARCH-016; its
+default-parallel test phase was environment-constrained when concurrent
+MongoMemoryServer workers exhausted the `/tmp` free-space threshold (160/166
+files and 1,612 assertions had passed, with no assertion failure). The complete
+suite was therefore rerun with one worker and passed 166 files / 1,730 tests.
+The dev read-only Salary preflight independently confirmed 3 Jobs, 0
+`salaryText`, 0 unresolved/invalid Salary, 0 non-DRAFT Job without valid
+Salary, and `strictSalaryGuardActive: true`; the canonical six-member
+Experience Level dataset is also present. A read-only index inventory confirmed
+that `job_discovery_salary_range_idx`, `category_field_catalog_name_idx`, and
+`category_position_catalog_name_idx` are declared in source but are not yet
+materialized on dev. Their dev activation remains a non-blocking operational
+follow-up and must not be claimed complete until rechecked after normal model
+initialization. The Slice 04 Structured Salary owner is now recorded in
+`docs/engineering/source-of-truth.md`. Remaining non-blocking follow-ups are
+the dev index materialization above and the fact that Salary cutover preflight
+does not separately diagnose a pre-existing V6 Recruitment Team violation
+before applying the combined Job validator. No production deployment or
+migration state is inferred from dev evidence.
+
+The approved V4.2 implementation sequence is:
+
+1. Slice 01 — Public Category Catalog Read (F03; BR-15–BR-18).
+2. Slice 02 — Public Experience Level Catalog Read (F04; BR-19–BR-21).
+3. Slice 03 — Candidate Skill Keyword Search (F05; BR-22–BR-26).
+4. Slice 04 — Structured Salary Runtime Foundation (F01; BR-01–BR-08).
+5. Slice 05 — Legacy Salary Migration & Final Cutover (F01 data completion and
+   compatibility/cutover).
+6. Slice 06 — Salary Range Filtering (F02; BR-09–BR-14).
+7. Slice 07 — V4.2 Acceptance & Regression Closure (F01–F05; BR-01–BR-26).
+
+Slices 03–04 may start independently after the completed governance gate.
+Slices 05 and 06 each depend on Slice 04. Slice 06 may be implemented and
+tested after Slice 04, but its production activation and business completion
+also depend on Slice 05 Final Cutover. Slice 07 depends on Slices 01–06.
+Slice 07 closed through the V4.2 Final Acceptance rerun after Bugfix Slices
+01–05 recorded above.
+
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `COMPLETED / ACCEPTED` as of 2026-10-07. Slice 01 — Location Catalog Foundation
 (F01; BR-01–BR-09,

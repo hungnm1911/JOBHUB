@@ -18,6 +18,7 @@ import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import User from "../models/user.model.js";
 import AppError from "../utils/app-error.js";
+import { escapeRegex } from "../utils/escape-regex.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
 import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
 import { deleteFile, downloadFileBuffer, uploadFileBuffer } from "./file.service.js";
@@ -1283,6 +1284,18 @@ const normalizeCandidateSearchFilterStringValues = ({
   return normalized;
 };
 
+const normalizeCandidateSearchSkillKeyword = (value) => {
+  if (value == null) {
+    return "";
+  }
+
+  if (typeof value !== "string") {
+    throw new AppError(400, "keyword must be a string", { field: "keyword" });
+  }
+
+  return value.trim();
+};
+
 const resolveCandidateSearchCategoryFilterIds = async (categoryIds) => {
   if (categoryIds.length === 0) {
     return [];
@@ -1353,6 +1366,7 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     values: filters.skillTags,
     field: "skillTags",
   });
+  const skillKeyword = normalizeCandidateSearchSkillKeyword(filters.keyword);
   const requestedLocationSelections = normalizeLocationFilterSelections(
     filters.preferredLocations,
     { field: "preferredLocations" },
@@ -1395,8 +1409,20 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     ...(requestedExperienceLevelIds.length > 0
       ? { experienceLevelId: { $in: requestedExperienceLevelIds } }
       : {}),
-    ...(requestedSkillTags.length > 0
-      ? { skillTags: { $in: requestedSkillTags } }
+    // Structured skill filter stays exact/case-sensitive ($in); the V4.2 skill
+    // keyword is an independent literal, case-insensitive substring condition.
+    // Each is satisfied by any element, and both must hold when both are given.
+    ...(requestedSkillTags.length > 0 || skillKeyword !== ""
+      ? {
+        skillTags: {
+          ...(requestedSkillTags.length > 0
+            ? { $in: requestedSkillTags }
+            : {}),
+          ...(skillKeyword !== ""
+            ? { $regex: escapeRegex(skillKeyword), $options: "i" }
+            : {}),
+        },
+      }
       : {}),
     // A Province-wide preference (`districtCode: null`) covers every District
     // filter of its Province; one preference must satisfy one filter branch.

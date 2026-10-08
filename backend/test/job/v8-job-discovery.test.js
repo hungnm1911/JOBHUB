@@ -110,7 +110,7 @@ describe("V8 — Job Discovery", () => {
       title,
       jobDescription,
       requiredSkills,
-      salaryText: "Negotiable",
+      salary: { type: "NEGOTIABLE" },
       fieldCategoryIds,
       positionCategoryIds,
       location,

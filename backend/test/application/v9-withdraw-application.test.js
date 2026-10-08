@@ -106,6 +106,7 @@ const createGeneratedCv = async ({
 
 const createPublishedJob = async ({ companyId, primaryMemberId }) => {
   return Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId: primaryMemberId,
     primaryRecruiterCompanyMemberId: primaryMemberId,

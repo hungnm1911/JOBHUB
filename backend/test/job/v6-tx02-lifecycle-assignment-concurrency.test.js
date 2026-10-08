@@ -114,6 +114,7 @@ const createPublishedJob = async ({
   applicationDeadline = FUTURE_DEADLINE(),
 }) =>
   Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId: primaryMemberId,
     primaryRecruiterCompanyMemberId: primaryMemberId,

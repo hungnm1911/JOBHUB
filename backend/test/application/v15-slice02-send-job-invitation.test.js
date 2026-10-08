@@ -141,6 +141,7 @@ const createPublishedJob = async ({
   status = JOB_STATUS.PUBLISHED,
 } = {}) => {
   return Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId: primaryMemberId,
     primaryRecruiterCompanyMemberId: primaryMemberId,

@@ -121,7 +121,7 @@ describe("V4.1 Slice 05 — Job Discovery Location hierarchy filter", () => {
         title,
         jobDescription: "Build reliable recruitment APIs.",
         requiredSkills,
-        salaryText: "Negotiable",
+        salary: { type: "NEGOTIABLE" },
         fieldCategoryIds: [engineering.id],
         positionCategoryIds,
         location: jobLocation,

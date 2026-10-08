@@ -50,6 +50,7 @@ const listCandidateSearchEligibleCandidateCvsHandler = async (
     const cvs = await listCandidateSearchEligibleCandidateCvs({
       actorUser: request.auth.user,
       filters: {
+        keyword: request.query?.keyword,
         categoryIds,
         experienceLevelIds,
         skillTags,

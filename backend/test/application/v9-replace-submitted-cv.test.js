@@ -182,6 +182,7 @@ const createPublishedJob = async ({
   title = "Backend Engineer",
 } = {}) => {
   return Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId: primaryMemberId,
     primaryRecruiterCompanyMemberId: primaryMemberId,

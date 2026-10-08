@@ -37,6 +37,7 @@ const createPublishedJob = async ({
   applicationDeadline,
 } = {}) => {
   return Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId,
     primaryRecruiterCompanyMemberId,
@@ -227,6 +228,7 @@ describe("V6 Slice 02 — Add Supporting Recruiter (F02, TX-02)", () => {
     });
 
     const job = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: primary.membership._id,
       primaryRecruiterCompanyMemberId: primary.membership._id,

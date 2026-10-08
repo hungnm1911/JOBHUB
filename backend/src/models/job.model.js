@@ -2,12 +2,16 @@ import mongoose from "mongoose";
 
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_STATUS from "../constants/job-status.js";
+import SALARY_PERIOD from "../constants/salary-period.js";
+import SALARY_TYPE from "../constants/salary-type.js";
 import WORK_MODE from "../constants/work-mode.js";
 
 const { Schema, model } = mongoose;
 
 const EMPLOYMENT_TYPE_VALUES = Object.values(EMPLOYMENT_TYPE);
 const WORK_MODE_VALUES = Object.values(WORK_MODE);
+const SALARY_TYPE_VALUES = Object.values(SALARY_TYPE);
+const SALARY_PERIOD_VALUES = Object.values(SALARY_PERIOD);
 
 const isNonEmptyTrimmedString = (value) => {
   return typeof value === "string" && value.trim() !== "";
@@ -82,9 +86,44 @@ const assertJobRecruitmentTeamInvariants = (job) => {
   return errors;
 };
 
+// Data V4.2 §5.3: the only fields of an embedded Structured Salary.
+const SALARY_FIELDS = Object.freeze([
+  "type",
+  "minAmount",
+  "maxAmount",
+  "period",
+  "customPeriodLabel",
+]);
+
+// MongoDB's default `$trim` set differs from `String.prototype.trim`, so the
+// collection validator trims exactly the characters the Salary helper trims.
+const TRIM_WHITESPACE_CHARACTERS = Array.from({ length: 0x10000 }, (_, code) =>
+  String.fromCharCode(code),
+)
+  .filter((character) => character.trim() === "")
+  .join("");
+
+const SALARY_AMOUNT_JSON_SCHEMA = Object.freeze({
+  bsonType: ["int", "long", "double", "null"],
+  multipleOf: 1,
+  minimum: Number.MIN_SAFE_INTEGER,
+  maximum: Number.MAX_SAFE_INTEGER,
+});
+
+const salaryAmountsMatch = (minAmountFilter, maxAmountFilter) => ({
+  "salary.minAmount": minAmountFilter,
+  "salary.maxAmount": maxAmountFilter,
+});
+
 // Database-level guard for query-write paths where document-context validators
-// do not see the merged final team state (Data Contract 10.1).
-const JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR = Object.freeze({
+// do not see the merged final team state (Data Contract 10.1), plus the V4.2
+// rules that every Job persists `salary` as `null` or a complete canonical
+// Structured Salary (Data V4.2 §5.2, §5.3, §7.2, §10.1, §16) and that a Job
+// outside DRAFT persists one (§7.1). It must accept exactly what
+// `getJobSalaryInvariantErrors` accepts.
+// Only the `v42-legacy-salary-cutover` migration applies this validator, after
+// zero-legacy verification; runtime startup only verifies that it is active.
+const JOB_COLLECTION_VALIDATOR = Object.freeze({
   $and: [
     {
       $jsonSchema: {
@@ -92,6 +131,7 @@ const JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR = Object.freeze({
         required: [
           "primaryRecruiterCompanyMemberId",
           "supportingRecruiterCompanyMemberIds",
+          "salary",
         ],
         properties: {
           primaryRecruiterCompanyMemberId: {
@@ -101,6 +141,18 @@ const JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR = Object.freeze({
             bsonType: "array",
             items: {
               bsonType: "objectId",
+            },
+          },
+          salary: {
+            bsonType: ["object", "null"],
+            required: [...SALARY_FIELDS],
+            additionalProperties: false,
+            properties: {
+              type: { enum: SALARY_TYPE_VALUES },
+              minAmount: SALARY_AMOUNT_JSON_SCHEMA,
+              maxAmount: SALARY_AMOUNT_JSON_SCHEMA,
+              period: { enum: [...SALARY_PERIOD_VALUES, null] },
+              customPeriodLabel: { bsonType: ["string", "null"] },
             },
           },
         },
@@ -127,6 +179,87 @@ const JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR = Object.freeze({
           ],
         },
       },
+    },
+    {
+      $or: [
+        { salary: null },
+        {
+          "salary.type": SALARY_TYPE.NEGOTIABLE,
+          ...salaryAmountsMatch(null, null),
+          "salary.period": null,
+          "salary.customPeriodLabel": null,
+        },
+        {
+          $and: [
+            {
+              $or: [
+                {
+                  "salary.type": SALARY_TYPE.FIXED,
+                  ...salaryAmountsMatch({ $ne: null }, { $ne: null }),
+                  $expr: {
+                    $eq: ["$salary.minAmount", "$salary.maxAmount"],
+                  },
+                },
+                {
+                  "salary.type": SALARY_TYPE.RANGE,
+                  ...salaryAmountsMatch({ $ne: null }, { $ne: null }),
+                  $expr: {
+                    $lte: ["$salary.minAmount", "$salary.maxAmount"],
+                  },
+                },
+                {
+                  "salary.type": SALARY_TYPE.FROM,
+                  ...salaryAmountsMatch({ $ne: null }, null),
+                },
+                {
+                  "salary.type": SALARY_TYPE.UP_TO,
+                  ...salaryAmountsMatch(null, { $ne: null }),
+                },
+              ],
+            },
+            {
+              $or: [
+                {
+                  "salary.period": SALARY_PERIOD.ETC,
+                  $expr: {
+                    $cond: [
+                      {
+                        $eq: [
+                          { $type: "$salary.customPeriodLabel" },
+                          "string",
+                        ],
+                      },
+                      {
+                        $ne: [
+                          {
+                            $trim: {
+                              input: "$salary.customPeriodLabel",
+                              chars: TRIM_WHITESPACE_CHARACTERS,
+                            },
+                          },
+                          "",
+                        ],
+                      },
+                      false,
+                    ],
+                  },
+                },
+                {
+                  "salary.period": {
+                    $in: SALARY_PERIOD_VALUES.filter(
+                      (period) => period !== SALARY_PERIOD.ETC,
+                    ),
+                  },
+                  "salary.customPeriodLabel": null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      $or: [{ status: JOB_STATUS.DRAFT }, { salary: { $type: "object" } }],
     },
   ],
 });
@@ -160,6 +293,146 @@ const jobLocationSchema = new Schema(
         message:
           "location.districtCode must be a non-empty string when provided",
       },
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+// V4.2 Structured Salary shape and type/amount/period matrix (Data §5.3, §5.6,
+// §7.2). Amounts are VND integers; no currency is persisted. Shared by schema
+// validation and the Job service so both enforce one local invariant.
+const getJobSalaryInvariantErrors = (salary) => {
+  if (salary == null) {
+    return [];
+  }
+
+  if (typeof salary !== "object" || Array.isArray(salary)) {
+    return ["salary must be a Structured Salary"];
+  }
+
+  // Own keys of a Mongoose subdocument are internals, not Salary fields.
+  const fields = Object.keys(
+    typeof salary.toObject === "function" ? salary.toObject() : salary,
+  );
+  // Data §5.3, §9.1: non-applicable fields persist as `null`, never absent.
+  const errors = [
+    ...fields
+      .filter((field) => !SALARY_FIELDS.includes(field))
+      .map((field) => `salary.${field} is not a Structured Salary field`),
+    ...SALARY_FIELDS.filter((field) => !fields.includes(field)).map(
+      (field) => `salary.${field} is required`,
+    ),
+  ];
+
+  const { type, minAmount, maxAmount, period, customPeriodLabel } = salary;
+
+  if (!SALARY_TYPE_VALUES.includes(type)) {
+    return [...errors, "salary.type must be a canonical SalaryType value"];
+  }
+
+  for (const [field, amount] of [
+    ["minAmount", minAmount],
+    ["maxAmount", maxAmount],
+  ]) {
+    if (amount != null && !Number.isSafeInteger(amount)) {
+      errors.push(`salary.${field} must be an integer VND amount`);
+    }
+  }
+
+  if (type === SALARY_TYPE.NEGOTIABLE) {
+    if (minAmount != null || maxAmount != null) {
+      errors.push("NEGOTIABLE salary must not have amounts");
+    }
+
+    if (period != null) {
+      errors.push("NEGOTIABLE salary must not have a period");
+    }
+
+    if (customPeriodLabel != null) {
+      errors.push("NEGOTIABLE salary must not have a customPeriodLabel");
+    }
+
+    return errors;
+  }
+
+  switch (type) {
+    case SALARY_TYPE.FIXED:
+      if (minAmount == null || maxAmount == null || minAmount !== maxAmount) {
+        errors.push("FIXED salary requires equal minAmount and maxAmount");
+      }
+      break;
+    case SALARY_TYPE.RANGE:
+      if (minAmount == null || maxAmount == null) {
+        errors.push("RANGE salary requires minAmount and maxAmount");
+      } else if (minAmount > maxAmount) {
+        errors.push("RANGE salary minAmount must not exceed maxAmount");
+      }
+      break;
+    case SALARY_TYPE.FROM:
+      if (minAmount == null || maxAmount != null) {
+        errors.push("FROM salary requires only minAmount");
+      }
+      break;
+    case SALARY_TYPE.UP_TO:
+      if (minAmount != null || maxAmount == null) {
+        errors.push("UP_TO salary requires only maxAmount");
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (period == null) {
+    errors.push("Numeric salary requires a period");
+  } else if (!SALARY_PERIOD_VALUES.includes(period)) {
+    errors.push("salary.period must be a canonical SalaryPeriod value");
+  } else if (period === SALARY_PERIOD.ETC) {
+    if (!isNonEmptyTrimmedString(customPeriodLabel)) {
+      errors.push("ETC salary period requires a non-empty customPeriodLabel");
+    }
+  } else if (customPeriodLabel != null) {
+    errors.push("customPeriodLabel is only allowed for ETC salary period");
+  }
+
+  return errors;
+};
+
+const jobSalarySchema = new Schema(
+  {
+    type: {
+      type: String,
+      required: true,
+      enum: {
+        values: SALARY_TYPE_VALUES,
+        message: "salary.type must be a canonical SalaryType value",
+      },
+    },
+
+    minAmount: {
+      type: Number,
+      default: null,
+    },
+
+    maxAmount: {
+      type: Number,
+      default: null,
+    },
+
+    period: {
+      type: String,
+      default: null,
+      enum: {
+        values: [...SALARY_PERIOD_VALUES, null],
+        message: "salary.period must be a canonical SalaryPeriod value",
+      },
+    },
+
+    customPeriodLabel: {
+      type: String,
+      default: null,
+      trim: true,
     },
   },
   {
@@ -268,15 +541,16 @@ const jobSchema = new Schema(
       default: [],
     },
 
-    salaryText: {
-      type: String,
+    salary: {
+      type: jobSalarySchema,
       default: null,
-      trim: true,
       validate: {
         validator(value) {
-          return value == null || isNonEmptyTrimmedString(value);
+          return getJobSalaryInvariantErrors(value).length === 0;
         },
-        message: "Salary text must be a non-empty string when provided",
+        message(props) {
+          return getJobSalaryInvariantErrors(props.value).join("; ");
+        },
       },
     },
 
@@ -435,6 +709,16 @@ jobSchema.index(
   { status: 1, workModes: 1, applicationDeadline: 1 },
   { name: "job_discovery_work_mode_idx" },
 );
+jobSchema.index(
+  {
+    status: 1,
+    "salary.period": 1,
+    "salary.type": 1,
+    "salary.minAmount": 1,
+    "salary.maxAmount": 1,
+  },
+  { name: "job_discovery_salary_range_idx" },
+);
 
 jobSchema.pre("validate", function validateJobRecruitmentTeam() {
   const errors = assertJobRecruitmentTeamInvariants(this);
@@ -444,64 +728,89 @@ jobSchema.pre("validate", function validateJobRecruitmentTeam() {
   }
 });
 
+jobSchema.pre("validate", function validateJobSalaryDeclaration() {
+  if (this.status !== JOB_STATUS.DRAFT && this.salary == null) {
+    throw new Error("A Job outside DRAFT requires a Structured Salary");
+  }
+});
+
 const Job = model("Job", jobSchema);
 
-const ensureJobCollectionInvariants = async (
+const JOB_COLLECTION_VALIDATION_OPTIONS = Object.freeze({
+  validator: JOB_COLLECTION_VALIDATOR,
+  validationLevel: "strict",
+  validationAction: "error",
+});
+
+const V42_CUTOVER_INSTRUCTIONS =
+  "run `node scripts/run-migration.js v42-legacy-salary-cutover --preflight`, " +
+  "remediate any reported Job, then run " +
+  "`node scripts/run-migration.js v42-legacy-salary-cutover`";
+
+// Read-only: whether the `jobs` collection enforces exactly the current
+// JOB_COLLECTION_VALIDATOR.
+const isJobCollectionValidatorActive = async (
+  connection = mongoose.connection,
+) => {
+  const [collectionInfo] = await connection.db
+    .listCollections({ name: Job.collection.collectionName })
+    .toArray();
+  const options = collectionInfo?.options ?? {};
+
+  return (
+    options.validationLevel ===
+      JOB_COLLECTION_VALIDATION_OPTIONS.validationLevel &&
+    options.validationAction ===
+      JOB_COLLECTION_VALIDATION_OPTIONS.validationAction &&
+    JSON.stringify(options.validator) ===
+      JSON.stringify(JOB_COLLECTION_VALIDATOR)
+  );
+};
+
+// Startup fails closed instead of applying the validator: activation over
+// data that was never cut over would freeze legacy Salary records in place.
+const assertJobCollectionInvariantsActive = async (
   connection = mongoose.connection,
 ) => {
   if (connection.readyState !== 1) {
     throw new Error(
-      "MongoDB connection must be ready before ensuring Job collection invariants",
+      "MongoDB connection must be ready before verifying Job collection invariants",
     );
   }
 
   await Job.init();
 
-  const collectionName = Job.collection.collectionName;
-  const applyValidator = () =>
-    connection.db.command({
-      collMod: collectionName,
-      validator: JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR,
-      validationLevel: "strict",
-      validationAction: "error",
-    });
-
-  try {
-    await applyValidator();
-    return;
-  } catch (error) {
-    const isMissingNamespace =
-      error?.code === 26 ||
-      error?.codeName === "NamespaceNotFound" ||
-      /ns does not exist/i.test(error?.message ?? "");
-
-    if (!isMissingNamespace) {
-      throw error;
-    }
+  if (!(await isJobCollectionValidatorActive(connection))) {
+    throw new Error(
+      `Job collection validator is missing or stale (V4.2 strict Salary guard inactive); ${V42_CUTOVER_INSTRUCTIONS}`,
+    );
   }
 
-  try {
-    await connection.db.createCollection(collectionName, {
-      validator: JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR,
-      validationLevel: "strict",
-      validationAction: "error",
-    });
-  } catch (error) {
-    const collectionAlreadyExists =
-      error?.codeName === "NamespaceExists" ||
-      /already exists/i.test(error?.message ?? "");
+  const unready = await Job.collection.findOne(
+    {
+      $or: [
+        { salaryText: { $exists: true } },
+        { $nor: [JOB_COLLECTION_VALIDATOR] },
+      ],
+    },
+    { projection: { _id: 1 } },
+  );
 
-    if (!collectionAlreadyExists) {
-      throw error;
-    }
-
-    await applyValidator();
+  if (unready) {
+    throw new Error(
+      `jobs/${unready._id} is not cut over to the V4.2 Salary contract; ${V42_CUTOVER_INSTRUCTIONS}`,
+    );
   }
 };
 
 export {
+  assertJobCollectionInvariantsActive,
   assertJobRecruitmentTeamInvariants,
-  ensureJobCollectionInvariants,
+  getJobSalaryInvariantErrors,
+  isJobCollectionValidatorActive,
   isNotForbiddenLocationProvinceCode,
+  JOB_COLLECTION_VALIDATION_OPTIONS,
+  JOB_COLLECTION_VALIDATOR,
+  SALARY_FIELDS,
 };
 export default Job;

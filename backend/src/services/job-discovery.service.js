@@ -9,6 +9,8 @@ import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_DISCOVERY_SORT from "../constants/job-discovery-sort.js";
 import JOB_DISCOVERY_VISIBILITY from "../constants/job-discovery-visibility.js";
 import JOB_STATUS from "../constants/job-status.js";
+import SALARY_PERIOD from "../constants/salary-period.js";
+import SALARY_TYPE from "../constants/salary-type.js";
 import USER_ROLE from "../constants/user-role.js";
 import WORK_MODE from "../constants/work-mode.js";
 import Category from "../models/category.model.js";
@@ -19,9 +21,11 @@ import Job from "../models/job.model.js";
 import {
   resolveJobDiscoveryVisibility,
   toPublicJobLocation,
+  toPublicJobSalary,
 } from "./job.service.js";
 import { normalizeLocationFilterSelections } from "./location.service.js";
 import AppError from "../utils/app-error.js";
+import { escapeRegex } from "../utils/escape-regex.js";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -29,6 +33,10 @@ const MAX_LIMIT = 100;
 
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
+const FILTERABLE_SALARY_PERIOD_VALUES = new Set(
+  Object.values(SALARY_PERIOD).filter((period) => period !== SALARY_PERIOD.ETC),
+);
+const SALARY_FILTER_AMOUNT_PATTERN = /^-?\d+$/;
 
 const normalizeArray = (values, field, { allowedValues = null } = {}) => {
   if (values == null) {
@@ -103,8 +111,66 @@ const normalizeKeyword = (value) => {
   return value.trim();
 };
 
-const escapeRegex = (value) => {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const isAbsentSalaryFilterValue = (value) => {
+  return value == null || (typeof value === "string" && value.trim() === "");
+};
+
+const normalizeSalaryFilterAmount = (value, field) => {
+  const trimmed = typeof value === "string" ? value.trim() : value;
+  const amount =
+    typeof trimmed === "string" && SALARY_FILTER_AMOUNT_PATTERN.test(trimmed)
+      ? Number(trimmed)
+      : trimmed;
+
+  if (!Number.isSafeInteger(amount)) {
+    throw new AppError(400, `${field} must be an integer VND amount`, {
+      field,
+    });
+  }
+
+  return amount;
+};
+
+const normalizeSalaryFilter = ({ salaryPeriod, salaryMin, salaryMax }) => {
+  const entries = [
+    ["salaryPeriod", salaryPeriod],
+    ["salaryMin", salaryMin],
+    ["salaryMax", salaryMax],
+  ];
+
+  if (entries.every(([, value]) => isAbsentSalaryFilterValue(value))) {
+    return null;
+  }
+
+  for (const [field, value] of entries) {
+    if (isAbsentSalaryFilterValue(value)) {
+      throw new AppError(
+        400,
+        "Salary filter requires salaryPeriod, salaryMin, and salaryMax",
+        { field },
+      );
+    }
+  }
+
+  const period =
+    typeof salaryPeriod === "string" ? salaryPeriod.trim() : salaryPeriod;
+
+  if (!FILTERABLE_SALARY_PERIOD_VALUES.has(period)) {
+    throw new AppError(400, "salaryPeriod must be a filterable Salary Period", {
+      field: "salaryPeriod",
+    });
+  }
+
+  const minAmount = normalizeSalaryFilterAmount(salaryMin, "salaryMin");
+  const maxAmount = normalizeSalaryFilterAmount(salaryMax, "salaryMax");
+
+  if (minAmount > maxAmount) {
+    throw new AppError(400, "salaryMin must not exceed salaryMax", {
+      field: "salaryMin",
+    });
+  }
+
+  return { period, minAmount, maxAmount };
 };
 
 const resolveCategoryBranches = async (categoryBranches) => {
@@ -328,7 +394,7 @@ const buildPublicJob = ({
     experienceLevel: buildPublicExperienceLevel(
       experienceLevelById.get(job.experienceLevelId?.toString()),
     ),
-    salaryText: job.salaryText,
+    salary: toPublicJobSalary(job.salary),
     publishedAt: job.publishedAt,
     applicationDeadline: job.applicationDeadline,
     status: job.status,
@@ -457,6 +523,7 @@ const buildDiscoveryFilter = ({
   workModes,
   employmentTypes,
   experienceLevelIds,
+  salaryFilter,
   now,
 }) => {
   const conditions = [
@@ -513,6 +580,17 @@ const buildDiscoveryFilter = ({
     conditions.push({ experienceLevelId: { $in: experienceLevelIds } });
   }
 
+  if (salaryFilter) {
+    // FIXED persists minAmount = maxAmount, so this inclusive overlap predicate
+    // is also the inclusive containment rule for FIXED.
+    conditions.push({
+      "salary.period": salaryFilter.period,
+      "salary.type": { $in: [SALARY_TYPE.FIXED, SALARY_TYPE.RANGE] },
+      "salary.minAmount": { $lte: salaryFilter.maxAmount },
+      "salary.maxAmount": { $gte: salaryFilter.minAmount },
+    });
+  }
+
   return conditions.length === 1 ? conditions[0] : { $and: conditions };
 };
 
@@ -540,6 +618,7 @@ const listJobDiscoveryJobs = async ({
     filters.experienceLevels,
     "experienceLevels",
   );
+  const salaryFilter = normalizeSalaryFilter(filters);
   const fieldFilters = await resolveCategoryBranches(filters.categories);
   const requestedSort = filters.sort ?? null;
   const sort =
@@ -621,6 +700,7 @@ const listJobDiscoveryJobs = async ({
     workModes,
     employmentTypes,
     experienceLevelIds,
+    salaryFilter,
     now,
   });
   const jobs = await Job.find(discoveryFilter).lean();

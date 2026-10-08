@@ -134,4 +134,51 @@ const createPositionCategory = async ({ name, parentCategoryId }) => {
   return toPublicCategory(category);
 };
 
-export { createFieldCategory, createPositionCategory, toPublicCategory };
+const listFieldCategories = async () => {
+  const fields = await Category.find({ level: CATEGORY_LEVEL.FIELD })
+    .select("_id name normalizedName level parentCategoryId")
+    .sort({ name: 1, _id: 1 })
+    .lean();
+
+  return fields.map(toPublicCategory);
+};
+
+const listPositionCategoriesByField = async (fieldId) => {
+  if (!mongoose.Types.ObjectId.isValid(fieldId)) {
+    throw new AppError(400, "Invalid FIELD category id", {
+      field: "fieldId",
+    });
+  }
+
+  const field = await Category.findById(fieldId).select("_id level").lean();
+
+  if (!field) {
+    throw new AppError(404, "FIELD category not found", {
+      field: "fieldId",
+    });
+  }
+
+  if (field.level !== CATEGORY_LEVEL.FIELD) {
+    throw new AppError(409, "Category must be a FIELD", {
+      field: "fieldId",
+    });
+  }
+
+  const positions = await Category.find({
+    level: CATEGORY_LEVEL.POSITION,
+    parentCategoryId: field._id,
+  })
+    .select("_id name normalizedName level parentCategoryId")
+    .sort({ name: 1, _id: 1 })
+    .lean();
+
+  return positions.map(toPublicCategory);
+};
+
+export {
+  createFieldCategory,
+  createPositionCategory,
+  listFieldCategories,
+  listPositionCategoriesByField,
+  toPublicCategory,
+};

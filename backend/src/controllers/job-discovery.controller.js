@@ -103,6 +103,9 @@ const getPublicJobsHandler = async (request, response, next) => {
         experienceLevels: normalizeQueryArray(
           request.query.experienceLevels ?? request.query.experienceLevelIds,
         ),
+        salaryPeriod: request.query.salaryPeriod,
+        salaryMin: request.query.salaryMin,
+        salaryMax: request.query.salaryMax,
         sort: request.query.sort,
         page: request.query.page,
         limit: request.query.limit,

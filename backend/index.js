@@ -14,7 +14,7 @@ import { ensureCandidateAvailabilityCollection } from "./src/models/candidate-av
 import { ensureCandidateCvCollectionInvariants } from "./src/models/candidate-cv.model.js";
 import { ensureCompanyCollectionInvariants } from "./src/models/company.model.js";
 import { ensureInterviewScheduleCollection } from "./src/models/interview-schedule.model.js";
-import { ensureJobCollectionInvariants } from "./src/models/job.model.js";
+import { assertJobCollectionInvariantsActive } from "./src/models/job.model.js";
 import { ensureJobInvitationCollectionInvariants } from "./src/models/job-invitation.model.js";
 import { ensureNotificationEventCollection } from "./src/models/notification-event.model.js";
 import { ensureNotificationCollection } from "./src/models/notification.model.js";
@@ -178,7 +178,7 @@ const shutdown = async ({
 const startServer = async () => {
   await connectDatabase();
   await ensureCompanyCollectionInvariants();
-  await ensureJobCollectionInvariants();
+  await assertJobCollectionInvariantsActive();
   await ensureCandidateCvCollectionInvariants();
   await ensureApplicationCollectionInvariants();
   await ensureJobInvitationCollectionInvariants();
