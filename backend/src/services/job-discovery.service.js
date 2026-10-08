@@ -22,6 +22,7 @@ import {
 } from "./job.service.js";
 import { normalizeLocationFilterSelections } from "./location.service.js";
 import AppError from "../utils/app-error.js";
+import { escapeRegex } from "../utils/escape-regex.js";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -101,10 +102,6 @@ const normalizeKeyword = (value) => {
   }
 
   return value.trim();
-};
-
-const escapeRegex = (value) => {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
 
 const resolveCategoryBranches = async (categoryBranches) => {

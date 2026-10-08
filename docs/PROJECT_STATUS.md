@@ -32,6 +32,20 @@ does not initialize the dataset (the `v4-experience-level-dataset` migration
 remains its only initializer). Focused Slice 02 coverage has 5 tests, the
 focused Slice 02 plus V4/V4.2 catalog regression set passed 21 tests, and the
 official backend gate passed 158 files / 1,645 tests.
+Slice 03 — Candidate Skill Keyword Search (F05; BR-22–BR-26) is
+`IMPLEMENTED AND VERIFIED`. The existing Recruiter
+`GET /api/jobs/candidate-search/cvs` accepts an optional `keyword` that
+matches only `CandidateCV.skillTags` as a trimmed, literal (regex-escaped),
+case-insensitive substring with ANY semantics; a non-string `keyword` returns
+`400`, and an absent/blank keyword leaves results unchanged. When combined with
+the unchanged exact, case-sensitive `$in` structured `skillTags` filter, both
+conditions must hold; eligibility, authorization, other filter groups, and the
+`updatedAt` desc, `_id` desc sort are unchanged. No schema, index, or persisted
+state changes; Job Discovery's `escapeRegex` moved to the shared
+`backend/src/utils/escape-regex.js` without behavior change. Focused Slice 03
+coverage has 9 tests, the focused Slice 03 plus V14/V4.1 Candidate Search and
+Job regression set passed 33 files / 399 tests, and the official backend gate
+passed 159 files / 1,654 tests.
 
 The approved V4.2 implementation sequence is:
 
@@ -48,7 +62,7 @@ Slices 03–04 may start independently after the completed governance gate.
 Slices 05 and 06 each depend on Slice 04. Slice 06 may be implemented and
 tested after Slice 04, but its production activation and business completion
 also depend on Slice 05 Final Cutover. Slice 07 depends on Slices 01–06. The
-next implementation focus is Slice 03.
+next implementation focus is Slice 04.
 
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `COMPLETED / ACCEPTED` as of 2026-10-07. Slice 01 — Location Catalog Foundation
