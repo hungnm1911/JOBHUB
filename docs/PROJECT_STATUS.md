@@ -21,6 +21,17 @@ the approved FIELD and POSITION catalog read indexes; Category hierarchy and
 Platform Admin mutation behavior are unchanged. Focused Slice 01 coverage has
 5 tests, the focused Slice 01 plus V4 regression set passed 23 tests, and the
 official backend gate passed 157 files / 1,640 tests.
+Slice 02 — Public Experience Level Catalog Read (F04; BR-19–BR-21) is
+`IMPLEMENTED AND VERIFIED`. Public `GET /api/experience-levels` returns
+`{ experienceLevels: [{ id, code }] }` from the existing canonical
+`experience_levels` dataset without authentication, ordered by the canonical
+`constants/experience-level.js` order, independent of Job/CandidateCV usage.
+`id` remains the identifier used by existing Job/CV/Search contracts; no
+metadata fields, schema, index, or dataset changes were made, and the read path
+does not initialize the dataset (the `v4-experience-level-dataset` migration
+remains its only initializer). Focused Slice 02 coverage has 5 tests, the
+focused Slice 02 plus V4/V4.2 catalog regression set passed 21 tests, and the
+official backend gate passed 158 files / 1,645 tests.
 
 The approved V4.2 implementation sequence is:
 
@@ -33,11 +44,11 @@ The approved V4.2 implementation sequence is:
 6. Slice 06 — Salary Range Filtering (F02; BR-09–BR-14).
 7. Slice 07 — V4.2 Acceptance & Regression Closure (F01–F05; BR-01–BR-26).
 
-Slices 02–04 may start independently after the completed governance gate.
+Slices 03–04 may start independently after the completed governance gate.
 Slices 05 and 06 each depend on Slice 04. Slice 06 may be implemented and
 tested after Slice 04, but its production activation and business completion
 also depend on Slice 05 Final Cutover. Slice 07 depends on Slices 01–06. The
-next implementation focus is Slice 02.
+next implementation focus is Slice 03.
 
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `COMPLETED / ACCEPTED` as of 2026-10-07. Slice 01 — Location Catalog Foundation
