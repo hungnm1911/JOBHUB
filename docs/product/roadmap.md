@@ -25,6 +25,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
 | V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | COMPLETED / ACCEPTED |
+| V4.2 | Structured Salary, Metadata Catalog & Candidate Skill Keyword Search | IN PROGRESS |
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
 | V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
@@ -90,6 +91,22 @@ blocked record, or unresolved `FOREIGN` remains, legacy Location indexes are
 dropped, and canonical indexes remain. Final Acceptance independently reran all
 seven V4.1 focused files (177 tests) and the official backend gate (156 files /
 1,635 tests) with no Product/Data-contract blocker or high finding.
+
+V4.2 has approved canonical Product/Data contracts and is
+`IN PROGRESS`. Its Product contract explicitly requires a
+non-empty custom period label when Salary period is `ETC`; that label is
+display metadata only and does not make `ETC` filterable or introduce
+cross-period semantics. The approved implementation order is S01 Public
+Category Catalog Read, S02 Public Experience Level Catalog Read, S03 Candidate
+Skill Keyword Search, S04 Structured Salary Runtime Foundation, S05 Legacy
+Salary Migration & Final Cutover, S06 Salary Range Filtering, and S07
+Acceptance & Regression Closure. S01 Public Category Catalog Read is
+implemented and verified against F03 and BR-15–BR-18, including canonical
+Category reads, public FIELD/POSITION endpoints, deterministic ordering, and
+the approved read indexes. S02–S04 may start independently after the completed
+governance gate; S05 and S06 both depend on S04, production activation/business
+completion of S06 also depends on S05 Final Cutover, and S07 depends on
+S01–S06.
 
 V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression
@@ -234,6 +251,14 @@ V4.1 canonical specification:
 V4.1 canonical persistence contract:
 
 `docs/data/versions/v4.1-vietnam-location-migration-data-model.md`
+
+V4.2 canonical specification:
+
+`docs/product/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword.md`
+
+V4.2 canonical persistence contract:
+
+`docs/data/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword-data-model.md`
 
 V3 canonical specification:
 

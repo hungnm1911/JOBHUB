@@ -1,6 +1,8 @@
 import {
   createFieldCategory,
   createPositionCategory,
+  listFieldCategories,
+  listPositionCategoriesByField,
 } from "../services/category.service.js";
 
 const createFieldCategoryHandler = async (request, response, next) => {
@@ -34,4 +36,31 @@ const createPositionCategoryHandler = async (request, response, next) => {
   }
 };
 
-export { createFieldCategoryHandler, createPositionCategoryHandler };
+const listFieldCategoriesHandler = async (request, response, next) => {
+  try {
+    const fields = await listFieldCategories();
+
+    return response.status(200).json({ fields });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const listPositionCategoriesHandler = async (request, response, next) => {
+  try {
+    const positions = await listPositionCategoriesByField(
+      request.params.fieldId,
+    );
+
+    return response.status(200).json({ positions });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export {
+  createFieldCategoryHandler,
+  createPositionCategoryHandler,
+  listFieldCategoriesHandler,
+  listPositionCategoriesHandler,
+};

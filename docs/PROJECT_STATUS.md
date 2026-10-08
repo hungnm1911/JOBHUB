@@ -2,6 +2,43 @@
 
 ## Current project state
 
+**V4.2 — Structured Salary, Metadata Catalog & Candidate Skill Keyword Search**
+is `IN PROGRESS` as of 2026-10-08. The approved canonical
+contracts are
+`docs/product/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword.md`
+and
+`docs/data/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword-data-model.md`.
+The Product contract now explicitly requires a non-empty custom period label
+for Salary period `ETC`; this label only describes the Salary unit and does not
+make `ETC` filterable or create cross-period semantics. Slice 01 — Public
+Category Catalog Read (F03; BR-15–BR-18) is `IMPLEMENTED AND VERIFIED`.
+Public `GET /api/categories/fields` and
+`GET /api/categories/fields/:fieldId/positions` read the existing canonical
+Category collection without authentication, order results deterministically by
+`name` then `_id`, reject missing/non-FIELD parents, and return an empty
+POSITION set for a valid FIELD with no children. The Category model declares
+the approved FIELD and POSITION catalog read indexes; Category hierarchy and
+Platform Admin mutation behavior are unchanged. Focused Slice 01 coverage has
+5 tests, the focused Slice 01 plus V4 regression set passed 23 tests, and the
+official backend gate passed 157 files / 1,640 tests.
+
+The approved V4.2 implementation sequence is:
+
+1. Slice 01 — Public Category Catalog Read (F03; BR-15–BR-18).
+2. Slice 02 — Public Experience Level Catalog Read (F04; BR-19–BR-21).
+3. Slice 03 — Candidate Skill Keyword Search (F05; BR-22–BR-26).
+4. Slice 04 — Structured Salary Runtime Foundation (F01; BR-01–BR-08).
+5. Slice 05 — Legacy Salary Migration & Final Cutover (F01 data completion and
+   compatibility/cutover).
+6. Slice 06 — Salary Range Filtering (F02; BR-09–BR-14).
+7. Slice 07 — V4.2 Acceptance & Regression Closure (F01–F05; BR-01–BR-26).
+
+Slices 02–04 may start independently after the completed governance gate.
+Slices 05 and 06 each depend on Slice 04. Slice 06 may be implemented and
+tested after Slice 04, but its production activation and business completion
+also depend on Slice 05 Final Cutover. Slice 07 depends on Slices 01–06. The
+next implementation focus is Slice 02.
+
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `COMPLETED / ACCEPTED` as of 2026-10-07. Slice 01 — Location Catalog Foundation
 (F01; BR-01–BR-09,
