@@ -19,7 +19,10 @@ import Category from "../models/category.model.js";
 import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
-import Job, { getJobSalaryInvariantErrors } from "../models/job.model.js";
+import Job, {
+  getJobSalaryInvariantErrors,
+  SALARY_FIELDS,
+} from "../models/job.model.js";
 import User from "../models/user.model.js";
 import {
   assertSameCompanyTenant,
@@ -323,6 +326,24 @@ const normalizeOptionalSalary = (value) => {
     });
   }
 
+  // Unsupported keys (e.g. `currency`) are rejected, never dropped, so a
+  // caller cannot have them silently persisted as a canonical VND Salary.
+  const unsupportedFields = Object.keys(value).filter(
+    (field) => !SALARY_FIELDS.includes(field),
+  );
+
+  if (unsupportedFields.length > 0) {
+    throw new AppError(
+      400,
+      unsupportedFields
+        .map((field) => `salary.${field} is not a Structured Salary field`)
+        .join("; "),
+      {
+        field: "salary",
+      },
+    );
+  }
+
   const customPeriodLabel =
     typeof value.customPeriodLabel === "string"
       ? normalizeOptionalTrimmedString(value.customPeriodLabel)
@@ -418,7 +439,22 @@ const normalizeDraftContentField = (field, value) => {
   }
 };
 
+// V4.2 BR-01 / Data §8.4, §14: legacy `salaryText` is not a Salary input.
+const assertNoLegacySalaryText = (content) => {
+  if (Object.hasOwn(content, "salaryText")) {
+    throw new AppError(
+      400,
+      "salaryText is not supported; declare a Structured Salary",
+      {
+        field: "salaryText",
+      },
+    );
+  }
+};
+
 const buildDraftContent = (content = {}) => {
+  assertNoLegacySalaryText(content);
+
   const draftContent = {};
 
   for (const field of DRAFT_CONTENT_FIELDS) {
@@ -432,6 +468,8 @@ const buildDraftContent = (content = {}) => {
 };
 
 const buildDraftContentPatch = (content = {}) => {
+  assertNoLegacySalaryText(content);
+
   const patch = {};
 
   for (const field of DRAFT_CONTENT_FIELDS) {

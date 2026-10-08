@@ -18,7 +18,7 @@ import SALARY_TYPE from "../../src/constants/salary-type.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import { migrate as migrateExperienceLevels } from "../../src/database/migrations/v4-experience-level-dataset.js";
 import ExperienceLevel from "../../src/models/experience-level.model.js";
-import Job from "../../src/models/job.model.js";
+import Job, { getJobSalaryInvariantErrors } from "../../src/models/job.model.js";
 import {
   createFieldCategory,
   createPositionCategory,
@@ -116,6 +116,86 @@ const INVALID_SALARIES = Object.freeze([
   ["non-ETC with label", { type: SALARY_TYPE.FROM, minAmount: 1, period: SALARY_PERIOD.MONTH, customPeriodLabel: "tháng" }],
   ["non-integer amount", { type: SALARY_TYPE.FROM, minAmount: 1.5, period: SALARY_PERIOD.MONTH }],
 ]);
+
+const NON_CANONICAL_SALARY_FIELDS = Object.freeze([
+  ["currency USD", { currency: "USD" }],
+  ["currency VND", { currency: "VND" }],
+  ["null currency", { currency: null }],
+  ["unknown field", { note: "thưởng" }],
+  ["embedded _id", { _id: new mongoose.Types.ObjectId() }],
+]);
+
+describe("V4.2 Slice 04 — getJobSalaryInvariantErrors canonical shape (Data §5.3)", () => {
+  it("accepts every canonical Salary type with null canonical fields and rejects absent ones", () => {
+    for (const salary of Object.values(VALID_SALARIES)) {
+      expect(getJobSalaryInvariantErrors(salary)).not.toEqual([]);
+      expect(getJobSalaryInvariantErrors(canonicalSalary(salary))).toEqual([]);
+    }
+
+    expect(getJobSalaryInvariantErrors(null)).toEqual([]);
+    expect(getJobSalaryInvariantErrors(undefined)).toEqual([]);
+  });
+
+  it("keeps rejecting every invalid type/amount/period combination", () => {
+    for (const [label, salary] of INVALID_SALARIES) {
+      expect(getJobSalaryInvariantErrors(salary), label).not.toEqual([]);
+      expect(
+        getJobSalaryInvariantErrors(canonicalSalary(salary)),
+        label,
+      ).not.toEqual([]);
+    }
+  });
+
+  it("rejects the Final Acceptance FIXED Salary that carries a USD currency", () => {
+    expect(
+      getJobSalaryInvariantErrors({
+        type: SALARY_TYPE.FIXED,
+        minAmount: 20000000,
+        maxAmount: 20000000,
+        period: SALARY_PERIOD.MONTH,
+        customPeriodLabel: null,
+        currency: "USD",
+      }),
+    ).toEqual(["salary.currency is not a Structured Salary field"]);
+  });
+
+  it("rejects any non-canonical field on every otherwise valid Salary type", () => {
+    for (const [typeLabel, salary] of Object.entries(VALID_SALARIES)) {
+      for (const [fieldLabel, extra] of NON_CANONICAL_SALARY_FIELDS) {
+        const label = `${typeLabel} + ${fieldLabel}`;
+
+        expect(
+          getJobSalaryInvariantErrors({ ...salary, ...extra }),
+          label,
+        ).not.toEqual([]);
+        expect(
+          getJobSalaryInvariantErrors({ ...canonicalSalary(salary), ...extra }),
+          label,
+        ).not.toEqual([]);
+      }
+    }
+  });
+
+  it("reports a non-canonical field alongside other invariant violations", () => {
+    expect(
+      getJobSalaryInvariantErrors({
+        ...canonicalSalary({ type: "MONTHLY" }),
+        currency: "VND",
+      }),
+    ).toEqual([
+      "salary.currency is not a Structured Salary field",
+      "salary.type must be a canonical SalaryType value",
+    ]);
+  });
+
+  it("evaluates a Mongoose Salary subdocument by its canonical fields", () => {
+    for (const salary of Object.values(VALID_SALARIES)) {
+      const job = new Job({ salary: { ...salary, currency: "USD" } });
+
+      expect(getJobSalaryInvariantErrors(job.salary)).toEqual([]);
+    }
+  });
+});
 
 describe("V4.2 Slice 04 — Structured Salary Runtime Foundation (F01)", () => {
   beforeAll(async () => {
@@ -364,6 +444,7 @@ describe("V4.2 Slice 04 — Structured Salary Runtime Foundation (F01)", () => {
       await Job.collection.updateOne(
         { _id: new mongoose.Types.ObjectId(jobId) },
         { $set: { salaryText: "10-20 triệu" }, $unset: { salary: "" } },
+        { bypassDocumentValidation: true },
       );
 
       const readResponse = await context.agent
@@ -422,6 +503,7 @@ describe("V4.2 Slice 04 — Structured Salary Runtime Foundation (F01)", () => {
             }),
           },
         },
+        { bypassDocumentValidation: true },
       );
 
       const invalid = await submitDraft(context, jobId);

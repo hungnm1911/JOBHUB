@@ -25,7 +25,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
 | V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | COMPLETED / ACCEPTED |
-| V4.2 | Structured Salary, Metadata Catalog & Candidate Skill Keyword Search | IN PROGRESS |
+| V4.2 | Structured Salary, Metadata Catalog & Candidate Skill Keyword Search | COMPLETED / ACCEPTED |
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
 | V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
@@ -93,20 +93,21 @@ seven V4.1 focused files (177 tests) and the official backend gate (156 files /
 1,635 tests) with no Product/Data-contract blocker or high finding.
 
 V4.2 has approved canonical Product/Data contracts and is
-`IN PROGRESS`. Its Product contract explicitly requires a
-non-empty custom period label when Salary period is `ETC`; that label is
-display metadata only and does not make `ETC` filterable or introduce
-cross-period semantics. The approved implementation order is S01 Public
-Category Catalog Read, S02 Public Experience Level Catalog Read, S03 Candidate
-Skill Keyword Search, S04 Structured Salary Runtime Foundation, S05 Legacy
-Salary Migration & Final Cutover, S06 Salary Range Filtering, and S07
-Acceptance & Regression Closure. S01 Public Category Catalog Read is
-implemented and verified against F03 and BR-15–BR-18, including canonical
-Category reads, public FIELD/POSITION endpoints, deterministic ordering, and
-the approved read indexes. S02–S04 may start independently after the completed
-governance gate; S05 and S06 both depend on S04, production activation/business
-completion of S06 also depends on S05 Final Cutover, and S07 depends on
-S01–S06.
+`COMPLETED / ACCEPTED` as of 2026-10-08. Its Product contract explicitly
+requires a non-empty custom period label when Salary period is `ETC`; that
+label is display metadata only and does not make `ETC` filterable or introduce
+cross-period semantics. Slices S01 Public Category Catalog Read, S02 Public
+Experience Level Catalog Read, S03 Candidate Skill Keyword Search, S04
+Structured Salary Runtime Foundation, S05 Legacy Salary Migration & Final
+Cutover, and S06 Salary Range Filtering are implemented and verified, and S07
+Acceptance & Regression Closure closed after Final Acceptance Bugfix Slices
+01–05. The V4.2 Salary Final Data Cutover is applied on the dev database
+(0 legacy `salaryText`, 0 invalid Salary, 0 non-DRAFT Jobs without valid
+Salary, strict Salary guard active). The independent Final Acceptance rerun
+found no Critical, High, or Medium finding across F01–F05 and BR-01–BR-26.
+The strict Salary guard is applied only by the
+`v42-legacy-salary-cutover` migration; backend startup only verifies it, so a
+new database must run that migration once before the first startup.
 
 V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression

@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-import Job, { ensureJobCollectionInvariants } from "../../models/job.model.js";
+import Job from "../../models/job.model.js";
 
 const name = "v6-supporting-recruiter-backfill";
 
@@ -20,8 +20,8 @@ const migrate = async (connection = mongoose.connection) => {
 
   await Job.syncIndexes();
 
-  await ensureJobCollectionInvariants(connection);
-
+  // The Job collection validator now also carries the V4.2 Salary guard, so
+  // only the `v42-legacy-salary-cutover` migration applies it.
   await assertMigrationInvariants(connection);
 
   return {

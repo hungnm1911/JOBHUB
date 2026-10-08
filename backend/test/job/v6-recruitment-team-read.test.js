@@ -203,6 +203,7 @@ describe("V6 Slice 01 — Recruitment Team persistence + read (F01)", () => {
           primaryRecruiterCompanyMemberId: recruiter.membership._id,
           status: JOB_STATUS.DRAFT,
           title: "Legacy V5 Job",
+          salary: null,
           publishedAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),

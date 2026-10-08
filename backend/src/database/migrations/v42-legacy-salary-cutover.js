@@ -5,9 +5,9 @@ import JOB_STATUS from "../../constants/job-status.js";
 import SALARY_PERIOD from "../../constants/salary-period.js";
 import SALARY_TYPE from "../../constants/salary-type.js";
 import Job, {
-  ensureJobCollectionInvariants,
   getJobSalaryInvariantErrors,
-  JOB_COLLECTION_VALIDATOR,
+  isJobCollectionValidatorActive,
+  JOB_COLLECTION_VALIDATION_OPTIONS,
 } from "../../models/job.model.js";
 
 const name = "v42-legacy-salary-cutover";
@@ -187,7 +187,7 @@ const classifyJobSalary = (job) => {
   }
 
   if (!Object.hasOwn(job, "salaryText")) {
-    return hasSalary || isDraft
+    return hasSalary || (isDraft && Object.hasOwn(job, "salary"))
       ? { state: CLASSIFICATION.CANONICAL }
       : unresolved(UNRESOLVED_REASON.MISSING_SALARY);
   }
@@ -274,18 +274,48 @@ const countBy = (records, key) => {
   }, {});
 };
 
-const isStrictSalaryGuardActive = async (connection) => {
-  const [collectionInfo] = await connection.db
-    .listCollections({ name: Job.collection.collectionName })
-    .toArray();
-  const options = collectionInfo?.options ?? {};
+// The only owner that applies the strict Job validator; callers must have
+// verified zero legacy and zero invalid Salary first.
+const applyStrictSalaryGuard = async (connection) => {
+  await Job.init();
 
-  return (
-    options.validationLevel === "strict" &&
-    options.validationAction === "error" &&
-    JSON.stringify(options.validator) ===
-      JSON.stringify(JOB_COLLECTION_VALIDATOR)
-  );
+  const collectionName = Job.collection.collectionName;
+  const applyValidator = () =>
+    connection.db.command({
+      collMod: collectionName,
+      ...JOB_COLLECTION_VALIDATION_OPTIONS,
+    });
+
+  try {
+    await applyValidator();
+    return;
+  } catch (error) {
+    const isMissingNamespace =
+      error?.code === 26 ||
+      error?.codeName === "NamespaceNotFound" ||
+      /ns does not exist/i.test(error?.message ?? "");
+
+    if (!isMissingNamespace) {
+      throw error;
+    }
+  }
+
+  try {
+    await connection.db.createCollection(
+      collectionName,
+      JOB_COLLECTION_VALIDATION_OPTIONS,
+    );
+  } catch (error) {
+    const collectionAlreadyExists =
+      error?.codeName === "NamespaceExists" ||
+      /already exists/i.test(error?.message ?? "");
+
+    if (!collectionAlreadyExists) {
+      throw error;
+    }
+
+    await applyValidator();
+  }
 };
 
 const toInventoryReport = async (scan, connection) => {
@@ -303,7 +333,7 @@ const toInventoryReport = async (scan, connection) => {
       records: scan.unresolved.slice(0, MAX_DESCRIBED_RECORDS),
     },
     nonDraftWithoutValidSalary: scan.nonDraftWithoutValidSalary,
-    strictSalaryGuardActive: await isStrictSalaryGuardActive(connection),
+    strictSalaryGuardActive: await isJobCollectionValidatorActive(connection),
   };
 };
 
@@ -451,7 +481,7 @@ const migrate = async (connection = mongoose.connection) => {
     );
   }
 
-  await ensureJobCollectionInvariants(connection);
+  await applyStrictSalaryGuard(connection);
 
   const verification = await assertCutoverComplete(connection);
 

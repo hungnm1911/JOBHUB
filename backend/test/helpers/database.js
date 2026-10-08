@@ -3,13 +3,13 @@ import mongoose from "mongoose";
 import request from "supertest";
 
 import app from "../../src/app.js";
+import { migrate as migrateV42SalaryCutover } from "../../src/database/migrations/v42-legacy-salary-cutover.js";
 import { ensureApplicationCollectionInvariants } from "../../src/models/application.model.js";
 import { ensureCandidateAvailabilityCollection } from "../../src/models/candidate-availability.model.js";
 import { ensureCandidateCvCollectionInvariants } from "../../src/models/candidate-cv.model.js";
 import { ensureCompanyCollectionInvariants } from "../../src/models/company.model.js";
 import { ensureConversationCollection } from "../../src/models/conversation.model.js";
 import { ensureInterviewScheduleCollection } from "../../src/models/interview-schedule.model.js";
-import { ensureJobCollectionInvariants } from "../../src/models/job.model.js";
 import { ensureJobInvitationCollectionInvariants } from "../../src/models/job-invitation.model.js";
 import { ensureMessageCollection } from "../../src/models/message.model.js";
 import { ensureNotificationEventCollection } from "../../src/models/notification-event.model.js";
@@ -35,7 +35,7 @@ const connectTestDatabase = async () => {
   });
 
   await ensureCompanyCollectionInvariants(mongoose.connection);
-  await ensureJobCollectionInvariants(mongoose.connection);
+  await migrateV42SalaryCutover(mongoose.connection);
   await ensureCandidateCvCollectionInvariants(mongoose.connection);
   await ensureApplicationCollectionInvariants(mongoose.connection);
   await ensureJobInvitationCollectionInvariants(mongoose.connection);
