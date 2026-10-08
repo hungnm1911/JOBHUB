@@ -111,6 +111,7 @@ describe("V5 Slice 12 — DRAFT privacy + pre-publication delete authority (F03,
     title,
   }) => {
     return Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId,
       createdByCompanyMemberId,
       primaryRecruiterCompanyMemberId,

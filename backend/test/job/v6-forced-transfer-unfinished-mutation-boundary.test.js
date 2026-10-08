@@ -48,6 +48,7 @@ const createJob = async ({
   title = "Forced Transfer Unfinished Boundary Job",
 }) =>
   Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId: primaryMemberId,
     primaryRecruiterCompanyMemberId: primaryMemberId,

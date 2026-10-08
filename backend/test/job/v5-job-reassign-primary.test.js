@@ -324,6 +324,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       publishedAt: null,
     });
     const pending = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: creator.membership._id,
       primaryRecruiterCompanyMemberId: creator.membership._id,
@@ -333,6 +334,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       publishedAt: null,
     });
     const closed = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: creator.membership._id,
       primaryRecruiterCompanyMemberId: creator.membership._id,
@@ -342,6 +344,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
       publishedAt: new Date("2026-01-15T00:00:00.000Z"),
     });
     const expired = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: creator.membership._id,
       primaryRecruiterCompanyMemberId: creator.membership._id,
@@ -659,6 +662,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
     expect(missingJob.status).toBe(404);
 
     const published = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: successor.membership._id,
       primaryRecruiterCompanyMemberId: successor.membership._id,
@@ -700,6 +704,7 @@ describe("V5 Slice 09 — Reassign Primary Recruiter (F08 / TX-03)", () => {
 
     const pastDeadline = new Date(Date.now() - 60 * 1000);
     const published = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: creator.membership._id,
       primaryRecruiterCompanyMemberId: creator.membership._id,

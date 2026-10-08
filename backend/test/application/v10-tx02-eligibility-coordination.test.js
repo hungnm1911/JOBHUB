@@ -76,6 +76,7 @@ const createJobWithTeam = async ({
   supportingMemberIds = [],
 }) =>
   Job.create({
+    salary: { type: "NEGOTIABLE" },
     companyId,
     createdByCompanyMemberId: primaryMemberId,
     primaryRecruiterCompanyMemberId: primaryMemberId,

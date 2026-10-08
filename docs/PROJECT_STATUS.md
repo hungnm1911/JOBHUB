@@ -71,6 +71,40 @@ lifecycle gate. No Salary filter index (Slice 06). Focused coverage:
 `test/job/v42-slice04-structured-salary.test.js` (13 tests); existing Job/
 Application/Notification fixtures migrated from `salaryText` to structured
 `salary`. The official backend gate passed 160 files / 1,667 tests.
+Slice 05 — Legacy Salary Preflight & Final Cutover (F01; BR-01, BR-03, BR-08;
+Data §7.1, §8.4, §9.3, §10.1, §16) is `IMPLEMENTED AND VERIFIED`, and the V4.2
+Salary Final Data Cutover was applied to the dev database on 2026-10-08. The
+explicit migration `backend/src/database/migrations/v42-legacy-salary-cutover.js`
+(`node scripts/run-migration.js v42-legacy-salary-cutover [--preflight]`)
+reports legacy `salaryText` totals (DRAFT / non-DRAFT), deterministic
+conversions by target, unresolved records by reason, non-DRAFT Jobs without a
+valid Structured Salary, and whether the strict guard is active. It maps only
+explicit `FIXED`/`RANGE`/`FROM`/`UP_TO` text with VND and a canonical non-`ETC`
+period (e.g. `20 - 30 million VND/month`), explicit negotiable wording
+(`Negotiable`, `Thỏa thuận`), empty text on a DRAFT (`NOT_DECLARED`), and drops
+stale `salaryText` beside an existing valid Salary without rewriting it. Any
+unresolved record blocks before any write; each conversion is one conditional
+document write (Salary set + `salaryText` unset); reruns are no-ops. After
+zero-legacy verification it applies `JOB_COLLECTION_VALIDATOR` (now including
+`status = DRAFT OR salary is an object`) via `ensureJobCollectionInvariants`,
+and `verify` requires zero `salaryText`, zero non-DRAFT Jobs without valid
+Salary, and the active strict validator. The Job schema also rejects saving a
+non-DRAFT Job with `salary = null`. Because `ensureJobCollectionInvariants` also
+runs at server startup, this migration must complete before deploying this code
+to a database holding legacy Salary records. Dev preflight (2026-10-08,
+`jobhub`): 3 Jobs, all legacy non-DRAFT (2 `PUBLISHED`, 1 `CLOSED`) with
+`salaryText = "20 - 30 million VND"`; 0 deterministic, 3
+`UNRECOGNIZED_SALARY_TEXT` (no Salary Period stated), so the migration was not
+run on them. The product owner explicitly approved per-record remediation
+`RANGE 20,000,000–30,000,000 VND / MONTH` for those 3 Job IDs; it was applied as
+one conditional single-document write per Job (Salary set + `salaryText` unset).
+The cutover then ran (`node scripts/run-migration.js v42-legacy-salary-cutover`,
+`migrate` + `verify` passed), and a final read-only preflight reports 0 legacy
+`salaryText`, 0 unresolved, 0 non-DRAFT Jobs without valid Salary, and the
+strict guard active. Focused coverage: `test/job/v42-slice05-legacy-salary-cutover.test.js`
+(10 tests); 34 existing test files' non-DRAFT Job fixtures now carry a
+Structured Salary, and the Slice 04 legacy-approve test now asserts the guard
+rejects that state. The official backend gate passed 161 files / 1,677 tests.
 
 The approved V4.2 implementation sequence is:
 
@@ -87,7 +121,7 @@ Slices 03–04 may start independently after the completed governance gate.
 Slices 05 and 06 each depend on Slice 04. Slice 06 may be implemented and
 tested after Slice 04, but its production activation and business completion
 also depend on Slice 05 Final Cutover. Slice 07 depends on Slices 01–06. The
-next implementation focus is Slice 05.
+next implementation focus is Slice 06.
 
 **V4.1 — Migration Location sang danh mục hành chính Việt Nam hai cấp** is
 `COMPLETED / ACCEPTED` as of 2026-10-07. Slice 01 — Location Catalog Foundation

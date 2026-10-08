@@ -503,7 +503,12 @@ describe("V4.1 Slice 02 — Job Location V4.1 (F02)", () => {
 
       await Job.updateOne(
         { _id: jobId },
-        { $set: { status: JOB_STATUS.PENDING_APPROVAL } },
+        {
+          $set: {
+            status: JOB_STATUS.PENDING_APPROVAL,
+            salary: { type: "NEGOTIABLE" },
+          },
+        },
       );
 
       const frozenResponse = await updateDraft(context, jobId, {

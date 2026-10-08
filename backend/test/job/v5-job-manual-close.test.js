@@ -394,6 +394,7 @@ describe("V5 Slice 10 — Manual close Job (F09 / TX-02)", () => {
 
     for (const status of [JOB_STATUS.CLOSED, JOB_STATUS.EXPIRED]) {
       const job = await Job.create({
+        salary: { type: "NEGOTIABLE" },
         companyId: manager.company._id,
         createdByCompanyMemberId: primary.membership._id,
         primaryRecruiterCompanyMemberId: primary.membership._id,

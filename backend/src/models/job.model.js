@@ -87,8 +87,11 @@ const assertJobRecruitmentTeamInvariants = (job) => {
 };
 
 // Database-level guard for query-write paths where document-context validators
-// do not see the merged final team state (Data Contract 10.1).
-const JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR = Object.freeze({
+// do not see the merged final team state (Data Contract 10.1), plus the V4.2
+// rule that a Job outside DRAFT persists a Structured Salary (Data V4.2 §7.1,
+// §10.1). The `v42-legacy-salary-cutover` migration must complete before this
+// validator is applied to a database that still holds legacy Salary records.
+const JOB_COLLECTION_VALIDATOR = Object.freeze({
   $and: [
     {
       $jsonSchema: {
@@ -131,6 +134,9 @@ const JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR = Object.freeze({
           ],
         },
       },
+    },
+    {
+      $or: [{ status: JOB_STATUS.DRAFT }, { salary: { $type: "object" } }],
     },
   ],
 });
@@ -577,6 +583,12 @@ jobSchema.pre("validate", function validateJobRecruitmentTeam() {
   }
 });
 
+jobSchema.pre("validate", function validateJobSalaryDeclaration() {
+  if (this.status !== JOB_STATUS.DRAFT && this.salary == null) {
+    throw new Error("A Job outside DRAFT requires a Structured Salary");
+  }
+});
+
 const Job = model("Job", jobSchema);
 
 const ensureJobCollectionInvariants = async (
@@ -594,7 +606,7 @@ const ensureJobCollectionInvariants = async (
   const applyValidator = () =>
     connection.db.command({
       collMod: collectionName,
-      validator: JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR,
+      validator: JOB_COLLECTION_VALIDATOR,
       validationLevel: "strict",
       validationAction: "error",
     });
@@ -615,7 +627,7 @@ const ensureJobCollectionInvariants = async (
 
   try {
     await connection.db.createCollection(collectionName, {
-      validator: JOB_RECRUITMENT_TEAM_COLLECTION_VALIDATOR,
+      validator: JOB_COLLECTION_VALIDATOR,
       validationLevel: "strict",
       validationAction: "error",
     });
@@ -637,5 +649,6 @@ export {
   ensureJobCollectionInvariants,
   getJobSalaryInvariantErrors,
   isNotForbiddenLocationProvinceCode,
+  JOB_COLLECTION_VALIDATOR,
 };
 export default Job;

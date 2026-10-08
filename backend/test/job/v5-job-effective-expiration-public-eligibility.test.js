@@ -296,6 +296,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
 
     for (const entry of cases) {
       const job = await Job.create({
+        salary: { type: "NEGOTIABLE" },
         companyId: manager.company._id,
         createdByCompanyMemberId: recruiter.membership._id,
         primaryRecruiterCompanyMemberId: recruiter.membership._id,
@@ -526,6 +527,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
     });
 
     const pending = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: primary.membership._id,
       primaryRecruiterCompanyMemberId: primary.membership._id,
@@ -547,6 +549,7 @@ describe("V5 Slice 11 — Effective expiration + public eligibility (F10/F11)", 
     );
 
     const futurePublished = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: primary.membership._id,
       primaryRecruiterCompanyMemberId: primary.membership._id,

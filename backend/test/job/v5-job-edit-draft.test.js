@@ -276,6 +276,7 @@ describe("V5 Slice 02 — Edit DRAFT + content immutability (F02)", () => {
       });
 
       const job = await Job.create({
+        salary: { type: "NEGOTIABLE" },
         companyId: manager.company._id,
         createdByCompanyMemberId: recruiter.membership._id,
         primaryRecruiterCompanyMemberId: recruiter.membership._id,

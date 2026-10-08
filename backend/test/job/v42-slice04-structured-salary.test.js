@@ -448,7 +448,7 @@ describe("V4.2 Slice 04 — Structured Salary Runtime Foundation (F01)", () => {
       );
     });
 
-    it("blocks approving a legacy PENDING_APPROVAL Job that has only salaryText", async () => {
+    it("cannot persist a legacy PENDING_APPROVAL Job that has only salaryText (S05 strict guard)", async () => {
       const context = await createRecruiterContext();
       const catalog = await seedCatalog();
       const created = await createDraft(
@@ -457,28 +457,24 @@ describe("V4.2 Slice 04 — Structured Salary Runtime Foundation (F01)", () => {
       );
       const jobId = created.body.job.id;
 
-      await Job.collection.updateOne(
-        { _id: new mongoose.Types.ObjectId(jobId) },
-        {
-          $set: {
-            status: JOB_STATUS.PENDING_APPROVAL,
-            salaryText: "Negotiate",
+      await expect(
+        Job.collection.updateOne(
+          { _id: new mongoose.Types.ObjectId(jobId) },
+          {
+            $set: {
+              status: JOB_STATUS.PENDING_APPROVAL,
+              salaryText: "Negotiate",
+            },
+            $unset: { salary: "" },
           },
-          $unset: { salary: "" },
-        },
-      );
-
-      const response = await context.agent
-        .post(`/api/jobs/${jobId}/approve`)
-        .set("Authorization", `Bearer ${context.managerToken}`);
-
-      expect(response.status).toBe(400);
-      expect(response.body.error.details).toMatchObject({ field: "salary" });
+        ),
+      ).rejects.toMatchObject({ code: 121 });
 
       const raw = await readRawJob(jobId);
 
-      expect(raw.status).toBe(JOB_STATUS.PENDING_APPROVAL);
-      expect(raw.salaryText).toBe("Negotiate");
+      expect(raw.status).toBe(JOB_STATUS.DRAFT);
+      expect(raw.salary).toBeNull();
+      expect(raw).not.toHaveProperty("salaryText");
     });
 
     it("keeps the same Structured Salary through submit, approve, reads, and Discovery, and freezes it after DRAFT", async () => {

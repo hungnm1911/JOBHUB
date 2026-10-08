@@ -359,6 +359,7 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
     });
 
     const published = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: recruiter.membership._id,
       primaryRecruiterCompanyMemberId: recruiter.membership._id,
@@ -367,6 +368,7 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
       publishedAt: new Date("2026-01-15T00:00:00.000Z"),
     });
     const closed = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: recruiter.membership._id,
       primaryRecruiterCompanyMemberId: recruiter.membership._id,
@@ -375,6 +377,7 @@ describe("V5 Slice 08 — Manual pre-publication delete (F12 / TX-04)", () => {
       publishedAt: new Date("2026-01-15T00:00:00.000Z"),
     });
     const expired = await Job.create({
+      salary: { type: "NEGOTIABLE" },
       companyId: manager.company._id,
       createdByCompanyMemberId: recruiter.membership._id,
       primaryRecruiterCompanyMemberId: recruiter.membership._id,
