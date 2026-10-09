@@ -8,12 +8,16 @@ configuration, the `@` import alias, a Redux Toolkit provider/store, nested
 React Router composition with a shared layout and runnable sample page, one
 owned Axios client with normalized errors, and a lazy authenticated Socket.IO
 client that does not connect during bootstrap. React Hook Form and Zod are
-integrated through the official resolver, with shared generic validators owned
-by `src/validation/index.js`. No frontend business feature, auth state, route
-guard, refresh-token policy, or feature realtime listener was invented without
-an approved client contract. Frontend ESLint and the Vite production build
-passed, and the Vite development server returned the root HTML during a local
-smoke check.
+integrated through the official resolver. `src/validation/index.js` is the
+application-wide validation provider; reusable implementations live in focused
+modules such as `common.validators.js`, and future form schemas are exported
+through the provider for React Hook Form consumers. Routing is composed from
+route-group modules, with prop-driven Protected, Guest, and Role guard building
+blocks that remain unwired until an auth-state owner and concrete client routes
+exist. No frontend business feature, auth state, refresh-token policy, or
+feature realtime listener was invented without an approved client contract.
+Frontend ESLint and the Vite production build passed, and the Vite development
+server returned the root HTML during a local smoke check.
 
 **V4.2 — Structured Salary, Metadata Catalog & Candidate Skill Keyword Search**
 is `COMPLETED / ACCEPTED` as of 2026-10-08. A later Final Acceptance review
