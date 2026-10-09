@@ -1,11 +1,8 @@
 import { io } from 'socket.io-client'
 
-export { default as REALTIME_EVENT } from './realtime-event'
+import { SOCKET_CONFIG } from '@/utils/constant'
 
-const realtimeSocket = io(
-  import.meta.env.VITE_SOCKET_URL || window.location.origin,
-  { autoConnect: false },
-)
+const realtimeSocket = io(SOCKET_CONFIG.URL, { autoConnect: false })
 
 export function connectRealtimeSocket(accessToken) {
   if (typeof accessToken !== 'string' || accessToken.trim() === '') {

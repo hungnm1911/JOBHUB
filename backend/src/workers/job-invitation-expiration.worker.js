@@ -1,5 +1,6 @@
 import config from "../config/index.js";
 import { materializeDueExpiredJobInvitations } from "../services/job-invitation.service.js";
+import logger from "../utils/logger.js";
 
 let expirationTimer = null;
 let expirationPassPromise = null;
@@ -13,7 +14,7 @@ const runExpirationPass = async () => {
   expirationPassPromise = materializeDueExpiredJobInvitations({
     now: new Date(),
   }).catch((error) => {
-    console.error("Job Invitation expiration pass failed:", error);
+    logger.error("Job Invitation expiration pass failed", { error });
   }).finally(() => {
     expirationPassPromise = null;
   });

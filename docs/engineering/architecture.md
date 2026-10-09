@@ -53,6 +53,8 @@ backend/
 
 ```text
 Express app
+  -> request logger (request id + access log)
+  -> CORS and body parsing
   -> root API router
   -> feature router
   -> route middleware
@@ -76,8 +78,8 @@ Failure path:
 ```text
 unmatched route or forwarded error
   -> not-found middleware when applicable
-  -> centralized error handler
-  -> JSON error response
+  -> centralized error handler (logs with request id)
+  -> JSON error response + X-Request-Id header
 ```
 
 The detailed, version-specific canonical backend owners and known mismatches
@@ -227,6 +229,12 @@ The root entry point imports normalized application configuration as part of boo
 - Both are registered in `backend/src/app.js` after application routes, with the final error handler last.
 - Other layers forward errors according to the centralized error contract instead of establishing competing global error formats.
 
+### Logging
+
+- `backend/src/utils/logger.js` is the single application logger; `backend/src/middlewares/request-logger.js` (registered first in `app.js`) owns request-id assignment, the `X-Request-Id` response header, and per-request access logging.
+- `LOG_LEVEL` is normalized by `backend/src/config/index.js`. Development defaults to `debug`, and other environments default to `info`. Production output is JSON lines.
+- Detailed level semantics and redaction rules are defined in [`backend-conventions.md`](backend-conventions.md#logging-and-request-tracing).
+
 ### File naming
 
 - All filenames use kebab-case.
@@ -257,11 +265,11 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
 The current browser runtime is composed as follows:
 
 1. [`frontend/src/main.jsx`](../../frontend/src/main.jsx) imports global styles, creates the React root, and mounts the application inside the single Redux `Provider`.
-2. [`frontend/src/App.jsx`](../../frontend/src/App.jsx) renders the single React Router `RouterProvider`.
+2. [`frontend/src/App.jsx`](../../frontend/src/App.jsx) renders the single React Router `RouterProvider` and the single Sonner `<Toaster />` for transient action feedback. The Toaster receives the application-wide defaults from `TOASTER_CONFIG` in `frontend/src/utils/constant.js`: top-right position, rich success/error colors, close button, 4,000 ms duration, and theme-token styling. Components and feature hooks call `toast` from `sonner` directly without extra setup; toasts are not persisted business notifications.
 3. [`frontend/src/routes/index.jsx`](../../frontend/src/routes/index.jsx) composes route groups and creates the browser router. The current public route group maps `/` to `RootLayout` and its nested `HomePage` index route.
 4. `RootLayout` composes the application-level `AppHeader` with an `Outlet`; the page owns the complete URL-mapped screen content.
-5. One configured Axios client owns the HTTP base URL, timeout, interceptors, and normalized `ApiError` shape. No resource `*.api.js` module consumes it yet.
-6. One lazy Socket.IO client owns connection configuration and access-token handshake auth. It uses `autoConnect: false`; no feature listener or bootstrap connection currently exists.
+5. One configured Axios client applies `API_CONFIG` (base URL and timeout) from `frontend/src/utils/constant.js` and owns the interceptors, the normalized `ApiError` shape (including `requestId` from the backend `X-Request-Id` header), and development-only console logging of failed requests. No resource `*.api.js` module consumes it yet.
+6. One lazy Socket.IO client applies `SOCKET_CONFIG` from `frontend/src/utils/constant.js` and owns the connection lifecycle and access-token handshake auth. It uses `autoConnect: false`; no feature listener or bootstrap connection currently exists.
 7. The Redux store is valid but empty. The `authentication` feature directory is scaffold only: it contains no state, reducer, service, hook, component, or business behavior.
 
 ### Current folders and responsibilities
@@ -284,15 +292,20 @@ frontend/
     ├── lib/                # External-library integration helpers such as cn()
     ├── pages/              # Complete URL-mapped screens
     ├── routes/             # Router composition, route groups, and navigation guards
-    ├── socket/             # Shared lazy Socket.IO client and event names
+    ├── socket/             # Shared lazy Socket.IO client
     ├── store/              # Redux Toolkit store composition and shared hooks
     ├── styles/             # Global CSS and application theme tokens
+    ├── utils/
+    │   └── constant.js     # Central project constants and environment-derived config
     └── validation/         # App-wide provider, focused schemas, and RHF integration
 ```
 
-`frontend/src/utils/` does not currently exist because there is no pure,
-cross-application utility that needs that owner. Empty feature subdirectories
-are represented by `.gitkeep` only and do not imply implemented capability.
+`frontend/src/utils/constant.js` is the single owner of frontend project
+constants: `RUNTIME_ENV`, `HTTP_HEADER`, `API_CONFIG`, `API_ERROR_MESSAGE`,
+`SOCKET_CONFIG`, `REALTIME_EVENT`, `VALIDATION_MESSAGE`, and `TOASTER_CONFIG`. It is the only
+module that reads `VITE_*` variables. No shared helper module exists beside it
+yet. Empty feature subdirectories are represented by `.gitkeep` only and do not
+imply implemented capability.
 
 ### Current capability boundary
 
@@ -302,6 +315,10 @@ owner, token refresh policy, resource API module, feature-specific realtime
 handler, or role-specific application shell. The route guards are prop-driven
 building blocks and are not wired to routes until concrete auth state and
 redirect destinations exist.
+
+The canonical frontend owners and known mismatches remain in
+[`frontend-source-of-truth.md`](frontend-source-of-truth.md). This architecture
+document does not duplicate that owner matrix.
 
 ## Frontend target convention
 
@@ -337,7 +354,7 @@ realtime behavior when it does not need them.
 ### Realtime boundary
 
 - `frontend/src/socket/index.js` owns the shared Socket.IO client, connection lifecycle, configuration, and handshake authentication mechanism.
-- `frontend/src/socket/realtime-event.js` owns frontend transport event-name constants and must remain aligned with the backend realtime event contract.
+- `REALTIME_EVENT` in `frontend/src/utils/constant.js` owns frontend transport event-name constants and must remain aligned with the backend realtime event contract.
 - Importing the application or socket facade does not require an immediate connection. Connection begins only when an authenticated workflow needs it.
 - Feature-specific subscribe/unsubscribe behavior and event handling live with the owning feature, not in the shared socket facade.
 - Realtime data is not the source of business truth. Features resynchronize durable/current state through canonical HTTP reads when required.
@@ -387,7 +404,8 @@ realtime behavior when it does not need them.
 ### Helpers, validation, and styling
 
 - `frontend/src/lib/` contains external-library integration helpers and platform adapters. The shadcn/ui-compatible `cn()` helper is owned there.
-- `frontend/src/utils/` is reserved for pure, domain-neutral utilities reused across multiple application areas, such as general formatting or data conversion. It is not a dumping ground for unowned logic.
+- `frontend/src/utils/` contains pure, domain-neutral helpers reused across multiple application areas, such as general formatting or data conversion, and the central `constant.js`. It is not a dumping ground for unowned logic.
+- `frontend/src/utils/constant.js` is the canonical owner of project constants, including environment-derived configuration, closed vocabularies, shared default messages, and library defaults such as `TOASTER_CONFIG`. Other modules import from `@/utils/constant` rather than redeclaring literals.
 - `frontend/src/validation/index.js` is the application-wide validation provider/public facade. Validator implementations and form/payload schemas live in focused `*.validators.js` and `*.schema.js` modules under `src/validation/`, then are imported and re-exported by the provider. Internal validation modules do not import the provider, avoiding circular dependencies; form consumers import schemas and `zodResolver` through `@/validation` for React Hook Form integration.
 - `frontend/src/styles/` owns global CSS, application theme tokens, and application-wide styling rules.
 - Tailwind configuration follows the installed major version. The current Tailwind CSS v4 integration uses the Vite plugin, CSS imports, and `@theme`; legacy configuration files are not added without a concrete requirement.
@@ -398,7 +416,7 @@ realtime behavior when it does not need them.
 - `frontend/components.json` owns shadcn/ui generation conventions and aliases.
 - Vite environment files belong at the frontend project root (`frontend/.env*`), not under `frontend/src/`.
 - Only public browser configuration uses the `VITE_*` prefix. Secrets must never be placed in frontend environment variables because Vite bundles them into client assets.
-- `VITE_API_BASE_URL` and `VITE_SOCKET_URL` configure the shared HTTP and realtime clients; their code defaults remain development-safe fallbacks, not secret configuration.
+- `VITE_API_BASE_URL` and `VITE_SOCKET_URL` are read only by `frontend/src/utils/constant.js` (`API_CONFIG`, `SOCKET_CONFIG`) and configure the shared HTTP and realtime clients; their code defaults remain development-safe fallbacks, not secret configuration.
 
 ### File naming
 
@@ -418,3 +436,5 @@ realtime behavior when it does not need them.
 - `lib/` and `utils/` do not absorb business logic merely because ownership is unclear.
 - New route groups, layouts, pages, UI primitives, feature subfolders, reducers, and shared helpers require concrete consumers; scaffolding does not imply behavior.
 - Frontend technical design must not invent business rules absent from an approved product specification or duplicate backend sources of truth.
+
+Current deviations from these constraints are catalogued in [`frontend-source-of-truth.md`](frontend-source-of-truth.md). They are documentation of the existing state, not authorization to duplicate or extend the mismatch.

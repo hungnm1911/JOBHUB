@@ -2,6 +2,7 @@ import NotificationEvent from "../models/notification-event.model.js";
 import Notification from "../models/notification.model.js";
 import { emitNotificationToRecipient } from "../sockets/index.js";
 import AppError from "../utils/app-error.js";
+import logger from "../utils/logger.js";
 
 const DEFAULT_RECOVERY_BATCH_SIZE = 100;
 
@@ -13,8 +14,12 @@ const emitMaterializedNotification = (notification) => {
       recipientUserId: notification.recipientUserId,
       notification,
     });
-  } catch {
+  } catch (error) {
     // Realtime fan-out is best-effort and must not fail materialization.
+    logger.warn("Notification realtime emit failed", {
+      notificationId: notification._id,
+      error,
+    });
   }
 };
 
@@ -213,8 +218,12 @@ const recoverPendingNotificationEvents = async ({
         now,
       });
       recoveredEventIds.push(event._id);
-    } catch {
+    } catch (error) {
       failedEventIds.push(event._id);
+      logger.warn("Notification event recovery failed", {
+        notificationEventId: event._id,
+        error,
+      });
     }
   }
 
