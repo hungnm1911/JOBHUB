@@ -76,7 +76,8 @@ The server verifies both MongoDB and Cloudinary during startup. It will stop if 
    CORS_ALLOWED_ORIGINS=http://localhost:5173
    ```
 
-   `CORS_ALLOWED_ORIGINS` is a comma-separated whitelist of frontend origins.
+   `CORS_ALLOWED_ORIGINS` is a comma-separated whitelist of frontend origins
+   shared by the HTTP API and the Socket.IO server.
    Each value must contain only the scheme and host (plus an optional port),
    without a path. When the frontend is deployed, add its production origin,
    for example `http://localhost:5173,https://jobhub.example.com`.
