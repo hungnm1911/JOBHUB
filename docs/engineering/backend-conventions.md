@@ -23,6 +23,7 @@ They do not claim that the current repository is fully compliant. Audited deviat
 - Service files must use `<name>.service.js`.
 - Model files must use `<name>.model.js`.
 - Approved background worker files must use `<name>.worker.js` under `src/workers/`.
+- Socket transport files must use `<name>.socket.js` under `src/sockets/`; `src/sockets/index.js` is the public facade exception.
 - Middleware and utility filenames must describe their responsibility in kebab-case, such as `error-handler.js` or `generate-password.js`.
 - JavaScript imports must include the `.js` extension because the backend uses ES modules.
 
@@ -156,7 +157,7 @@ Application routes must be registered before `not-found.js`, and `error-handler.
 
 ### Realtime distribution
 
-- `backend/src/services/realtime-distribution.service.js` is the canonical Socket.IO and Notification realtime-distribution owner for V13 Slice 09.
+- `backend/src/sockets/realtime-server.socket.js` is the canonical Socket.IO server lifecycle, connection-authentication, and User-room owner; `backend/src/sockets/realtime-events.socket.js` is the canonical realtime payload and fan-out owner; `backend/src/sockets/index.js` is their public facade.
 - `backend/index.js` attaches Socket.IO to the process HTTP server through that owner after the HTTP server exists, and closes it during graceful shutdown. The entry point must not implement handshake auth, room membership, or emit fan-out inline.
 - Connection authentication reuses `authenticateAccess` from `backend/src/services/authenticate-access.service.js`. Handshake credentials must resolve to a valid AuthSession and `ACTIVE` User; onboarding-only access is not a Slice 09 realtime connection path.
 - One authenticated User may have many concurrent Socket connections. Membership is in-memory only, via a User-scoped room such as `user:{userId}`. Slice 09 does not persist SocketSession, connection maps, presence, or delivery receipts.
@@ -247,14 +248,18 @@ For V13 Notification recovery:
 - source services create required NotificationEvent obligations inside the existing source transaction by passing explicit values and its active MongoDB session;
 - recipient/content snapshots are fixed at source-event time and are never recomputed during recovery;
 - an immediate post-commit materialization attempt may improve latency, but the background recovery worker remains the runtime recovery trigger and materialization failure must not turn an already committed source result into failure; and
-- after a durable Notification exists for a recipient, materialization may best-effort call `realtime-distribution.service.js` for recipient-scoped emit without importing Express, without persisting delivery state, and without treating Socket failure as materialization or source failure.
+- after a durable Notification exists for a recipient, materialization may best-effort call the `src/sockets/index.js` facade for recipient-scoped emit without importing Express, without persisting delivery state, and without treating Socket failure as materialization or source failure.
 
-For V13 Slice 09 realtime distribution:
+### Sockets
 
-- `realtime-distribution.service.js` may attach Socket.IO to a Node `http.Server` and must not depend on Express request/response objects;
+- `src/sockets/realtime-server.socket.js` may attach Socket.IO to a Node `http.Server` and must not depend on Express request/response objects;
+- `src/sockets/realtime-events.socket.js` owns only transport payload conversion, recipient de-duplication, and User-room fan-out;
+- `src/sockets/index.js` is the only public import surface for entry-point and service consumers;
 - handshake authentication calls the canonical access-auth service rather than reimplementing session validation;
 - Notification emit APIs accept explicit recipient User id and already-persisted Notification data rather than HTTP/Socket request objects; and
-- Message/Conversation realtime helpers remain out of Slice 09 except for sharing the authenticated User-connection plane.
+- Socket modules must not import Mongoose, models, database modules, routes, controllers, or middlewares, and may consume no service except the canonical access-auth service;
+- business services retain ownership of durable/post-commit timing, current recipient resolution, and Conversation interaction-mode decisions; and
+- direct `socket.io` server imports outside `src/sockets/` are forbidden.
 
 There is no repository layer in the approved architecture. Services work directly with models. Introducing repositories requires explicit architectural approval.
 

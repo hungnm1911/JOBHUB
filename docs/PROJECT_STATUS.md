@@ -948,10 +948,13 @@ behavior changes.
 
 Slice 09 is implemented and verified for Notification Realtime Distribution
 (`F09`, `F11` realtime closure; `BR-04`, `BR-08`, `BR-42`–`BR-44`, `BR-50`;
-Data §9.5 / §14.1). `realtime-distribution.service.js` owns Socket.IO
+Data §9.5 / §14.1). `src/sockets/realtime-server.socket.js` owns Socket.IO
 lifecycle, `authenticateAccess` handshake auth (ACTIVE User + valid
-AuthSession only), in-memory `user:{userId}` membership, and recipient-scoped
-Notification emit. `backend/index.js` attaches after the HTTP server exists
+AuthSession only), and in-memory `user:{userId}` membership;
+`src/sockets/realtime-events.socket.js` owns recipient-scoped transport
+payloads/fan-out through the `src/sockets/index.js` facade. Business recipient
+and post-commit decisions remain in their source services. `backend/index.js`
+attaches after the HTTP server exists
 and closes the plane before MongoDB disconnect. `notification.service.js`
 best-effort emits only after a durable `Notification` insert, outside any
 MongoDB transaction; Socket failure does not roll back source state,
@@ -2734,6 +2737,17 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V13 Socket.IO ownership refactor (2026-10-09): Socket.IO lifecycle,
+  authenticated User-room membership, transport payloads, and fan-out moved
+  without business-behavior or persistence changes from the former
+  `services/realtime-distribution.service.js` owner into the canonical
+  `src/sockets/` layer and public `src/sockets/index.js` facade. Business
+  recipient resolution and durable/post-commit timing remain in
+  `application.service.js` and `notification.service.js`. Focused V13 Slice
+  09–12 coverage passed 4 files / 31 tests. Then `cd backend && npm run
+  verify:agent` passed (ESLint: 0 errors / the same 2 pre-existing warnings in
+  `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-018;
+  Vitest: 167 files / 1,735 tests).
 - V4.1 Final Acceptance (2026-10-07): seven focused V4.1 files passed 177/177
   tests. The independently rerun `cd backend && npm run verify:agent` passed:
   ESLint 0 errors (the 2 pre-existing warnings in

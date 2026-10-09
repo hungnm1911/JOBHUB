@@ -39,6 +39,7 @@ backend/
     ├── models/              # Mongoose schemas/models; barrel is disconnected
     ├── routes/              # Root and feature routers
     ├── services/            # Cloudinary file operations and mail sending
+    ├── sockets/             # Socket.IO lifecycle and realtime transport
     └── utils/               # Application error, JWT, and password helpers
 ```
 
@@ -107,7 +108,7 @@ Some expected file errors are currently formatted and returned directly by the c
 - V4.1 Location reference data uses Province Open API v1 (`https://provinces.open-api.vn/api/v1/`) and its pre-July-2025-merger semantics. Raw Province and raw District become the JOBHUB `Province → optional District-level unit` hierarchy; raw Ward/Commune is excluded. `backend/src/services/location.service.js` is the stable consumer-facing catalog/semantic-validation boundary and, for the demo scope, calls v1 directly with no cache, fallback, static catalog, or MongoDB mirror; provider failure fails that operation closed. Job/CandidateCV mutation owners consume the boundary. Job Discovery and Candidate Search filter/sort only from persisted `provinceCode`/`districtCode`; the one search-path use of the boundary is Candidate Search resolving District → Province membership of a District-subset filter once per request (`resolveLocationFilterSelections`), because a Province-wide preference carries no District to prove membership. Job Discovery never calls the boundary, and no search consumer calls the provider directly. A future cache/provider wrapper may be inserted behind the same boundary without changing Product/API contracts or downstream consumers.
 - V13 durable Notification recovery is an approved background-worker exception to request-only execution. `backend/src/workers/notification-recovery.worker.js` owns only the scheduling lifecycle for bounded, non-overlapping recovery passes and delegates materialization to `backend/src/services/notification.service.js`. `backend/index.js` starts the worker after MongoDB and required collection/index readiness, and stops it before disconnecting MongoDB during shutdown.
 - V15 Job Invitation Day-15 expiration materialization is the second approved background-worker exception. `backend/src/workers/job-invitation-expiration.worker.js` owns only the scheduling lifecycle for bounded, non-overlapping catch-up passes and delegates persistence to `backend/src/services/job-invitation.service.js` (`materializeDueExpiredJobInvitations`). It does not own expiration evaluation, timezone/day-count semantics, or a second transition path. `backend/index.js` starts the worker after MongoDB and Job Invitation collection/index readiness, and stops it before disconnecting MongoDB during shutdown.
-- V13 Socket.IO realtime distribution is the approved transport exception for online fan-out. `backend/src/services/realtime-distribution.service.js` owns attaching Socket.IO to the process HTTP server, connection authentication, in-memory User→connection membership, and recipient-scoped Notification emit. `backend/index.js` attaches the Socket server after the HTTP server exists and closes it during graceful shutdown. This is not a new architectural layer and must not introduce Socket session/delivery persistence.
+- V13 Socket.IO realtime distribution is the approved transport layer for online fan-out. `backend/src/sockets/realtime-server.socket.js` owns attaching Socket.IO to the process HTTP server, connection authentication, and in-memory User→connection membership. `backend/src/sockets/realtime-events.socket.js` owns the Notification, Message, and Conversation-state transport payloads and recipient-room fan-out. `backend/src/sockets/index.js` is their public facade. `backend/index.js` attaches the Socket server after the HTTP server exists and closes it during graceful shutdown. The layer must not introduce Socket session/delivery persistence or absorb business recipient and post-commit decisions from services.
 - No repository layer is part of the current target architecture. Adding one requires explicit approval as an architecture change.
 
 ### Layer dependency direction
@@ -120,8 +121,9 @@ route -> middleware -> controller -> service -> model/database
                                       +-> approved infrastructure clients/utilities
 
 entry point -> background worker -> service -> model/database
-entry point -> realtime distribution service (Socket.IO on http.Server)
-notification materialization -> realtime distribution service (best-effort emit)
+entry point -> sockets facade (Socket.IO on http.Server)
+notification materialization -> sockets facade (best-effort emit)
+application post-commit hooks -> sockets facade (best-effort emit)
 ```
 
 Not every endpoint must use every layer. A layer may be omitted when it has no responsibility for that endpoint, but callers must not skip a layer in order to take over that layer's responsibility.
@@ -162,11 +164,11 @@ Services own business workflows and business validation. Under the current targe
 
 For V13, `notification.service.js` owns NotificationEvent creation support, Notification materialization, idempotent pending-event recovery, and the rule that recovery consumes immutable recipient/content snapshots rather than recomputing current recipients. Source business services remain owners of their source transitions and pass the active MongoDB session when creating a required durable obligation inside the source transaction.
 
-For V13 Slice 09, after a durable Notification for a recipient has been materialized, `notification.service.js` may trigger a best-effort recipient-scoped emit through `realtime-distribution.service.js`. That emit is outside any MongoDB transaction, must not run before the durable Notification exists, must not change read state, and must not roll back Notification or source business state on Socket failure. Exactly-once Socket delivery is not required.
+For V13 Slice 09, after a durable Notification for a recipient has been materialized, `notification.service.js` may trigger a best-effort recipient-scoped emit through `backend/src/sockets/index.js`. That emit is outside any MongoDB transaction, must not run before the durable Notification exists, must not change read state, and must not roll back Notification or source business state on Socket failure. Exactly-once Socket delivery is not required.
 
 ### Realtime distribution
 
-The approved V13 Socket.IO distribution owner:
+The approved V13 Socket.IO distribution owner under `backend/src/sockets/`:
 
 - attaches one Socket.IO server to the process HTTP server owned by `backend/index.js`;
 - authenticates each connection with the canonical `authenticateAccess` credential rules (valid access token, AuthSession, and `ACTIVE` User);
@@ -236,6 +238,7 @@ The root entry point imports normalized application configuration as part of boo
 - Controller files use `<name>.controller.js`.
 - Service files use `<name>.service.js`.
 - Model files use `<name>.model.js`.
+- Socket transport files use `<name>.socket.js`; `src/sockets/index.js` is the public facade exception.
 
 ## Architectural constraints
 
@@ -247,6 +250,6 @@ The root entry point imports normalized application configuration as part of boo
 - Generic utility modules do not become feature service substitutes.
 - New architectural layers or changes in ownership require explicit approval and corresponding documentation updates.
 - Background scheduling outside the approved V13 Notification recovery worker and the approved V15 Job Invitation expiration worker requires separate architectural approval.
-- Socket.IO realtime distribution outside `backend/src/services/realtime-distribution.service.js`, or Notification realtime emit outside the Notification materialization → distributor boundary, requires separate architectural approval.
+- Socket.IO server imports outside `backend/src/sockets/`, direct persistence or HTTP-layer access from `src/sockets/`, or Notification realtime emit outside the Notification materialization → sockets boundary requires separate architectural approval.
 
 Current deviations from these constraints are catalogued in [`source-of-truth.md`](source-of-truth.md). They are documentation of the existing state, not authorization to duplicate or extend the mismatch.
