@@ -258,55 +258,6 @@ const jobInvitationExpiration = Object.freeze({
   intervalMs: jobInvitationExpirationIntervalMs,
 });
 
-const rawCorsAllowedOrigins = process.env.CORS_ALLOWED_ORIGINS
-  || "http://localhost:5173";
-
-const corsAllowedOrigins = Object.freeze([
-  ...new Set(
-    rawCorsAllowedOrigins
-      .split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean)
-      .map((origin) => {
-        let parsedOrigin;
-
-        try {
-          parsedOrigin = new URL(origin);
-        } catch {
-          throw new Error(
-            `CORS_ALLOWED_ORIGINS contains an invalid origin: ${origin}`,
-          );
-        }
-
-        const isHttpOrigin = ["http:", "https:"].includes(
-          parsedOrigin.protocol,
-        );
-        const hasOriginOnly = parsedOrigin.pathname === "/"
-          && !parsedOrigin.search
-          && !parsedOrigin.hash
-          && !parsedOrigin.username
-          && !parsedOrigin.password;
-
-        if (!isHttpOrigin || !hasOriginOnly) {
-          throw new Error(
-            "CORS_ALLOWED_ORIGINS values must be HTTP(S) origins "
-              + `without paths, queries, or credentials: ${origin}`,
-          );
-        }
-
-        return parsedOrigin.origin;
-      }),
-  ),
-]);
-
-if (corsAllowedOrigins.length === 0) {
-  throw new Error("CORS_ALLOWED_ORIGINS must contain at least one origin");
-}
-
-const cors = Object.freeze({
-  allowedOrigins: corsAllowedOrigins,
-});
-
 const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:8000";
 
 export default Object.freeze({
@@ -323,6 +274,5 @@ export default Object.freeze({
   authSession,
   notificationRecovery,
   jobInvitationExpiration,
-  cors,
   appBaseUrl,
 });

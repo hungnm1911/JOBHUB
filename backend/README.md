@@ -72,14 +72,7 @@ The server verifies both MongoDB and Cloudinary during startup. It will stop if 
    SMTP_USER=your-smtp-username
    SMTP_PASS=your-smtp-password
    MAIL_FROM_NAME=JobHub Admin
-
-   CORS_ALLOWED_ORIGINS=http://localhost:5173
    ```
-
-   `CORS_ALLOWED_ORIGINS` is a comma-separated whitelist of frontend origins.
-   Each value must contain only the scheme and host (plus an optional port),
-   without a path. When the frontend is deployed, add its production origin,
-   for example `http://localhost:5173,https://jobhub.example.com`.
 
    Do not commit `.env`; it is already ignored by Git. For Gmail SMTP, use an app password rather than your normal account password.
 

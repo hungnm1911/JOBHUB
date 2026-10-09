@@ -1,7 +1,7 @@
 import NotificationEvent from "../models/notification-event.model.js";
 import Notification from "../models/notification.model.js";
-import { emitNotificationToRecipient } from "../sockets/index.js";
 import AppError from "../utils/app-error.js";
+import { emitNotificationToRecipient } from "./realtime-distribution.service.js";
 
 const DEFAULT_RECOVERY_BATCH_SIZE = 100;
 

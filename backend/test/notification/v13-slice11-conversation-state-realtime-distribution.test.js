@@ -34,7 +34,7 @@ import {
 import {
   attachRealtimeDistribution,
   closeRealtimeDistribution,
-} from "../../src/sockets/index.js";
+} from "../../src/services/realtime-distribution.service.js";
 import { generateAuthToken, hashAuthToken } from "../../src/utils/hash-auth-token.js";
 import { generateAccessToken } from "../../src/utils/jwt.js";
 import {

@@ -8,11 +8,6 @@ const sourceRoot = path.join(backendRoot, "src");
 
 const canonicalFiles = Object.freeze({
   app: path.join(sourceRoot, "app.js"),
-  authenticateAccess: path.join(
-    sourceRoot,
-    "services",
-    "authenticate-access.service.js",
-  ),
   authTokenType: path.join(
     sourceRoot,
     "constants",
@@ -293,7 +288,6 @@ const checkLayerSuffixes = () => {
     ["controllers", ".controller.js"],
     ["services", ".service.js"],
     ["models", ".model.js"],
-    ["sockets", ".socket.js"],
   ];
 
   for (const [directoryName, suffix] of layerRules) {
@@ -497,77 +491,6 @@ const checkServiceHttpBoundary = () => {
           filePath,
           line: getLineNumber(source, importedModule.index),
           reason: "Services must not import Express or HTTP-layer modules.",
-        });
-      }
-    }
-  }
-};
-
-const checkSocketLayerBoundary = () => {
-  const socketsDirectory = path.join(sourceRoot, "sockets");
-  const servicesDirectory = path.join(sourceRoot, "services");
-  const forbiddenDirectories = [
-    path.join(sourceRoot, "routes"),
-    path.join(sourceRoot, "controllers"),
-    path.join(sourceRoot, "middlewares"),
-    path.join(sourceRoot, "models"),
-    path.join(sourceRoot, "database"),
-  ];
-
-  for (const filePath of sourceFiles) {
-    if (!isWithin(filePath, socketsDirectory)) {
-      continue;
-    }
-
-    const source = sourceByFile.get(filePath);
-
-    for (const importedModule of importsByFile.get(filePath)) {
-      const resolvedImport = resolveLocalImport(
-        filePath,
-        importedModule.specifier,
-      );
-      const importsForbiddenLayer =
-        resolvedImport !== null &&
-        forbiddenDirectories.some((directory) =>
-          isWithin(resolvedImport, directory),
-        );
-      const importsUnapprovedService =
-        resolvedImport !== null &&
-        isWithin(resolvedImport, servicesDirectory) &&
-        resolvedImport !== canonicalFiles.authenticateAccess;
-
-      if (
-        isPackageImport(importedModule.specifier, "express") ||
-        isPackageImport(importedModule.specifier, "mongoose") ||
-        importsForbiddenLayer ||
-        importsUnapprovedService
-      ) {
-        addViolation({
-          rule: "ARCH-017",
-          filePath,
-          line: getLineNumber(source, importedModule.index),
-          reason:
-            "Sockets may depend on constants, utilities, sibling socket modules, and the canonical access-auth service only; HTTP layers and persistence owners are forbidden.",
-        });
-      }
-    }
-  }
-};
-
-const checkSocketIoOwnership = () => {
-  const socketsDirectory = path.join(sourceRoot, "sockets");
-
-  for (const [filePath, source] of sourceByFile) {
-    for (const importedModule of importsByFile.get(filePath)) {
-      if (
-        isPackageImport(importedModule.specifier, "socket.io") &&
-        !isWithin(filePath, socketsDirectory)
-      ) {
-        addViolation({
-          rule: "ARCH-018",
-          filePath,
-          line: getLineNumber(source, importedModule.index),
-          reason: "The Socket.IO server package may be imported only under src/sockets/.",
         });
       }
     }
@@ -871,8 +794,6 @@ checkPersistenceImportBoundary({
   layerLabel: "Controllers",
 });
 checkServiceHttpBoundary();
-checkSocketLayerBoundary();
-checkSocketIoOwnership();
 checkConfigurationDependencyDirection();
 checkCallOwnership({
   rule: "ARCH-011",
@@ -918,5 +839,5 @@ if (violations.length > 0) {
 
   process.exitCode = 1;
 } else {
-  console.log("Architecture verification passed (ARCH-001 through ARCH-018).");
+  console.log("Architecture verification passed (ARCH-001 through ARCH-016).");
 }

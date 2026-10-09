@@ -21,7 +21,7 @@ import { ensureNotificationCollection } from "./src/models/notification.model.js
 import {
   attachRealtimeDistribution,
   closeRealtimeDistribution,
-} from "./src/sockets/index.js";
+} from "./src/services/realtime-distribution.service.js";
 import {
   startJobInvitationExpirationWorker,
   stopJobInvitationExpirationWorker,
