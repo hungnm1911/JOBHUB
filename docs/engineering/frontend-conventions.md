@@ -7,7 +7,10 @@ architecture for new frontend work and changes to existing frontend work.
 
 They do not claim that every planned frontend capability already exists. The
 current implementation is described in [`architecture.md`](architecture.md),
-and an empty scaffold must not be treated as implemented behavior.
+and an empty scaffold must not be treated as implemented behavior. Canonical
+owners and audited deviations are recorded in
+[`frontend-source-of-truth.md`](frontend-source-of-truth.md) and must not be
+copied merely because they already exist.
 
 Product specifications under `docs/product/versions/` remain authoritative for
 business behavior. These conventions define code ownership and dependency
@@ -519,8 +522,8 @@ Additional rules:
 ## Verification
 
 - Frontend changes must run the applicable repository scripts from `frontend/`.
-- `yarn lint` is the current lint gate.
-- `yarn build` is the current production compilation gate.
+- `yarn verify:agent` is the common frontend gate. It runs `yarn lint` (the lint gate) and then `yarn build` (the production compilation gate).
+- When a frontend test harness or deterministic architecture checks are introduced, they are added to `verify:agent` rather than documented as a separate final gate.
 - Passing lint/build proves syntax, configured lint rules, module resolution, and production bundling; it does not prove business behavior.
 - Feature behavior, validation edge cases, route guards, reducers, and error mapping should receive focused automated tests when a frontend test harness is introduced.
 - No frontend test result may be claimed unless the stated command was actually run successfully.
@@ -532,7 +535,7 @@ Before adding a client, route group, layout, page, feature service, slice,
 shared component, primitive, helper, validator, constant, or error type:
 
 1. Read the approved product/API contract for the behavior.
-2. Search for an existing canonical frontend owner.
+2. Check [`frontend-source-of-truth.md`](frontend-source-of-truth.md) and search for an existing canonical frontend owner.
 3. Reuse or extend that owner within its responsibility.
 4. Keep feature-specific code with the feature until real reuse justifies promotion.
 5. Do not establish a parallel HTTP client, Socket.IO client, router, Redux store, validation contract, or component system.

@@ -20,6 +20,9 @@ public được đóng gói vào client; không đặt secret trong các biến 
 - `yarn build`: tạo production build.
 - `yarn lint`: chạy ESLint.
 - `yarn preview`: xem production build ở local.
+- `yarn verify:agent`: gate xác minh chung (ESLint rồi production build) trước
+  khi coi thay đổi frontend là đã được xác minh. Quy tắc cho agent nằm trong
+  [`AGENTS.md`](AGENTS.md).
 
 ## Cấu trúc chính
 

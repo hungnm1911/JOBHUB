@@ -316,6 +316,10 @@ handler, or role-specific application shell. The route guards are prop-driven
 building blocks and are not wired to routes until concrete auth state and
 redirect destinations exist.
 
+The canonical frontend owners and known mismatches remain in
+[`frontend-source-of-truth.md`](frontend-source-of-truth.md). This architecture
+document does not duplicate that owner matrix.
+
 ## Frontend target convention
 
 Detailed normative rules for frontend work are defined in
@@ -432,3 +436,5 @@ realtime behavior when it does not need them.
 - `lib/` and `utils/` do not absorb business logic merely because ownership is unclear.
 - New route groups, layouts, pages, UI primitives, feature subfolders, reducers, and shared helpers require concrete consumers; scaffolding does not imply behavior.
 - Frontend technical design must not invent business rules absent from an approved product specification or duplicate backend sources of truth.
+
+Current deviations from these constraints are catalogued in [`frontend-source-of-truth.md`](frontend-source-of-truth.md). They are documentation of the existing state, not authorization to duplicate or extend the mismatch.
