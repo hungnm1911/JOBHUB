@@ -1,11 +1,28 @@
 import { Server as SocketIOServer } from "socket.io";
 
+import config from "../config/index.js";
 import { authenticateAccess } from "../services/authenticate-access.service.js";
 import AppError from "../utils/app-error.js";
 
 let ioServer = null;
 
+const realtimeAllowedOrigins = new Set(config.cors.allowedOrigins);
+
 const getUserRealtimeRoomName = (userId) => `user:${String(userId)}`;
+
+// Browsers do not apply CORS to WebSocket handshakes, so the whitelist is
+// enforced here for every transport. Requests without Origin are non-browser.
+const allowRealtimeRequestOrigin = (request, callback) => {
+  const { origin } = request.headers;
+
+  if (!origin || realtimeAllowedOrigins.has(origin)) {
+    callback(null, true);
+
+    return;
+  }
+
+  callback("Origin is not allowed by CORS", false);
+};
 
 const extractHandshakeAccessToken = (handshake) => {
   const auth = handshake?.auth ?? {};
@@ -58,6 +75,10 @@ const attachRealtimeDistribution = (httpServer) => {
 
   ioServer = new SocketIOServer(httpServer, {
     serveClient: false,
+    cors: {
+      origin: config.cors.allowedOrigins,
+    },
+    allowRequest: allowRealtimeRequestOrigin,
   });
 
   ioServer.use(authenticateRealtimeConnection);
