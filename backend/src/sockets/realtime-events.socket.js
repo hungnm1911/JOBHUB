@@ -1,8 +1,17 @@
 import REALTIME_EVENT from "../constants/realtime-event.js";
+import logger from "../utils/logger.js";
 import {
   emitRealtimeEventToUser,
   isRealtimeDistributionAttached,
 } from "./realtime-server.socket.js";
+
+const logFanOutFailure = ({ eventName, recipientUserId, error }) => {
+  logger.warn("Realtime fan-out failed", {
+    eventName,
+    recipientUserId,
+    error,
+  });
+};
 
 const toPlainNotification = (notification) => {
   if (notification && typeof notification.toJSON === "function") {
@@ -64,8 +73,13 @@ const emitNotificationToRecipient = ({
         notification: toPlainNotification(notification),
       },
     });
-  } catch {
+  } catch (error) {
     // Socket fan-out is best-effort and must not fail the caller.
+    logFanOutFailure({
+      eventName: REALTIME_EVENT.NOTIFICATION,
+      recipientUserId: recipientId,
+      error,
+    });
   }
 };
 
@@ -106,8 +120,13 @@ const emitMessageToRecipients = ({
         eventName: REALTIME_EVENT.MESSAGE,
         payload,
       });
-    } catch {
+    } catch (error) {
       // Socket fan-out is best-effort and must not fail the caller.
+      logFanOutFailure({
+        eventName: REALTIME_EVENT.MESSAGE,
+        recipientUserId: recipientId,
+        error,
+      });
     }
   }
 };
@@ -149,8 +168,13 @@ const emitConversationStateToRecipients = ({
         eventName: REALTIME_EVENT.CONVERSATION_STATE,
         payload,
       });
-    } catch {
+    } catch (error) {
       // Socket fan-out is best-effort and must not fail the caller.
+      logFanOutFailure({
+        eventName: REALTIME_EVENT.CONVERSATION_STATE,
+        recipientUserId: recipientId,
+        error,
+      });
     }
   }
 };

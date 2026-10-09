@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 import config from "../config/index.js";
+import logger from "../utils/logger.js";
 
 // Compiling a model schedules `Model.init()`, which on connect creates missing
 // collections and builds schema indexes unless the connection disables both.
@@ -26,24 +27,21 @@ const registerConnectionListeners = () => {
   }
 
   mongoose.connection.on("error", (error) => {
-    console.error(
-      "MongoDB connection error:",
-      getErrorMessage(error),
-    );
+    logger.error("MongoDB connection error", { error });
   });
 
   mongoose.connection.on("disconnected", () => {
     if (isDisconnectingIntentionally) {
-      console.log("MongoDB disconnected safely.");
+      logger.info("MongoDB disconnected safely.");
 
       return;
     }
 
-    console.warn("MongoDB connection was lost.");
+    logger.warn("MongoDB connection was lost.");
   });
 
   mongoose.connection.on("reconnected", () => {
-    console.log("MongoDB reconnected successfully.");
+    logger.info("MongoDB reconnected successfully.");
   });
 
   areConnectionListenersRegistered = true;
@@ -66,9 +64,7 @@ const connectDatabase = async (connectionOptions = {}) => {
 
     registerConnectionListeners();
 
-    console.log(
-      `Connected to MongoDB database: ${mongoose.connection.name}`,
-    );
+    logger.info(`Connected to MongoDB database: ${mongoose.connection.name}`);
 
     return mongoose.connection;
   } catch (error) {

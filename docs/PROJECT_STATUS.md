@@ -17,7 +17,76 @@ blocks that remain unwired until an auth-state owner and concrete client routes
 exist. No frontend business feature, auth state, refresh-token policy, or
 feature realtime listener was invented without an approved client contract.
 Frontend ESLint and the Vite production build passed, and the Vite development
-server returned the root HTML during a local smoke check.
+server returned the root HTML during a local smoke check. Sonner (`sonner`
+2.0.8) is the transient toast library: `App.jsx` mounts the single
+`<Toaster />` by spreading the application-wide `TOASTER_CONFIG`, and
+consumers call `toast` from `sonner` directly without extra setup. The defaults
+are:
+- top-right position, light theme, rich success/error colors, and a close
+  button;
+- 4,000 ms duration, three visible toasts, and 24/16 px desktop/mobile
+  offsets;
+- Vietnamese accessible labels; and
+- theme-token neutral styling with the application font.
+
+Toasts are not the persisted Notification feature.
+`frontend/src/utils/constant.js` is now the central owner of frontend project
+constants and the only `VITE_*` reader. It holds:
+- `API_CONFIG`, `API_ERROR_MESSAGE`, `SOCKET_CONFIG`, `REALTIME_EVENT` (moved
+  from the removed `src/socket/realtime-event.js`), `VALIDATION_MESSAGE`, and
+  `TOASTER_CONFIG`.
+
+The HTTP client, API error normalizer, socket client, common validators, and
+`App.jsx` consume them. Verification after this change:
+- frontend lint and build passed; and
+- a browser smoke check on the dev server confirmed one Toaster with the
+  configured position, theme, rich colors, close label, 24 px offset,
+  inherited Inter font, `--popover` neutral background, 12 px radius, and
+  automatic dismissal after about 4 seconds.
+
+Error handling and development logging are standardized across both
+applications.
+
+**Backend:**
+- `src/utils/logger.js` is the single dependency-free application logger.
+  - Its level comes from `LOG_LEVEL` through `config.logging`: `debug` in
+    development and `info` elsewhere.
+  - Output is pretty and colorized outside production and JSON lines in
+    production.
+  - It prints error stacks, own properties, and `cause` chains.
+- `src/middlewares/request-logger.js` runs first in `app.js`. It assigns a
+  request id, returns it in a CORS-exposed `X-Request-Id` header, and logs one
+  query-free access line per request.
+- The final error handler logs 5xx at `error` and rejected 4xx at `debug`, with
+  request id, method, and path.
+- The error handler now maps body-parser http-errors marked `expose` to their
+  4xx status. Previously, malformed JSON and oversized bodies returned `500`.
+- `AppError` accepts an optional `{ cause }`.
+- Bootstrap, MongoDB, Cloudinary, workers, realtime fan-out, and Notification
+  recovery log through the logger. The previously silent fan-out and
+  recovery-item failures are logged at `warn`.
+- About 30 silent best-effort `catch {}` blocks remain in business services
+  (application, job, job-invitation, candidate-cv, recruiter, platform-admin,
+  company). Some `AppError(502)` conversions there still drop the original
+  error. These are documented for migration when those modules are next
+  changed.
+
+**Frontend:**
+- `normalizeApiError` now reads the backend `{ error: { message, details } }`
+  body. Previously it showed Axios's generic message.
+- `ApiError` exposes `requestId`.
+- The Axios client logs failed requests to the browser console in development
+  only. The log includes status, code, request id, details, params, the server
+  stack, and the cause, but not the request body.
+
+**Verification:**
+- Backend `npm run verify:agent` passed: lint with 2 pre-existing test
+  warnings, ARCH-001–ARCH-018, and 169 files / 1,749 tests, including the new
+  `test/http/error-logging.test.js`.
+- Frontend `yarn lint` and `yarn build` passed.
+- A browser-to-terminal smoke check ran the real Express `app` without
+  MongoDB. It confirmed matching request ids for a 404, a malformed-JSON 400,
+  and a network failure.
 
 **V4.2 — Structured Salary, Metadata Catalog & Candidate Skill Keyword Search**
 is `COMPLETED / ACCEPTED` as of 2026-10-08. A later Final Acceptance review

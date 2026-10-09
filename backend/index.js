@@ -1,5 +1,6 @@
 import app from "./src/app.js";
 import config from "./src/config/index.js";
+import logger from "./src/utils/logger.js";
 
 import {
   verifyCloudinaryConnection,
@@ -82,7 +83,7 @@ const closeHttpServer = async () => {
 
   httpServer = null;
 
-  console.log("HTTP server closed.");
+  logger.info("HTTP server closed.");
 };
 
 const shutdown = async ({
@@ -95,10 +96,10 @@ const shutdown = async ({
 
   isShuttingDown = true;
 
-  console.log(`Shutting down application: ${reason}`);
+  logger.info(`Shutting down application: ${reason}`);
 
   const forceShutdownTimer = setTimeout(() => {
-    console.error(
+    logger.error(
       `Graceful shutdown exceeded ${SHUTDOWN_TIMEOUT_MS}ms. Forcing exit.`,
     );
 
@@ -114,10 +115,7 @@ const shutdown = async ({
   } catch (error) {
     finalExitCode = 1;
 
-    console.error(
-      "Failed to close realtime distribution:",
-      error,
-    );
+    logger.error("Failed to close realtime distribution", { error });
   }
 
   try {
@@ -125,10 +123,7 @@ const shutdown = async ({
   } catch (error) {
     finalExitCode = 1;
 
-    console.error(
-      "Failed to close HTTP server:",
-      error,
-    );
+    logger.error("Failed to close HTTP server", { error });
   }
 
   try {
@@ -136,10 +131,7 @@ const shutdown = async ({
   } catch (error) {
     finalExitCode = 1;
 
-    console.error(
-      "Failed to stop Notification recovery worker:",
-      error,
-    );
+    logger.error("Failed to stop Notification recovery worker", { error });
   }
 
   try {
@@ -147,10 +139,7 @@ const shutdown = async ({
   } catch (error) {
     finalExitCode = 1;
 
-    console.error(
-      "Failed to stop Job Invitation expiration worker:",
-      error,
-    );
+    logger.error("Failed to stop Job Invitation expiration worker", { error });
   }
 
   try {
@@ -158,10 +147,7 @@ const shutdown = async ({
   } catch (error) {
     finalExitCode = 1;
 
-    console.error(
-      "Failed to disconnect from MongoDB:",
-      error,
-    );
+    logger.error("Failed to disconnect from MongoDB", { error });
   }
 
   clearTimeout(forceShutdownTimer);
@@ -169,9 +155,9 @@ const shutdown = async ({
   process.exitCode = finalExitCode;
 
   if (finalExitCode === 0) {
-    console.log("Application shut down successfully.");
+    logger.info("Application shut down successfully.");
   } else {
-    console.error("Application shut down with errors.");
+    logger.error("Application shut down with errors.");
   }
 };
 
@@ -195,7 +181,7 @@ const startServer = async () => {
   startJobInvitationExpirationWorker();
 
   httpServer.on("error", (error) => {
-    console.error("HTTP server error:", error);
+    logger.error("HTTP server error", { error });
 
     void shutdown({
       reason: "HTTP server error",
@@ -203,9 +189,7 @@ const startServer = async () => {
     });
   });
 
-  console.log(
-    `Server is running at http://localhost:${config.port}`,
-  );
+  logger.info(`Server is running at http://localhost:${config.port}`);
 };
 
 process.once("SIGINT", () => {
@@ -221,7 +205,7 @@ process.once("SIGTERM", () => {
 });
 
 process.on("uncaughtException", (error) => {
-  console.error("Uncaught exception:", error);
+  logger.error("Uncaught exception", { error });
 
   if (isShuttingDown) {
     process.exit(1);
@@ -234,10 +218,7 @@ process.on("uncaughtException", (error) => {
 });
 
 process.on("unhandledRejection", (reason) => {
-  console.error(
-    "Unhandled promise rejection:",
-    reason,
-  );
+  logger.error("Unhandled promise rejection", { error: reason });
   
   if (isShuttingDown) {
     process.exit(1);
@@ -252,10 +233,7 @@ process.on("unhandledRejection", (reason) => {
 try {
   await startServer();
 } catch (error) {
-  console.error(
-    "Error starting the server:",
-    error,
-  );
+  logger.error("Error starting the server", { error });
 
   await shutdown({
     reason: "Server startup failed",

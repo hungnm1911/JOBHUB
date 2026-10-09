@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 
+import logger from "../utils/logger.js";
 import config from "./index.js";
 
 cloudinary.config({
@@ -13,12 +14,9 @@ const verifyCloudinaryConnection = async () => {
   try {
     await cloudinary.api.ping();
 
-    console.log("Connected to Cloudinary successfully.");
+    logger.info("Connected to Cloudinary successfully.");
   } catch (error) {
-    console.error(
-      "Failed to connect to Cloudinary:",
-      error.message,
-    );
+    logger.error("Failed to connect to Cloudinary", { error });
 
     throw error;
   }

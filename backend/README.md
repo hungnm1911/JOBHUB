@@ -194,6 +194,7 @@ In non-production environments, error responses also include a stack trace. Uplo
 ## Production notes
 
 - Set `NODE_ENV=production` to hide stack traces and disable test file routes.
+- Logging goes through `src/utils/logger.js`. `LOG_LEVEL` (`silent`, `error`, `warn`, `info`, `debug`) defaults to `debug` in development and `info` elsewhere. Development output is human-readable and colorized; production output is one JSON line per entry. Every response carries an `X-Request-Id` header that also scopes the related log lines.
 - Store secrets in your deployment platform's secret manager, not in source control.
 - The process handles `SIGINT` and `SIGTERM`, closes the HTTP server, and disconnects MongoDB before exiting.
 - Run the service behind HTTPS and a production process/container supervisor.

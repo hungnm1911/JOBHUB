@@ -309,6 +309,22 @@ const cors = Object.freeze({
 
 const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:8000";
 
+// logging :
+const LOG_LEVELS = Object.freeze(["silent", "error", "warn", "info", "debug"]);
+
+const logLevel = (
+  process.env.LOG_LEVEL || (env === "development" ? "debug" : "info")
+).toLowerCase();
+
+if (!LOG_LEVELS.includes(logLevel)) {
+  throw new Error(`LOG_LEVEL must be one of: ${LOG_LEVELS.join(", ")}`);
+}
+
+const logging = Object.freeze({
+  level: logLevel,
+  format: env === "production" ? "json" : "pretty",
+});
+
 export default Object.freeze({
   env,
   port: PORT,
@@ -325,4 +341,5 @@ export default Object.freeze({
   jobInvitationExpiration,
   cors,
   appBaseUrl,
+  logging,
 });

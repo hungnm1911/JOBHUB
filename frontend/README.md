@@ -33,7 +33,27 @@ public được đóng gói vào client; không đặt secret trong các biến 
 - `src/socket`: Socket.IO client dùng chung, không tự kết nối khi import.
 - `src/store`: Redux Toolkit store và hooks dùng chung.
 - `src/styles`: Tailwind CSS và theme tokens toàn ứng dụng.
+- `src/utils`: helper thuần dùng chung và `constant.js`, nơi khai báo tập trung
+  các constant của dự án (cấu hình HTTP/socket từ `VITE_*`, tên sự kiện
+  realtime, thông báo mặc định, cấu hình mặc định của Toaster).
 - `src/validation`: validation provider, các schema tách file và React Hook Form resolver.
+
+## Toast phản hồi thao tác
+
+`App.jsx` đã đăng ký duy nhất một `<Toaster />` của Sonner với cấu hình mặc định
+`TOASTER_CONFIG` trong `src/utils/constant.js`. Component hoặc hook chỉ cần
+import `toast` từ `sonner` và gọi, không cần cấu hình thêm:
+
+```jsx
+import { toast } from 'sonner'
+
+toast.success('Đã lưu thay đổi')
+toast.error(error.message)
+```
+
+Toast chỉ dùng cho phản hồi tức thời; thông báo nghiệp vụ được lưu trữ thuộc
+feature Notification. Xem quy ước chi tiết trong
+[`frontend-conventions.md`](../docs/engineering/frontend-conventions.md#transient-feedback-toasts).
 
 ## Form validation
 

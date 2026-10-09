@@ -1,5 +1,6 @@
 import config from "../config/index.js";
 import { recoverPendingNotificationEvents } from "../services/notification.service.js";
+import logger from "../utils/logger.js";
 
 let recoveryTimer = null;
 let recoveryPassPromise = null;
@@ -13,7 +14,7 @@ const runRecoveryPass = async () => {
   recoveryPassPromise = recoverPendingNotificationEvents({
     limit: config.notificationRecovery.batchSize,
   }).catch((error) => {
-    console.error("Notification recovery pass failed:", error);
+    logger.error("Notification recovery pass failed", { error });
   }).finally(() => {
     recoveryPassPromise = null;
   });

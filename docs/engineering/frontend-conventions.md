@@ -44,7 +44,7 @@ RootLayout.jsx
 ProtectedRoute.jsx
 public.routes.jsx
 authentication.api.js
-realtime-event.js
+constant.js
 ```
 
 ### Symbols
@@ -73,10 +73,26 @@ handling, or feature state initialization beyond provider composition.
 ### Root application
 
 `frontend/src/App.jsx` owns the top-level application composition beneath the
-providers. The current application renders the single `RouterProvider`.
+providers. The current application renders the single `RouterProvider` and the
+single Sonner `<Toaster />`.
 
 `App.jsx` must remain small. Feature pages, layouts, data loading, route groups,
 and business state must stay with their canonical owners.
+
+### Transient feedback toasts
+
+Sonner is the application toast library for immediate, non-persisted feedback
+about a user action, such as a save succeeding or a request failing.
+
+- `App.jsx` mounts the single `<Toaster />` by spreading `TOASTER_CONFIG` from `src/utils/constant.js`. Another `<Toaster />` must not be mounted elsewhere, and props must not be added inline in `App.jsx`.
+- `TOASTER_CONFIG` is the application-wide default contract, not sample data: top-right position, light theme, rich success/error/warning/info colors, a close button, 4,000 ms duration, three visible toasts, 24 px desktop and 16 px mobile offsets, Vietnamese accessible labels, and neutral toasts mapped to the `--popover`, `--popover-foreground`, `--border`, and `--radius` theme tokens with the inherited application font.
+- Default behavior changes are made only in `TOASTER_CONFIG`; colors change through the theme tokens in `src/styles/globals.css`. When a dark theme is introduced, `TOASTER_CONFIG.theme` must follow the same theme owner.
+- Components and feature hooks that handle an event or request outcome import `toast` directly from `sonner` and need no further setup: `toast.success()`, `toast.error()`, `toast.warning()`, `toast.info()`, `toast.loading()`, and `toast.promise()` all use the defaults.
+- Per-call options such as `description`, `duration`, `action`, or a stable `id` (to replace or de-duplicate a toast) are passed only when one call has a real need; they must not be used to restyle toasts ad hoc.
+- For a failed request, the owning component or hook shows `ApiError.message`, or a feature-specific message when an approved error code requires one.
+- A wrapper or helper around Sonner is introduced only when a repeated handling rule exists, consistent with the library-integration rule below.
+- API modules, the shared HTTP/socket clients, Redux slices, and validation modules must not trigger toasts.
+- Toasts are not the JOBHUB Notification feature. Persisted, recipient-owned business notifications, their read state, and their realtime delivery belong to the Notification feature defined by the approved product specification; Sonner must not replace or simulate them.
 
 ### Dependency direction
 
@@ -128,7 +144,7 @@ API modules must not:
 `frontend/src/socket/` is the shared realtime transport boundary.
 
 - `src/socket/index.js` owns the single Socket.IO client, URL/configuration, connection lifecycle, and handshake authentication mechanism.
-- `src/socket/realtime-event.js` owns frontend event-name constants and must remain aligned with the backend transport contract.
+- Realtime event-name constants are owned by `REALTIME_EVENT` in `src/utils/constant.js` and must remain aligned with the backend transport contract (`backend/src/constants/realtime-event.js`). Feature listeners import them from `@/utils/constant`.
 - The shared socket must use lazy connection when no authenticated workflow requires an immediate connection.
 - Feature-specific subscribe/unsubscribe behavior and event interpretation belong to the owning feature.
 - Shared socket modules must not contain page UI, feature reducers, or the complete business response to Notification, Message, or Conversation-state events.
@@ -257,14 +273,21 @@ provide platform-level adapters.
 
 ### Shared utilities
 
-`frontend/src/utils/` is reserved for pure, domain-neutral helpers reused by
-multiple application areas.
+`frontend/src/utils/` contains pure, domain-neutral helpers reused by multiple
+application areas and the central project constant module.
 
-- Appropriate examples include general date formatting, domain-neutral data conversion, and cross-application constants.
+- `src/utils/constant.js` is the canonical owner of project constants: application configuration values (including the only reads of `VITE_*` variables), closed vocabularies such as `REALTIME_EVENT`, shared default messages, and library default configuration such as `TOASTER_CONFIG`.
+- Constants are declared there as named upper-snake-case exports, frozen with `Object.freeze`, and imported through `@/utils/constant`. Other modules must not redeclare the same literal or keep a parallel constant module.
+- Object keys normally use upper snake case. A configuration object passed directly to a library as props, such as `TOASTER_CONFIG`, keeps the library's prop names.
+- Frontend role, status, and event vocabularies must mirror the approved backend/API contract. They are added only when a real consumer needs them, not pre-declared from the roadmap.
+- Page-local display content, such as a list rendered by one page, is not a project constant and remains with its component.
+- Existing module-level constants elsewhere are moved here when their module is next changed; new constants are added here directly.
+- Shared helper modules are added beside `constant.js` with descriptive lowercase or kebab-case names, such as general date formatting or domain-neutral data conversion, only when genuine cross-area reuse exists.
 - Feature rules, role authorization, API calls, React hooks, and component behavior do not belong here.
 - A helper remains inside its feature until genuine cross-area reuse exists.
-- `src/utils/` must not be created or used as a dumping ground for logic whose owner is unclear.
-- A domain concept must have one constant owner. Shared literals must not be copied into multiple utility files.
+- `src/utils/` must not be used as a dumping ground for logic whose owner is unclear.
+- `src/utils/` modules must not import application layers such as APIs, socket, store, routes, pages, or features.
+- `src/lib/utils.js` remains the owner of the shadcn/ui `cn()` helper because `components.json` points shadcn/ui at that path.
 
 ## Validation boundaries
 
@@ -295,9 +318,9 @@ entire application. It must:
 - contain no growing collection of inline form-schema implementations.
 
 Validation implementation modules must not import from `index.js`, because that
-would create a circular dependency through the public facade. They import Zod
-and sibling validator modules directly. Validation modules must be side-effect
-free.
+would create a circular dependency through the public facade. They import Zod,
+sibling validator modules, and shared constants such as `VALIDATION_MESSAGE`
+from `@/utils/constant` directly. Validation modules must be side-effect free.
 
 The current module shape is:
 
@@ -456,9 +479,9 @@ styling rules.
 - Vite environment files belong at the frontend project root as `frontend/.env*`, not under `frontend/src/`.
 - Only public browser configuration uses the `VITE_*` prefix.
 - Secrets must never be stored in frontend environment variables because Vite embeds them in client assets.
-- `VITE_API_BASE_URL` configures the shared HTTP client.
-- `VITE_SOCKET_URL` configures the shared realtime client.
-- Feature modules must not read environment variables when an application-level client/config owner already provides the required behavior.
+- `VITE_API_BASE_URL` configures the shared HTTP client through `API_CONFIG.BASE_URL` (fallback `/api`).
+- `VITE_SOCKET_URL` configures the shared realtime client through `SOCKET_CONFIG.URL` (fallback: the current browser origin).
+- `src/utils/constant.js` is the only module that reads `import.meta.env`. Other modules consume the derived constants.
 - Environment defaults must be explicit and safe for the intended development setup.
 
 ### shadcn/ui
@@ -469,7 +492,10 @@ styling rules.
 
 ## Error handling
 
-- `src/apis/client/api-error.js` owns the normalized API error type and Axios-error translation.
+- `src/apis/client/api-error.js` owns the normalized API error type and Axios-error translation. It reads the backend error body `{ error: { message, details } }` (falling back to a top-level body) and exposes `message`, `status`, `code`, `details`, `requestId` (from the `X-Request-Id` response header, `HTTP_HEADER.REQUEST_ID`), and the original Axios error as `cause`.
+- `src/apis/client/index.js` owns development API-error logging. When `RUNTIME_ENV.IS_DEVELOPMENT` is true, every failed request except a cancellation is logged once to the browser console as `[API] METHOD url -> status: message`, followed by status, code, `requestId`, details, params, the backend development stack, and the Axios cause. Request bodies are never logged. Production builds do not log.
+- The `requestId` shown in the browser console matches the scope of the backend terminal log lines for the same request; use it to correlate the two.
+- Components, hooks, and API modules must not add their own `console.error` for API failures that the client already logged; they only decide presentation, such as `toast.error(error.message)`.
 - API modules must reject through that shared error contract rather than invent resource-specific global error classes for the same transport concern.
 - Feature code owns translating approved error codes/details into feature presentation.
 - Pages and components must not parse arbitrary Axios internals when `ApiError` already exposes the normalized fields.
@@ -524,7 +550,7 @@ It is still a foundation rather than an implemented business client:
 - route guards exist but are not connected to an auth-state owner;
 - no resource `*.api.js` module or feature realtime handler exists;
 - the Redux store has no feature reducer; and
-- `src/utils/` is intentionally absent until a real shared pure utility exists.
+- `src/utils/` currently contains only `constant.js`; no shared helper module exists yet.
 
 These facts must not be interpreted as missing behavior to invent without an
 approved feature specification.
