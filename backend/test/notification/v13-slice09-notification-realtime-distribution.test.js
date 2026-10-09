@@ -27,7 +27,7 @@ import {
   closeRealtimeDistribution,
   fetchUserRealtimeSockets,
   getUserRealtimeRoomName,
-} from "../../src/services/realtime-distribution.service.js";
+} from "../../src/sockets/index.js";
 import { generateAuthToken, hashAuthToken } from "../../src/utils/hash-auth-token.js";
 import { generateAccessToken } from "../../src/utils/jwt.js";
 import { createVerifiedUser } from "../helpers/auth-fixtures.js";

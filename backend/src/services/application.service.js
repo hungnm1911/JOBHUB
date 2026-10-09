@@ -27,6 +27,10 @@ import InterviewSchedule from "../models/interview-schedule.model.js";
 import Job from "../models/job.model.js";
 import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
+import {
+  emitConversationStateToRecipients,
+  emitMessageToRecipients,
+} from "../sockets/index.js";
 import INTERVIEW_SCHEDULE_STATUS from "../constants/interview-schedule-status.js";
 import AppError from "../utils/app-error.js";
 import {
@@ -56,7 +60,6 @@ import {
   createNotificationEvent,
   materializeNotificationEvent,
 } from "./notification.service.js";
-import { emitConversationStateToRecipients, emitMessageToRecipients } from "./realtime-distribution.service.js";
 import {
   acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,

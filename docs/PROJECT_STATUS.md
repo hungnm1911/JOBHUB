@@ -2,6 +2,23 @@
 
 ## Current project state
 
+The frontend foundation is `IMPLEMENTED AND VERIFIED` as of 2026-10-10. The
+existing React + Vite application now has Tailwind CSS v4 and shadcn/ui
+configuration, the `@` import alias, a Redux Toolkit provider/store, nested
+React Router composition with a shared layout and runnable sample page, one
+owned Axios client with normalized errors, and a lazy authenticated Socket.IO
+client that does not connect during bootstrap. React Hook Form and Zod are
+integrated through the official resolver. `src/validation/index.js` is the
+application-wide validation provider; reusable implementations live in focused
+modules such as `common.validators.js`, and future form schemas are exported
+through the provider for React Hook Form consumers. Routing is composed from
+route-group modules, with prop-driven Protected, Guest, and Role guard building
+blocks that remain unwired until an auth-state owner and concrete client routes
+exist. No frontend business feature, auth state, refresh-token policy, or
+feature realtime listener was invented without an approved client contract.
+Frontend ESLint and the Vite production build passed, and the Vite development
+server returned the root HTML during a local smoke check.
+
 **V4.2 — Structured Salary, Metadata Catalog & Candidate Skill Keyword Search**
 is `COMPLETED / ACCEPTED` as of 2026-10-08. A later Final Acceptance review
 had found two blockers (strict Salary guard activation ownership;
@@ -948,10 +965,13 @@ behavior changes.
 
 Slice 09 is implemented and verified for Notification Realtime Distribution
 (`F09`, `F11` realtime closure; `BR-04`, `BR-08`, `BR-42`–`BR-44`, `BR-50`;
-Data §9.5 / §14.1). `realtime-distribution.service.js` owns Socket.IO
+Data §9.5 / §14.1). `src/sockets/realtime-server.socket.js` owns Socket.IO
 lifecycle, `authenticateAccess` handshake auth (ACTIVE User + valid
-AuthSession only), in-memory `user:{userId}` membership, and recipient-scoped
-Notification emit. `backend/index.js` attaches after the HTTP server exists
+AuthSession only), and in-memory `user:{userId}` membership;
+`src/sockets/realtime-events.socket.js` owns recipient-scoped transport
+payloads/fan-out through the `src/sockets/index.js` facade. Business recipient
+and post-commit decisions remain in their source services. `backend/index.js`
+attaches after the HTTP server exists
 and closes the plane before MongoDB disconnect. `notification.service.js`
 best-effort emits only after a durable `Notification` insert, outside any
 MongoDB transaction; Socket failure does not roll back source state,
@@ -2637,6 +2657,7 @@ the current V10 revision complete.
 - **Prepared; verified:** V3 Product/Data contract paths and repository milestone status were aligned for `READY FOR IMPLEMENTATION` before Slice 01; the backend replica-set test infrastructure proves transaction rollback; migration tooling ownership is defined by the engineering contracts.
 
 - **Implemented; lint-verified:** the Node.js ES-module backend project foundation, package scripts, Express application bootstrap, `/api` root router, hello-world endpoint, application middleware composition, and process startup/shutdown orchestration exist. The current backend source passes the configured ESLint command.
+- **Implemented; verified:** application-wide CORS uses an exact frontend-origin whitelist normalized by `backend/src/config/index.js` from comma-separated `CORS_ALLOWED_ORIGINS` (default `http://localhost:5173`) and composed by `backend/src/app.js`; configured browser origins and bearer-token preflights are allowed, origins outside the whitelist are rejected, and requests without `Origin` remain available to non-browser clients. Focused coverage in `test/http/cors.test.js` (5 tests); the official backend gate passed 167 files / 1,735 tests.
 - **Implemented; test-verified for registration:** MongoDB connection/disconnection infrastructure and startup integration exist. The candidate registration request path uses MongoDB through `auth.service.js` to persist `User` and `AuthToken` records.
 - **Implemented; not runtime-verified in this snapshot:** Cloudinary client configuration, startup connection verification, file upload/delete service operations, and non-production test endpoints exist.
 - **Implemented; test-verified for registration (mail mocked in automated tests):** Nodemailer transport configuration and the canonical mail-sending service exist. The candidate registration request path invokes `mail.service.js`.
@@ -2733,6 +2754,17 @@ the current V10 revision complete.
 ## Verification status
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
+- V13 Socket.IO ownership refactor (2026-10-09): Socket.IO lifecycle,
+  authenticated User-room membership, transport payloads, and fan-out moved
+  without business-behavior or persistence changes from the former
+  `services/realtime-distribution.service.js` owner into the canonical
+  `src/sockets/` layer and public `src/sockets/index.js` facade. Business
+  recipient resolution and durable/post-commit timing remain in
+  `application.service.js` and `notification.service.js`. Focused V13 Slice
+  09–12 coverage passed 4 files / 31 tests. Then `cd backend && npm run
+  verify:agent` passed (ESLint: 0 errors / the same 2 pre-existing warnings in
+  `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-018;
+  Vitest: 167 files / 1,735 tests).
 - V4.1 Final Acceptance (2026-10-07): seven focused V4.1 files passed 177/177
   tests. The independently rerun `cd backend && npm run verify:agent` passed:
   ESLint 0 errors (the 2 pre-existing warnings in
