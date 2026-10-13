@@ -2,22 +2,30 @@
 
 ## Current project state
 
-The frontend foundation is `IMPLEMENTED AND VERIFIED` as of 2026-10-10. The
+The frontend foundation and V1 authentication lifecycle infrastructure are
+`IMPLEMENTED AND VERIFIED` as of 2026-10-13. The
 existing React + Vite application now has Tailwind CSS v4 and shadcn/ui
 configuration, the `@` import alias, a Redux Toolkit provider/store, nested
 React Router composition with a shared layout and runnable sample page, one
 owned Axios client with normalized errors, and a lazy authenticated Socket.IO
-client that does not connect during bootstrap. React Hook Form and Zod are
+client. React Hook Form and Zod are
 integrated through the official resolver. `src/validation/index.js` is the
 application-wide validation provider; reusable implementations live in focused
 modules such as `common.validators.js`, and future form schemas are exported
 through the provider for React Hook Form consumers. Routing is composed from
-route-group modules, with prop-driven Protected, Guest, and Role guard building
-blocks that remain unwired until an auth-state owner and concrete client routes
-exist. No frontend business feature, auth state, refresh-token policy, or
-feature realtime listener was invented without an approved client contract.
-Frontend ESLint and the Vite production build passed, and the Vite development
-server returned the root HTML during a local smoke check. Sonner (`sonner`
+route-group modules; Protected, Guest, and Role guards now consume resolved
+state from the Authentication feature, while concrete guarded routes remain
+deferred until their screens and destinations exist. Authentication persists
+one owned localStorage record, restores a session through refresh on reload,
+marks infrastructure restoration failures as temporarily unavailable without
+discarding credentials, and keeps Redux UI state and Socket.IO lifecycle in
+sync. The Axios client attaches Bearer credentials only to explicitly protected
+requests and performs reactive, single-flight `401` refresh with a one-retry
+limit; login/refresh remain public, business `403` responses do not refresh,
+and logout remains protected so it may refresh before revoking the session.
+The focused authentication tests, frontend ESLint, and Vite production build
+passed. No login/logout page or concrete protected route was introduced because
+none is currently approved in the frontend route contract. Sonner (`sonner`
 2.0.8) is the transient toast library: `App.jsx` mounts the single
 `<Toaster />` by spreading the application-wide `TOASTER_CONFIG`, and
 consumers call `toast` from `sonner` directly without extra setup. The defaults
@@ -2823,6 +2831,13 @@ the current V10 revision complete.
 - **Resolved in S04 / acceptance:** Data §9.3 structured-record wording narrowed to Product V7 exact Generated completeness (incomplete Education/WorkExperience/Project drafts do not fail completeness by themselves; Certification/Language keep item-level validity for activation-readiness); `hiddenSections[]` members are locked to the fixed Harvard section vocabulary and cannot bypass completeness.
 ## Verification status
 
+- Frontend V1 authentication lifecycle (2026-10-13): 11 focused Node tests
+  passed for explicit protected/public request behavior, one-retry prevention,
+  single-flight concurrent refresh, invalid-refresh invalidation, transient
+  refresh credential preservation/retry, reload bootstrap, login synchronization,
+  and logout cleanup. `cd frontend && yarn verify:agent` passed the focused
+  tests, ESLint, and the Vite production build. No browser/end-to-end check was
+  performed.
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
 - V13 Socket.IO ownership refactor (2026-10-09): Socket.IO lifecycle,
   authenticated User-room membership, transport payloads, and fan-out moved

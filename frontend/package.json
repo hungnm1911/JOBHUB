@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test:auth": "node test/authentication/authentication-interceptors.test.js && node test/authentication/authentication-manager.test.js",
     "preview": "vite preview",
-    "verify:agent": "yarn lint && yarn build"
+    "verify:agent": "yarn test:auth && yarn lint && yarn build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

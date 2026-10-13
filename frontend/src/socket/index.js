@@ -23,4 +23,19 @@ export function disconnectRealtimeSocket() {
   realtimeSocket.auth = {}
 }
 
+export function updateRealtimeSocketAccessToken(accessToken) {
+  if (typeof accessToken !== 'string' || accessToken.trim() === '') {
+    throw new TypeError('An access token is required to update realtime.')
+  }
+
+  const wasConnected = realtimeSocket.connected
+  realtimeSocket.auth = { accessToken }
+
+  if (wasConnected) {
+    realtimeSocket.disconnect().connect()
+  }
+
+  return realtimeSocket
+}
+
 export { realtimeSocket }

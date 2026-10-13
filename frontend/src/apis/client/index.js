@@ -3,6 +3,7 @@ import axios from 'axios'
 import { API_CONFIG, RUNTIME_ENV } from '@/utils/constant'
 
 import { normalizeApiError } from './api-error'
+import { installAuthenticationInterceptors } from './authentication-interceptors'
 
 const apiClient = axios.create({
   baseURL: API_CONFIG.BASE_URL,
@@ -34,21 +35,23 @@ function logApiErrorInDevelopment(apiError) {
   )
 }
 
-apiClient.interceptors.request.use((config) => {
-  config.headers.set('Accept', 'application/json')
-  return config
+let authenticationAdapter = {
+  getAccessToken: () => null,
+  refreshAuthentication: () =>
+    Promise.reject(new Error('Authentication lifecycle is not configured.')),
+}
+
+function configureHttpAuthentication(adapter) {
+  authenticationAdapter = adapter
+}
+
+installAuthenticationInterceptors(apiClient, {
+  getAccessToken: () => authenticationAdapter.getAccessToken(),
+  refreshAuthentication: () => authenticationAdapter.refreshAuthentication(),
+  normalizeError: normalizeApiError,
+  reportError: logApiErrorInDevelopment,
 })
 
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const apiError = normalizeApiError(error)
-
-    logApiErrorInDevelopment(apiError)
-
-    return Promise.reject(apiError)
-  },
-)
-
 export { ApiError, normalizeApiError } from './api-error'
+export { configureHttpAuthentication }
 export default apiClient

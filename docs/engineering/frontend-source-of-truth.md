@@ -27,11 +27,12 @@ Backend owners are recorded separately in [`source-of-truth.md`](source-of-truth
 | Feature subscribe/unsubscribe and event interpretation | The owning `frontend/src/features/<feature>/` (none exist yet) | Pages and components of that feature | Feature event handling inside the shared socket facade, pages, or common components |
 | Browser router creation and route-group composition | `frontend/src/routes/index.jsx` | `frontend/src/App.jsx` | A second router or `createBrowserRouter` outside this module |
 | Route declarations for one area | `frontend/src/routes/<name>.routes.jsx` (currently `public.routes.jsx`) | `frontend/src/routes/index.jsx` | Routes declared inside layouts, pages, or features |
-| Client navigation guards | `frontend/src/routes/ProtectedRoute.jsx`, `GuestRoute.jsx`, `RoleRoute.jsx` (prop-driven, not yet wired) | Route-group modules | Guard logic inside pages or layouts; guards that create auth state, call APIs, or decode authority |
+| Client navigation guards | `frontend/src/routes/ProtectedRoute.jsx`, `GuestRoute.jsx`, `RoleRoute.jsx` (consume resolved authentication state; no concrete guarded routes exist yet) | Route-group modules | Guard logic inside pages or layouts; guards that create auth state, call APIs, or decode authority |
 | Shared structural frames | `frontend/src/layouts/` (currently `RootLayout.jsx`) | Route-group modules | Layout markup inside route modules; role-specific layouts without approved screens |
 | URL-mapped screens | `frontend/src/pages/` (currently `HomePage.jsx`) | Route-group modules | Business workflows, HTTP/socket configuration, or global state defined in pages |
 | Client behavior of one business feature | `frontend/src/features/<feature>/` (`components/`, `hooks/`, `services/`, `slice.js`, `utils.js` only when needed) | Pages; route modules only through pages | Feature workflows in pages, common components, `utils/`, or `lib/`; importing another feature's internals |
-| Authentication client state | Not yet established; reserved for `frontend/src/features/authentication/` once an approved client contract exists | Route guards and features through the future owner | Auth state created by guards, pages, the HTTP client, or the socket facade |
+| Authentication persistence and UI state | `frontend/src/features/authentication/services/authentication-storage.js` exclusively owns the `jobhub.authentication` localStorage record; `frontend/src/features/authentication/slice.js` owns UI-facing state and selectors | Authentication workflows, HTTP authentication adapter, route guards, and features through these owners | Direct authentication-key storage access from components/pages; tokens treated as Redux's source of truth; auth state created by guards, pages, HTTP client, or socket facade |
+| Authentication lifecycle coordination | `frontend/src/features/authentication/services/authentication.service.js` composes the testable manager with the auth API, storage, Redux store, shared HTTP client, and shared Socket.IO facade; `AuthenticationBootstrap.jsx` triggers reload restoration | Authentication feature UI and application composition | Login/refresh/retry/logout/bootstrap orchestration in components, pages, route guards, resource API modules, or the socket facade |
 | Redux store creation and reducer registration | `frontend/src/store/store.js` | `frontend/src/main.jsx` | A second store or feature slices defined under `src/store/` |
 | Shared Redux hook aliases | `frontend/src/store/hooks.js` (`useAppDispatch`, `useAppSelector`) | Feature hooks and components | Parallel hook aliases in features |
 | Domain-neutral UI primitives | `frontend/src/components/ui/` (shadcn/ui approach; currently `button.jsx`) | Common components, layouts, pages, and feature components | A competing primitive system; primitives aware of roles, endpoints, slices, or statuses |
@@ -47,7 +48,7 @@ Backend owners are recorded separately in [`source-of-truth.md`](source-of-truth
 | Editor/tooling alias mirror | `frontend/jsconfig.json` | Editors and static tooling | A second alias definition source |
 | shadcn/ui generation conventions and aliases | `frontend/components.json` | The shadcn/ui CLI | Generated components that bypass layer rules or aliases that disagree with Vite |
 | Lint configuration | `frontend/eslint.config.js` | `yarn lint` and `yarn verify:agent` | Per-directory lint configuration files |
-| Common frontend verification gate | `verify:agent` script in `frontend/package.json` (ESLint, then the Vite production build) | Agents and contributors before declaring frontend work verified | Ad hoc final gates documented elsewhere |
+| Common frontend verification gate | `verify:agent` script in `frontend/package.json` (focused authentication tests, ESLint, then the Vite production build) | Agents and contributors before declaring frontend work verified | Ad hoc final gates documented elsewhere |
 
 ## Consumption rules
 
@@ -62,9 +63,9 @@ Backend owners are recorded separately in [`source-of-truth.md`](source-of-truth
 
 The following items describe the audited repository. They are not target patterns and do not propose a remediation.
 
-### Authentication feature placeholder files have no content
+### Authentication utility placeholder has no content
 
-[`frontend/src/features/authentication/slice.js`](../../frontend/src/features/authentication/slice.js) and [`frontend/src/features/authentication/utils.js`](../../frontend/src/features/authentication/utils.js) contain only an empty comment. The conventions allow `slice.js` and `utils.js` only when they have real content, and represent explicitly requested empty scaffolds with `.gitkeep`. Neither file is registered, imported, or evidence of implemented behavior.
+[`frontend/src/features/authentication/utils.js`](../../frontend/src/features/authentication/utils.js) contains only an empty comment. The conventions allow `utils.js` only when it has real content and represent explicitly requested empty scaffolds with `.gitkeep`. The file is not imported and is not evidence of implemented behavior.
 
 ### The UI primitive filename does not follow the component filename rule
 
@@ -80,8 +81,7 @@ The target conventions do not settle these points:
 
 - whether shadcn/ui primitives under `components/ui/` keep the generated lowercase filenames or are renamed to PascalCase;
 - whether a shared `src/hooks/` owner is wanted for domain-neutral hooks, or the `components.json` alias should point elsewhere;
-- which module owns authentication client state, token storage, and refresh policy once an approved client contract exists;
 - whether a server-state library is introduced or server responses stay in feature hooks and slices; and
-- which frontend test harness, and which deterministic architecture checks, become part of `verify:agent`.
+- whether the dependency-free Node authentication tests should later be expanded into a browser-oriented frontend test harness, and which deterministic architecture checks become part of `verify:agent`.
 
 Until those decisions are made, code must not establish a second owner or infer a new architectural layer.

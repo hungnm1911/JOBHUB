@@ -17,6 +17,8 @@ const API_ERROR_MESSAGE = Object.freeze({
   CONNECTION_FAILED: 'Không thể kết nối đến máy chủ.',
 })
 
+const AUTH_STORAGE_KEY = 'jobhub.authentication'
+
 const SOCKET_CONFIG = Object.freeze({
   URL: import.meta.env.VITE_SOCKET_URL || window.location.origin,
 })
@@ -58,6 +60,7 @@ const TOASTER_CONFIG = Object.freeze({
 export {
   API_CONFIG,
   API_ERROR_MESSAGE,
+  AUTH_STORAGE_KEY,
   HTTP_HEADER,
   REALTIME_EVENT,
   RUNTIME_ENV,
