@@ -265,12 +265,12 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
 The current browser runtime is composed as follows:
 
 1. [`frontend/src/main.jsx`](../../frontend/src/main.jsx) imports global styles, creates the React root, and mounts the application inside the single Redux `Provider`.
-2. [`frontend/src/App.jsx`](../../frontend/src/App.jsx) renders the single React Router `RouterProvider` and the single Sonner `<Toaster />` for transient action feedback. The Toaster receives the application-wide defaults from `TOASTER_CONFIG` in `frontend/src/utils/constant.js`: top-right position, rich success/error colors, close button, 4,000 ms duration, and theme-token styling. Components and feature hooks call `toast` from `sonner` directly without extra setup; toasts are not persisted business notifications.
+2. [`frontend/src/App.jsx`](../../frontend/src/App.jsx) composes authentication bootstrap around the single React Router `RouterProvider` and renders the single Sonner `<Toaster />` for transient action feedback. The Toaster receives the application-wide defaults from `TOASTER_CONFIG` in `frontend/src/utils/constant.js`: top-right position, rich success/error colors, close button, 4,000 ms duration, and theme-token styling. Components and feature hooks call `toast` from `sonner` directly without extra setup; toasts are not persisted business notifications.
 3. [`frontend/src/routes/index.jsx`](../../frontend/src/routes/index.jsx) composes route groups and creates the browser router. The current public route group maps `/` to `RootLayout` and its nested `HomePage` index route.
 4. `RootLayout` composes the application-level `AppHeader` with an `Outlet`; the page owns the complete URL-mapped screen content.
-5. One configured Axios client applies `API_CONFIG` (base URL and timeout) from `frontend/src/utils/constant.js` and owns the interceptors, the normalized `ApiError` shape (including `requestId` from the backend `X-Request-Id` header), and development-only console logging of failed requests. No resource `*.api.js` module consumes it yet.
-6. One lazy Socket.IO client applies `SOCKET_CONFIG` from `frontend/src/utils/constant.js` and owns the connection lifecycle and access-token handshake auth. It uses `autoConnect: false`; no feature listener or bootstrap connection currently exists.
-7. The Redux store is valid but empty. The `authentication` feature directory is scaffold only: it contains no state, reducer, service, hook, component, or business behavior.
+5. One configured Axios client applies `API_CONFIG` (base URL and timeout) from `frontend/src/utils/constant.js`, attaches access credentials only to requests declaring `requiresAuthentication: true`, coordinates reactive single-flight refresh/retry through the Authentication feature, and owns normalized `ApiError` output (including `requestId` from the backend `X-Request-Id` header) plus development-only console logging. `authentication.api.js` is its first resource consumer.
+6. One lazy Socket.IO client applies `SOCKET_CONFIG` from `frontend/src/utils/constant.js` and owns connection lifecycle and access-token handshake auth. Authentication login/bootstrap connects it, access refresh updates its credential and reconnects an active connection, and logout/session invalidation disconnects it.
+7. The Redux store registers the Authentication feature reducer. Authentication storage is an owned localStorage record; Redux reflects restoration, authenticated, unauthenticated, and temporarily-unavailable UI state without becoming the token source of truth.
 
 ### Current folders and responsibilities
 
@@ -282,12 +282,13 @@ frontend/
 ├── vite.config.js          # React, Tailwind CSS v4, and @ alias integration
 └── src/
     ├── apis/
-    │   └── client/         # Shared Axios instance and API error normalization
+    │   ├── client/         # Shared Axios instance, auth interceptors, and error normalization
+    │   └── authentication.api.js # Authentication HTTP endpoints
     ├── components/
     │   ├── common/         # Application-level shared components
     │   └── ui/             # shadcn/ui-style primitives
     ├── features/
-    │   └── authentication/ # Empty scaffold; not an implemented feature
+    │   └── authentication/ # Auth storage/state, lifecycle services, and bootstrap
     ├── layouts/            # Shared route layout frames with Outlet
     ├── lib/                # External-library integration helpers such as cn()
     ├── pages/              # Complete URL-mapped screens
@@ -302,19 +303,18 @@ frontend/
 
 `frontend/src/utils/constant.js` is the single owner of frontend project
 constants: `RUNTIME_ENV`, `HTTP_HEADER`, `API_CONFIG`, `API_ERROR_MESSAGE`,
-`SOCKET_CONFIG`, `REALTIME_EVENT`, `VALIDATION_MESSAGE`, and `TOASTER_CONFIG`. It is the only
+`AUTH_STORAGE_KEY`, `SOCKET_CONFIG`, `REALTIME_EVENT`, `VALIDATION_MESSAGE`, and `TOASTER_CONFIG`. It is the only
 module that reads `VITE_*` variables. No shared helper module exists beside it
-yet. Empty feature subdirectories are represented by `.gitkeep` only and do not
-imply implemented capability.
+yet.
 
 ### Current capability boundary
 
-The frontend currently provides a runnable technical foundation and sample
-screen. It does not yet implement a frontend business workflow, auth-state
-owner, token refresh policy, resource API module, feature-specific realtime
-handler, or role-specific application shell. The route guards are prop-driven
-building blocks and are not wired to routes until concrete auth state and
-redirect destinations exist.
+The frontend currently provides a runnable technical foundation, sample
+screen, and V1 authentication lifecycle infrastructure. It still has no
+concrete login/logout screen, feature-specific realtime listener, or
+role-specific application shell. Route guards consume the Authentication
+feature's resolved state, but no concrete guarded routes or redirect
+destinations have been approved and declared yet.
 
 The canonical frontend owners and known mismatches remain in
 [`frontend-source-of-truth.md`](frontend-source-of-truth.md). This architecture
