@@ -1,185 +1,345 @@
+<div align="center">
+
 # JOBHUB
 
-JOBHUB is an early-stage full-stack job platform built with React, Express, and MongoDB. The repository currently provides a Vite-powered frontend scaffold and a backend foundation with configuration validation, database lifecycle management, Cloudinary file operations, email and authentication utilities, centralized error handling, and graceful shutdown.
+### Nền tảng tuyển dụng full-stack cho ứng viên và doanh nghiệp
+
+Backend nghiệp vụ bằng Express/MongoDB, frontend bằng React/Vite và phân phối realtime qua Socket.IO.
+
+`React 19` · `Vite 8` · `Express 5` · `MongoDB` · `Socket.IO` · `Tailwind CSS 4`
+
+[Backend](backend/README.md) · [Frontend](frontend/README.md) · [Product Roadmap](docs/product/roadmap.md) · [Project Status](docs/project-status/index.md) · [Architecture](docs/engineering/architecture.md)
+
+</div>
+
+---
+
+JOBHUB hỗ trợ toàn bộ chuỗi tuyển dụng từ quản lý tài khoản và Company, đăng Job, tìm kiếm việc/CV, ứng tuyển, phân công Application, pipeline, chat, lịch phỏng vấn, thông báo đến Job Invitation.
+
+Repository hiện có độ trưởng thành không đồng đều giữa hai ứng dụng: backend đã triển khai phần lớn phạm vi V1–V15, trong khi frontend mới hoàn tất nền tảng kỹ thuật và authentication lifecycle V1; UI nghiệp vụ vẫn chưa được xây dựng.
+
+> [!IMPORTANT]
+> README này là cổng vào kỹ thuật của repository. [Product Specifications](docs/product/versions/) quyết định yêu cầu nghiệp vụ, [Data Contracts](docs/data/versions/) quyết định persistence, [Engineering docs](docs/engineering/) quyết định kiến trúc/owner, và [Project Status](docs/project-status/index.md) ghi nhận trạng thái triển khai cùng bằng chứng xác minh.
+
+## Mục lục
+
+- [Tổng quan](#tổng-quan)
+- [Trạng thái sản phẩm](#trạng-thái-sản-phẩm)
+- [Chức năng chính](#chức-năng-chính)
+- [Kiến trúc hệ thống](#kiến-trúc-hệ-thống)
+- [Công nghệ](#công-nghệ)
+- [Cấu trúc repository](#cấu-trúc-repository)
+- [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
+- [Quick start](#quick-start)
+- [Cấu hình môi trường](#cấu-hình-môi-trường)
+- [Các lệnh thường dùng](#các-lệnh-thường-dùng)
+- [API và realtime](#api-và-realtime)
+- [Kiểm thử và xác minh](#kiểm-thử-và-xác-minh)
+- [Quy tắc phát triển](#quy-tắc-phát-triển)
+- [Triển khai production](#triển-khai-production)
+- [Tài liệu nguồn chuẩn](#tài-liệu-nguồn-chuẩn)
+- [Giấy phép](#giấy-phép)
+
+## Tổng quan
+
+| Ứng dụng | Vai trò | Trạng thái hiện tại | Tài liệu |
+| --- | --- | --- | --- |
+| Backend | REST API, nghiệp vụ, persistence, worker và realtime server | Phần lớn V1–V15 đã triển khai; V2, V8, V12, V13 còn `IN PROGRESS` | [Backend README](backend/README.md) |
+| Frontend | Browser UI, routing, auth client, HTTP/realtime client | Foundation và authentication lifecycle V1 đã xác minh; chưa có UI nghiệp vụ | [Frontend README](frontend/README.md) |
+| Product/Data docs | Yêu cầu nghiệp vụ và hợp đồng persistence | V1–V15 có tài liệu phiên bản; V16–V17 mới ở roadmap | [Docs](docs/) |
+| AI Kit | Không gian dành cho năng lực AI trong tương lai | Chưa có implementation snapshot | [Project Status](docs/project-status/index.md) |
+
+### Điểm nổi bật
+
+- Business workflows có transaction và concurrency guards trên MongoDB replica set.
+- Phân quyền theo Candidate, Recruiter, Company Manager và Platform Admin.
+- CV generated/uploaded, snapshot CV khi apply và lưu trữ Cloudinary có kiểm soát.
+- Chat, Notification và Conversation state được fan-out realtime sau durable commit.
+- Background worker phục hồi Notification và vật chất hóa Job Invitation hết hạn.
+- Request tracing xuyên HTTP bằng `X-Request-Id` và structured logging ở production.
+- Kiến trúc frontend có canonical owner cho router, Redux, Axios, Socket.IO, validation và theme.
+- Cổng verification riêng cho backend và frontend.
+
+## Trạng thái sản phẩm
+
+Theo [Product Roadmap](docs/product/roadmap.md):
+
+| Phiên bản | Phạm vi | Trạng thái |
+| --- | --- | --- |
+| V1 | Tài khoản và vòng đời xác thực | `COMPLETED AND VERIFIED` |
+| V2 | Company onboarding và quản trị cấp nền tảng | `IN PROGRESS` |
+| V3 | Quản lý nhân sự tuyển dụng của Company | `COMPLETED AND VERIFIED` |
+| V4 | Danh mục chuẩn của nền tảng | `COMPLETED AND VERIFIED` |
+| V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | `COMPLETED / ACCEPTED` |
+| V4.2 | Structured Salary, Metadata Catalog và Candidate Skill Keyword Search | `COMPLETED / ACCEPTED` |
+| V5 | Job và vòng đời phê duyệt Job | `COMPLETED AND VERIFIED` |
+| V6 | Recruitment Team và chuyển giao trách nhiệm | `COMPLETED AND VERIFIED` |
+| V7 | Candidate Profile và thư viện CV | `COMPLETED AND VERIFIED` |
+| V8 | Job Discovery | `IN PROGRESS` |
+| V9 | Candidate chủ động Apply và tạo Application | `COMPLETED AND VERIFIED` |
+| V10 | Phân công Application và Recruitment Pipeline | `COMPLETED AND VERIFIED` |
+| V11 | Conversation và Chat thuộc Application | `COMPLETED AND VERIFIED` |
+| V12 | Interview Schedule | `IN PROGRESS` |
+| V13 | Notification và phân phối realtime | `IN PROGRESS` |
+| V14 | Candidate Search trên CV `PUBLIC` | `COMPLETED AND VERIFIED` |
+| V15 | Job Invitation và nhánh Recruiter săn ứng viên | `COMPLETED AND VERIFIED` |
+| V16 | Saved Jobs | `PLANNED` |
+| V17 | Dashboard, thống kê và giám sát | `PLANNED` |
 
 > [!NOTE]
-> The product UI, job workflows, authentication endpoints, and frontend-to-backend integration are not implemented yet. The current frontend displays the default starter screen, while the backend exposes a health-style endpoint and development-only file test routes.
+> Bảng trên là trạng thái sản phẩm cấp repository, không phải mức hoàn thiện UI. Frontend hiện chỉ có status leaf V1; việc backend hoàn thành một phiên bản không đồng nghĩa màn hình frontend của phiên bản đó đã tồn tại.
 
-## Repository status
+Ý nghĩa trạng thái:
 
-| Area | Current state |
+- `IN PROGRESS`: đã bắt đầu triển khai nhưng toàn bộ phạm vi chưa hoàn tất xác minh.
+- `COMPLETED AND VERIFIED`: phạm vi được phê duyệt đã triển khai và vượt qua verification bắt buộc.
+- `COMPLETED / ACCEPTED`: đã qua thêm Final Acceptance Review.
+- `PLANNED`: chỉ có vị trí trên roadmap, chưa được phép suy diễn yêu cầu chi tiết.
+
+## Chức năng chính
+
+### Tài khoản và tổ chức
+
+- Đăng ký Candidate và Company Manager.
+- Xác minh email, đăng nhập, refresh session, đăng xuất và đặt lại mật khẩu.
+- Company onboarding, submit/approval/confirmation và khóa Company.
+- Quản lý Recruiter: tạo, kích hoạt, khóa, mở khóa, chấm dứt và chuyển giao trách nhiệm.
+- Platform Admin quản lý account lifecycle, Company registration và danh mục.
+
+### Job và tuyển dụng
+
+- Job draft, submit, approve, reject, publish, close và expire.
+- Recruitment Team với Primary/Supporting Recruiter.
+- Location hai cấp, Structured Salary, Category và Experience Level.
+- Job Discovery công khai với filter/sort.
+- Candidate Search trên CV `PUBLIC`.
+
+### Candidate và CV
+
+- Candidate Profile.
+- Generated CV và Uploaded PDF CV.
+- Preview/download, visibility, default CV, archive và thay tệp.
+- Harvard-style PDF generation với font Unicode đi kèm.
+
+### Application pipeline
+
+- Direct Apply hoặc tạo Application từ Job Invitation.
+- Snapshot CV độc lập tại thời điểm nộp.
+- Assign, reassign, take over, unassign và automatic unassign.
+- Recruitment Pipeline, workspace và workload projection.
+- Candidate withdraw và submitted-CV replacement.
+
+### Tương tác và realtime
+
+- Conversation/Message gắn với Application.
+- Candidate Availability và Interview Proposal lifecycle.
+- Notification bền vững, unread/open state và recovery.
+- Socket.IO fan-out cho Notification, Message và Conversation state.
+- Job Invitation send/read/reject/accept/revoke/expiration/invalidation.
+
+Danh sách endpoint và boundary chi tiết nằm trong [Backend README](backend/README.md#danh-mục-endpoint).
+
+## Kiến trúc hệ thống
+
+```mermaid
+flowchart LR
+    Browser[React / Vite Frontend]
+    API[Express REST API]
+    Socket[Socket.IO]
+    Services[Business Services]
+    Workers[Background Workers]
+    Mongo[(MongoDB Replica Set)]
+    Cloudinary[(Cloudinary)]
+    SMTP[SMTP]
+    Location[Province Open API v1]
+
+    Browser -->|HTTPS / JSON| API
+    Browser <-->|Authenticated realtime| Socket
+    API --> Services
+    Socket <--> Services
+    Workers --> Services
+    Services --> Mongo
+    Services --> Cloudinary
+    Services --> SMTP
+    Services --> Location
+```
+
+### Backend dependency direction
+
+```text
+route -> middleware -> controller -> service -> model/database
+                                      |
+                                      +-> approved infrastructure client/utility
+
+entry point -> worker -> service -> model/database
+service sau durable commit -> sockets facade -> authenticated user room
+```
+
+### Frontend dependency direction
+
+```text
+main -> providers -> App -> authentication bootstrap -> router
+router -> route groups -> guards/layouts/pages
+pages -> features + common components + UI primitives
+features -> API modules / socket facade / store hooks / validation
+```
+
+Nguyên tắc cốt lõi là mỗi trách nhiệm có một canonical owner. Repository không dùng repository layer ở backend và không cho phép router/store/Axios/Socket.IO client song song ở frontend.
+
+## Công nghệ
+
+| Lớp | Công nghệ chính |
 | --- | --- |
-| Frontend | React/Vite scaffold with hot module replacement and ESLint |
-| API | Express server with a hello-world endpoint and centralized errors |
-| Database | MongoDB connection and shutdown lifecycle; application models are not implemented |
-| File storage | Cloudinary connection plus development-only upload/delete test endpoints |
-| Authentication | JWT and password utilities exist; authentication routes are not implemented |
-| Email | SMTP transport and mail service utilities exist; product email flows are not implemented |
+| Frontend runtime | React 19, React Router 7, Redux Toolkit |
+| Frontend tooling | Vite 8, ESLint 10 |
+| Styling/UI | Tailwind CSS 4, shadcn/ui conventions, Radix, Lucide, Sonner |
+| Form/validation | React Hook Form, Zod |
+| HTTP/realtime client | Axios, Socket.IO Client |
+| Backend runtime | Node.js ES Modules, Express 5 |
+| Persistence | MongoDB, Mongoose 9 |
+| Realtime server | Socket.IO 4 |
+| File/PDF | Cloudinary, Multer, `file-type`, `pdf-lib`, Fontkit |
+| Authentication | JWT, session-bound refresh credential, bcryptjs |
+| Email | Nodemailer/SMTP |
+| Backend testing | Vitest, Supertest, MongoDB Memory Server |
 
-## Tech stack
-
-### Frontend
-
-- React 19
-- Vite 8
-- CSS
-- ESLint
-
-### Backend
-
-- Node.js with ES modules
-- Express 5
-- MongoDB and Mongoose
-- Cloudinary, Multer, and `file-type`
-- Nodemailer
-- JSON Web Tokens and bcrypt
-- Zod
-- Socket.IO dependencies (real-time features are not implemented yet)
-- ESLint
-
-## Project structure
+## Cấu trúc repository
 
 ```text
 JOBHUB/
 ├── backend/
-│   ├── index.js                 # API startup and graceful shutdown
+│   ├── index.js                     # Process entry point
+│   ├── scripts/                     # Migration và architecture verification
 │   ├── src/
-│   │   ├── config/              # Environment, MongoDB, Cloudinary, and SMTP
-│   │   ├── constants/           # Shared file, token, and folder constants
-│   │   ├── controllers/         # HTTP request handlers
-│   │   ├── database/            # Seed scaffolding
-│   │   ├── middlewares/         # Upload, validation, 404, and error handling
-│   │   ├── models/              # Mongoose model exports
-│   │   ├── routes/              # API routes
-│   │   ├── services/            # File and mail services
-│   │   └── utils/               # JWT, password, and application error helpers
-│   ├── .env.example
-│   └── package.json
+│   │   ├── config/                  # Env, MongoDB, Cloudinary, SMTP
+│   │   ├── constants/               # Shared vocabularies/mappings
+│   │   ├── controllers/             # HTTP boundary
+│   │   ├── database/                # Versioned migrations và seed scaffold
+│   │   ├── middlewares/             # Auth, authorization, validation, errors
+│   │   ├── models/                  # Mongoose schemas/invariants
+│   │   ├── routes/                  # Root và feature routers
+│   │   ├── services/                # Business workflows
+│   │   ├── sockets/                 # Realtime distribution
+│   │   ├── utils/                   # Generic helpers/logger
+│   │   └── workers/                 # Recovery/expiration schedulers
+│   ├── test/                        # Unit, integration và acceptance tests
+│   └── README.md
 ├── frontend/
-│   ├── public/                  # Static assets
-│   ├── src/                     # React application and styles
-│   ├── index.html
-│   ├── vite.config.js
-│   └── package.json
-└── README.md
+│   ├── src/
+│   │   ├── apis/                    # Axios client và resource APIs
+│   │   ├── components/              # Common và UI primitives
+│   │   ├── features/                # Feature-owned client behavior
+│   │   ├── layouts/                 # Shared route frames
+│   │   ├── pages/                   # URL-mapped screens
+│   │   ├── routes/                  # Router, route groups và guards
+│   │   ├── socket/                  # Lazy Socket.IO client
+│   │   ├── store/                   # Redux composition/hooks
+│   │   ├── styles/                  # Tailwind/theme tokens
+│   │   ├── utils/                   # Constants/shared helpers
+│   │   └── validation/              # Zod/RHF provider và schemas
+│   ├── test/                        # Focused authentication tests
+│   └── README.md
+├── docs/
+│   ├── product/                     # Roadmap và version specifications
+│   ├── data/                        # Versioned data contracts
+│   ├── engineering/                 # Architecture, conventions, owners
+│   └── project-status/              # Implementation/verification snapshots
+├── .agents/skills/                  # Repository-local agent workflows
+├── AGENTS.md                        # Repository agent contract
+└── README.md                        # Tài liệu tổng quan này
 ```
 
-## Prerequisites
+## Yêu cầu hệ thống
 
-- Node.js 20 or later
-- Yarn 1.x
-- A running MongoDB instance or MongoDB Atlas connection
-- A Cloudinary account
-- SMTP credentials
+- Node.js `>=20.19.0`. Frontend Vite 8 hỗ trợ `^20.19.0` hoặc `>=22.12.0`.
+- npm cho backend vì `backend/package-lock.json` là lockfile chính được dùng trong hướng dẫn.
+- Yarn Classic 1.x cho frontend vì `frontend/yarn.lock` là lockfile v1.
+- MongoDB replica set hoặc MongoDB Atlas; nhiều workflow backend sử dụng multi-document transaction.
+- Tài khoản Cloudinary.
+- SMTP credential để gửi email.
+- Truy cập Province Open API v1 cho Location catalog.
+- Trình duyệt hiện đại cho frontend.
 
-The backend validates every environment variable and verifies its MongoDB and Cloudinary connections before it starts listening. It exits on startup if the configuration is incomplete or either service cannot be reached.
+## Quick start
 
-## Getting started
-
-### 1. Clone the repository
+### 1. Clone repository
 
 ```bash
 git clone <repository-url>
 cd JOBHUB
 ```
 
-### 2. Configure and start the backend
+### 2. Cài đặt và cấu hình backend
 
 ```bash
 cd backend
-yarn install
+npm ci
 cp .env.example .env
 ```
 
-Fill in every value in `backend/.env`. A development configuration has this shape:
+Điền đầy đủ cấu hình trong `backend/.env`. MongoDB local phải chạy ở chế độ replica set, ví dụ URI:
 
 ```dotenv
-NODE_ENV=development
-PORT=8000
-
-MONGODB_URI=mongodb://127.0.0.1:27017/jobhub
-MONGODB_SERVER_SELECTION_TIMEOUT_MS=10000
-
-CLOUDINARY_CLOUD_NAME=your-cloud-name
-CLOUDINARY_API_KEY=your-api-key
-CLOUDINARY_API_SECRET=your-api-secret
-
-BYTES_PER_MEGABYTE=1048576
-MAX_FILE_SIZE_MB=10
-
-JWT_SECRET=replace-with-a-long-random-secret
-JWT_EXPIRES_IN=15m
-JWT_ALGORITHM=HS256
-JWT_INVITE_SECRET=replace-with-another-long-random-secret
-JWT_INVITE_EXPIRES_IN=24h
-
-BCRYPT_SALT_ROUNDS=10
-
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=replace-with-a-secure-password
-
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=your-smtp-username
-SMTP_PASS=your-smtp-password
-MAIL_FROM_NAME=JobHub Admin
+MONGODB_URI=mongodb://127.0.0.1:27017/jobhub?replicaSet=rs0
 ```
 
-Do not commit `.env`. For Gmail SMTP, use an app password instead of your normal account password.
-
-Start the API:
+Với database hoàn toàn mới, áp strict Structured Salary guard trước lần startup đầu tiên:
 
 ```bash
-yarn dev
+node scripts/run-migration.js v42-legacy-salary-cutover --preflight
+node scripts/run-migration.js v42-legacy-salary-cutover
 ```
 
-The default API address is `http://localhost:8000`.
+Khởi tạo Experience Level dataset nếu database chưa có:
 
-### 3. Start the frontend
+```bash
+node scripts/run-migration.js v4-experience-level-dataset
+```
 
-In a second terminal, from the repository root:
+Chạy backend:
+
+```bash
+npm run dev
+```
+
+Backend mặc định phục vụ REST API và Socket.IO tại `http://localhost:8000`.
+
+> [!WARNING]
+> Không chạy các migration lịch sử khác một cách máy móc trên database có dữ liệu. Đọc status/data contract tương ứng, backup và chạy preflight khi được hỗ trợ.
+
+### 3. Cài đặt và chạy frontend
+
+Mở terminal thứ hai từ repository root:
 
 ```bash
 cd frontend
-yarn install
+yarn install --frozen-lockfile
+cp .env.example .env
 yarn dev
 ```
 
-Vite prints the local development URL, which is `http://localhost:5173` by default. The frontend does not currently call the backend, so no frontend API environment variable or proxy is required yet.
+Frontend mặc định chạy tại `http://localhost:5173` và cấu hình mẫu gọi backend tại port `8000`.
 
-## Available scripts
+Đảm bảo `backend/.env` cho phép origin frontend:
 
-Run each command from the relevant application directory.
+```dotenv
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+```
 
-| Directory | Command | Description |
-| --- | --- | --- |
-| `backend` | `yarn dev` | Start the API with Nodemon and reload on changes |
-| `backend` | `yarn start` | Start the API with Node.js |
-| `backend` | `yarn lint` | Check backend code with ESLint |
-| `backend` | `yarn lint:fix` | Fix supported backend lint issues |
-| `frontend` | `yarn dev` | Start the Vite development server |
-| `frontend` | `yarn build` | Create a production frontend build in `dist/` |
-| `frontend` | `yarn preview` | Preview the production build locally |
-| `frontend` | `yarn lint` | Check frontend code with ESLint |
+### 4. Kiểm tra nhanh
 
-There is no automated test suite configured yet.
-
-## API reference
-
-| Method | Endpoint | Availability | Description |
-| --- | --- | --- | --- |
-| `GET` | `/api/` | All environments | Return a hello-world health-style response |
-| `POST` | `/api/files/test-upload` | Non-production only | Upload one image or PDF to Cloudinary |
-| `DELETE` | `/api/files/test-delete` | Non-production only | Delete a Cloudinary asset by public ID |
-
-### Check the API
+| Thành phần | URL |
+| --- | --- |
+| Frontend | `http://localhost:5173/` |
+| Backend API base | `http://localhost:8000/api` |
+| Backend smoke endpoint | `http://localhost:8000/api/` |
+| Socket.IO | `http://localhost:8000` |
 
 ```bash
 curl http://localhost:8000/api/
 ```
 
-Example response:
+Kết quả mẫu:
 
 ```json
 {
@@ -189,62 +349,201 @@ Example response:
 }
 ```
 
-### Upload a test file
+## Cấu hình môi trường
 
-Send one `multipart/form-data` field named `file`:
+### Backend
 
-```bash
-curl -X POST \
-  -F "file=@/path/to/file.pdf" \
-  http://localhost:8000/api/files/test-upload
+`backend/.env.example` bao gồm các nhóm cấu hình:
+
+- Runtime và MongoDB.
+- Cloudinary và upload limit.
+- JWT, session và bcrypt.
+- Platform Admin provisioning inputs.
+- SMTP và application URL.
+- CORS origins.
+- Notification recovery và Job Invitation expiration workers.
+- Logging.
+
+Danh sách biến, default và lưu ý vận hành đầy đủ: [Backend README — Biến môi trường](backend/README.md#biến-môi-trường).
+
+### Frontend
+
+```dotenv
+VITE_API_BASE_URL=http://localhost:8000/api
+VITE_SOCKET_URL=http://localhost:8000
 ```
 
-Accepted content types are JPEG, PNG, WebP, and PDF. The API validates the file contents, not only the supplied MIME type. The upload limit is controlled by `MAX_FILE_SIZE_MB`.
+Mọi biến `VITE_*` là public và được đóng gói vào browser bundle. Không đặt secret vào frontend environment variables.
 
-Keep the returned `publicId`, `resourceType`, and `deliveryType` values if you want to delete the asset afterward.
+Chi tiết: [Frontend README — Biến môi trường](frontend/README.md#biến-môi-trường).
 
-### Delete a test file
+### Bảo vệ secret
 
-```bash
-curl -X DELETE \
-  -H "Content-Type: application/json" \
-  -d '{
-    "publicId": "cloudinary-public-id",
-    "resourceType": "image",
-    "deliveryType": "upload"
-  }' \
-  http://localhost:8000/api/files/test-delete
-```
+- Không commit `backend/.env` hoặc `frontend/.env`.
+- Không đưa JWT secret, database URI, SMTP password hoặc Cloudinary secret vào `VITE_*`.
+- Dùng secret manager của nền tảng khi triển khai.
+- Không ghi credential/token/CV content nhạy cảm vào log hoặc tài liệu.
 
-`resourceType` defaults to `image` and `deliveryType` defaults to `upload` when omitted. Both file test routes are disabled when `NODE_ENV=production`.
+## Các lệnh thường dùng
 
-## Error responses
+### Backend
 
-API errors use a consistent JSON structure:
+Chạy trong `backend/`:
+
+| Lệnh | Mục đích |
+| --- | --- |
+| `npm run dev` | Chạy API bằng Nodemon |
+| `npm start` | Chạy production entry point |
+| `npm run lint` | ESLint |
+| `npm run lint:fix` | Tự sửa lỗi lint được hỗ trợ |
+| `npm test` | Chạy toàn bộ Vitest suite |
+| `npm run test:watch` | Vitest watch mode |
+| `npm run verify:architecture` | Kiểm tra ràng buộc kiến trúc |
+| `npm run verify:agent` | Lint + architecture + toàn bộ test |
+
+### Frontend
+
+Chạy trong `frontend/`:
+
+| Lệnh | Mục đích |
+| --- | --- |
+| `yarn dev` | Chạy Vite development server |
+| `yarn build` | Tạo production bundle |
+| `yarn preview` | Preview bundle ở local |
+| `yarn lint` | ESLint |
+| `yarn test:auth` | Focused authentication tests |
+| `yarn verify:agent` | Auth tests + lint + production build |
+
+## API và realtime
+
+### HTTP
+
+- REST API dùng prefix `/api`.
+- Protected request dùng `Authorization: Bearer <access-token>`.
+- Mỗi response có `X-Request-Id` để liên kết browser log với backend log.
+- Lỗi chuẩn hóa theo dạng:
 
 ```json
 {
   "error": {
-    "message": "Route not found"
+    "message": "Mô tả lỗi",
+    "details": {}
   }
 }
 ```
 
-Non-production responses also include a stack trace. Oversized uploads return `413`, unsupported file types return `415`, and unknown routes return `404`.
+Frontend có một Axios client dùng chung, chỉ gắn token cho request khai báo `requiresAuthentication: true`, refresh single-flight khi protected request nhận `401`, và retry tối đa một lần.
 
-## Production notes
+### Realtime
 
-- Set `NODE_ENV=production` to hide error stack traces and disable file test routes.
-- Keep secrets in your deployment platform's secret manager.
-- Serve the API behind HTTPS and a production process or container supervisor.
-- The backend handles `SIGINT` and `SIGTERM`, closes the HTTP server, and disconnects from MongoDB before exiting.
-- Configure the frontend's eventual API base URL and cross-origin policy before deploying the two applications separately.
+Socket.IO dùng cùng backend origin và xác thực bằng access token trong handshake. Các event hiện có:
 
-## More documentation
+| Event | Dữ liệu chính |
+| --- | --- |
+| `notification` | Notification vừa được materialize |
+| `message` | Message mới trong Application Conversation |
+| `conversationState` | Mode hiện tại của Conversation |
 
-- [Backend documentation](backend/README.md)
-- [Frontend documentation](frontend/README.md)
+Realtime là best-effort, không đảm bảo exactly-once và không thay thế dữ liệu bền vững. Client phải resync qua HTTP sau reconnect hoặc khi cần trạng thái authoritative.
 
-## License
+Xem chi tiết:
 
-The backend package declares the MIT license in `backend/package.json`. Add a root `LICENSE` file before distributing the complete project under that license.
+- [Backend endpoint catalog](backend/README.md#danh-mục-endpoint)
+- [Backend realtime contract](backend/README.md#realtime-với-socketio)
+- [Frontend HTTP/auth lifecycle](frontend/README.md#http-client-và-xử-lý-lỗi)
+- [Frontend realtime client](frontend/README.md#realtime-với-socketio)
+
+## Kiểm thử và xác minh
+
+Backend và frontend có cổng verification độc lập. Một cổng pass không xác minh ứng dụng còn lại.
+
+### Backend gate
+
+```bash
+cd backend
+npm run verify:agent
+```
+
+Bao gồm ESLint, deterministic architecture checks và toàn bộ Vitest suite.
+
+### Frontend gate
+
+```bash
+cd frontend
+yarn verify:agent
+```
+
+Bao gồm focused authentication Node tests, ESLint và Vite production build.
+
+### Giới hạn của verification
+
+- Backend gate không tự chứng minh MongoDB Atlas, Cloudinary, SMTP hoặc Province Open API thật đang hoạt động.
+- Frontend gate chưa có browser/end-to-end harness và không chứng minh rendering, accessibility hoặc backend integration.
+- Smoke test production phải được thực hiện riêng và chỉ được báo cáo khi đã chạy thực tế.
+
+## Quy tắc phát triển
+
+- Đọc implementation liên quan và tìm canonical owner trước khi tạo abstraction mới.
+- Giữ một source of truth; không tạo client, config, constant, helper hoặc workflow song song.
+- Thực hiện thay đổi nhỏ nhất nhưng đầy đủ và tránh refactor ngoài phạm vi.
+- Không thêm/xóa production dependency khi chưa được phê duyệt rõ ràng.
+- Không suy diễn business behavior từ roadmap title hoặc mã nguồn cũ khi đã có Product Specification.
+- Backend giữ dependency direction `route -> middleware -> controller -> service -> model`.
+- Frontend giữ một router, Redux store, Axios client, Socket.IO client, Toaster và `VITE_*` reader.
+- Route guard và client validation chỉ hỗ trợ UX; backend vẫn là authority cho auth, authorization và business invariant.
+- Sau thay đổi material, chạy focused checks và cổng verification của đúng ứng dụng.
+- Không tuyên bố test/build/lint pass nếu lệnh tương ứng chưa thực sự chạy thành công.
+
+Agent/contributor workflow đầy đủ nằm trong [AGENTS.md](AGENTS.md), [backend/AGENTS.md](backend/AGENTS.md) và [frontend/AGENTS.md](frontend/AGENTS.md).
+
+## Triển khai production
+
+### Backend
+
+- Đặt `NODE_ENV=production`.
+- Hoàn tất migration/cutover bắt buộc trước khi deploy code phụ thuộc vào chúng.
+- Chạy sau HTTPS reverse proxy và process/container supervisor hỗ trợ `SIGTERM`.
+- Cho phép outbound đến MongoDB, Cloudinary, SMTP và Province Open API v1.
+- Thu thập JSON logs và bảo toàn `X-Request-Id` qua proxy.
+- Worker chạy trong mỗi process; chúng chịu được nhiều process nhưng không phải distributed exactly-once scheduler.
+
+### Frontend
+
+- Cung cấp đúng `VITE_API_BASE_URL` và `VITE_SOCKET_URL` tại thời điểm build.
+- Chạy `yarn build` và phục vụ `frontend/dist/` bằng static hosting/CDN hoặc web server production.
+- Cấu hình SPA fallback về `index.html` cho browser routes.
+- Không dùng `yarn preview` làm production server.
+- Thêm frontend production origin vào backend `CORS_ALLOWED_ORIGINS`.
+- Bật HTTPS và hỗ trợ WebSocket/Socket.IO upgrade qua reverse proxy.
+
+Checklist chi tiết nằm trong [Backend README](backend/README.md#triển-khai-production) và [Frontend README](frontend/README.md#build-và-triển-khai-production).
+
+## Tài liệu nguồn chuẩn
+
+| Câu hỏi | Tài liệu |
+| --- | --- |
+| Sản phẩm đang đi đến đâu? | [Product Roadmap](docs/product/roadmap.md) |
+| Yêu cầu nghiệp vụ cụ thể là gì? | [Product Specifications](docs/product/versions/) |
+| Dữ liệu phải được lưu như thế nào? | [Data Contracts](docs/data/versions/) |
+| Phần nào đã triển khai/xác minh? | [Project Status](docs/project-status/index.md) |
+| Kiến trúc toàn hệ thống ra sao? | [Architecture](docs/engineering/architecture.md) |
+| Canonical backend owners ở đâu? | [Backend Source of Truth](docs/engineering/source-of-truth.md) |
+| Canonical frontend owners ở đâu? | [Frontend Sources of Truth](docs/engineering/frontend-source-of-truth.md) |
+| Quy ước backend? | [Backend Engineering Conventions](docs/engineering/backend-conventions.md) |
+| Quy ước frontend? | [Frontend Engineering Conventions](docs/engineering/frontend-conventions.md) |
+| Cách chạy backend? | [Backend README](backend/README.md) |
+| Cách chạy frontend? | [Frontend README](frontend/README.md) |
+
+Thứ tự authority:
+
+1. Product Specification cho business behavior.
+2. Data Contract cho persistence.
+3. Engineering docs cho architecture và ownership.
+4. Backend implementation cho API path/payload/response hiện tại mà frontend tiêu thụ.
+5. Project Status cho implementation/verification snapshot.
+
+Nếu các nguồn mâu thuẫn, dừng trước khi thay đổi hành vi và báo cáo để có quyết định của con người.
+
+## Giấy phép
+
+Backend package khai báo giấy phép MIT trong `backend/package.json`. Repository hiện chưa có file `LICENSE` ở root; cần bổ sung file giấy phép chính thức trước khi phân phối toàn bộ dự án dưới điều khoản đó.

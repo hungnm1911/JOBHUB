@@ -4,7 +4,7 @@ const PUBLIC_AUTH_REQUEST = Object.freeze({
   requiresAuthentication: false,
 })
 
-async function login(credentials) {
+async function loginApi(credentials) {
   const response = await apiClient.post(
     '/auth/login',
     credentials,
@@ -13,7 +13,7 @@ async function login(credentials) {
   return response.data
 }
 
-async function refreshAccess(refreshToken) {
+async function refreshAccessApi(refreshToken) {
   const response = await apiClient.post(
     '/auth/refresh',
     { refreshToken },
@@ -22,11 +22,11 @@ async function refreshAccess(refreshToken) {
   return response.data
 }
 
-async function logout() {
+async function logoutApi() {
   const response = await apiClient.post('/auth/logout', undefined, {
     requiresAuthentication: true,
   })
   return response.data
 }
 
-export { login, logout, refreshAccess }
+export { loginApi, logoutApi, refreshAccessApi }

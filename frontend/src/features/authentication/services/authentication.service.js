@@ -1,4 +1,8 @@
-import * as authenticationApi from '@/apis/authentication.api'
+import {
+  loginApi,
+  logoutApi,
+  refreshAccessApi,
+} from '@/apis/authentication.api'
 import { configureHttpAuthentication } from '@/apis/client'
 import {
   connectRealtimeSocket,
@@ -18,7 +22,11 @@ import { createAuthenticationManager } from './authentication-manager'
 import authenticationStorage from './authentication-storage'
 
 const authenticationManager = createAuthenticationManager({
-  api: authenticationApi,
+  api: {
+    login: loginApi,
+    logout: logoutApi,
+    refreshAccess: refreshAccessApi,
+  },
   storage: authenticationStorage,
   dispatch: store.dispatch,
   actions: {

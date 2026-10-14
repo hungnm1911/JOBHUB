@@ -54,6 +54,8 @@ constant.js
 
 - React components use Pascal case.
 - Functions, hooks, variables, and object fields use camel case.
+- Exported endpoint functions in resource `*.api.js` modules use an `Api`
+  suffix, such as `loginApi` or `getJobsApi`.
 - Custom hooks begin with `use` and obey the Rules of Hooks.
 - Enum-like immutable objects and module-level constants use upper snake case when they represent a closed vocabulary.
 - Names identify the owned responsibility rather than only an implementation detail.
