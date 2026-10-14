@@ -1581,7 +1581,7 @@ Approved Data Contract
 Engineering Contracts
 → architecture truth
 
-PROJECT_STATUS
+Project Status (`docs/project-status/index.md`)
 → implementation snapshot
 
 Source code + tests

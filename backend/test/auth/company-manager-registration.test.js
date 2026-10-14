@@ -7,18 +7,22 @@ import {
   it,
   vi,
 } from "vitest";
+import jsonwebtoken from "jsonwebtoken";
 
+import config from "../../src/config/index.js";
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
 import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
+import AuthSession from "../../src/models/auth-session.model.js";
 import AuthToken from "../../src/models/auth-token.model.js";
 import Company from "../../src/models/company.model.js";
 import CompanyMember from "../../src/models/company-member.model.js";
 import User from "../../src/models/user.model.js";
 import { registerCompanyManager } from "../../src/services/auth.service.js";
+import { hashAuthToken } from "../../src/utils/hash-auth-token.js";
 import {
   clearDatabase,
   connectTestDatabase,
@@ -44,7 +48,7 @@ describe("POST /api/auth/register/company-manager", () => {
     await disconnectTestDatabase();
   });
 
-  it("creates a pending Company Staff manager and linked NOT_SUBMITTED Company in one onboarding", async () => {
+  it("creates the onboarding aggregate and returns its initial limited session", async () => {
     const agent = createTestAgent();
 
     const response = await agent
@@ -78,8 +82,12 @@ describe("POST /api/auth/register/company-manager", () => {
       activatedAt: null,
     });
     expect(response.body.company.id).toEqual(expect.any(String));
-    expect(response.body.accessToken).toBeUndefined();
-    expect(response.body.refreshToken).toBeUndefined();
+    expect(response.body.accessToken).toEqual(expect.any(String));
+    expect(response.body.refreshToken).toEqual(expect.any(String));
+    expect(response.body.session).toMatchObject({
+      id: expect.any(String),
+      expiresAt: expect.any(String),
+    });
 
     const persistedUser = await User.findOne({
       email: "chris.manager@example.com",
@@ -114,6 +122,66 @@ describe("POST /api/auth/register/company-manager", () => {
     expect(persistedCompany.reviewedByUserId).toBeNull();
     expect(persistedCompany.reviewedAt).toBeNull();
     expect(persistedCompany.activatedAt).toBeNull();
+
+    const persistedSession = await AuthSession.findById(
+      response.body.session.id,
+    ).select("+refreshTokenHash");
+
+    expect(persistedSession).not.toBeNull();
+    expect(persistedSession.userId.toString()).toBe(response.body.user.id);
+    expect(persistedSession.refreshTokenHash).not.toBe(
+      response.body.refreshToken,
+    );
+    expect(persistedSession.refreshTokenHash).toBe(
+      hashAuthToken(response.body.refreshToken),
+    );
+
+    const decodedAccessToken = jsonwebtoken.verify(
+      response.body.accessToken,
+      config.jwt.secret,
+      { algorithms: [config.jwt.algorithm] },
+    );
+
+    expect(decodedAccessToken).toMatchObject({
+      userId: response.body.user.id,
+      role: USER_ROLE.COMPANY_STAFF,
+      sessionId: response.body.session.id,
+    });
+
+    const draftResponse = await agent
+      .get("/api/company")
+      .set("Authorization", `Bearer ${response.body.accessToken}`);
+
+    expect(draftResponse.status).toBe(200);
+    expect(draftResponse.body.company.id).toBe(response.body.company.id);
+
+    const updateResponse = await agent
+      .patch("/api/company")
+      .set("Authorization", `Bearer ${response.body.accessToken}`)
+      .send({
+        name: "Registration Session Company",
+        businessRegistrationNumber: "BRN-REGISTRATION-SESSION",
+      });
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.company).toMatchObject({
+      id: response.body.company.id,
+      name: "Registration Session Company",
+      businessRegistrationNumber: "BRN-REGISTRATION-SESSION",
+      approvalStatus: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
+    });
+
+    const submitResponse = await agent
+      .post("/api/company/submit")
+      .set("Authorization", `Bearer ${response.body.accessToken}`)
+      .send();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitResponse.body.company).toMatchObject({
+      id: response.body.company.id,
+      approvalStatus: COMPANY_APPROVAL_STATUS.PENDING,
+      operationalStatus: COMPANY_OPERATIONAL_STATUS.INACTIVE,
+    });
 
     const authTokenCount = await AuthToken.countDocuments({
       userId: persistedUser._id,
@@ -199,6 +267,7 @@ describe("POST /api/auth/register/company-manager", () => {
     expect(await User.countDocuments()).toBe(1);
     expect(await Company.countDocuments()).toBe(1);
     expect(await CompanyMember.countDocuments()).toBe(1);
+    expect(await AuthSession.countDocuments()).toBe(1);
   });
 
   it("rejects client-supplied role selection", async () => {
@@ -238,5 +307,28 @@ describe("POST /api/auth/register/company-manager", () => {
     ).toBeNull();
     expect(await Company.countDocuments()).toBe(0);
     expect(await CompanyMember.countDocuments()).toBe(0);
+    expect(await AuthSession.countDocuments()).toBe(0);
+  });
+
+  it("rolls back TX-01 when initial session persistence fails", async () => {
+    const createSpy = vi
+      .spyOn(AuthSession, "create")
+      .mockRejectedValueOnce(new Error("forced session persistence failure"));
+
+    await expect(
+      registerCompanyManager({
+        fullName: "Session Rollback Manager",
+        email: "session.rollback.manager@example.com",
+        password: "password123",
+      }),
+    ).rejects.toThrow("forced session persistence failure");
+
+    expect(createSpy).toHaveBeenCalledOnce();
+    expect(
+      await User.findOne({ email: "session.rollback.manager@example.com" }),
+    ).toBeNull();
+    expect(await Company.countDocuments()).toBe(0);
+    expect(await CompanyMember.countDocuments()).toBe(0);
+    expect(await AuthSession.countDocuments()).toBe(0);
   });
 });

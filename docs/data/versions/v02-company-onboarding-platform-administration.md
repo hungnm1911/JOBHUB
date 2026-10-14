@@ -43,7 +43,7 @@ V02 kế thừa ba collection của V01 và bổ sung `companies`.
 | Entity / Collection | Trạng thái | Mô tả |
 | --- | --- | --- |
 | `users` | `UPDATED` | Bổ sung `PENDING_ACTIVATION` vào account status để biểu diễn Company Manager đang onboarding. |
-| `auth_sessions` | `UNCHANGED` | Giữ nguyên contract V01; được sử dụng khi Company Manager bị chuyển sang `TERMINATED`. |
+| `auth_sessions` | `UNCHANGED` | Giữ nguyên schema/contract V01; F01 persist initial limited onboarding session và F10 revoke toàn bộ session khi Company Manager bị chuyển sang `TERMINATED`. |
 | `auth_tokens` | `UPDATED` | Bổ sung loại `COMPANY_APPROVAL_CONFIRMATION`. |
 | `companies` | `NEW` | Lưu Company profile, quan hệ với Company Manager, state, review snapshot và các mốc lifecycle của V02. |
 
@@ -359,9 +359,13 @@ V02 **không** thêm field/enum riêng trên `AuthSession` để phân biệt ha
 
 Tạo onboarding session:
 
+- là persistence consequence bắt buộc của F01 thành công;
+- phải persist `AuthSession` ban đầu trong cùng TX-01 với Company Manager và Company;
 - không đổi `User.status`;
 - không set `User.emailVerifiedAt`;
 - không làm User thành `ACTIVE`.
+
+Raw refresh credential và access token chỉ được trả sau khi TX-01 commit thành công; raw credential không được persist. Logout hoặc security revocation về sau có thể xóa session này theo lifecycle thông thường.
 
 V02 cũng sử dụng collection này trong F10 khi Company Manager bị chuyển sang `TERMINATED` và toàn bộ session phải bị revoke.
 
@@ -768,12 +772,14 @@ submittedAt <= reviewedAt <= activatedAt
 - `BR-01`
 - `BR-02`
 - `BR-04`
+- `BR-21`
 
 ### Trước
 
 ```text
 Không có User COMPANY_MANAGER của onboarding
 Không có Company tương ứng
+Không có initial onboarding AuthSession tương ứng
 ```
 
 ### Sau
@@ -792,16 +798,22 @@ submittedAt        = null
 reviewedByUserId   = null
 reviewedAt         = null
 activatedAt        = null
+
+AuthSession
+userId             = User._id
+refreshTokenHash   = hash của refresh credential ban đầu
+expiresAt          = thời điểm hết hạn theo session policy
 ```
 
 ### Entity thay đổi
 
 - `users`
 - `companies`
+- `auth_sessions`
 
 ### Invariant
 
-Không được persist Company Manager onboarding độc lập khỏi Company tương ứng.
+Không được hoàn tất PT-01 thành công nếu Company Manager, Company tương ứng hoặc initial onboarding AuthSession thiếu một phía. Logout/revocation sau PT-01 được phép xóa session theo lifecycle authentication bình thường.
 
 ---
 
@@ -1202,13 +1214,14 @@ Chỉ các workflow cần bảo vệ cross-document invariant mới bắt buộc
 
 Các update chỉ nằm trong một Company document phải atomic ở document level nhưng không bắt buộc multi-document transaction.
 
-## TX-01 — Tạo Company Manager + Company
+## TX-01 — Tạo Company Manager + Company + initial onboarding session
 
 **Business source**
 
 - `F01`
 - `BR-02`
 - `BR-04`
+- `BR-21`
 
 Trong cùng transaction:
 
@@ -1217,6 +1230,7 @@ Trong cùng transaction:
 3. tạo `Company`;
 4. persist `Company.managerUserId = User._id`;
 5. persist `Company = NOT_SUBMITTED + INACTIVE`.
+6. persist một `AuthSession` ban đầu thuộc Company Manager với refresh credential chỉ được lưu dưới dạng hash và thời hạn theo session policy.
 
 Sau commit:
 
@@ -1224,7 +1238,11 @@ Sau commit:
 User COMPANY_MANAGER tồn tại
 ↔
 Company tương ứng tồn tại
++
+initial onboarding AuthSession thuộc User tồn tại
 ```
+
+Sau commit thành công, F01 trả access token gắn với session, raw refresh credential, session metadata, User và Company. Không persist raw refresh credential hoặc access token.
 
 Không được xuất hiện:
 
@@ -1233,6 +1251,8 @@ User COMPANY_MANAGER onboarding tồn tại
 nhưng
 không có Company tương ứng
 ```
+
+hoặc một kết quả F01 thành công đã được trả nhưng initial onboarding AuthSession không được persist.
 
 Nếu một bước bắt buộc thất bại:
 
@@ -1438,7 +1458,7 @@ Service chịu trách nhiệm cho constraint cần actor context, referenced doc
 | --- | --- | --- |
 | `managerUserId` phải reference User role `COMPANY_MANAGER` | Service | Database reference không biết business role. |
 | `reviewedByUserId` phải là `PLATFORM_ADMIN` | Service | Cần đọc referenced User. |
-| F01 chỉ tạo Company Manager cùng Company | Service + TX-01 | Cross-document business invariant. |
+| F01 tạo Company Manager cùng Company và initial onboarding AuthSession | Service + TX-01 | Cross-document business invariant và khả năng tiếp tục onboarding ngay sau registration. |
 | Company Manager không được là Candidate trong cùng account | Service | Role/business boundary. |
 | `name` bắt buộc khi submit | Service | Draft `NOT_SUBMITTED` được phép chưa có giá trị. |
 | `businessRegistrationNumber` bắt buộc khi submit | Service | Draft được phép chưa hoàn chỉnh. |
@@ -1454,6 +1474,7 @@ Service chịu trách nhiệm cho constraint cần actor context, referenced doc
 | Confirmation token phải còn hạn | Service | TTL cleanup không đủ để xác định validity. |
 | Resend chỉ khi Company `APPROVED + INACTIVE` và token trước hết hạn | Service | Business state + token lifecycle. |
 | Limited onboarding authentication chỉ cho CM `PENDING_ACTIVATION` theo Product `BR-21` | Service | Authorization context; không đổi schema `AuthSession`. |
+| F01 chỉ trả registration success sau khi initial onboarding AuthSession đã commit | Service + TX-01 | Kết quả registration phải dùng được ngay cho F02/F03 mà không login lại. |
 | Tạo/duy trì onboarding session không set `ACTIVE` hoặc `emailVerifiedAt` | Service | Product `BR-21` + F07/TX-03 boundary. |
 | Onboarding session không authorize flow dành cho User `ACTIVE` | Service | Scope tách biệt với normal ACTIVE authentication. |
 | Company + User activation đồng bộ | Service + TX-03 | Cross-document invariant. |
@@ -1906,6 +1927,7 @@ Các invariant sau phải luôn đúng ở persisted state.
 | 31 | Limited onboarding authentication không persist `ACTIVE` hoặc `emailVerifiedAt` cho CM onboarding. | Service |
 | 32 | `emailVerifiedAt` của Company Manager onboarding chỉ được set trong TX-03/F07. | TX-03 |
 | 33 | Phân biệt onboarding vs ACTIVE authorization context không yêu cầu schema `AuthSession` mới. | Service / Product `BR-21` |
+| 34 | Ngay tại completion của F01/TX-01 phải có initial onboarding AuthSession thuộc Company Manager; logout/revocation sau đó không vi phạm invariant này. | TX-01 + authentication lifecycle |
 
 ---
 
@@ -1915,7 +1937,7 @@ Data contract V02 được coi là hoàn thành khi:
 
 - `users` được mở rộng đúng với `PENDING_ACTIVATION`;
 - Candidate persistence behavior V01 không bị thay đổi;
-- `auth_sessions` được giữ nguyên schema V01, hỗ trợ cả normal ACTIVE sessions và limited onboarding sessions theo Product `BR-21`, và tham gia F10 session revocation;
+- `auth_sessions` được giữ nguyên schema V01, hỗ trợ cả normal ACTIVE sessions và limited onboarding sessions theo Product `BR-21`, được tạo ban đầu trong F01/TX-01, và tham gia F10 session revocation;
 - `auth_tokens` hỗ trợ `COMPANY_APPROVAL_CONFIRMATION`;
 - `companies` được định nghĩa đầy đủ;
 - relationship `Company.managerUserId → User._id` được bảo vệ;
@@ -1923,7 +1945,7 @@ Data contract V02 được coi là hoàn thành khi:
 - review snapshot là embedded immutable persistence;
 - state matrix chỉ cho phép lifecycle canonical;
 - mọi persistence transition PT-01 đến PT-09 rõ ràng;
-- TX-01 đến TX-04 bảo vệ các cross-document invariant;
+- TX-01 đến TX-04 bảo vệ các cross-document invariant, trong đó TX-01 chỉ hoàn tất registration sau khi initial onboarding AuthSession đã được persist;
 - constraint ownership giữa database/schema và service rõ ràng;
 - token/TTL lifecycle của approval confirmation rõ ràng;
 - tenant key là `Company._id`;

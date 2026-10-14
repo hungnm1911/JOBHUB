@@ -522,9 +522,9 @@ Additional rules:
 ## Verification
 
 - Frontend changes must run the applicable repository scripts from `frontend/`.
-- `yarn verify:agent` is the common frontend gate. It runs `yarn lint` (the lint gate) and then `yarn build` (the production compilation gate).
-- When a frontend test harness or deterministic architecture checks are introduced, they are added to `verify:agent` rather than documented as a separate final gate.
-- Passing lint/build proves syntax, configured lint rules, module resolution, and production bundling; it does not prove business behavior.
+- `yarn verify:agent` is the common frontend gate. It runs the focused authentication Node tests (`yarn test:auth`), `yarn lint` (the lint gate), and then `yarn build` (the production compilation gate).
+- When a browser-oriented frontend test harness or deterministic architecture checks are introduced, they are added to `verify:agent` rather than documented as a separate final gate.
+- Passing the gate proves the focused authentication behavior, syntax, configured lint rules, module resolution, and production bundling; it does not prove other business behavior.
 - Feature behavior, validation edge cases, route guards, reducers, and error mapping should receive focused automated tests when a frontend test harness is introduced.
 - No frontend test result may be claimed unless the stated command was actually run successfully.
 - Backend verification does not verify frontend behavior, and frontend build success does not verify backend contracts.

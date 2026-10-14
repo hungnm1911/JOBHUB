@@ -6,6 +6,9 @@ This document provides the high-level product roadmap for JOBHUB.
 
 It identifies the planned business versions and their current status.
 
+Implementation and verification snapshots are mapped from the
+[Project Status entry point](../project-status/index.md).
+
 Detailed business requirements are defined only in the corresponding documents under:
 
 `docs/product/versions/`
@@ -21,7 +24,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | Version | Scope | Status |
 | --- | --- | --- |
 | V1 | Tài khoản và vòng đời xác thực | COMPLETED AND VERIFIED |
-| V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
+| V2 | Company onboarding và quản trị cấp nền tảng | IN PROGRESS |
 | V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
 | V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | COMPLETED / ACCEPTED |
@@ -34,7 +37,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
 | V11 | Conversation và Chat thuộc Application | COMPLETED AND VERIFIED |
 | V12 | Interview Schedule | IN PROGRESS |
-| V13 | Notification và phân phối realtime | READY FOR IMPLEMENTATION |
+| V13 | Notification và phân phối realtime | IN PROGRESS |
 | V14 | Candidate Search trên CV PUBLIC | COMPLETED AND VERIFIED |
 | V15 | Job Invitation và nhánh Recruiter săn ứng viên | COMPLETED AND VERIFIED |
 | V16 | Saved Jobs | PLANNED |
@@ -55,7 +58,8 @@ Agents must not infer detailed requirements from the version name.
 The version has planning material in the repository but is intentionally held
 before implementation. Its specifications and data contract are not approved
 implementation authority, and no business slice may start until the roadmap
-and project status explicitly move it forward.
+explicitly moves it forward and the
+[Project Status entry point](../project-status/index.md) reflects that state.
 
 ### READY FOR IMPLEMENTATION
 
@@ -78,7 +82,13 @@ Review in addition to implementation and repository verification.
 
 ## Current project state
 
-V1 through V7 are `COMPLETED AND VERIFIED`.
+V1 and V3 through V7 are `COMPLETED AND VERIFIED`.
+
+V2 is `IN PROGRESS`. Its previously approved F02–F10 scope and acceptance
+findings #1–#8 remain complete. The newly canonicalized F01/BR-21 immediate
+onboarding-session issuance is implemented and focused-verified, while a clean
+rerun of the required common backend verification gate remains pending before
+V2 can return to `COMPLETED AND VERIFIED`.
 
 V4.1 has canonical Product/Data contracts and is `COMPLETED / ACCEPTED` as of
 2026-10-07. Final Acceptance passed across F01–F06 and BR-01–BR-24 after Slices
@@ -142,10 +152,10 @@ attachment, and related deferred capabilities remain outside V11 by product
 boundary. V12 now has approved Product/Data contracts and is `IN PROGRESS`;
 Slices 01–08 are implemented and verified, while Slice 09 Final Acceptance is
 resolving recorded acceptance findings. V13 has approved Product/Data
-contracts and is `READY FOR IMPLEMENTATION`; its Slice 01 may start against
-those contracts and the approved recovery ownership/trigger contract. V12
-closure remains a later acceptance gate for V13 Slices 06–08, not a Slice 01
-prerequisite. V14 Final Acceptance / regression closure passed across F01–F06
+contracts and is `IN PROGRESS`; Slices 01–12 are implemented and verified,
+while Slice 13 Final Acceptance remains later work. V12 closure remains a
+later acceptance gate for V13 Slices 06–08, not a Slice 01 prerequisite. V14
+Final Acceptance / regression closure passed across F01–F06
 and BR-01–BR-38 after Slices 01–06 and the Slice 07 dynamic-revocation and
 read-only acceptance suite. The required backend verification gate passed;
 V14 is therefore `COMPLETED AND VERIFIED` against the approved Candidate

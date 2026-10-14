@@ -6,11 +6,21 @@ This file applies to all work under `backend/` and supplements the repository-le
 
 Before any significant backend modification, read:
 
-- [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md)
+- [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md): its `Purpose` and the `Backend …` sections only; the `Frontend …` sections do not apply to backend work
 - [`../docs/engineering/backend-conventions.md`](../docs/engineering/backend-conventions.md)
-- [`../docs/engineering/source-of-truth.md`](../docs/engineering/source-of-truth.md)
+- [`../docs/engineering/source-of-truth.md`](../docs/engineering/source-of-truth.md), using the lookup protocol below instead of reading the whole file
 
 These engineering documents are the canonical backend architecture contract. Follow their distinction between current state and target convention.
+
+### Looking up owners in `source-of-truth.md`
+
+The ownership table is about 135 KB, one row per line, and grows with every slice. Do not read it in full.
+
+1. Read only `Purpose` and `Consumption rules` (the top of the file and the short section after the table).
+2. Inspect the existing implementation first, then search the table with `rg -n` using the file paths and basenames you found plus the concept words from the task. Match the first two columns (`Responsibility`, `Canonical owner`), for example ``rg -in "^\|([^|]*\|)?[^|]*location" docs/engineering/source-of-truth.md``; the other columns are for confirming a row you already selected.
+3. A version tag such as `V4.1` or `Slice 04` in a row is a pointer to the matching spec, data model, and status leaf, not a filter that excludes owners from other versions. If a broad keyword returns many rows, narrow it by owner path instead of reading them all.
+4. Open `Current known mismatches` only when the change touches a file or layer it names.
+5. The table can lag the code. If no row matches a responsibility the code already implements, report the missing row instead of assuming there is no owner; if neither code nor table has an owner, treat the responsibility as new and follow the working rules below.
 
 ## Task-specific canonical context
 
@@ -18,9 +28,9 @@ For backend work that implements or changes V1 behavior, read all of the followi
 
 - [`../docs/product/versions/v01-account-authentication.md`](../docs/product/versions/v01-account-authentication.md)
 - [`../docs/data/versions/v01-authentication-data-model.md`](../docs/data/versions/v01-authentication-data-model.md)
-- [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md)
+- [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md) (sections as above)
 - [`../docs/engineering/backend-conventions.md`](../docs/engineering/backend-conventions.md)
-- [`../docs/engineering/source-of-truth.md`](../docs/engineering/source-of-truth.md)
+- [`../docs/engineering/source-of-truth.md`](../docs/engineering/source-of-truth.md) (lookup protocol above)
 
 Each canonical document is authoritative only for its own concern:
 
@@ -60,4 +70,4 @@ For material backend code, configuration, or tooling changes, run focused tests 
 cd backend && npm run verify:agent
 ```
 
-The gate currently runs ESLint and deterministic architecture verification. When automated tests are introduced, extend the canonical command as appropriate so agents do not need to remember another independent final gate. Passing this command does not verify business behavior without relevant tests or prove MongoDB, Cloudinary, SMTP, or other external-service runtime behavior; claim those checks only when they were actually performed.
+The gate runs ESLint, deterministic architecture verification, and the Vitest suite (see the `verify:agent` script in `backend/package.json`). New automated tests and checks join this command so agents do not need to remember another independent final gate. Passing this command does not verify business behavior without relevant tests or prove MongoDB, Cloudinary, SMTP, or other external-service runtime behavior; claim those checks only when they were actually performed.
