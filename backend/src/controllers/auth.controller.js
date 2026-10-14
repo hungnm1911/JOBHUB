@@ -45,6 +45,9 @@ const registerCompanyManagerHandler = async (request, response, next) => {
     return response.status(201).json({
       message:
         "Company Manager registration successful. Complete your company profile to continue onboarding.",
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      session: result.session,
       user: result.user,
       company: result.company,
     });

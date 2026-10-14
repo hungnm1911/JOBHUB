@@ -102,7 +102,7 @@ V02 **chốt thêm** một exception riêng: limited onboarding authentication c
         ↓
 PENDING_ACTIVATION
         ↓
-Limited onboarding authentication (F02 / F03 / F08)
+Limited onboarding authentication do F01 cấp (F02 / F03 / F08)
         ↓
 Platform Admin chấp thuận Company
         ↓
@@ -330,7 +330,7 @@ Terminal                             ↓
 
 ### Mục tiêu
 
-Khởi tạo một onboarding trong đó tài khoản Company Manager và Company được tạo như hai đối tượng nghiệp vụ riêng nhưng bắt buộc gắn với nhau theo quan hệ `1 — 1`.
+Khởi tạo một onboarding trong đó tài khoản Company Manager và Company được tạo như hai đối tượng nghiệp vụ riêng nhưng bắt buộc gắn với nhau theo quan hệ `1 — 1`, đồng thời cấp limited onboarding authentication để Company Manager có thể tiếp tục hoàn thiện Company draft mà không phải đăng nhập lại.
 
 ### Tiền điều kiện
 
@@ -347,13 +347,15 @@ Khởi tạo một onboarding trong đó tài khoản Company Manager và Compan
 4. Hệ thống thiết lập quan hệ `1 Company Manager ↔ 1 Company`.
 5. Company Manager bước vào trạng thái `PENDING_ACTIVATION`.
 6. Company bắt đầu ở `NOT_SUBMITTED + INACTIVE`.
-7. Company Manager tiếp tục hoàn thiện hồ sơ Company.
+7. Hệ thống cấp limited onboarding authentication context theo `BR-21` cho Company Manager vừa đăng ký.
+8. Company Manager tiếp tục hoàn thiện hồ sơ Company.
 
 
 
 ### Kết quả
 
 - Company Manager và Company cùng tồn tại trong onboarding.
+- Kết quả đăng ký thành công cung cấp limited onboarding authentication để tiếp tục F02/F03 mà không yêu cầu Company Manager đăng nhập lại.
 - Company Manager chưa được active.
 - Company chưa được phép hoạt động.
 - Company Manager chưa được sử dụng tài khoản như Candidate.
@@ -363,6 +365,7 @@ Khởi tạo một onboarding trong đó tài khoản Company Manager và Compan
 ### Trường hợp từ chối
 
 - Không cho phép hoàn tất onboarding Company Manager mà không có Company tương ứng.
+- Không trả kết quả đăng ký thành công nếu limited onboarding authentication context ban đầu không được cấp cho Company Manager tương ứng.
 - Không cho phép một Company Manager gắn với Company thứ hai.
 - Không cho phép một Company gắn với Company Manager thứ hai.
 
@@ -374,6 +377,7 @@ Khởi tạo một onboarding trong đó tài khoản Company Manager và Compan
 - `BR-02`
 - `BR-03`
 - `BR-04`
+- `BR-21`
 
 
 
@@ -1309,6 +1313,8 @@ là trạng thái hợp lệ và có nghĩa Platform Admin đã approve nhưng C
 
 Company Manager có `status = PENDING_ACTIVATION` được phép sử dụng một limited onboarding authentication context trước F07.
 
+F01 thành công phải cấp context đầu tiên ngay trong kết quả đăng ký Company Manager để actor có thể chuyển thẳng sang hoàn thiện Company draft. Company Manager không phải gửi lại credentials qua login chỉ để bắt đầu F02/F03. Việc login hợp lệ ở lần sử dụng sau vẫn có thể tạo một onboarding context mới theo cùng rule này.
+
 Context này:
 
 - tách biệt với normal ACTIVE authentication của V01;
@@ -1345,7 +1351,7 @@ Sau F07 thành công, User không còn `PENDING_ACTIVATION` nên onboarding cont
 
 | Hành động                  | Trước                                                       | Sau                                                         | Actor           |
 | -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- | --------------- |
-| Khởi tạo onboarding        | Chưa có onboarding V02                                      | CM `PENDING_ACTIVATION`; Company `NOT_SUBMITTED + INACTIVE` | Company Manager |
+| Khởi tạo onboarding        | Chưa có onboarding V02                                      | CM `PENDING_ACTIVATION`; Company `NOT_SUBMITTED + INACTIVE`; limited onboarding authentication đã được cấp | Company Manager |
 | Submit Company             | CM `PENDING_ACTIVATION`; Company `NOT_SUBMITTED + INACTIVE` | CM `PENDING_ACTIVATION`; Company `PENDING + INACTIVE`       | Company Manager |
 | Reject Company             | CM `PENDING_ACTIVATION`; Company `PENDING + INACTIVE`       | CM `PENDING_ACTIVATION`; Company `REJECTED + INACTIVE`      | Platform Admin  |
 | Approve Company            | CM `PENDING_ACTIVATION`; Company `PENDING + INACTIVE`       | CM `PENDING_ACTIVATION`; Company `APPROVED + INACTIVE`      | Platform Admin  |
@@ -1375,7 +1381,7 @@ Không tự bổ sung:
 
 | Hành động                       | Actor được phép               | Auth context                         | Resource / Scope               | Điều kiện                                               |
 | ------------------------------- | ----------------------------- | ------------------------------------ | ------------------------------ | ------------------------------------------------------- |
-| Khởi tạo onboarding             | Người đăng ký Company Manager | Chưa có session                      | Company của onboarding đó      | Quan hệ `1 — 1` được thiết lập trong cùng onboarding    |
+| Khởi tạo onboarding             | Người đăng ký Company Manager | Chưa có session ở đầu request; F01 cấp limited onboarding authentication khi thành công | Company của onboarding đó | Quan hệ `1 — 1` và onboarding context ban đầu được thiết lập trong cùng kết quả đăng ký |
 | Cập nhật/xem hồ sơ trước submit | Company Manager               | Limited onboarding authentication    | Company của chính mình         | Company `NOT_SUBMITTED + INACTIVE`; `BR-21`             |
 | Submit Company                  | Company Manager               | Limited onboarding authentication    | Company của chính mình         | Đủ điều kiện F03; `BR-21`                               |
 | Xem danh sách/chi tiết đăng ký  | Platform Admin                | Normal ACTIVE authentication         | Company đăng ký ở cấp nền tảng | Actor là Platform Admin                                 |
@@ -1465,6 +1471,7 @@ V02 chỉ thiết lập tenant boundary. Các resource tuyển dụng cụ thể
 25. Normal ACTIVE authentication của V01 vẫn yêu cầu User `ACTIVE` và email đã được xác thực; V02 không nới lỏng điều kiện này.
 26. Limited onboarding authentication chỉ dành cho Company Manager `PENDING_ACTIVATION`, không set `ACTIVE`/`emailVerifiedAt`, và chỉ authorize F02/F03/F08 cùng refresh/logout của chính context đó.
 27. Khi User không còn `PENDING_ACTIVATION`, limited onboarding authentication không còn authorize.
+28. F01 thành công phải cấp limited onboarding authentication context ban đầu; Company Manager không phải login lại để bắt đầu F02/F03.
 
 ---
 
@@ -1502,7 +1509,7 @@ Không được dùng data design hoặc implementation hiện tại để tạo
 
 V02 được coi là hoàn thành về mặt nghiệp vụ khi:
 
-- `F01` — onboarding Company Manager và Company được đáp ứng;
+- `F01` — onboarding Company Manager và Company được đáp ứng, bao gồm cấp limited onboarding authentication context ban đầu trong kết quả đăng ký thành công;
 - `F02` — hoàn thiện hồ sơ Company trước submit được đáp ứng;
 - `F03` — submit và snapshot được đáp ứng;
 - `F04` — Platform Admin xem đăng ký Company được đáp ứng;

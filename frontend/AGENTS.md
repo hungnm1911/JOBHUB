@@ -6,7 +6,7 @@ This file applies to all work under `frontend/` and supplements the repository-l
 
 Before any significant frontend modification, read:
 
-- [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md)
+- [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md): its `Purpose` and the `Frontend …` sections only; the `Backend …` sections do not apply to frontend work
 - [`../docs/engineering/frontend-conventions.md`](../docs/engineering/frontend-conventions.md)
 - [`../docs/engineering/frontend-source-of-truth.md`](../docs/engineering/frontend-source-of-truth.md)
 
@@ -19,7 +19,7 @@ For frontend work that implements or changes the client behavior of a product ve
 - the approved product specification for that version under [`../docs/product/versions/`](../docs/product/versions/);
 - the backend routes, controllers, and response/error shapes of every endpoint or realtime event the change consumes;
 - the matching data contract under [`../docs/data/versions/`](../docs/data/versions/) only when field semantics are needed to present or submit data;
-- [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md);
+- [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md) (sections as above);
 - [`../docs/engineering/frontend-conventions.md`](../docs/engineering/frontend-conventions.md); and
 - [`../docs/engineering/frontend-source-of-truth.md`](../docs/engineering/frontend-source-of-truth.md).
 
@@ -68,6 +68,6 @@ For material frontend code, configuration, or tooling changes, run focused check
 cd frontend && yarn verify:agent
 ```
 
-The gate currently runs ESLint and the Vite production build. No frontend test harness or deterministic architecture verification exists yet; when either is introduced, extend the canonical command so agents do not need to remember another independent final gate. Passing this command proves lint rules, module resolution, and bundling only. It does not verify business behavior, rendering, accessibility, or integration with the running backend; claim a browser or end-to-end check only when it was actually performed.
+The gate runs the focused authentication Node tests, ESLint, and the Vite production build (see the `verify:agent` script in `frontend/package.json`). No browser-oriented test harness or deterministic architecture verification exists yet; when either is introduced, extend the canonical command so agents do not need to remember another independent final gate. Passing this command proves the focused authentication behavior, lint rules, module resolution, and bundling only. It does not verify other business behavior, rendering, accessibility, or integration with the running backend; claim a browser or end-to-end check only when it was actually performed.
 
 Frontend verification does not verify backend work, and backend verification does not verify frontend work. A change that spans both applications must pass both gates.

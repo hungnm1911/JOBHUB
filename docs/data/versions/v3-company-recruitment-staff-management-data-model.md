@@ -765,6 +765,8 @@ Tiếp tục lưu session của User theo contract authentication đã tồn t�
 
 V3 sử dụng collection này để bảo đảm session cũ không tiếp tục tạo quyền truy cập sau các security transition yêu cầu revocation.
 
+V3 đồng thời giữ behavior V2 đã được canonicalize: TX-06 tạo initial limited onboarding `AuthSession` cho Company Manager `PENDING_ACTIVATION` trong cùng registration transaction với User, Company và CompanyMember. Session vẫn thuộc User và không thêm Company/CompanyMember reference.
+
 ---
 
 ## 8.2. Fields
@@ -1415,6 +1417,11 @@ Company
 CompanyMember
 role = COMPANY_MANAGER
 status = ACTIVE
+
+AuthSession
+userId = User._id
+refreshTokenHash = hash của refresh credential ban đầu
+expiresAt = thời điểm hết hạn theo session policy
 ```
 
 Không được commit:
@@ -1430,6 +1437,10 @@ hoặc:
 COMPANY_STAFF Company Manager
 nhưng không có CompanyMember
 ```
+
+hoặc trả kết quả registration thành công khi initial onboarding AuthSession chưa được persist.
+
+Sau commit, F01 trả access token gắn với session, raw refresh credential và session metadata cùng User/Company. Raw refresh credential và access token không được persist.
 
 ---
 
@@ -1918,6 +1929,7 @@ Các invariant sau phải luôn đúng sau khi relevant database operation commi
 38. Không tồn tại Recruiter-specific collection.
 39. Không persist Job/team/Application data như một phần của V3.
 40. External SMTP delivery không thuộc database atomic completion trừ khi canonical contract sau này quy định khác.
+41. V2 F01 sau V3 chỉ hoàn tất registration khi User, Company, CompanyMember `COMPANY_MANAGER` và initial onboarding AuthSession đã cùng commit; logout/revocation sau đó được phép xóa session theo lifecycle authentication bình thường.
 
 ---
 
@@ -1934,6 +1946,7 @@ Data Contract V3 được coi là hoàn thành khi:
 * `RECRUITER_ACTIVATION` token lifecycle đã rõ;
 * password reset persistence đã rõ;
 * session revocation persistence đã rõ;
+* TX-06 giữ V2 F01 immediate-onboarding behavior bằng cách persist initial onboarding AuthSession cùng User, Company và CompanyMember;
 * state matrix đã rõ;
 * persistence transitions đã rõ;
 * transaction/atomicity requirements đã rõ;

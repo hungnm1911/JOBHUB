@@ -2043,7 +2043,7 @@ Approved Data Contract
 Engineering docs
 → architecture truth
 
-PROJECT_STATUS
+Project Status (`docs/project-status/index.md`)
 → implementation snapshot
 
 Source code + tests

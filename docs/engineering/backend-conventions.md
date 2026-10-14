@@ -395,7 +395,7 @@ Additional rules:
 
 Before adding a configuration object, connection, client, constant, helper, service, model, middleware, or error type:
 
-1. Check [`source-of-truth.md`](source-of-truth.md) for the canonical owner.
+1. Check [`source-of-truth.md`](source-of-truth.md) for the canonical owner by searching its table, not by reading the whole file (see the lookup protocol in `backend/AGENTS.md`).
 2. Search the repository for an existing implementation.
 3. Reuse or extend the canonical owner within its responsibility.
 4. Do not establish a parallel owner to work around an existing mismatch.

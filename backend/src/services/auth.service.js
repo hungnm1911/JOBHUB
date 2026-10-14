@@ -111,6 +111,50 @@ const isCompanyManagerOnboarding = (user) => {
   );
 };
 
+const issueSessionCredentials = async ({ user, transactionSession }) => {
+  const rawRefreshToken = generateAuthToken();
+  const refreshTokenHash = hashAuthToken(rawRefreshToken);
+  const expiresAt = new Date(
+    Date.now() + config.authSession.expiresInMs,
+  );
+
+  let authSession;
+
+  if (transactionSession) {
+    [authSession] = await AuthSession.create(
+      [
+        {
+          userId: user._id,
+          refreshTokenHash,
+          expiresAt,
+        },
+      ],
+      { session: transactionSession },
+    );
+  } else {
+    authSession = await AuthSession.create({
+      userId: user._id,
+      refreshTokenHash,
+      expiresAt,
+    });
+  }
+
+  const accessToken = generateAccessToken({
+    userId: user._id.toString(),
+    role: user.role,
+    sessionId: authSession._id.toString(),
+  });
+
+  return {
+    accessToken,
+    refreshToken: rawRefreshToken,
+    session: {
+      id: authSession._id.toString(),
+      expiresAt: authSession.expiresAt,
+    },
+  };
+};
+
 const registerCandidate = async ({ fullName, email, password }) => {
   assertPasswordPolicy(password);
 
@@ -212,6 +256,7 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
 
   let user;
   let company;
+  let credentials;
 
   try {
     await session.withTransaction(async () => {
@@ -266,12 +311,18 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
         ],
         { session },
       );
+
+      credentials = await issueSessionCredentials({
+        user,
+        transactionSession: session,
+      });
     });
   } finally {
     await session.endSession();
   }
 
   return {
+    ...credentials,
     user: toPublicUser(user),
     company: toPublicCompany(company, user._id),
   };
@@ -485,31 +536,10 @@ const login = async ({ email, password }) => {
     });
   }
 
-  const rawRefreshToken = generateAuthToken();
-  const refreshTokenHash = hashAuthToken(rawRefreshToken);
-  const expiresAt = new Date(
-    Date.now() + config.authSession.expiresInMs,
-  );
-
-  const session = await AuthSession.create({
-    userId: user._id,
-    refreshTokenHash,
-    expiresAt,
-  });
-
-  const accessToken = generateAccessToken({
-    userId: user._id.toString(),
-    role: user.role,
-    sessionId: session._id.toString(),
-  });
+  const credentials = await issueSessionCredentials({ user });
 
   return {
-    accessToken,
-    refreshToken: rawRefreshToken,
-    session: {
-      id: session._id.toString(),
-      expiresAt: session.expiresAt,
-    },
+    ...credentials,
     user: toPublicUser(user),
   };
 };

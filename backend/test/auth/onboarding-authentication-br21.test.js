@@ -183,7 +183,7 @@ describe("BR-21 limited onboarding authentication", () => {
   it("revokes only the current onboarding session on logout", async () => {
     const agent = createTestAgent();
 
-    await registerCompanyManager(agent, {
+    const registration = await registerCompanyManager(agent, {
       email: "br21.logout@example.com",
     });
 
@@ -202,9 +202,13 @@ describe("BR-21 limited onboarding authentication", () => {
 
     const revokedSession = await AuthSession.findById(firstLogin.session.id);
     const remainingSession = await AuthSession.findById(secondLogin.session.id);
+    const registrationSession = await AuthSession.findById(
+      registration.session.id,
+    );
 
     expect(revokedSession).toBeNull();
     expect(remainingSession).not.toBeNull();
+    expect(registrationSession).not.toBeNull();
 
     const revokedDraftGet = await agent
       .get("/api/company")
@@ -227,8 +231,13 @@ describe("BR-21 limited onboarding authentication", () => {
     });
     const persistedUser = await User.findById(firstLogin.user.id);
 
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0]._id.toString()).toBe(secondLogin.session.id);
+    expect(sessions).toHaveLength(2);
+    expect(sessions.map(({ _id }) => _id.toString())).toEqual(
+      expect.arrayContaining([
+        registration.session.id,
+        secondLogin.session.id,
+      ]),
+    );
     expect(persistedUser.status).toBe(USER_STATUS.PENDING_ACTIVATION);
     expect(persistedUser.emailVerifiedAt).toBeNull();
   });
@@ -320,6 +329,6 @@ describe("BR-21 limited onboarding authentication", () => {
     });
 
     expect(persistedUser.status).toBe(USER_STATUS.TERMINATED);
-    expect(sessions).toHaveLength(1);
+    expect(sessions).toHaveLength(2);
   });
 });
