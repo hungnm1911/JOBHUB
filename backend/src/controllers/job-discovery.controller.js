@@ -100,9 +100,7 @@ const getPublicJobsHandler = async (request, response, next) => {
         locations: parseLocationFilterQuery(request.query.locations, "locations"),
         workModes: normalizeQueryArray(request.query.workModes),
         employmentTypes: normalizeQueryArray(request.query.employmentTypes),
-        experienceLevels: normalizeQueryArray(
-          request.query.experienceLevels ?? request.query.experienceLevelIds,
-        ),
+        experienceLevels: normalizeQueryArray(request.query.experienceLevels),
         salaryPeriod: request.query.salaryPeriod,
         salaryMin: request.query.salaryMin,
         salaryMax: request.query.salaryMax,

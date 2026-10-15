@@ -2,7 +2,14 @@
 
 ## Current project state
 
-**V13 — Notification và phân phối realtime** is `IN PROGRESS`.
+**V13 — Notification và phân phối realtime** is `COMPLETED AND VERIFIED`:
+Slices 01–12 plus Slice 13 Final Acceptance passed across `F01`–`F11`,
+`BR-01`–`BR-50`, and `TX-01`. The final independent architecture review found
+no Critical finding. Its one High finding (the V12 closure gate for Slices
+06–08) was resolved when V12 became `COMPLETED AND VERIFIED`. Its one Medium
+finding (malformed `notificationId` returned 500 instead of 404 on Notification
+fetch/open) is fixed and regression-covered, and the official backend gate
+passed afterwards. Two non-blocking Low findings are deferred (see below).
 Its approved canonical Product/Data contracts are tracked at
 `docs/product/versions/v13-notification-realtime-distribution.md` and
 `docs/data/versions/v13-notification-realtime-distribution-data-model.md`.
@@ -15,10 +22,20 @@ add `InterviewSchedule.COMPLETED` or `INTERVIEW_SCHEDULE_COMPLETED`.
 
 ## Deferred / not started
 
-- **V13 later-slice gates:** V12 closure is deferred as the acceptance gate for
-  V13 Slices 06–08 and does not block Slice 01. Slice 09–12 are implemented on
-  the shared authenticated connection plane with durable HTTP resync for offline
-  recovery; Slice 13 Final Acceptance remains later work.
+- **V13 closure:** Final Acceptance is complete; no V13 business slice remains.
+  V12 is `COMPLETED AND VERIFIED`, so the V12 closure gate for Slices 06–08 is
+  satisfied. Job Invitation Notification (owned by V15), Message read receipt,
+  typing/presence, mark-all/mark-unread/delete/archive, Notification
+  preference, email/push/SMS, Socket replay, and
+  `InterviewSchedule.COMPLETED` stay outside V13 by approved product boundary.
+- **Deferred non-blocking Low findings (no V13 business behavior is violated):**
+  - Notification HTTP and realtime payloads serialize the raw `Notification`
+    document (including `eventId`, `actorUserId`, `updatedAt`); for
+    candidate-facing `APPLICATION_UNASSIGNED`, `actorUserId` being null vs set
+    lets a Candidate infer automatic vs manual Unassign. Needs a public
+    Notification projection in a later API-contract change.
+  - The inbox list is unpaginated; Data Contract IDX-N01 defers pagination to
+    the later Data/API layer.
 
 ## Implementation record (slice detail)
 
@@ -74,7 +91,7 @@ Slice 01 recovery, which remains idempotent. This slice adds no Assignment
 Notification, realtime, delivery/read receipt, Conversation state, or Message
 schema behavior.
 
-Slice 05 is implemented for Assignment Notification (`F03`; `BR-10`–`BR-19`,
+Slice 05 is implemented and verified for Assignment Notification (`F03`; `BR-10`–`BR-19`,
 `BR-47`–`BR-50`, `TX-01`). Successful Assign, Reassign, and manual or automatic
 Unassign now persist their respective `APPLICATION_ASSIGNED`,
 `APPLICATION_REASSIGNED`, or `APPLICATION_UNASSIGNED` NotificationEvent inside
@@ -190,6 +207,19 @@ Focused coverage in
 `test/notification/v13-slice12-offline-reconnect-resync.test.js` (6 tests).
 
 ## Verification status
+
+- V13 Slice 13 Final Acceptance: independent architecture review of F01–F11,
+  BR-01–BR-50, and TX-01 found no Critical finding; the V12-closure High gate
+  was satisfied by V12 closure, the Medium finding (malformed `notificationId`
+  → 500) was fixed in `notification.service.js` with the regression test in
+  `test/notification/v13-slice02-notification-inbox-read-state.test.js` (failed
+  with `expected 500 to be 404` before the fix), and the Low findings above are
+  deferred. `cd backend && npm run verify:agent` passed (ESLint: 0 errors / 2
+  existing warnings in `test/job/v6-acceptance.test.js`; architecture:
+  ARCH-001 through ARCH-018; Vitest: 169 files / 1,765 tests). A first run
+  failed only because MongoMemoryServer picked an already-used port in one
+  suite; the rerun passed. Not verified: behavior against a real MongoDB/Socket.IO
+  deployment or multiple server instances (rooms are in-memory by contract).
 
 - V13 Socket.IO ownership refactor (2026-10-09): Socket.IO lifecycle,
   authenticated User-room membership, transport payloads, and fan-out moved

@@ -35,7 +35,7 @@ Theo [Product Roadmap](../docs/product/roadmap.md):
 | Phiên bản | Phạm vi | Trạng thái |
 | --- | --- | --- |
 | V1 | Tài khoản và vòng đời xác thực | `COMPLETED AND VERIFIED` |
-| V2 | Company onboarding và quản trị cấp nền tảng | `IN PROGRESS` |
+| V2 | Company onboarding và quản trị cấp nền tảng | `COMPLETED AND VERIFIED` |
 | V3 | Quản lý nhân sự tuyển dụng của Company | `COMPLETED AND VERIFIED` |
 | V4 | Danh mục chuẩn của nền tảng | `COMPLETED AND VERIFIED` |
 | V4.1 | Danh mục địa giới hành chính Việt Nam hai cấp | `COMPLETED / ACCEPTED` |
@@ -47,8 +47,8 @@ Theo [Product Roadmap](../docs/product/roadmap.md):
 | V9 | Candidate chủ động Apply và tạo Application | `COMPLETED AND VERIFIED` |
 | V10 | Phân công Application và Recruitment Pipeline | `COMPLETED AND VERIFIED` |
 | V11 | Conversation và Chat thuộc Application | `COMPLETED AND VERIFIED` |
-| V12 | Interview Schedule | `IN PROGRESS` |
-| V13 | Notification và phân phối realtime | `IN PROGRESS` |
+| V12 | Interview Schedule | `COMPLETED AND VERIFIED` |
+| V13 | Notification và phân phối realtime | `COMPLETED AND VERIFIED` |
 | V14 | Candidate Search trên CV `PUBLIC` | `COMPLETED AND VERIFIED` |
 | V15 | Job Invitation và nhánh Recruiter săn ứng viên | `COMPLETED AND VERIFIED` |
 | V16–V17 | Saved Jobs; dashboard, thống kê và giám sát | `PLANNED` |

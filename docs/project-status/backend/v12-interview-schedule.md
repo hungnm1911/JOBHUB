@@ -2,9 +2,13 @@
 
 ## Current project state
 
-**V12 — Interview Schedule** is `IN PROGRESS`: Slices 01–08 are implemented and
-verified, while Slice 09 Final Acceptance is resolving recorded acceptance
-findings. Slice 01 covers first Candidate Availability submit and Application-read projection
+**V12 — Interview Schedule** is `COMPLETED AND VERIFIED`: Slices 01–08 plus
+Slice 09 Final Acceptance passed across `F01`–`F11`, `BR-01`–`BR-39`,
+`TX-01`–`TX-03`, and `PI-01`–`PI-20`. The final independent architecture review
+found no Critical or High finding; its one Medium finding (Availability edit
+was not blocked on a terminal Application) is fixed and regression-covered, and
+the official backend gate passed afterwards. Two non-blocking Low findings are
+deferred (see below). Slice 01 covers first Candidate Availability submit and Application-read projection
 (`F01`, `F02`, `F04`, `F11` partial; `BR-01`–`BR-10`, `BR-33`, `BR-35`).
 Slice 02 is implemented and verified for the first Interview Proposal and
 pipeline cutover (`F05`; `BR-11`, `BR-12`, `BR-15`–`BR-18`, `BR-25`–`BR-26`,
@@ -26,10 +30,18 @@ history; no new legacy state may be created after cutover.
 
 ## Deferred / not started
 
-- **V12 Final Acceptance:** Slices 01–08 are implemented and verified. Slice 09
-  Final Acceptance remains in progress only for recorded acceptance findings;
-  Slice 07 terminal cancellation and Slice 08 Assignment/Interview-read
-  compatibility are not deferred.
+- **V12 closure:** Final Acceptance is complete; no V12 business slice remains.
+  Notification, realtime, Calendar UI, exact-time/duration scheduling,
+  `InterviewSchedule.COMPLETED`, and Availability/Schedule audit history stay
+  outside V12 by approved product/data boundary.
+- **Deferred non-blocking Low findings (no V12 business behavior is violated):**
+  - Reproposal increments `Application.version`/`updatedAt` as its
+    terminal-serialization write, while Data Contract §8.4 lists Application as
+    unchanged for follow-up proposals; needs a Data Contract clarification or a
+    switch to the restore-`updatedAt` acquire used by other V12 writes.
+  - Candidate-facing Application projections include
+    `createdByUserId`/`createdByCompanyMemberId` of each Schedule; a
+    Candidate-specific projection without creator identity is a follow-up.
 
 ## Implementation record (slice detail)
 
@@ -117,6 +129,19 @@ unique `applicationId` index is established (or startup fails) before traffic
 is accepted. First-submit/edit/proposal business behavior is unchanged.
 
 ## Verification status
+
+- V12 Final Acceptance (Slice 09): independent architecture review found no
+  Critical/High finding. The Medium finding — `editCandidateAvailability`
+  accepted edits on a terminal Application — is fixed by a terminal-status guard
+  (409, `field: "status"`) in the existing owner and covered by a regression
+  test in `test/application/v12-slice01-candidate-availability.test.js`
+  (failed before the fix, passes after). The focused V12/V13-interview suites
+  passed (8 files / 76 tests), then `cd backend && npm run verify:agent` passed
+  (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`;
+  architecture: ARCH-001 through ARCH-018; Vitest: 169 files / 1,764 tests).
+  An earlier full run had one failure in the unrelated V14
+  `v14-candidate-search-generated-preview.test.js` (PDF charset assertion) that
+  passed in isolation and in the final full run; it is not a V12 behavior.
 
 - V12 Gate 00 Implementation Readiness baseline: the official
   `cd backend && npm run verify:agent` gate passed without implementing any V12
