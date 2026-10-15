@@ -166,8 +166,8 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   `test/application/v9-application-foundation.test.js` (8 tests). The official
   backend gate passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 81 files /
-  589 tests). V8 remains `PENDING`; V9 Slice 02+ remains deferred by dependency
-  order.
+  589 tests). At that point Slice 02+ were not yet started; they are recorded
+  above as implemented and verified.
 
 - **Prepared; verified:** V9 Slice 01 implementation readiness — approved V9
   Product/Data contracts are established as repository sources of truth;
@@ -184,8 +184,8 @@ Regression Closure is completed and verified. V9 is `COMPLETED AND VERIFIED`.
   infrastructure or verification rule was changed. The official backend gate
   passed (ESLint: 0 errors / 2 existing warnings in
   `test/job/v6-acceptance.test.js`; ARCH-001 through ARCH-016; Vitest: 80 files /
-  581 tests). No V9 Fxx behavior was implemented. V8 remains `PENDING`, so V9
-  Slice 02+ remains deferred by dependency order.
+  581 tests). No V9 Fxx behavior was implemented at that point; later slices
+  are recorded above.
 
 ## Verification status
 

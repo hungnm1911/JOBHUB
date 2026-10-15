@@ -1640,6 +1640,16 @@ const editCandidateAvailability = async ({
         });
       }
 
+      // V12 Data §10.2 / BR-39: terminal Applications no longer participate in
+      // scheduling, so their current Availability is frozen.
+      if (isApplicationTerminalStatus(application.status)) {
+        throw new AppError(
+          409,
+          "Terminal Applications cannot edit Availability",
+          { field: "status" },
+        );
+      }
+
       const availability = await CandidateAvailability.findOne({
         applicationId: application._id,
       }).session(session);

@@ -501,6 +501,43 @@ describe("V12 Slice 01 — Current Availability first submit and read", () => {
     expect(await InterviewSchedule.countDocuments({ applicationId: application._id })).toBe(0);
   });
 
+  it.each([APPLICATION_STATUS.HIRED, APPLICATION_STATUS.REJECTED])(
+    "rejects Availability edit once the Application is terminal (%s)",
+    async (terminalStatus) => {
+      const { application, candidate } = await setup();
+      await submitCandidateAvailabilityFirstTime({
+        candidateUserId: candidate.user._id,
+        actorUser: candidate.user,
+        applicationId: application._id,
+        timezone: "UTC",
+        slots: [{ date: "2026-08-20", dayPart: "MORNING" }],
+        now: new Date("2026-08-14T00:00:00.000Z"),
+      });
+      await Application.updateOne(
+        { _id: application._id },
+        { $set: { status: terminalStatus } },
+      );
+
+      await expect(
+        editCandidateAvailability({
+          candidateUserId: candidate.user._id,
+          actorUser: candidate.user,
+          applicationId: application._id,
+          timezone: "UTC",
+          slots: [],
+          expectedRevision: 0,
+          now: new Date("2026-08-15T00:00:00.000Z"),
+        }),
+      ).rejects.toMatchObject({ statusCode: 409, details: { field: "status" } });
+
+      const availability = await CandidateAvailability.findOne({
+        applicationId: application._id,
+      });
+      expect(availability.revision).toBe(0);
+      expect(availability.slots).toHaveLength(1);
+    },
+  );
+
   it("provides the authenticated Candidate HTTP edit surface", async () => {
     const { application, candidate } = await setup();
     await submitCandidateAvailabilityFirstTime({

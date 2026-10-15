@@ -1,3 +1,5 @@
+import mongoose from "mongoose";
+
 import NotificationEvent from "../models/notification-event.model.js";
 import Notification from "../models/notification.model.js";
 import { emitNotificationToRecipient } from "../sockets/index.js";
@@ -23,10 +25,18 @@ const emitMaterializedNotification = (notification) => {
   }
 };
 
+const assertNotificationIdFormat = (notificationId) => {
+  if (!mongoose.isValidObjectId(notificationId)) {
+    throw new AppError(404, "Notification not found");
+  }
+};
+
 const findNotificationForRecipient = async ({
   notificationId,
   recipientUserId,
 }) => {
+  assertNotificationIdFormat(notificationId);
+
   const notification = await Notification.findOne({
     _id: notificationId,
     recipientUserId,
@@ -55,6 +65,8 @@ const openNotificationForRecipient = async ({
   recipientUserId,
   now = new Date(),
 }) => {
+  assertNotificationIdFormat(notificationId);
+
   const newlyReadNotification = await Notification.findOneAndUpdate(
     {
       _id: notificationId,

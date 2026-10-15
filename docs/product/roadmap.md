@@ -24,7 +24,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | Version | Scope | Status |
 | --- | --- | --- |
 | V1 | Tài khoản và vòng đời xác thực | COMPLETED AND VERIFIED |
-| V2 | Company onboarding và quản trị cấp nền tảng | IN PROGRESS |
+| V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
 | V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
 | V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
 | V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | COMPLETED / ACCEPTED |
@@ -32,12 +32,12 @@ When a detailed version specification exists and has been reviewed and approved,
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
 | V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
-| V8 | Job Discovery | IN PROGRESS |
+| V8 | Job Discovery | COMPLETED AND VERIFIED |
 | V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
 | V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
 | V11 | Conversation và Chat thuộc Application | COMPLETED AND VERIFIED |
-| V12 | Interview Schedule | IN PROGRESS |
-| V13 | Notification và phân phối realtime | IN PROGRESS |
+| V12 | Interview Schedule | COMPLETED AND VERIFIED |
+| V13 | Notification và phân phối realtime | COMPLETED AND VERIFIED |
 | V14 | Candidate Search trên CV PUBLIC | COMPLETED AND VERIFIED |
 | V15 | Job Invitation và nhánh Recruiter săn ứng viên | COMPLETED AND VERIFIED |
 | V16 | Saved Jobs | PLANNED |
@@ -82,13 +82,7 @@ Review in addition to implementation and repository verification.
 
 ## Current project state
 
-V1 and V3 through V7 are `COMPLETED AND VERIFIED`.
-
-V2 is `IN PROGRESS`. Its previously approved F02–F10 scope and acceptance
-findings #1–#8 remain complete. The newly canonicalized F01/BR-21 immediate
-onboarding-session issuance is implemented and focused-verified, while a clean
-rerun of the required common backend verification gate remains pending before
-V2 can return to `COMPLETED AND VERIFIED`.
+V1 through V7 are `COMPLETED AND VERIFIED`.
 
 V4.1 has canonical Product/Data contracts and is `COMPLETED / ACCEPTED` as of
 2026-10-07. Final Acceptance passed across F01–F06 and BR-01–BR-24 after Slices
@@ -128,7 +122,8 @@ V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 closure passed across F01–F05, BR-01–BR-33, and TX-01–TX-03 after its recorded
 remediations and the required backend verification gate. V7 Final Acceptance /
 regression closure passed across F01–F10, BR-01–BR-46, and TX-01 after Slices
-01–11 and the recorded acceptance remediations. V8 is `IN PROGRESS`. V9 has
+01–11 and the recorded acceptance remediations. V8 is
+`COMPLETED AND VERIFIED`. V9 has
 approved Product/Data contracts; Slices 01–05 and Slice 06 Final Acceptance /
 Regression Closure are complete, including the recorded Application identity
 immutability remediation and required backend verification gate. V9 is
@@ -149,12 +144,22 @@ Assign-again ordering. The required backend verification gate passed after
 those remediations; V11 is therefore `COMPLETED AND VERIFIED` against the
 approved Conversation/Chat Product/Data contracts. Realtime, notification,
 attachment, and related deferred capabilities remain outside V11 by product
-boundary. V12 now has approved Product/Data contracts and is `IN PROGRESS`;
-Slices 01–08 are implemented and verified, while Slice 09 Final Acceptance is
-resolving recorded acceptance findings. V13 has approved Product/Data
-contracts and is `IN PROGRESS`; Slices 01–12 are implemented and verified,
-while Slice 13 Final Acceptance remains later work. V12 closure remains a
-later acceptance gate for V13 Slices 06–08, not a Slice 01 prerequisite. V14
+boundary. V12 Final Acceptance passed across F01–F11, BR-01–BR-39,
+TX-01–TX-03, and PI-01–PI-20 after Slices 01–08 and the Slice 09 acceptance
+review; its one Medium finding (Availability edit on a terminal Application)
+was fixed and the required backend verification gate passed. V12 is therefore
+`COMPLETED AND VERIFIED` against the approved Interview Schedule Product/Data
+contracts. Calendar UI, Notification, exact-time scheduling, and
+`InterviewSchedule.COMPLETED` remain outside V12 by product boundary. V13 Final
+Acceptance passed across F01–F11, BR-01–BR-50, and TX-01 after Slices 01–12 and
+the Slice 13 acceptance review; its one Medium finding (malformed Notification
+id returned 500) was fixed and the required backend verification gate passed.
+V13 is therefore `COMPLETED AND VERIFIED` against the approved Notification and
+realtime Product/Data contracts. Job Invitation Notification (V15), Message
+read receipt, typing/presence, Notification preference, external
+(email/push/SMS) delivery, and Socket replay remain outside V13 by product
+boundary.
+V14
 Final Acceptance / regression closure passed across F01–F06
 and BR-01–BR-38 after Slices 01–06 and the Slice 07 dynamic-revocation and
 read-only acceptance suite. The required backend verification gate passed;

@@ -195,8 +195,8 @@ const resolveCategoryBranches = async (categoryBranches) => {
       });
     }
 
-    const fieldId = entry.fieldId ?? entry.fieldCategoryId;
-    const positionIds = entry.positionIds ?? entry.positionCategoryIds ?? [];
+    const { fieldId } = entry;
+    const positionIds = entry.positionIds ?? [];
 
     if (!mongoose.Types.ObjectId.isValid(fieldId)) {
       throw new AppError(400, "categories entries require a valid fieldId", {
@@ -413,68 +413,64 @@ const buildPublicJob = ({
   return publicJob;
 };
 
-const buildRelevanceRank = ({ job, company, keyword }) => {
-  const pattern = new RegExp(escapeRegex(keyword), "i");
-
-  if (pattern.test(job.title ?? "")) {
-    return 4;
-  }
-
-  if (job.requiredSkills?.some((skill) => pattern.test(skill))) {
-    return 3;
-  }
-
-  if (pattern.test(company.name ?? "")) {
-    return 2;
-  }
-
-  if (pattern.test(job.jobDescription ?? "")) {
-    return 1;
-  }
-
-  return 0;
-};
-
-const compareObjectIdsDescending = (left, right) => {
-  return right._id.toString().localeCompare(left._id.toString());
-};
-
-const sortDiscoveryJobs = ({ jobs, companyById, sort, keyword }) => {
-  return [...jobs].sort((left, right) => {
-    if (sort === JOB_DISCOVERY_SORT.RELEVANCE && keyword !== "") {
-      const rankDifference =
-        buildRelevanceRank({
-          job: right,
-          company: companyById.get(right.companyId.toString()),
-          keyword,
-        }) -
-        buildRelevanceRank({
-          job: left,
-          company: companyById.get(left.companyId.toString()),
-          keyword,
-        });
-
-      if (rankDifference !== 0) {
-        return rankDifference;
-      }
-    } else if (sort === JOB_DISCOVERY_SORT.EXPIRING_SOON) {
-      const deadlineDifference =
-        left.applicationDeadline.getTime() - right.applicationDeadline.getTime();
-
-      if (deadlineDifference !== 0) {
-        return deadlineDifference;
-      }
-    } else {
-      const publishedDifference =
-        right.publishedAt.getTime() - left.publishedAt.getTime();
-
-      if (publishedDifference !== 0) {
-        return publishedDifference;
-      }
-    }
-
-    return compareObjectIdsDescending(left, right);
+// Relevance priority (BR-31): Job title > required skills > Company name >
+// Job Description. Computed by MongoDB so only the requested page is sorted
+// into the result; every Job reaching this stage already matched the keyword.
+const buildRelevanceRankExpression = (keyword) => {
+  const regexMatch = (input) => ({
+    $regexMatch: {
+      input: { $ifNull: [input, ""] },
+      regex: escapeRegex(keyword),
+      options: "i",
+    },
   });
+
+  return {
+    $cond: [
+      regexMatch("$title"),
+      4,
+      {
+        $cond: [
+          {
+            $anyElementTrue: [
+              {
+                $map: {
+                  input: { $ifNull: ["$requiredSkills", []] },
+                  as: "skill",
+                  in: regexMatch("$$skill"),
+                },
+              },
+            ],
+          },
+          3,
+          {
+            $cond: [
+              regexMatch("$company.name"),
+              2,
+              { $cond: [regexMatch("$jobDescription"), 1, 0] },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
+// `_id` descending is the deterministic tie-breaker for every sort, so
+// skip/limit pages never duplicate or drop items.
+const buildDiscoverySortStages = ({ sort, keyword }) => {
+  if (sort === JOB_DISCOVERY_SORT.RELEVANCE && keyword !== "") {
+    return [
+      { $addFields: { relevanceRank: buildRelevanceRankExpression(keyword) } },
+      { $sort: { relevanceRank: -1, _id: -1 } },
+    ];
+  }
+
+  if (sort === JOB_DISCOVERY_SORT.EXPIRING_SOON) {
+    return [{ $sort: { applicationDeadline: 1, _id: -1 } }];
+  }
+
+  return [{ $sort: { publishedAt: -1, _id: -1 } }];
 };
 
 const getDiscoveryCatalogData = async (jobs) => {
@@ -514,10 +510,9 @@ const getDiscoveryCatalogData = async (jobs) => {
   };
 };
 
+// Job-level conditions only: they run before the Company lookup so the
+// `job_discovery_*` indexes can narrow the candidate set first.
 const buildDiscoveryFilter = ({
-  activeCompanyIds,
-  keyword,
-  companyIdsMatchingKeyword,
   fieldFilters,
   locationSelections,
   workModes,
@@ -531,20 +526,8 @@ const buildDiscoveryFilter = ({
       status: JOB_STATUS.PUBLISHED,
       publishedAt: { $ne: null },
       applicationDeadline: { $gt: now },
-      companyId: { $in: activeCompanyIds },
     },
   ];
-
-  if (keyword !== "") {
-    conditions.push({
-      $or: [
-        { title: { $regex: escapeRegex(keyword), $options: "i" } },
-        { requiredSkills: { $regex: escapeRegex(keyword), $options: "i" } },
-        { jobDescription: { $regex: escapeRegex(keyword), $options: "i" } },
-        { companyId: { $in: companyIdsMatchingKeyword } },
-      ],
-    });
-  }
 
   if (fieldFilters.length > 0) {
     conditions.push({
@@ -592,6 +575,81 @@ const buildDiscoveryFilter = ({
   }
 
   return conditions.length === 1 ? conditions[0] : { $and: conditions };
+};
+
+// Keyword scope (BR-16). Company name lives on the joined Company, so this
+// condition runs after the Company lookup.
+const buildKeywordFilter = (keyword) => {
+  const pattern = { $regex: escapeRegex(keyword), $options: "i" };
+
+  return {
+    $or: [
+      { title: pattern },
+      { requiredSkills: pattern },
+      { jobDescription: pattern },
+      { "company.name": pattern },
+    ],
+  };
+};
+
+// Joins the owning Company and keeps only Jobs whose Company is publicly
+// eligible (same predicate as isOwningCompanyActiveForPublicEligibility).
+// Only the fields needed by the list projection are carried through.
+const COMPANY_PUBLIC_ELIGIBILITY_LOOKUP_STAGES = Object.freeze([
+  {
+    $lookup: {
+      from: Company.collection.name,
+      let: { companyId: "$companyId" },
+      pipeline: [
+        {
+          $match: {
+            $expr: { $eq: ["$_id", "$$companyId"] },
+            approvalStatus: COMPANY_APPROVAL_STATUS.APPROVED,
+            operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
+          },
+        },
+        { $project: { _id: 1, name: 1, logoUrl: 1 } },
+      ],
+      as: "company",
+    },
+  },
+  { $unwind: "$company" },
+]);
+
+// filter + Company eligibility + keyword + sort + skip/limit all run in
+// MongoDB through a single $facet pass; only the requested page (plus its
+// total count) is returned to the application.
+const queryDiscoveryPage = async ({
+  discoveryFilter,
+  keyword,
+  sort,
+  page,
+  limit,
+}) => {
+  const pipeline = [
+    { $match: discoveryFilter },
+    ...COMPANY_PUBLIC_ELIGIBILITY_LOOKUP_STAGES,
+    ...(keyword === "" ? [] : [{ $match: buildKeywordFilter(keyword) }]),
+    {
+      $facet: {
+        total: [{ $count: "count" }],
+        jobs: [
+          ...buildDiscoverySortStages({ sort, keyword }),
+          { $skip: (page - 1) * limit },
+          { $limit: limit },
+          // The list projection never exposes these; do not carry them.
+          { $project: { jobDescription: 0, requiredSkills: 0 } },
+        ],
+      },
+    },
+  ];
+
+  const [result] = await Job.aggregate(pipeline).allowDiskUse(true);
+
+  return {
+    total: result?.total[0]?.count ?? 0,
+    jobs: result?.jobs ?? [],
+  };
 };
 
 const listJobDiscoveryJobs = async ({
@@ -648,15 +706,6 @@ const listJobDiscoveryJobs = async ({
     }
   }
 
-  const activeCompanies = await Company.find({
-    approvalStatus: COMPANY_APPROVAL_STATUS.APPROVED,
-    operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
-  })
-    .select(
-      "_id name logoUrl bannerUrl website address description contactInfo",
-    )
-    .lean();
-
   const page = normalizePageValue(filters.page, "page", DEFAULT_PAGE);
   const limit = normalizePageValue(
     filters.limit,
@@ -665,36 +714,7 @@ const listJobDiscoveryJobs = async ({
     MAX_LIMIT,
   );
 
-  if (activeCompanies.length === 0) {
-    return {
-      jobs: [],
-      pagination: {
-        page,
-        limit,
-        total: 0,
-        totalPages: 0,
-      },
-      sort,
-    };
-  }
-
-  const activeCompanyIds = activeCompanies.map((company) => company._id);
-  const companyById = new Map(
-    activeCompanies.map((company) => [company._id.toString(), company]),
-  );
-  const companyIdsMatchingKeyword =
-    keyword === ""
-      ? []
-      : activeCompanies
-          .filter((company) =>
-            new RegExp(escapeRegex(keyword), "i").test(company.name ?? ""),
-          )
-          .map((company) => company._id);
-
   const discoveryFilter = buildDiscoveryFilter({
-    activeCompanyIds,
-    keyword,
-    companyIdsMatchingKeyword,
     fieldFilters,
     locationSelections,
     workModes,
@@ -703,23 +723,21 @@ const listJobDiscoveryJobs = async ({
     salaryFilter,
     now,
   });
-  const jobs = await Job.find(discoveryFilter).lean();
-  const sortedJobs = sortDiscoveryJobs({
-    jobs,
-    companyById,
-    sort,
+  const { total, jobs: pageJobs } = await queryDiscoveryPage({
+    discoveryFilter,
     keyword,
+    sort,
+    page,
+    limit,
   });
-  const total = sortedJobs.length;
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-  const pageJobs = sortedJobs.slice((page - 1) * limit, page * limit);
   const catalogData = await getDiscoveryCatalogData(pageJobs);
 
   return {
     jobs: pageJobs.map((job) =>
       buildPublicJob({
         job,
-        company: companyById.get(job.companyId.toString()),
+        company: job.company,
         ...catalogData,
         visibility: JOB_DISCOVERY_VISIBILITY.DISCOVERABLE,
       }),

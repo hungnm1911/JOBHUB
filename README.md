@@ -44,7 +44,7 @@ Repository hiện có độ trưởng thành không đồng đều giữa hai �
 
 | Ứng dụng | Vai trò | Trạng thái hiện tại | Tài liệu |
 | --- | --- | --- | --- |
-| Backend | REST API, nghiệp vụ, persistence, worker và realtime server | Phần lớn V1–V15 đã triển khai; V2, V8, V12, V13 còn `IN PROGRESS` | [Backend README](backend/README.md) |
+| Backend | REST API, nghiệp vụ, persistence, worker và realtime server | Phần lớn V1–V15 đã triển khai; V8 còn `IN PROGRESS` | [Backend README](backend/README.md) |
 | Frontend | Browser UI, routing, auth client, HTTP/realtime client | Foundation và authentication lifecycle V1 đã xác minh; chưa có UI nghiệp vụ | [Frontend README](frontend/README.md) |
 | Product/Data docs | Yêu cầu nghiệp vụ và hợp đồng persistence | V1–V15 có tài liệu phiên bản; V16–V17 mới ở roadmap | [Docs](docs/) |
 | AI Kit | Không gian dành cho năng lực AI trong tương lai | Chưa có implementation snapshot | [Project Status](docs/project-status/index.md) |
@@ -67,7 +67,7 @@ Theo [Product Roadmap](docs/product/roadmap.md):
 | Phiên bản | Phạm vi | Trạng thái |
 | --- | --- | --- |
 | V1 | Tài khoản và vòng đời xác thực | `COMPLETED AND VERIFIED` |
-| V2 | Company onboarding và quản trị cấp nền tảng | `IN PROGRESS` |
+| V2 | Company onboarding và quản trị cấp nền tảng | `COMPLETED AND VERIFIED` |
 | V3 | Quản lý nhân sự tuyển dụng của Company | `COMPLETED AND VERIFIED` |
 | V4 | Danh mục chuẩn của nền tảng | `COMPLETED AND VERIFIED` |
 | V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | `COMPLETED / ACCEPTED` |
@@ -79,8 +79,8 @@ Theo [Product Roadmap](docs/product/roadmap.md):
 | V9 | Candidate chủ động Apply và tạo Application | `COMPLETED AND VERIFIED` |
 | V10 | Phân công Application và Recruitment Pipeline | `COMPLETED AND VERIFIED` |
 | V11 | Conversation và Chat thuộc Application | `COMPLETED AND VERIFIED` |
-| V12 | Interview Schedule | `IN PROGRESS` |
-| V13 | Notification và phân phối realtime | `IN PROGRESS` |
+| V12 | Interview Schedule | `COMPLETED AND VERIFIED` |
+| V13 | Notification và phân phối realtime | `COMPLETED AND VERIFIED` |
 | V14 | Candidate Search trên CV `PUBLIC` | `COMPLETED AND VERIFIED` |
 | V15 | Job Invitation và nhánh Recruiter săn ứng viên | `COMPLETED AND VERIFIED` |
 | V16 | Saved Jobs | `PLANNED` |

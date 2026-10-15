@@ -163,6 +163,22 @@ describe("V13 Slice 02 Notification Inbox + Read State", () => {
     expect(afterSecondOpen.body.unreadCount).toBe(1);
   });
 
+  it("returns 404 instead of 500 for a malformed Notification id on fetch and open", async () => {
+    const agent = createTestAgent();
+    const owner = await createVerifiedUser({ email: "notification-malformed-owner@example.com" });
+    const accessToken = await login(agent, owner.user.email, owner.password);
+
+    const fetched = await agent
+      .get("/api/notifications/not-an-object-id")
+      .set("Authorization", `Bearer ${accessToken}`);
+    const opened = await agent
+      .post("/api/notifications/not-an-object-id/open")
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    expect(fetched.status).toBe(404);
+    expect(opened.status).toBe(404);
+  });
+
   it("keeps historical Notifications readable without modifying their event or granting resource access", async () => {
     const agent = createTestAgent();
     const owner = await createVerifiedUser({ email: "notification-history-owner@example.com" });
