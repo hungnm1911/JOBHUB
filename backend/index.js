@@ -19,6 +19,7 @@ import { assertJobCollectionInvariantsActive } from "./src/models/job.model.js";
 import { ensureJobInvitationCollectionInvariants } from "./src/models/job-invitation.model.js";
 import { ensureNotificationEventCollection } from "./src/models/notification-event.model.js";
 import { ensureNotificationCollection } from "./src/models/notification.model.js";
+import { ensureSavedJobCollection } from "./src/models/saved-job.model.js";
 import {
   attachRealtimeDistribution,
   closeRealtimeDistribution,
@@ -172,6 +173,7 @@ const startServer = async () => {
   await ensureInterviewScheduleCollection();
   await ensureNotificationEventCollection();
   await ensureNotificationCollection();
+  await ensureSavedJobCollection();
 
   await verifyCloudinaryConnection();
 

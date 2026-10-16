@@ -40,6 +40,11 @@ import {
   getOwnCandidateProfileHandler,
   updateOwnCandidateProfileHandler,
 } from "../controllers/candidate-profile.controller.js";
+import {
+  listSavedJobsHandler,
+  saveJobHandler,
+  unsaveJobHandler,
+} from "../controllers/saved-job.controller.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCandidate from "../middlewares/authorize-candidate.js";
 import uploadCandidateCvPdf from "../middlewares/upload-candidate-cv-pdf.js";
@@ -71,6 +76,10 @@ router.patch(
   validateCandidateProfileUpdate,
   updateOwnCandidateProfileHandler,
 );
+
+router.put("/saved-jobs/:jobId", authenticateAccess, authorizeCandidate, saveJobHandler);
+router.delete("/saved-jobs/:jobId", authenticateAccess, authorizeCandidate, unsaveJobHandler);
+router.get("/saved-jobs", authenticateAccess, authorizeCandidate, listSavedJobsHandler);
 
 router.get(
   "/cvs",
