@@ -23,6 +23,7 @@ import Job, {
   getJobSalaryInvariantErrors,
   SALARY_FIELDS,
 } from "../models/job.model.js";
+import SavedJob from "../models/saved-job.model.js";
 import User from "../models/user.model.js";
 import {
   assertSameCompanyTenant,
@@ -1959,7 +1960,23 @@ const hardDeleteJobDocument = async ({
     filter.primaryRecruiterCompanyMemberId = primaryRecruiterCompanyMemberId;
   }
 
-  return Job.findOneAndDelete(filter);
+  const session = await mongoose.startSession();
+  let deletedJob = null;
+  try {
+    await session.withTransaction(async () => {
+      const candidateJob = await Job.findOne(filter)
+        .select("_id")
+        .session(session);
+      if (!candidateJob) {
+        return;
+      }
+      await SavedJob.deleteMany({ jobId: candidateJob._id }).session(session);
+      deletedJob = await Job.findOneAndDelete(filter).session(session);
+    });
+  } finally {
+    await session.endSession();
+  }
+  return deletedJob;
 };
 
 const approveAndPublishJob = async ({

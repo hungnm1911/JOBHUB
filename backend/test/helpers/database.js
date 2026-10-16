@@ -14,6 +14,7 @@ import { ensureJobInvitationCollectionInvariants } from "../../src/models/job-in
 import { ensureMessageCollection } from "../../src/models/message.model.js";
 import { ensureNotificationEventCollection } from "../../src/models/notification-event.model.js";
 import { ensureNotificationCollection } from "../../src/models/notification.model.js";
+import { ensureSavedJobCollection } from "../../src/models/saved-job.model.js";
 
 let mongoMemoryReplicaSet = null;
 
@@ -45,6 +46,7 @@ const connectTestDatabase = async () => {
   await ensureMessageCollection(mongoose.connection);
   await ensureNotificationEventCollection(mongoose.connection);
   await ensureNotificationCollection(mongoose.connection);
+  await ensureSavedJobCollection(mongoose.connection);
 };
 
 const disconnectTestDatabase = async () => {

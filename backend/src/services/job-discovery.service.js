@@ -18,6 +18,7 @@ import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import Job from "../models/job.model.js";
+import SavedJob from "../models/saved-job.model.js";
 import {
   resolveJobDiscoveryVisibility,
   toPublicJobLocation,
@@ -375,6 +376,7 @@ const buildPublicJob = ({
   experienceLevelById,
   visibility,
   detail = false,
+  isSaved = undefined,
 }) => {
   const publicJob = {
     id: job._id.toString(),
@@ -408,6 +410,10 @@ const buildPublicJob = ({
   if (detail) {
     publicJob.jobDescription = job.jobDescription;
     publicJob.requiredSkills = job.requiredSkills;
+  }
+
+  if (isSaved !== undefined) {
+    publicJob.isSaved = isSaved;
   }
 
   return publicJob;
@@ -732,6 +738,14 @@ const listJobDiscoveryJobs = async ({
   });
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
   const catalogData = await getDiscoveryCatalogData(pageJobs);
+  let savedJobIds = new Set();
+  if (actorUser?.role === USER_ROLE.CANDIDATE && pageJobs.length > 0) {
+    const saved = await SavedJob.find({
+      candidateUserId: actorUser._id,
+      jobId: { $in: pageJobs.map((job) => job._id) },
+    }).select("jobId").lean();
+    savedJobIds = new Set(saved.map((entry) => entry.jobId.toString()));
+  }
 
   return {
     jobs: pageJobs.map((job) =>
@@ -740,6 +754,10 @@ const listJobDiscoveryJobs = async ({
         company: job.company,
         ...catalogData,
         visibility: JOB_DISCOVERY_VISIBILITY.DISCOVERABLE,
+        isSaved:
+          actorUser?.role === USER_ROLE.CANDIDATE
+            ? savedJobIds.has(job._id.toString())
+            : undefined,
       }),
     ),
     pagination: {
@@ -781,6 +799,15 @@ const getPublicJobDiscoveryDetail = async ({
   }
 
   const catalogData = await getDiscoveryCatalogData([job]);
+  const isSaved =
+    actorUser?.role === USER_ROLE.CANDIDATE
+      ? Boolean(
+          await SavedJob.exists({
+            candidateUserId: actorUser._id,
+            jobId: job._id,
+          }),
+        )
+      : undefined;
 
   return buildPublicJob({
     job,
@@ -788,6 +815,7 @@ const getPublicJobDiscoveryDetail = async ({
     ...catalogData,
     visibility,
     detail: true,
+    isSaved,
   });
 };
 
