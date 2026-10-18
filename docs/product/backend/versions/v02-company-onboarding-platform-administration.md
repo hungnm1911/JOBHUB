@@ -1,6 +1,6 @@
 # V02 — Company onboarding và quản trị cấp nền tảng
 
-> **File:** `docs/product/versions/v02-company-onboarding-platform-administration.md`
+> **File:** `docs/product/backend/versions/v02-company-onboarding-platform-administration.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V02.

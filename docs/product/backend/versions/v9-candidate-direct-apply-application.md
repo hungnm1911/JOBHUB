@@ -1,6 +1,6 @@
 # V9 — Candidate chủ động Apply và tạo Application
 
-> **File:** `docs/product/versions/v9-candidate-direct-apply-application.md`
+> **File:** `docs/product/backend/versions/v9-candidate-direct-apply-application.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V9.

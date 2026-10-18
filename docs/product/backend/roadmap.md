@@ -1,17 +1,18 @@
-# JOBHUB Product Roadmap
+# JOBHUB Backend Product Roadmap
 
 ## Purpose
 
-This document provides the high-level product roadmap for JOBHUB.
+This document provides the high-level product roadmap for JOBHUB Backend
+business versions and the Frontend surfaces that consume their contracts.
 
 It identifies the planned business versions and their current status.
 
 Implementation and verification snapshots are mapped from the
-[Project Status entry point](../project-status/index.md).
+[Project Status entry point](../../project-status/index.md).
 
 Detailed business requirements are defined only in the corresponding documents under:
 
-`docs/product/versions/`
+`docs/product/backend/versions/`
 
 A version must not be implemented from this roadmap alone.
 
@@ -59,11 +60,11 @@ The version has planning material in the repository but is intentionally held
 before implementation. Its specifications and data contract are not approved
 implementation authority, and no business slice may start until the roadmap
 explicitly moves it forward and the
-[Project Status entry point](../project-status/index.md) reflects that state.
+[Project Status entry point](../../project-status/index.md) reflects that state.
 
 ### READY FOR IMPLEMENTATION
 
-The version has an approved canonical business specification under `docs/product/versions/` and may be decomposed into implementation tasks.
+The version has an approved canonical business specification under `docs/product/backend/versions/` and may be decomposed into implementation tasks.
 
 ### IN PROGRESS
 
@@ -178,123 +179,123 @@ must not be implemented merely from their roadmap titles.
 
 V15 canonical specification:
 
-`docs/product/versions/v15-job-invitation-recruiter-sourcing.md`
+`docs/product/backend/versions/v15-job-invitation-recruiter-sourcing.md`
 
 V15 canonical persistence contract:
 
-`docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`
+`docs/data/backend/versions/v15-job-invitation-recruiter-sourcing-data-model.md`
 
 V14 canonical specification:
 
-`docs/product/versions/v14-candidate-search-public-cv.md`
+`docs/product/backend/versions/v14-candidate-search-public-cv.md`
 
 V14 canonical persistence contract:
 
-`docs/data/versions/v14-candidate-search-public-cv-data-model.md`
+`docs/data/backend/versions/v14-candidate-search-public-cv-data-model.md`
 
 V13 canonical specification:
 
-`docs/product/versions/v13-notification-realtime-distribution.md`
+`docs/product/backend/versions/v13-notification-realtime-distribution.md`
 
 V13 canonical persistence contract:
 
-`docs/data/versions/v13-notification-realtime-distribution-data-model.md`
+`docs/data/backend/versions/v13-notification-realtime-distribution-data-model.md`
 
 V12 canonical specification:
 
-`docs/product/versions/v12-interview-schedule.md`
+`docs/product/backend/versions/v12-interview-schedule.md`
 
 V12 canonical persistence contract:
 
-`docs/data/versions/v12-interview-schedule-data-model.md`
+`docs/data/backend/versions/v12-interview-schedule-data-model.md`
 
 V10 canonical specification:
 
-`docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
+`docs/product/backend/versions/v10-application-assignment-recruitment-pipeline.md`
 
 V10 canonical persistence contract:
 
-`docs/data/versions/v10-application-assignment-recruitment-pipeline-data-model.md`
+`docs/data/backend/versions/v10-application-assignment-recruitment-pipeline-data-model.md`
 
 V11 canonical specification:
 
-`docs/product/versions/v11-application-conversation-chat.md`
+`docs/product/backend/versions/v11-application-conversation-chat.md`
 
 V11 canonical persistence contract:
 
-`docs/data/versions/v11-application-conversation-chat-data-model.md`
+`docs/data/backend/versions/v11-application-conversation-chat-data-model.md`
 
 V9 canonical specification:
 
-`docs/product/versions/v9-candidate-direct-apply-application.md`
+`docs/product/backend/versions/v9-candidate-direct-apply-application.md`
 
 V9 canonical persistence contract:
 
-`docs/data/versions/v9-candidate-direct-apply-application-data-model.md`
+`docs/data/backend/versions/v9-candidate-direct-apply-application-data-model.md`
 
 V7 canonical specification:
 
-`docs/product/versions/v7-candidate-profile-cv-library.md`
+`docs/product/backend/versions/v7-candidate-profile-cv-library.md`
 
 V7 canonical persistence contract:
 
-`docs/data/versions/v7-candidate-profile-cv-library-data-model.md`
+`docs/data/backend/versions/v7-candidate-profile-cv-library-data-model.md`
 
 V6 canonical specification:
 
-`docs/product/versions/v6-recruitment-team-responsibility-transfer.md`
+`docs/product/backend/versions/v6-recruitment-team-responsibility-transfer.md`
 
 V6 canonical persistence contract:
 
-`docs/data/versions/v6-recruitment-team-responsibility-transfer-data-model.md`
+`docs/data/backend/versions/v6-recruitment-team-responsibility-transfer-data-model.md`
 
 V5 canonical specification:
 
-`docs/product/versions/v5-job-approval-lifecycle.md`
+`docs/product/backend/versions/v5-job-approval-lifecycle.md`
 
 V5 canonical persistence contract:
 
-`docs/data/versions/v5-job-approval-lifecycle-data-model.md`
+`docs/data/backend/versions/v5-job-approval-lifecycle-data-model.md`
 
 V4 canonical specification:
 
-`docs/product/versions/v4-platform-standard-catalogs.md`
+`docs/product/backend/versions/v4-platform-standard-catalogs.md`
 
 V4 canonical persistence contract:
 
-`docs/data/versions/v4-platform-standard-catalogs-data-model.md`
+`docs/data/backend/versions/v4-platform-standard-catalogs-data-model.md`
 
 V4.1 canonical specification:
 
-`docs/product/versions/v4.1-vietnam-location-migration.md`
+`docs/product/backend/versions/v4.1-vietnam-location-migration.md`
 
 V4.1 canonical persistence contract:
 
-`docs/data/versions/v4.1-vietnam-location-migration-data-model.md`
+`docs/data/backend/versions/v4.1-vietnam-location-migration-data-model.md`
 
 V4.2 canonical specification:
 
-`docs/product/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword.md`
+`docs/product/backend/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword.md`
 
 V4.2 canonical persistence contract:
 
-`docs/data/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword-data-model.md`
+`docs/data/backend/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword-data-model.md`
 
 V3 canonical specification:
 
-`docs/product/versions/v3-company-recruitment-staff-management.md`
+`docs/product/backend/versions/v3-company-recruitment-staff-management.md`
 
 V3 canonical persistence contract:
 
-`docs/data/versions/v3-company-recruitment-staff-management-data-model.md`
+`docs/data/backend/versions/v3-company-recruitment-staff-management-data-model.md`
 
 V2 canonical specification:
 
-`docs/product/versions/v02-company-onboarding-platform-administration.md`
+`docs/product/backend/versions/v02-company-onboarding-platform-administration.md`
 
 V2 canonical persistence contract:
 
-`docs/data/versions/v02-company-onboarding-platform-administration.md`
+`docs/data/backend/versions/v02-company-onboarding-platform-administration.md`
 
 ---
 

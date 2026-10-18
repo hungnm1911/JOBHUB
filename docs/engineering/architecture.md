@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This document records both the backend and frontend architecture that exists
-today and the architecture the project intends to enforce going forward. These
-are deliberately separate:
+This document records the backend, AI Kit, and frontend architecture that
+exists today and the architecture the project intends to enforce going
+forward. These are deliberately separate:
 
 - **Current state** is evidence-based and describes the repository as it currently exists.
 - **Target convention** is normative guidance for new and changed code.
@@ -12,9 +12,10 @@ are deliberately separate:
 
 The backend is located under `backend/` and uses Node.js ES modules, Express,
 MongoDB/Mongoose, Cloudinary, Multer, Nodemailer, JSON Web Tokens, and
-Socket.IO. The frontend is located under `frontend/` and uses React, Vite,
-React Router, Redux Toolkit, Axios, Socket.IO Client, Tailwind CSS v4,
-shadcn/ui conventions, React Hook Form, and Zod.
+Socket.IO. AI Kit is the private local Node.js package under `ai-kit/` and uses
+JavaScript ES modules. The frontend is located under `frontend/` and uses
+React, Vite, React Router, Redux Toolkit, Axios, Socket.IO Client, Tailwind CSS
+v4, shadcn/ui conventions, React Hook Form, and Zod.
 
 ## Backend current state
 
@@ -100,29 +101,9 @@ does not duplicate that owner matrix.
   instance through the package-root public API, injecting normalized AI Kit
   configuration from `backend/src/config/index.js` and the canonical Backend
   logger. Other Backend source modules must consume this service rather than
-  import the package or its internals. AI Kit must not read Backend environment
-  state or import Backend modules.
-- `ai-kit/src/llm/gemini-client.js` is the sole direct `@google/genai` consumer.
-  It owns provider-specific SDK initialization and `models.generateContent`
-  delegation, remains internal to AI Kit, and receives API key, model, and
-  logger dependencies explicitly rather than reading environment state.
-- `ai-kit/src/llm/groq-client.js` is the sole direct `groq-sdk` consumer. It
-  owns provider-specific SDK initialization and `chat.completions.create`
-  delegation, remains internal to AI Kit, and receives API key, model, and
-  logger dependencies explicitly rather than reading environment state. It
-  does not own fallback or retry behavior.
-- `ai-kit/src/llm/llm-fallback.js` owns the internal, provider-request-agnostic
-  single-attempt LLM fallback policy. It executes injected primary and fallback
-  functions without normalizing their request or result shapes, falls back only
-  for the approved temporary HTTP statuses or structured response-free
-  connection/timeout errors, and does not retry either function. It is not part
-  of the AI Kit package-root API and is not composed into a business capability.
-- Manual provider smoke tooling keeps environment composition in
-  `backend/scripts/smoke-<provider>.js` and adapter invocation plus marker
-  validation in `ai-kit/scripts/smoke-<provider>.js`. Backend imports those
-  harnesses only through explicit `@jobhub/ai-kit/tooling/smoke-<provider>`
-  package subpaths; it does not deep-import AI Kit filesystem internals. These
-  tooling exports do not add provider clients to the production package root.
+  import the package or its internals. AI Kit-specific ownership and dependency
+  rules are defined under [AI Kit target convention](#ai-kit--target-convention)
+  and [AI Kit architectural constraints](#ai-kit--architectural-constraints).
 - `backend/index.js` consumes application configuration during runtime bootstrap, but does not own environment loading, parsing, validation, normalization, or defaults.
 - One-time data migrations required by an approved persistence contract are explicit database tooling. `backend/scripts/run-migration.js` owns migration invocation and connection orchestration, while versioned migration definitions live under `backend/src/database/migrations/`. Migrations are never run implicitly during application startup or seed execution.
 - V4.1 Location reference data uses Province Open API v1 (`https://provinces.open-api.vn/api/v1/`) and its pre-July-2025-merger semantics. Raw Province and raw District become the JOBHUB `Province → optional District-level unit` hierarchy; raw Ward/Commune is excluded. `backend/src/services/location.service.js` is the stable consumer-facing catalog/semantic-validation boundary and, for the demo scope, calls v1 directly with no cache, fallback, static catalog, or MongoDB mirror; provider failure fails that operation closed. Job/CandidateCV mutation owners consume the boundary. Job Discovery and Candidate Search filter/sort only from persisted `provinceCode`/`districtCode`; the one search-path use of the boundary is Candidate Search resolving District → Province membership of a District-subset filter once per request (`resolveLocationFilterSelections`), because a Province-wide preference carries no District to prove membership. Job Discovery never calls the boundary, and no search consumer calls the provider directly. A future cache/provider wrapper may be inserted behind the same boundary without changing Product/API contracts or downstream consumers.
@@ -285,6 +266,162 @@ The root entry point imports normalized application configuration as part of boo
 - Socket.IO server imports outside `backend/src/sockets/`, direct persistence or HTTP-layer access from `src/sockets/`, or realtime emits outside the approved Notification-materialization / application-post-commit → sockets boundaries require separate architectural approval.
 
 Current deviations from these constraints are catalogued in [`source-of-truth.md`](source-of-truth.md). They are documentation of the existing state, not authorization to duplicate or extend the mismatch.
+
+## AI Kit — Current State
+
+### Package and runtime boundary
+
+- `ai-kit/` is the private local package `@jobhub/ai-kit`, located beside
+  `backend/` and `frontend/`. It has its own `package.json`, dependencies,
+  ESLint, and Vitest configuration and uses JavaScript ES modules.
+- Backend declares it through `file:../ai-kit`. AI Kit executes in the Backend
+  Node.js process; it has no Express application, HTTP port, independent
+  process, deployment service, or `start`/`dev` entrypoint. The repository does
+  not compose it as an npm workspace.
+- [`ai-kit/src/index.js`](../../ai-kit/src/index.js) is the production package
+  entrypoint and currently exports only `createAiKit`. The factory validates
+  optional Gemini/Groq configuration and the injected logger contract, then
+  returns an empty frozen object; it exposes no AI business capability.
+- [`backend/src/services/ai-kit.service.js`](../../backend/src/services/ai-kit.service.js)
+  is the sole Backend runtime package consumer and creates the shared instance
+  with normalized Backend configuration and the canonical Backend logger.
+  Backend startup does not currently import that service, so AI Kit is not yet
+  part of the full startup or shutdown lifecycle.
+- Explicit `tooling/smoke-gemini` and `tooling/smoke-groq` package subpaths are
+  manual provider-smoke tooling only. They are not production capability APIs.
+
+### Implemented foundations
+
+- `src/llm/gemini-client.js` and `src/llm/groq-client.js` are internal,
+  provider-specific adapters and the only direct consumers of `@google/genai`
+  and `groq-sdk`, respectively. Manual live smoke tests have verified Gemini
+  with `gemini-3.8-flash` and Groq with `openai/gpt-oss-120b`.
+- `src/llm/llm-fallback.js` implements one primary attempt followed by at most
+  one fallback attempt. Fallback is eligible only for HTTP 429, 500, 502, 503,
+  or 504, or a recognized connection/timeout failure with no HTTP response.
+  Authentication, configuration, request-validation, and programming failures
+  are not eligible. This utility is not exported or wired into a business
+  capability, so fallback is not automatic for AI Kit calls.
+- `src/document/pdf-text-extractor.js` is the sole direct `scribe.js-ocr`
+  consumer. It extracts PDF text, invokes Scribe OCR when `requiresOCR` is set,
+  closes each document in a `finally` block, and leaves the shared Scribe
+  runtime active until `disposePdfTextExtractor()` is called. Neither operation
+  is exported from the package root or wired into Backend lifecycle.
+- The package-local verification gate covers the public boundary, provider
+  adapters, fallback policy, dependency boundaries, a real text-native PDF
+  fixture, and document/shared-runtime lifecycle behavior. Detailed evidence is
+  recorded in the [AI Kit foundation status](../project-status/ai-kit/foundation.md).
+
+## AI Kit — Target Convention
+
+### Runtime composition and dependency direction
+
+```text
+Frontend
+    |
+    | HTTP
+    v
+JOBHUB Backend
+    |
+    | same-process package call
+    v
+@jobhub/ai-kit
+    |
+    +-- document extraction (Scribe)
+    +-- LLM adapters (Gemini / Groq)
+    +-- LLM fallback policy
+    +-- approved future AI capabilities
+```
+
+The dependency direction is `Backend -> @jobhub/ai-kit`. AI Kit never imports
+Backend modules. Backend remains the application and transport boundary; AI Kit
+is an in-process computation package, not a microservice.
+
+### Ownership and integration
+
+- Backend owns process startup/shutdown, environment loading and normalized
+  configuration, the canonical logger, HTTP, authentication, authorization,
+  business permissions, persistence, and canonical JOBHUB domain services.
+- AI Kit owns provider adapters, document extraction, internal provider
+  fallback policy, and approved AI-specific computation and orchestration.
+- Backend passes normalized configuration, the logger, input data, and any
+  authorized operation callbacks through the AI Kit public API. AI Kit does not
+  load environment state or reach into Backend internals.
+- `ai-kit/src/index.js` remains the production package boundary. New capability
+  exports are added there only when an approved feature requires them. Backend
+  consumes them only through `backend/src/services/ai-kit.service.js`; neither
+  side deep-imports the other's filesystem internals.
+- Manual provider smoke composition remains split between Backend environment
+  composition and AI Kit adapter invocation, connected only through explicit
+  tooling package subpaths. Tooling exports do not become production APIs.
+
+### Provider and document conventions
+
+- Gemini is the intended primary LLM provider using `gemini-3.8-flash` through
+  `@google/genai`; Groq is the intended fallback using
+  `openai/gpt-oss-120b` through `groq-sdk`.
+- Each provider adapter owns only its provider SDK construction and delegation.
+  `llm-fallback.js` owns the provider-agnostic fallback decision. Capability
+  composition must opt into that policy explicitly; adapters do not retry or
+  select one another.
+- The PDF extractor owns Scribe-specific document handling. Every extraction
+  closes its document-scoped resources, while shared-runtime teardown remains
+  an explicit dispose operation. Backend lifecycle wiring is added only with a
+  production document capability that requires it.
+
+### Future capability direction
+
+Subject to approved Product and Data contracts, the intended capability groups
+are AI #1 (CV–Job evaluation, explanation, and improvement), AI #2
+(retrieval/embedding-based Job recommendation), and AI #3 (a bounded-tool CV
+draft agent). They are expected to reuse canonical CV/Job match profiles and
+the deterministic Matching Engine; this is architectural direction, not an
+implemented or approved capability contract.
+
+A future tool-calling capability preserves Backend ownership of authorization
+and domain writes:
+
+```text
+Backend authenticates actor
+    -> Backend invokes AI Kit
+    -> LLM requests tool
+    -> AI Kit calls injected callback
+    -> Backend validates permission and executes canonical service
+    -> AI Kit continues
+```
+
+## AI Kit — Architectural Constraints
+
+- AI Kit remains a private, in-process package. It does not gain its own HTTP
+  server, port, process lifecycle, deployment unit, or independent environment
+  loader without an explicit architecture decision.
+- AI Kit must not import Backend modules or access Mongoose models, MongoDB,
+  JWTs, Express request/response objects, Backend services, or Backend-internal
+  configuration. Dependency injection must not be replaced by reverse imports.
+- Authentication, authorization, business permissions, persistence, and
+  canonical domain mutations remain Backend responsibilities. AI Kit may
+  request an operation only through an injected callback whose Backend owner
+  revalidates permission and invokes the canonical service.
+- Production consumers use the package-root API. Backend modules do not
+  deep-import AI Kit internals, bypass `backend/src/services/ai-kit.service.js`,
+  or create parallel shared instances.
+- Provider SDK imports remain confined to their adapters, and Scribe imports
+  remain confined to the PDF extractor. Provider fallback remains an explicit
+  internal policy, not a claim that every AI request falls back automatically.
+- AI capability APIs, persistence shapes, workflows, matching semantics, and
+  business rules require approved Product/Data authority. Architecture work
+  must not invent those contracts.
+
+### Deferred decisions
+
+- Wiring provider fallback into a real capability, retries, circuit breakers,
+  and a provider registry are deferred to the capability that needs them.
+- CV upload ingestion, Buffer input, scanned-PDF/OCR fixtures, and Backend
+  startup/shutdown wiring for extractor disposal are deferred to the document
+  capability integration.
+- Match profiles, embeddings/retrieval, tool schemas and limits, persistence,
+  and API workflows are deferred until their Product/Data contracts are
+  approved.
 
 ## Frontend current state
 

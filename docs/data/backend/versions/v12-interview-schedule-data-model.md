@@ -1,9 +1,9 @@
 # V12 — Interview Schedule Data Model
 
-> **File:** `docs/data/versions/v12-interview-schedule-data-model.md`
+> **File:** `docs/data/backend/versions/v12-interview-schedule-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v12-interview-schedule.md`
+> **Product authority:** `docs/product/backend/versions/v12-interview-schedule.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v12-interview-schedule.md
+docs/product/backend/versions/v12-interview-schedule.md
 ```
 
 Product Specification là authority đối với business behavior.

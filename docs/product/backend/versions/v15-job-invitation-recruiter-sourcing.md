@@ -1,6 +1,6 @@
 # V15 — Job Invitation và nhánh Recruiter săn ứng viên
 
-> **File:** `docs/product/versions/v15-job-invitation-recruiter-sourcing.md`
+> **File:** `docs/product/backend/versions/v15-job-invitation-recruiter-sourcing.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V15.

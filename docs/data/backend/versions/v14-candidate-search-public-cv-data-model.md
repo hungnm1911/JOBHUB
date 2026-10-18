@@ -1,9 +1,9 @@
 # V14 — Candidate Search trên CV PUBLIC Data Model
 
-> **File:** `docs/data/versions/v14-candidate-search-public-cv-data-model.md`
+> **File:** `docs/data/backend/versions/v14-candidate-search-public-cv-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v14-candidate-search-public-cv.md`
+> **Product authority:** `docs/product/backend/versions/v14-candidate-search-public-cv.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v14-candidate-search-public-cv.md
+docs/product/backend/versions/v14-candidate-search-public-cv.md
 ```
 
 Product Specification là authority đối với business behavior.

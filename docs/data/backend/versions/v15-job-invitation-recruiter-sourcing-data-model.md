@@ -1,9 +1,9 @@
 # V15 — Job Invitation và nhánh Recruiter săn ứng viên Data Model
 
-> **File:** `docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`
+> **File:** `docs/data/backend/versions/v15-job-invitation-recruiter-sourcing-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v15-job-invitation-recruiter-sourcing.md`
+> **Product authority:** `docs/product/backend/versions/v15-job-invitation-recruiter-sourcing.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v15-job-invitation-recruiter-sourcing.md
+docs/product/backend/versions/v15-job-invitation-recruiter-sourcing.md
 ```
 
 Product Specification là authority đối với business behavior.

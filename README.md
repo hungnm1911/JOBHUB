@@ -8,7 +8,7 @@ Backend nghiệp vụ bằng Express/MongoDB, frontend bằng React/Vite và ph�
 
 `React 19` · `Vite 8` · `Express 5` · `MongoDB` · `Socket.IO` · `Tailwind CSS 4`
 
-[Backend](backend/README.md) · [Frontend](frontend/README.md) · [Product Roadmap](docs/product/roadmap.md) · [Project Status](docs/project-status/index.md) · [Architecture](docs/engineering/architecture.md)
+[Backend](backend/README.md) · [Frontend](frontend/README.md) · [AI Kit](ai-kit/README.md) · [Backend Product Roadmap](docs/product/backend/roadmap.md) · [AI Kit Roadmap](docs/product/ai-kit/roadmap.md) · [Project Status](docs/project-status/index.md) · [Architecture](docs/engineering/architecture.md)
 
 </div>
 
@@ -19,7 +19,7 @@ JOBHUB hỗ trợ toàn bộ chuỗi tuyển dụng từ quản lý tài khoản
 Repository hiện có độ trưởng thành không đồng đều giữa hai ứng dụng: backend đã triển khai phần lớn phạm vi V1–V15, trong khi frontend mới hoàn tất nền tảng kỹ thuật và authentication lifecycle V1; UI nghiệp vụ vẫn chưa được xây dựng.
 
 > [!IMPORTANT]
-> README này là cổng vào kỹ thuật của repository. [Product Specifications](docs/product/versions/) quyết định yêu cầu nghiệp vụ, [Data Contracts](docs/data/versions/) quyết định persistence, [Engineering docs](docs/engineering/) quyết định kiến trúc/owner, và [Project Status](docs/project-status/index.md) ghi nhận trạng thái triển khai cùng bằng chứng xác minh.
+> README này là cổng vào kỹ thuật của repository. Backend và các Frontend surface dùng [Backend Product Specifications](docs/product/backend/versions/) cùng [Backend Data Contracts](docs/data/backend/versions/); AI Kit dùng [AI Kit roadmap](docs/product/ai-kit/roadmap.md), [Product Specifications](docs/product/ai-kit/versions/) và [Data Contracts](docs/data/ai-kit/versions/). [Engineering docs](docs/engineering/) quyết định kiến trúc/owner, còn [Project Status](docs/project-status/index.md) ghi nhận trạng thái triển khai cùng bằng chứng xác minh.
 
 ## Mục lục
 
@@ -46,8 +46,8 @@ Repository hiện có độ trưởng thành không đồng đều giữa hai �
 | --- | --- | --- | --- |
 | Backend | REST API, nghiệp vụ, persistence, worker và realtime server | Phần lớn V1–V15 đã triển khai; V8 còn `IN PROGRESS` | [Backend README](backend/README.md) |
 | Frontend | Browser UI, routing, auth client, HTTP/realtime client | Foundation và authentication lifecycle V1 đã xác minh; chưa có UI nghiệp vụ | [Frontend README](frontend/README.md) |
-| Product/Data docs | Yêu cầu nghiệp vụ và hợp đồng persistence | V1–V15 có tài liệu phiên bản; V16–V17 mới ở roadmap | [Docs](docs/) |
-| AI Kit | Private local Node.js package `@jobhub/ai-kit`, chạy trong Backend runtime; không có process/server riêng | Technical foundation sẵn sàng: Gemini và Groq provider adapter, fallback policy nội bộ, trích xuất PDF bằng Scribe. Chưa có năng lực AI nghiệp vụ (AI #1/#2/#3); AI #1 chưa có Product/Data specification được phê duyệt | [AI Kit status](docs/project-status/ai-kit/foundation.md) |
+| Backend Product/Data docs | Yêu cầu nghiệp vụ và hợp đồng persistence | V1–V15 có tài liệu phiên bản; V16–V17 mới ở roadmap | [Docs](docs/product/backend/) |
+| AI Kit | Private local Node.js package `@jobhub/ai-kit`, chạy trong Backend runtime; không có process/server riêng | Technical foundation sẵn sàng: Gemini và Groq provider adapter, fallback policy nội bộ, trích xuất PDF bằng Scribe. Chưa có năng lực AI nghiệp vụ (AI #1/#2/#3); AI #1 chưa có Product/Data specification được phê duyệt | [AI Kit README](ai-kit/README.md) · [Status](docs/project-status/ai-kit/foundation.md) |
 
 ### Điểm nổi bật
 
@@ -58,11 +58,11 @@ Repository hiện có độ trưởng thành không đồng đều giữa hai �
 - Background worker phục hồi Notification và vật chất hóa Job Invitation hết hạn.
 - Request tracing xuyên HTTP bằng `X-Request-Id` và structured logging ở production.
 - Kiến trúc frontend có canonical owner cho router, Redux, Axios, Socket.IO, validation và theme.
-- Cổng verification riêng cho backend và frontend.
+- Cổng verification riêng cho backend, AI Kit và frontend.
 
 ## Trạng thái sản phẩm
 
-Theo [Product Roadmap](docs/product/roadmap.md):
+Theo [Backend Product Roadmap](docs/product/backend/roadmap.md):
 
 | Phiên bản | Phạm vi | Trạng thái |
 | --- | --- | --- |
@@ -202,6 +202,7 @@ Nguyên tắc cốt lõi là mỗi trách nhiệm có một canonical owner. Rep
 | Authentication | JWT, session-bound refresh credential, bcryptjs |
 | Email | Nodemailer/SMTP |
 | Backend testing | Vitest, Supertest, MongoDB Memory Server |
+| AI Kit | Node.js ES Modules, Gemini/Groq adapters, Scribe, Vitest |
 
 ## Cấu trúc repository
 
@@ -408,6 +409,19 @@ Chạy trong `backend/`:
 | `npm run verify:architecture` | Kiểm tra ràng buộc kiến trúc |
 | `npm run verify:agent` | Lint + architecture + toàn bộ test |
 
+### AI Kit
+
+Chạy trong `ai-kit/`:
+
+| Lệnh | Mục đích |
+| --- | --- |
+| `npm run lint` | ESLint |
+| `npm test` | Chạy offline Vitest suite |
+| `npm run test:watch` | Vitest watch mode |
+| `npm run verify:agent` | Cổng offline chính thức: lint + toàn bộ test |
+| `npm run smoke:gemini` | Live smoke Gemini, chạy tường minh và có thể tiêu thụ quota |
+| `npm run smoke:groq` | Live smoke Groq, chạy tường minh và có thể tiêu thụ quota |
+
 ### Frontend
 
 Chạy trong `frontend/`:
@@ -462,7 +476,7 @@ Xem chi tiết:
 
 ## Kiểm thử và xác minh
 
-Backend và frontend có cổng verification độc lập. Một cổng pass không xác minh ứng dụng còn lại.
+Backend, AI Kit và frontend có cổng verification độc lập. Một cổng pass không xác minh area còn lại.
 
 ### Backend gate
 
@@ -472,6 +486,15 @@ npm run verify:agent
 ```
 
 Bao gồm ESLint, deterministic architecture checks và toàn bộ Vitest suite.
+
+### AI Kit gate
+
+```bash
+cd ai-kit
+npm run verify:agent
+```
+
+Bao gồm ESLint và offline Vitest suite. Live provider smoke không thuộc gate này và chỉ chạy khi được yêu cầu tường minh.
 
 ### Frontend gate
 
@@ -485,6 +508,7 @@ Bao gồm focused authentication Node tests, ESLint và Vite production build.
 ### Giới hạn của verification
 
 - Backend gate không tự chứng minh MongoDB Atlas, Cloudinary, SMTP hoặc Province Open API thật đang hoạt động.
+- AI Kit gate không gọi provider thật và không chứng minh Gemini/Groq live hoặc fallback composition đang hoạt động.
 - Frontend gate chưa có browser/end-to-end harness và không chứng minh rendering, accessibility hoặc backend integration.
 - Smoke test production phải được thực hiện riêng và chỉ được báo cáo khi đã chạy thực tế.
 
@@ -501,7 +525,7 @@ Bao gồm focused authentication Node tests, ESLint và Vite production build.
 - Sau thay đổi material, chạy focused checks và cổng verification của đúng ứng dụng.
 - Không tuyên bố test/build/lint pass nếu lệnh tương ứng chưa thực sự chạy thành công.
 
-Agent/contributor workflow đầy đủ nằm trong [AGENTS.md](AGENTS.md), [backend/AGENTS.md](backend/AGENTS.md) và [frontend/AGENTS.md](frontend/AGENTS.md).
+Agent/contributor workflow đầy đủ nằm trong [AGENTS.md](AGENTS.md), [backend/AGENTS.md](backend/AGENTS.md), [ai-kit/AGENTS.md](ai-kit/AGENTS.md) và [frontend/AGENTS.md](frontend/AGENTS.md).
 
 ## Triển khai production
 
@@ -530,15 +554,20 @@ Checklist chi tiết nằm trong [Backend README](backend/README.md#triển-khai
 
 | Câu hỏi | Tài liệu |
 | --- | --- |
-| Sản phẩm đang đi đến đâu? | [Product Roadmap](docs/product/roadmap.md) |
-| Yêu cầu nghiệp vụ cụ thể là gì? | [Product Specifications](docs/product/versions/) |
-| Dữ liệu phải được lưu như thế nào? | [Data Contracts](docs/data/versions/) |
+| Backend đang đi đến đâu? | [Backend Product Roadmap](docs/product/backend/roadmap.md) |
+| Yêu cầu nghiệp vụ Backend/Frontend cụ thể là gì? | [Backend Product Specifications](docs/product/backend/versions/) |
+| Dữ liệu Backend phải được lưu như thế nào? | [Backend Data Contracts](docs/data/backend/versions/) |
+| AI Kit quản lý version/scope ở đâu? | [AI Kit Product Roadmap](docs/product/ai-kit/roadmap.md) |
+| Yêu cầu và dữ liệu AI Kit ở đâu? | [AI Kit Product Specifications](docs/product/ai-kit/versions/) · [AI Kit Data Contracts](docs/data/ai-kit/versions/) |
 | Phần nào đã triển khai/xác minh? | [Project Status](docs/project-status/index.md) |
 | Kiến trúc toàn hệ thống ra sao? | [Architecture](docs/engineering/architecture.md) |
 | Canonical backend owners ở đâu? | [Backend Source of Truth](docs/engineering/source-of-truth.md) |
 | Canonical frontend owners ở đâu? | [Frontend Sources of Truth](docs/engineering/frontend-source-of-truth.md) |
 | Quy ước backend? | [Backend Engineering Conventions](docs/engineering/backend-conventions.md) |
 | Quy ước frontend? | [Frontend Engineering Conventions](docs/engineering/frontend-conventions.md) |
+| Cách cài đặt, cấu hình và kiểm tra AI Kit? | [AI Kit README](ai-kit/README.md) |
+| Quy ước AI Kit? | [AI Kit Engineering Conventions](docs/engineering/ai-kit-conventions.md) |
+| Canonical AI Kit owners ở đâu? | [AI Kit Sources of Truth](docs/engineering/ai-kit-source-of-truth.md) |
 | Cách chạy backend? | [Backend README](backend/README.md) |
 | Cách chạy frontend? | [Frontend README](frontend/README.md) |
 

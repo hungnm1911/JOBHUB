@@ -1,6 +1,6 @@
 # V13 — Notification và phân phối realtime
 
-> **File:** `docs/product/versions/v13-notification-realtime-distribution.md`
+> **File:** `docs/product/backend/versions/v13-notification-realtime-distribution.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V13.

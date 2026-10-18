@@ -1,9 +1,9 @@
 # V5 — Job và vòng đời phê duyệt Job Data Model
 
-> **File:** `docs/data/versions/v5-job-approval-lifecycle-data-model.md`
+> **File:** `docs/data/backend/versions/v5-job-approval-lifecycle-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v5-job-approval-lifecycle.md`
+> **Product authority:** `docs/product/backend/versions/v5-job-approval-lifecycle.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v5-job-approval-lifecycle.md
+docs/product/backend/versions/v5-job-approval-lifecycle.md
 ```
 
 Product Specification V5 là authority đối với business behavior.

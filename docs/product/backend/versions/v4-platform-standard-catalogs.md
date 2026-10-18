@@ -1,6 +1,6 @@
 # V4 — Quản lý danh mục chuẩn của nền tảng
 
-> **File:** `docs/product/versions/v4-platform-standard-catalogs.md`
+> **File:** `docs/product/backend/versions/v4-platform-standard-catalogs.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V4 — Quản lý danh mục chuẩn của nền tảng.

@@ -1,9 +1,9 @@
 # V10 — Phân công Application và Recruitment Pipeline Data Model
 
-> **File:** `docs/data/versions/v10-application-assignment-recruitment-pipeline-data-model.md`
+> **File:** `docs/data/backend/versions/v10-application-assignment-recruitment-pipeline-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
+> **Product authority:** `docs/product/backend/versions/v10-application-assignment-recruitment-pipeline.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v10-application-assignment-recruitment-pipeline.md
+docs/product/backend/versions/v10-application-assignment-recruitment-pipeline.md
 ```
 
 Product Specification là authority đối với business behavior.

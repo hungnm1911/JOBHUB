@@ -1,9 +1,9 @@
 # V11 — Conversation và Chat thuộc Application Data Model
 
-> **File:** `docs/data/versions/v11-application-conversation-chat-data-model.md`
+> **File:** `docs/data/backend/versions/v11-application-conversation-chat-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v11-application-conversation-chat.md`
+> **Product authority:** `docs/product/backend/versions/v11-application-conversation-chat.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v11-application-conversation-chat.md
+docs/product/backend/versions/v11-application-conversation-chat.md
 ```
 
 Product Specification là authority đối với business behavior.

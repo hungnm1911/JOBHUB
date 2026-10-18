@@ -1,9 +1,9 @@
 # V4 — Quản lý danh mục chuẩn của nền tảng Data Model
 
-> **File:** `docs/data/versions/v4-platform-standard-catalogs-data-model.md`
+> **File:** `docs/data/backend/versions/v4-platform-standard-catalogs-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v4-platform-standard-catalogs.md`
+> **Product authority:** `docs/product/backend/versions/v4-platform-standard-catalogs.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v4-platform-standard-catalogs.md
+docs/product/backend/versions/v4-platform-standard-catalogs.md
 ```
 
 Product Specification là authority đối với business behavior.

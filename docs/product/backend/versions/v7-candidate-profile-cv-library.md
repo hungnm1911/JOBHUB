@@ -4,7 +4,7 @@ Dưới đây là nội dung đã chuẩn hóa theo đúng cấu trúc **Canonic
 
 # V7 — Candidate Profile và thư viện CV
 
-> **File:** `docs/product/versions/v7-candidate-profile-cv-library.md`
+> **File:** `docs/product/backend/versions/v7-candidate-profile-cv-library.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V7 — Candidate Profile và thư viện CV.

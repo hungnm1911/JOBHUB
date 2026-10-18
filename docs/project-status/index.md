@@ -3,11 +3,12 @@
 This directory is the single entry point for JOBHUB implementation and
 verification snapshots.
 
-The canonical high-level product status remains in
-[the Product Roadmap](../product/roadmap.md). Approved Product Specifications
-define business requirements, Data Contracts define persistence requirements,
-and Engineering documents define architecture and ownership. The files mapped
-below record implementation and verification evidence only.
+The canonical high-level Backend product status remains in
+[the Backend Product Roadmap](../product/backend/roadmap.md). Approved Backend
+Product Specifications define business requirements, Data Contracts define
+persistence requirements, and Engineering documents define architecture and
+ownership. The files mapped below record implementation and verification
+evidence only.
 
 ## Reading a status leaf
 
@@ -53,7 +54,7 @@ Reading rules:
 - [V13 — Notification and realtime distribution](backend/v13-notification-realtime-distribution.md)
 - [V14 — Candidate search public CV](backend/v14-candidate-search-public-cv.md)
 - [V15 — Job invitation and recruiter sourcing](backend/v15-job-invitation-recruiter-sourcing.md)
-- V16 and V17 do not yet have implementation snapshots; see the Product Roadmap.
+- V16 and V17 do not yet have implementation snapshots; see the Backend Product Roadmap.
 
 ## Frontend
 

@@ -1,6 +1,6 @@
 # V11 — Conversation và Chat thuộc Application
 
-> **File:** `docs/product/versions/v11-application-conversation-chat.md`
+> **File:** `docs/product/backend/versions/v11-application-conversation-chat.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V11.

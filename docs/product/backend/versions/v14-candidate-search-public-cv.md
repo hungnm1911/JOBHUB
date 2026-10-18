@@ -1,6 +1,6 @@
 # V14 — Candidate Search trên CV PUBLIC
 
-> **File:** `docs/product/versions/v14-candidate-search-public-cv.md`
+> **File:** `docs/product/backend/versions/v14-candidate-search-public-cv.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V14.

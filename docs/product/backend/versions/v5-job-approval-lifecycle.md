@@ -1,6 +1,6 @@
 # V5 — Job và vòng đời phê duyệt Job
 
-> **File:** `docs/product/versions/v5-job-approval-lifecycle.md`
+> **File:** `docs/product/backend/versions/v5-job-approval-lifecycle.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V5 — Job và vòng đời phê duyệt Job.

@@ -1,6 +1,6 @@
 # V6 — Recruitment Team và chuyển giao trách nhiệm
 
-> **File:** `docs/product/versions/v6-recruitment-team-responsibility-transfer.md`
+> **File:** `docs/product/backend/versions/v6-recruitment-team-responsibility-transfer.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V6.

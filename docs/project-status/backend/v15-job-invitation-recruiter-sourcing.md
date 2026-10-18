@@ -13,8 +13,8 @@ Slice 08 — Atomic Accept + Availability Handoff, and Slice 09 — Acceptance +
 Concurrency Closure are `IMPLEMENTED AND VERIFIED`. Slice 09 closes `F01`–`F11`
 across `BR-01`–`BR-61` and `TX-01`–`TX-05` without adding business capability
 beyond the approved canonical contracts. Its approved Product/Data contracts
-remain `docs/product/versions/v15-job-invitation-recruiter-sourcing.md` and
-`docs/data/versions/v15-job-invitation-recruiter-sourcing-data-model.md`.
+remain `docs/product/backend/versions/v15-job-invitation-recruiter-sourcing.md` and
+`docs/data/backend/versions/v15-job-invitation-recruiter-sourcing-data-model.md`.
 
 ## Deferred / not started
 

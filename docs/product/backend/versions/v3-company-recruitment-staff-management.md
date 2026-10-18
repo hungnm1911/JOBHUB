@@ -1,6 +1,6 @@
 # V3 — Quản lý nhân sự tuyển dụng của Company
 
-> **File:** `docs/product/versions/v3-company-recruitment-staff-management.md`
+> **File:** `docs/product/backend/versions/v3-company-recruitment-staff-management.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V3.

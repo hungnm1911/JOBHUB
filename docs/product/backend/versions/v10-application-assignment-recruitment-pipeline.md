@@ -1,6 +1,6 @@
 # V10 — Phân công Application và Recruitment Pipeline
 
-> **File:** `docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
+> **File:** `docs/product/backend/versions/v10-application-assignment-recruitment-pipeline.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V10.

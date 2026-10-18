@@ -16,9 +16,9 @@ These engineering documents are the canonical frontend architecture contract. Fo
 
 For frontend work that implements or changes the client behavior of a product version, read all of the following before planning or editing:
 
-- the approved product specification for that version under [`../docs/product/versions/`](../docs/product/versions/);
+- the approved product specification for that version under [`../docs/product/backend/versions/`](../docs/product/backend/versions/);
 - the backend routes, controllers, and response/error shapes of every endpoint or realtime event the change consumes;
-- the matching data contract under [`../docs/data/versions/`](../docs/data/versions/) only when field semantics are needed to present or submit data;
+- the matching data contract under [`../docs/data/backend/versions/`](../docs/data/backend/versions/) only when field semantics are needed to present or submit data;
 - [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md) (sections as above);
 - [`../docs/engineering/frontend-conventions.md`](../docs/engineering/frontend-conventions.md); and
 - [`../docs/engineering/frontend-source-of-truth.md`](../docs/engineering/frontend-source-of-truth.md).

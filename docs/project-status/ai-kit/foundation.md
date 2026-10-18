@@ -4,8 +4,10 @@
 
 - **Readiness:** AI Kit technical foundation: ready. AI #1 Product/Data
   specification: not approved. No AI #1/#2/#3 business capability is
-  implemented, and none is implementation-ready, because neither the roadmap
-  nor `docs/product/versions/` / `docs/data/versions/` defines one yet.
+  implemented, and none is implementation-ready, because
+  `docs/product/ai-kit/roadmap.md` defines no approved business version and
+  `docs/product/ai-kit/versions/` / `docs/data/ai-kit/versions/` contains no
+  approved specification or contract.
 - **Implemented; verified:** `ai-kit/` is the private `@jobhub/ai-kit` npm
   package using Node.js ES modules. Its package root is the only production
   source entrypoint and exports the minimal `createAiKit` composition factory;

@@ -1,6 +1,6 @@
 # V12 — Interview Schedule
 
-> **File:** `docs/product/versions/v12-interview-schedule.md`
+> **File:** `docs/product/backend/versions/v12-interview-schedule.md`
 > **Vai trò:** Canonical Product Specification
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business/functional truth của V12.

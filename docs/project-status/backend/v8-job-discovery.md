@@ -3,8 +3,8 @@
 ## Current project state
 
 **V8 — Job Discovery** is `COMPLETED AND VERIFIED` for the backend. Its approved
-Product and Data contracts are `docs/product/versions/v8-job-discovery.md` and
-`docs/data/versions/v8-job-discovery-data-model.md`.
+Product and Data contracts are `docs/product/backend/versions/v8-job-discovery.md` and
+`docs/data/backend/versions/v8-job-discovery-data-model.md`.
 
 The read-only public surface is implemented under `/api/job-discovery` with
 optional authentication: `GET /jobs` (list, search, filter, sort, pagination),

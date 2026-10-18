@@ -1,9 +1,9 @@
 # V7 — Candidate Profile và thư viện CV Data Model
 
-> **File:** `docs/data/versions/v7-candidate-profile-cv-library-data-model.md`
+> **File:** `docs/data/backend/versions/v7-candidate-profile-cv-library-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v7-candidate-profile-cv-library.md`
+> **Product authority:** `docs/product/backend/versions/v7-candidate-profile-cv-library.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v7-candidate-profile-cv-library.md
+docs/product/backend/versions/v7-candidate-profile-cv-library.md
 ```
 
 Product Specification là authority đối với business behavior.

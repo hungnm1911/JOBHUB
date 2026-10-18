@@ -9,8 +9,8 @@ current Submitted CV, and Slice 05 — Withdraw Application
 `IMPLEMENTED AND VERIFIED` (F01, F02, F03 for Generated/Uploaded Apply plus
 F03/F04 Replace boundary and F05 Withdraw boundary).
 Its approved Product and Data contracts are
-`docs/product/versions/v9-candidate-direct-apply-application.md` and
-`docs/data/versions/v9-candidate-direct-apply-application-data-model.md`.
+`docs/product/backend/versions/v9-candidate-direct-apply-application.md` and
+`docs/data/backend/versions/v9-candidate-direct-apply-application-data-model.md`.
 Slice 01 adds canonical Application persistence; Slice 02 adds authenticated
 Candidate `POST /api/candidate/applications` with Generated ACTIVE CV
 eligibility, Harvard snapshot capture/upload, and Candidate–Job uniqueness via

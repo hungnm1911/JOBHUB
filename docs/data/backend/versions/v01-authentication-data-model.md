@@ -5,7 +5,7 @@
 
 This document defines the canonical persistence model required to support:
 
-`docs/product/versions/v01-account-authentication.md`
+`docs/product/backend/versions/v01-account-authentication.md`
 
 It describes the data required by V1 without defining HTTP endpoints,
 controllers, services, routes, or application workflow implementation.
@@ -517,4 +517,4 @@ Those decisions belong to the implementation and engineering layers.
 
 Implementation must satisfy this data contract without changing the business behavior defined in:
 
-`docs/product/versions/v01-account-authentication.md`
+`docs/product/backend/versions/v01-account-authentication.md`

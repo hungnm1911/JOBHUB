@@ -1,9 +1,9 @@
 # V02 — Company onboarding và quản trị cấp nền tảng Data Model
 
-> **File:** `docs/data/versions/v02-company-onboarding-platform-administration-data-model.md`
+> **File:** `docs/data/backend/versions/v02-company-onboarding-platform-administration-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v02-company-onboarding-platform-administration.md`
+> **Product authority:** `docs/product/backend/versions/v02-company-onboarding-platform-administration.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v02-company-onboarding-platform-administration.md
+docs/product/backend/versions/v02-company-onboarding-platform-administration.md
 ```
 
 Product Specification là authority đối với business behavior.

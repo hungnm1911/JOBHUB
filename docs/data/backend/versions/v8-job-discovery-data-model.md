@@ -1,8 +1,8 @@
 # V8 — Job Discovery Data Model
 
-> **File:** `docs/data/versions/v8-job-discovery-data-model.md`
+> **File:** `docs/data/backend/versions/v8-job-discovery-data-model.md`
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v8-job-discovery.md`
+> **Product authority:** `docs/product/backend/versions/v8-job-discovery.md`
 
 
 ---
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v8-job-discovery.md
+docs/product/backend/versions/v8-job-discovery.md
 ```
 
 Product Specification là authority đối với business behavior.

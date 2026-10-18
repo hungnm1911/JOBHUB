@@ -1,9 +1,9 @@
 # V3 — Quản lý nhân sự tuyển dụng của Company Data Model
 
-> **File:** `docs/data/versions/v3-company-recruitment-staff-management-data-model.md`
+> **File:** `docs/data/backend/versions/v3-company-recruitment-staff-management-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v3-company-recruitment-staff-management.md`
+> **Product authority:** `docs/product/backend/versions/v3-company-recruitment-staff-management.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v3-company-recruitment-staff-management.md
+docs/product/backend/versions/v3-company-recruitment-staff-management.md
 ```
 
 Product Specification là authority đối với business behavior.

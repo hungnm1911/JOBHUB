@@ -1,6 +1,6 @@
 # V16 — Saved Jobs
 
-> **File:** `docs/product/versions/v16-saved-jobs.md`  
+> **File:** `docs/product/backend/versions/v16-saved-jobs.md`
 > **Vai trò:** Product Specification + Implementation Contract cho V16 — Saved Jobs.  
 > **Ngôn ngữ:** Tiếng Việt  
 > **Mục đích:** Chốt business flow, API surface và các implementation decision cần thiết để triển khai V16 trên backend hiện tại của JOBHUB.

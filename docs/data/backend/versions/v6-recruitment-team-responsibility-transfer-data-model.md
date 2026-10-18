@@ -1,9 +1,9 @@
 # V6 — Recruitment Team và chuyển giao trách nhiệm Data Model
 
-> **File:** `docs/data/versions/v6-recruitment-team-responsibility-transfer-data-model.md`
+> **File:** `docs/data/backend/versions/v6-recruitment-team-responsibility-transfer-data-model.md`
 > **Vai trò:** Canonical Persistence / Data Contract
 > **Ngôn ngữ:** Tiếng Việt
-> **Product authority:** `docs/product/versions/v6-recruitment-team-responsibility-transfer.md`
+> **Product authority:** `docs/product/backend/versions/v6-recruitment-team-responsibility-transfer.md`
 
 ---
 
@@ -12,7 +12,7 @@
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text
-docs/product/versions/v6-recruitment-team-responsibility-transfer.md
+docs/product/backend/versions/v6-recruitment-team-responsibility-transfer.md
 ```
 
 Product Specification V6 là authority đối với business behavior.

@@ -4,8 +4,8 @@
 
 **V14 — Candidate Search trên CV PUBLIC** is `COMPLETED AND VERIFIED`.
 Its approved canonical Product/Data contracts are tracked at
-`docs/product/versions/v14-candidate-search-public-cv.md` and
-`docs/data/versions/v14-candidate-search-public-cv-data-model.md`.
+`docs/product/backend/versions/v14-candidate-search-public-cv.md` and
+`docs/data/backend/versions/v14-candidate-search-public-cv-data-model.md`.
 
 ## Deferred / not started
 
