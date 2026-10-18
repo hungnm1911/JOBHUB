@@ -23,6 +23,17 @@ applications.
 - Bootstrap, MongoDB, Cloudinary, workers, realtime fan-out, and Notification
   recovery log through the logger. The previously silent fan-out and
   recovery-item failures are logged at `warn`.
+- `src/services/ai-kit.service.js` is the sole Backend integration owner for
+  the local `@jobhub/ai-kit` package. It injects optional normalized
+  `config.aiKit.llm` values and the canonical Backend logger while creating the
+  shared instance through the package-root public API. ARCH-019 rejects imports
+  from other Backend source modules and rejects AI Kit deep imports.
+- Canonical install is `npm ci` in `ai-kit/`, then `npm ci` in `backend/`;
+  only Backend runs a process. `file:../ai-kit` installs as a symlink, so the
+  install and runtime context must contain the sibling `ai-kit/` and
+  `backend/` directories. Backend-only `npm ci` succeeds without installing AI
+  Kit dependencies (and with a dangling link when `ai-kit/` is absent), and
+  `npm ls @jobhub/ai-kit --depth=0` does not detect either case.
 - About 30 silent best-effort `catch {}` blocks remain in business services
   (application, job, job-invitation, candidate-cv, recruiter, platform-admin,
   company). Some `AppError(502)` conversions there still drop the original
@@ -31,8 +42,18 @@ applications.
 
 **Verification:**
 - Backend `npm run verify:agent` passed: lint with 2 pre-existing test
-  warnings, ARCH-001–ARCH-018, and 169 files / 1,749 tests, including the new
-  `test/http/error-logging.test.js`.
+  warnings, ARCH-001–ARCH-019, and 171 files / 1,779 tests, including the AI
+  Kit runtime-dependency injection integration test.
+- 2026-10-18 clean-install check on temporary `ai-kit/` + `backend/` copies
+  without `node_modules`/`.env` (Node 20.19.1, npm 10.8.2): after the
+  canonical two-step install, `npm ls @jobhub/ai-kit --depth=0` passed,
+  `@google/genai`, `groq-sdk`, and `scribe.js-ocr` resolved and imported from
+  the AI Kit package context, `@jobhub/ai-kit` and both
+  `@jobhub/ai-kit/tooling/smoke-*` subpaths imported from Backend, and AI Kit
+  `npm run verify:agent` passed (7 files / 40 tests). Backend-only `npm ci`
+  reproduced `ERR_MODULE_NOT_FOUND` for both tooling subpaths. Backend
+  `npm run verify:agent` then passed (ARCH-001–ARCH-019, 172 files / 1,782
+  tests). Backend startup does not yet import `ai-kit.service.js`.
 - A browser-to-terminal smoke check ran the real Express `app` without
   MongoDB. It confirmed matching request ids for a 404, a malformed-JSON 400,
   and a network failure.

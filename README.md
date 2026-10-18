@@ -47,7 +47,7 @@ Repository hiện có độ trưởng thành không đồng đều giữa hai �
 | Backend | REST API, nghiệp vụ, persistence, worker và realtime server | Phần lớn V1–V15 đã triển khai; V8 còn `IN PROGRESS` | [Backend README](backend/README.md) |
 | Frontend | Browser UI, routing, auth client, HTTP/realtime client | Foundation và authentication lifecycle V1 đã xác minh; chưa có UI nghiệp vụ | [Frontend README](frontend/README.md) |
 | Product/Data docs | Yêu cầu nghiệp vụ và hợp đồng persistence | V1–V15 có tài liệu phiên bản; V16–V17 mới ở roadmap | [Docs](docs/) |
-| AI Kit | Không gian dành cho năng lực AI trong tương lai | Chưa có implementation snapshot | [Project Status](docs/project-status/index.md) |
+| AI Kit | Private local Node.js package `@jobhub/ai-kit`, chạy trong Backend runtime; không có process/server riêng | Technical foundation sẵn sàng: Gemini và Groq provider adapter, fallback policy nội bộ, trích xuất PDF bằng Scribe. Chưa có năng lực AI nghiệp vụ (AI #1/#2/#3); AI #1 chưa có Product/Data specification được phê duyệt | [AI Kit status](docs/project-status/ai-kit/foundation.md) |
 
 ### Điểm nổi bật
 
@@ -207,6 +207,7 @@ Nguyên tắc cốt lõi là mỗi trách nhiệm có một canonical owner. Rep
 
 ```text
 JOBHUB/
+├── ai-kit/                          # Local package @jobhub/ai-kit; không có process riêng
 ├── backend/
 │   ├── index.js                     # Process entry point
 │   ├── scripts/                     # Migration và architecture verification
@@ -252,7 +253,7 @@ JOBHUB/
 ## Yêu cầu hệ thống
 
 - Node.js `>=20.19.0`. Frontend Vite 8 hỗ trợ `^20.19.0` hoặc `>=22.12.0`.
-- npm cho backend vì `backend/package-lock.json` là lockfile chính được dùng trong hướng dẫn.
+- npm cho backend và `ai-kit` vì `backend/package-lock.json` và `ai-kit/package-lock.json` là lockfile được dùng trong hướng dẫn.
 - Yarn Classic 1.x cho frontend vì `frontend/yarn.lock` là lockfile v1.
 - MongoDB replica set hoặc MongoDB Atlas; nhiều workflow backend sử dụng multi-document transaction.
 - Tài khoản Cloudinary.
@@ -271,11 +272,17 @@ cd JOBHUB
 
 ### 2. Cài đặt và cấu hình backend
 
+Backend phụ thuộc local package `@jobhub/ai-kit` qua `file:../ai-kit`. `npm ci` trong `backend/` chỉ tạo symlink tới thư mục `ai-kit/` cùng cấp, không cài dependency của AI Kit, nên phải cài `ai-kit/` trước:
+
 ```bash
-cd backend
+cd ai-kit
+npm ci
+cd ../backend
 npm ci
 cp .env.example .env
 ```
+
+`ai-kit/` không có process riêng; chỉ backend được khởi động.
 
 Điền đầy đủ cấu hình trong `backend/.env`. MongoDB local phải chạy ở chế độ replica set, ví dụ URI:
 
@@ -500,6 +507,7 @@ Agent/contributor workflow đầy đủ nằm trong [AGENTS.md](AGENTS.md), [bac
 
 ### Backend
 
+- Deployment/build context phải chứa cả `ai-kit/` và `backend/` cùng cấp; chỉ copy riêng `backend/` là không đủ. Cài bằng `npm ci` trong `ai-kit/` rồi trong `backend/`, và chỉ khởi động backend (`npm start` trong `backend/`).
 - Đặt `NODE_ENV=production`.
 - Hoàn tất migration/cutover bắt buộc trước khi deploy code phụ thuộc vào chúng.
 - Chạy sau HTTPS reverse proxy và process/container supervisor hỗ trợ `SIGTERM`.

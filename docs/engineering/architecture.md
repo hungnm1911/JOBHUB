@@ -95,6 +95,34 @@ does not duplicate that owner matrix.
 - `backend/src/routes/index.js` is the root API router and mounts feature routers.
 - Infrastructure-specific configuration and clients, including MongoDB, Cloudinary, and mail transport, remain under `backend/src/config/`.
 - `backend/src/config/index.js` is the canonical normalized application configuration provider.
+- `backend/src/services/ai-kit.service.js` is the sole Backend integration
+  boundary for the local `@jobhub/ai-kit` package. It creates the shared AI Kit
+  instance through the package-root public API, injecting normalized AI Kit
+  configuration from `backend/src/config/index.js` and the canonical Backend
+  logger. Other Backend source modules must consume this service rather than
+  import the package or its internals. AI Kit must not read Backend environment
+  state or import Backend modules.
+- `ai-kit/src/llm/gemini-client.js` is the sole direct `@google/genai` consumer.
+  It owns provider-specific SDK initialization and `models.generateContent`
+  delegation, remains internal to AI Kit, and receives API key, model, and
+  logger dependencies explicitly rather than reading environment state.
+- `ai-kit/src/llm/groq-client.js` is the sole direct `groq-sdk` consumer. It
+  owns provider-specific SDK initialization and `chat.completions.create`
+  delegation, remains internal to AI Kit, and receives API key, model, and
+  logger dependencies explicitly rather than reading environment state. It
+  does not own fallback or retry behavior.
+- `ai-kit/src/llm/llm-fallback.js` owns the internal, provider-request-agnostic
+  single-attempt LLM fallback policy. It executes injected primary and fallback
+  functions without normalizing their request or result shapes, falls back only
+  for the approved temporary HTTP statuses or structured response-free
+  connection/timeout errors, and does not retry either function. It is not part
+  of the AI Kit package-root API and is not composed into a business capability.
+- Manual provider smoke tooling keeps environment composition in
+  `backend/scripts/smoke-<provider>.js` and adapter invocation plus marker
+  validation in `ai-kit/scripts/smoke-<provider>.js`. Backend imports those
+  harnesses only through explicit `@jobhub/ai-kit/tooling/smoke-<provider>`
+  package subpaths; it does not deep-import AI Kit filesystem internals. These
+  tooling exports do not add provider clients to the production package root.
 - `backend/index.js` consumes application configuration during runtime bootstrap, but does not own environment loading, parsing, validation, normalization, or defaults.
 - One-time data migrations required by an approved persistence contract are explicit database tooling. `backend/scripts/run-migration.js` owns migration invocation and connection orchestration, while versioned migration definitions live under `backend/src/database/migrations/`. Migrations are never run implicitly during application startup or seed execution.
 - V4.1 Location reference data uses Province Open API v1 (`https://provinces.open-api.vn/api/v1/`) and its pre-July-2025-merger semantics. Raw Province and raw District become the JOBHUB `Province → optional District-level unit` hierarchy; raw Ward/Commune is excluded. `backend/src/services/location.service.js` is the stable consumer-facing catalog/semantic-validation boundary and, for the demo scope, calls v1 directly with no cache, fallback, static catalog, or MongoDB mirror; provider failure fails that operation closed. Job/CandidateCV mutation owners consume the boundary. Job Discovery and Candidate Search filter/sort only from persisted `provinceCode`/`districtCode`; the one search-path use of the boundary is Candidate Search resolving District → Province membership of a District-subset filter once per request (`resolveLocationFilterSelections`), because a Province-wide preference carries no District to prove membership. Job Discovery never calls the boundary, and no search consumer calls the provider directly. A future cache/provider wrapper may be inserted behind the same boundary without changing Product/API contracts or downstream consumers.

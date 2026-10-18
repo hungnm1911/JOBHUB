@@ -140,12 +140,16 @@ Nếu một bước bắt buộc thất bại, tiến trình sẽ dừng thay v�
 
 ### 1. Cài dependency
 
-Từ thư mục repository:
+Backend phụ thuộc local package `@jobhub/ai-kit` qua `file:../ai-kit`. `npm ci` trong `backend/` chỉ tạo symlink tới thư mục `ai-kit/` cùng cấp và không cài dependency của AI Kit, nên phải cài `ai-kit/` trước. Từ thư mục repository:
 
 ```bash
-cd backend
+cd ai-kit
+npm ci
+cd ../backend
 npm ci
 ```
+
+`ai-kit/` không có process riêng; chỉ backend được khởi động.
 
 ### 2. Tạo file cấu hình
 
@@ -660,6 +664,7 @@ backend/
 
 ## Triển khai production
 
+- Deployment/build context phải chứa cả `ai-kit/` và `backend/` cùng cấp, vì `node_modules/@jobhub/ai-kit` là symlink tới `../ai-kit` khi cài và khi chạy; chỉ copy riêng `backend/` là không đủ. Chạy `npm ci` trong `ai-kit/` rồi trong `backend/`; chỉ khởi động backend.
 - Đặt `NODE_ENV=production` để tắt route probe/test file và ẩn stack trace khỏi response.
 - Dùng secret manager của nền tảng triển khai; không đóng gói `.env` hoặc credential vào image/source control.
 - Chạy MongoDB replica set/Atlas và thực hiện migration/cutover bắt buộc trước khi deploy phiên bản mã nguồn phụ thuộc vào chúng.

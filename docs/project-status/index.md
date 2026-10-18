@@ -61,5 +61,4 @@ Reading rules:
 
 ## AI Kit
 
-No AI Kit implementation snapshot exists yet. The directory is retained by
-an empty .gitkeep file until implementation begins.
+- [Package foundation](ai-kit/foundation.md)
