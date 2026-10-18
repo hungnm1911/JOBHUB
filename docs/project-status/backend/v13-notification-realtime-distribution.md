@@ -11,8 +11,8 @@ finding (malformed `notificationId` returned 500 instead of 404 on Notification
 fetch/open) is fixed and regression-covered, and the official backend gate
 passed afterwards. Two non-blocking Low findings are deferred (see below).
 Its approved canonical Product/Data contracts are tracked at
-`docs/product/versions/v13-notification-realtime-distribution.md` and
-`docs/data/versions/v13-notification-realtime-distribution-data-model.md`.
+`docs/product/backend/versions/v13-notification-realtime-distribution.md` and
+`docs/data/backend/versions/v13-notification-realtime-distribution-data-model.md`.
 Gate 00 corrects the canonical boundary before business implementation: V12
 did not persist Notification, so V13 introduces both `Notification` and
 `NotificationEvent` as new entities; every V13 Notification has a required

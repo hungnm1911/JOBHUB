@@ -26,8 +26,8 @@ The ownership table is about 135 KB, one row per line, and grows with every slic
 
 For backend work that implements or changes V1 behavior, read all of the following before planning or editing:
 
-- [`../docs/product/versions/v01-account-authentication.md`](../docs/product/versions/v01-account-authentication.md)
-- [`../docs/data/versions/v01-authentication-data-model.md`](../docs/data/versions/v01-authentication-data-model.md)
+- [`../docs/product/backend/versions/v01-account-authentication.md`](../docs/product/backend/versions/v01-account-authentication.md)
+- [`../docs/data/backend/versions/v01-authentication-data-model.md`](../docs/data/backend/versions/v01-authentication-data-model.md)
 - [`../docs/engineering/architecture.md`](../docs/engineering/architecture.md) (sections as above)
 - [`../docs/engineering/backend-conventions.md`](../docs/engineering/backend-conventions.md)
 - [`../docs/engineering/source-of-truth.md`](../docs/engineering/source-of-truth.md) (lookup protocol above)

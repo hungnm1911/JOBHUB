@@ -309,6 +309,20 @@ const cors = Object.freeze({
 
 const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:8000";
 
+// AI Kit:
+const aiKit = Object.freeze({
+  llm: Object.freeze({
+    gemini: Object.freeze({
+      apiKey: process.env.GEMINI_API_KEY?.trim() || undefined,
+      model: process.env.GEMINI_MODEL?.trim() || undefined,
+    }),
+    groq: Object.freeze({
+      apiKey: process.env.GROQ_API_KEY?.trim() || undefined,
+      model: process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b",
+    }),
+  }),
+});
+
 // logging :
 const LOG_LEVELS = Object.freeze(["silent", "error", "warn", "info", "debug"]);
 
@@ -341,5 +355,6 @@ export default Object.freeze({
   jobInvitationExpiration,
   cors,
   appBaseUrl,
+  aiKit,
   logging,
 });

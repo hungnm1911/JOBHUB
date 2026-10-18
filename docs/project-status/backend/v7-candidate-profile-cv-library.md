@@ -15,7 +15,7 @@ vocabulary; Generated activation same-millisecond content CAS; CandidateCV
 query-update local-invariant enforcement) are remediated and verified. Final
 Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
 
-V7's approved business specification is at `docs/product/versions/v7-candidate-profile-cv-library.md`, and its approved persistence contract is at `docs/data/versions/v7-candidate-profile-cv-library-data-model.md`.
+V7's approved business specification is at `docs/product/backend/versions/v7-candidate-profile-cv-library.md`, and its approved persistence contract is at `docs/data/backend/versions/v7-candidate-profile-cv-library-data-model.md`.
 
 V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46,
 and TX-01.

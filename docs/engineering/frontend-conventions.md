@@ -12,9 +12,10 @@ owners and audited deviations are recorded in
 [`frontend-source-of-truth.md`](frontend-source-of-truth.md) and must not be
 copied merely because they already exist.
 
-Product specifications under `docs/product/versions/` remain authoritative for
-business behavior. These conventions define code ownership and dependency
-boundaries; they must not invent or silently redefine product rules.
+Product specifications under `docs/product/backend/versions/` remain
+authoritative for business behavior. These conventions define code ownership
+and dependency boundaries; they must not invent or silently redefine product
+rules.
 
 ## Terminology
 

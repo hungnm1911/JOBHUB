@@ -1,0 +1,32 @@
+{
+  "name": "@jobhub/ai-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./tooling/smoke-gemini": "./scripts/smoke-gemini.js",
+    "./tooling/smoke-groq": "./scripts/smoke-groq.js"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke:gemini": "cd ../backend && node scripts/smoke-gemini.js",
+    "smoke:groq": "cd ../backend && node scripts/smoke-groq.js",
+    "verify:agent": "npm run lint && npm run test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@google/genai": "^2.30.0",
+    "groq-sdk": "^1.6.0",
+    "scribe.js-ocr": "^0.16.1"
+  }
+}

@@ -19,8 +19,8 @@ revision. Schedule identity snapshots the selected slot and creator; partial
 active-Schedule uniqueness is persisted. Notification, realtime, or
 Conversation/Message authority change are not included. Its approved
 Product/Data contracts are tracked at
-`docs/product/versions/v12-interview-schedule.md` and
-`docs/data/versions/v12-interview-schedule-data-model.md`. Gate 00 closes the
+`docs/product/backend/versions/v12-interview-schedule.md` and
+`docs/data/backend/versions/v12-interview-schedule-data-model.md`. Gate 00 closes the
 V10 compatibility boundary: from V12 onward,
 `CONTACTED → INTERVIEW_SCHEDULED` is valid only in the same business outcome as
 the first `InterviewSchedule(PROPOSED)` creation. Pre-V12 Applications already

@@ -1,0 +1,309 @@
+# JOBHUB Backend Product Roadmap
+
+## Purpose
+
+This document provides the high-level product roadmap for JOBHUB Backend
+business versions and the Frontend surfaces that consume their contracts.
+
+It identifies the planned business versions and their current status.
+
+Implementation and verification snapshots are mapped from the
+[Project Status entry point](../../project-status/index.md).
+
+Detailed business requirements are defined only in the corresponding documents under:
+
+`docs/product/backend/versions/`
+
+A version must not be implemented from this roadmap alone.
+
+When a detailed version specification exists and has been reviewed and approved, that version document becomes the canonical business contract for implementation.
+
+---
+
+## Versions
+
+| Version | Scope | Status |
+| --- | --- | --- |
+| V1 | Tài khoản và vòng đời xác thực | COMPLETED AND VERIFIED |
+| V2 | Company onboarding và quản trị cấp nền tảng | COMPLETED AND VERIFIED |
+| V3 | Quản lý nhân sự tuyển dụng của Company | COMPLETED AND VERIFIED |
+| V4 | Danh mục chuẩn của nền tảng | COMPLETED AND VERIFIED |
+| V4.1 | Migration Location sang danh mục hành chính Việt Nam hai cấp | COMPLETED / ACCEPTED |
+| V4.2 | Structured Salary, Metadata Catalog & Candidate Skill Keyword Search | COMPLETED / ACCEPTED |
+| V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
+| V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
+| V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
+| V8 | Job Discovery | COMPLETED AND VERIFIED |
+| V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
+| V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
+| V11 | Conversation và Chat thuộc Application | COMPLETED AND VERIFIED |
+| V12 | Interview Schedule | COMPLETED AND VERIFIED |
+| V13 | Notification và phân phối realtime | COMPLETED AND VERIFIED |
+| V14 | Candidate Search trên CV PUBLIC | COMPLETED AND VERIFIED |
+| V15 | Job Invitation và nhánh Recruiter săn ứng viên | COMPLETED AND VERIFIED |
+| V16 | Saved Jobs | PLANNED |
+| V17 | Dashboard, thống kê và giám sát | PLANNED |
+
+---
+
+## Status meanings
+
+### PLANNED
+
+The version exists in the product roadmap but its repository-level business specification has not yet been approved for implementation.
+
+Agents must not infer detailed requirements from the version name.
+
+### PENDING
+
+The version has planning material in the repository but is intentionally held
+before implementation. Its specifications and data contract are not approved
+implementation authority, and no business slice may start until the roadmap
+explicitly moves it forward and the
+[Project Status entry point](../../project-status/index.md) reflects that state.
+
+### READY FOR IMPLEMENTATION
+
+The version has an approved canonical business specification under `docs/product/backend/versions/` and may be decomposed into implementation tasks.
+
+### IN PROGRESS
+
+Implementation of the version has started but its complete business scope has not yet been verified.
+
+### COMPLETED AND VERIFIED
+
+The approved business scope of the version has been implemented and the required repository verification has passed.
+
+### COMPLETED / ACCEPTED
+
+The approved business and data scope has passed a recorded Final Acceptance
+Review in addition to implementation and repository verification.
+
+---
+
+## Current project state
+
+V1 through V7 are `COMPLETED AND VERIFIED`.
+
+V4.1 has canonical Product/Data contracts and is `COMPLETED / ACCEPTED` as of
+2026-10-07. Final Acceptance passed across F01–F06 and BR-01–BR-24 after Slices
+01–06 and acceptance Bug Fix 01–03. Province Open API v1 and its
+pre-July-2025-merger dataset semantics are the approved external authority. The
+canonical hierarchy is Province plus optional District-level unit using raw v1
+Province/District records; raw Ward/Commune is excluded. The Final Data Cutover
+completed successfully on the dev database: no persisted legacy Location,
+blocked record, or unresolved `FOREIGN` remains, legacy Location indexes are
+dropped, and canonical indexes remain. Final Acceptance independently reran all
+seven V4.1 focused files (177 tests) and the official backend gate (156 files /
+1,635 tests) with no Product/Data-contract blocker or high finding.
+
+V4.2 has approved canonical Product/Data contracts and is
+`COMPLETED / ACCEPTED` as of 2026-10-08. Its Product contract explicitly
+requires a non-empty custom period label when Salary period is `ETC`; that
+label is display metadata only and does not make `ETC` filterable or introduce
+cross-period semantics. Slices S01 Public Category Catalog Read, S02 Public
+Experience Level Catalog Read, S03 Candidate Skill Keyword Search, S04
+Structured Salary Runtime Foundation, S05 Legacy Salary Migration & Final
+Cutover, and S06 Salary Range Filtering are implemented and verified, and S07
+Acceptance & Regression Closure closed after Final Acceptance Bugfix Slices
+01–05. The V4.2 Salary Final Data Cutover is applied on the dev database
+(0 legacy `salaryText`, 0 invalid Salary, 0 non-DRAFT Jobs without valid
+Salary, strict Salary guard active). The independent Final Acceptance rerun
+found no Critical, High, or Medium finding across F01–F05 and BR-01–BR-26.
+The strict Salary guard is applied only by the
+`v42-legacy-salary-cutover` migration; backend startup only verifies it, so a
+new database must run that migration once before the first startup. Phase
+closure documentation has reconciled the final implementation, regression,
+cutover, and ownership evidence; the mandatory Salary/Category indexes remain
+declared in source, while their materialization on dev is a non-blocking
+environment follow-up and is not claimed as completed deployment evidence.
+
+V5 Final Acceptance / regression closure passed across F01–F12 after Slices
+01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression
+closure passed across F01–F05, BR-01–BR-33, and TX-01–TX-03 after its recorded
+remediations and the required backend verification gate. V7 Final Acceptance /
+regression closure passed across F01–F10, BR-01–BR-46, and TX-01 after Slices
+01–11 and the recorded acceptance remediations. V8 is
+`COMPLETED AND VERIFIED`. V9 has
+approved Product/Data contracts; Slices 01–05 and Slice 06 Final Acceptance /
+Regression Closure are complete, including the recorded Application identity
+immutability remediation and required backend verification gate. V9 is
+`COMPLETED AND VERIFIED`. V10 previously passed Final Acceptance / regression
+closure across F01–F11, BR-01–BR-53, and TX-01–TX-05 after Slices 01–13, the
+F11 Platform User lifecycle/recovery extension, and the Job-team responsibility
+writer remediation. That implementation remains the regression baseline. The
+approved V10 Product/Data contracts then defined the `ASSIGN / UNASSIGN` core
+lifecycle refactor; Slices 01–10 of that revision are implemented and verified,
+including Concurrency Closure / Final Acceptance (TX-01/TX-02/TX-05 race
+closure, Platform LOCK partial-progress retry, and stale trusted A→B cleanup).
+V10 is therefore `COMPLETED AND VERIFIED` against the current canonical
+revision. V11 Final Acceptance / regression closure passed across F01–F10,
+BR-01–BR-55, and TX-01–TX-08 after Slices 01–06 and the Slice 07 acceptance
+suite, including the recorded final remediations for Send guard-document
+timestamps, complementary Send ↔ eligibility-loss ordering, and actual Send ↔
+Assign-again ordering. The required backend verification gate passed after
+those remediations; V11 is therefore `COMPLETED AND VERIFIED` against the
+approved Conversation/Chat Product/Data contracts. Realtime, notification,
+attachment, and related deferred capabilities remain outside V11 by product
+boundary. V12 Final Acceptance passed across F01–F11, BR-01–BR-39,
+TX-01–TX-03, and PI-01–PI-20 after Slices 01–08 and the Slice 09 acceptance
+review; its one Medium finding (Availability edit on a terminal Application)
+was fixed and the required backend verification gate passed. V12 is therefore
+`COMPLETED AND VERIFIED` against the approved Interview Schedule Product/Data
+contracts. Calendar UI, Notification, exact-time scheduling, and
+`InterviewSchedule.COMPLETED` remain outside V12 by product boundary. V13 Final
+Acceptance passed across F01–F11, BR-01–BR-50, and TX-01 after Slices 01–12 and
+the Slice 13 acceptance review; its one Medium finding (malformed Notification
+id returned 500) was fixed and the required backend verification gate passed.
+V13 is therefore `COMPLETED AND VERIFIED` against the approved Notification and
+realtime Product/Data contracts. Job Invitation Notification (V15), Message
+read receipt, typing/presence, Notification preference, external
+(email/push/SMS) delivery, and Socket replay remain outside V13 by product
+boundary.
+V14
+Final Acceptance / regression closure passed across F01–F06
+and BR-01–BR-38 after Slices 01–06 and the Slice 07 dynamic-revocation and
+read-only acceptance suite. The required backend verification gate passed;
+V14 is therefore `COMPLETED AND VERIFIED` against the approved Candidate
+Search Product/Data contracts. Keyword/full-text search, Saved Search,
+Recruiter Download, Direct Message, and Job Invitation remain outside V14 by
+product boundary. V15 Final Acceptance / regression closure passed across
+F01–F11, BR-01–BR-61, and TX-01–TX-05 after Slices 01–08 and the Slice 09
+acceptance and concurrency suite. The required backend verification gate
+passed; V15 is therefore `COMPLETED AND VERIFIED` against the approved Job
+Invitation Product/Data contracts. Sourcing KPI/report/dashboard, Company
+Manager Invitation management, Invitation audit/history, configurable
+lifetime, `EXPIRED` notification, Candidate Accept self-notification, and a
+new realtime protocol remain outside V15 by product boundary. V16 and V17
+must not be implemented merely from their roadmap titles.
+
+V15 canonical specification:
+
+`docs/product/backend/versions/v15-job-invitation-recruiter-sourcing.md`
+
+V15 canonical persistence contract:
+
+`docs/data/backend/versions/v15-job-invitation-recruiter-sourcing-data-model.md`
+
+V14 canonical specification:
+
+`docs/product/backend/versions/v14-candidate-search-public-cv.md`
+
+V14 canonical persistence contract:
+
+`docs/data/backend/versions/v14-candidate-search-public-cv-data-model.md`
+
+V13 canonical specification:
+
+`docs/product/backend/versions/v13-notification-realtime-distribution.md`
+
+V13 canonical persistence contract:
+
+`docs/data/backend/versions/v13-notification-realtime-distribution-data-model.md`
+
+V12 canonical specification:
+
+`docs/product/backend/versions/v12-interview-schedule.md`
+
+V12 canonical persistence contract:
+
+`docs/data/backend/versions/v12-interview-schedule-data-model.md`
+
+V10 canonical specification:
+
+`docs/product/backend/versions/v10-application-assignment-recruitment-pipeline.md`
+
+V10 canonical persistence contract:
+
+`docs/data/backend/versions/v10-application-assignment-recruitment-pipeline-data-model.md`
+
+V11 canonical specification:
+
+`docs/product/backend/versions/v11-application-conversation-chat.md`
+
+V11 canonical persistence contract:
+
+`docs/data/backend/versions/v11-application-conversation-chat-data-model.md`
+
+V9 canonical specification:
+
+`docs/product/backend/versions/v9-candidate-direct-apply-application.md`
+
+V9 canonical persistence contract:
+
+`docs/data/backend/versions/v9-candidate-direct-apply-application-data-model.md`
+
+V7 canonical specification:
+
+`docs/product/backend/versions/v7-candidate-profile-cv-library.md`
+
+V7 canonical persistence contract:
+
+`docs/data/backend/versions/v7-candidate-profile-cv-library-data-model.md`
+
+V6 canonical specification:
+
+`docs/product/backend/versions/v6-recruitment-team-responsibility-transfer.md`
+
+V6 canonical persistence contract:
+
+`docs/data/backend/versions/v6-recruitment-team-responsibility-transfer-data-model.md`
+
+V5 canonical specification:
+
+`docs/product/backend/versions/v5-job-approval-lifecycle.md`
+
+V5 canonical persistence contract:
+
+`docs/data/backend/versions/v5-job-approval-lifecycle-data-model.md`
+
+V4 canonical specification:
+
+`docs/product/backend/versions/v4-platform-standard-catalogs.md`
+
+V4 canonical persistence contract:
+
+`docs/data/backend/versions/v4-platform-standard-catalogs-data-model.md`
+
+V4.1 canonical specification:
+
+`docs/product/backend/versions/v4.1-vietnam-location-migration.md`
+
+V4.1 canonical persistence contract:
+
+`docs/data/backend/versions/v4.1-vietnam-location-migration-data-model.md`
+
+V4.2 canonical specification:
+
+`docs/product/backend/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword.md`
+
+V4.2 canonical persistence contract:
+
+`docs/data/backend/versions/v4.2-structured-salary-metadata-catalog-candidate-skill-keyword-data-model.md`
+
+V3 canonical specification:
+
+`docs/product/backend/versions/v3-company-recruitment-staff-management.md`
+
+V3 canonical persistence contract:
+
+`docs/data/backend/versions/v3-company-recruitment-staff-management-data-model.md`
+
+V2 canonical specification:
+
+`docs/product/backend/versions/v02-company-onboarding-platform-administration.md`
+
+V2 canonical persistence contract:
+
+`docs/data/backend/versions/v02-company-onboarding-platform-administration.md`
+
+---
+
+## Product documentation rules
+
+- The roadmap defines version ordering and high-level scope only.
+- Detailed business behavior belongs in the corresponding version specification.
+- Agents must not invent requirements for versions that do not yet have an approved specification.
+- Product requirements must not be inferred from existing implementation code.
+- Technical or database design must not redefine product business rules.
+- When a business decision changes, the canonical version specification must be updated before implementation based on that changed requirement proceeds.

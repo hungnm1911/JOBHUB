@@ -28,6 +28,10 @@ const testEnvironment = {
   PASSWORD_RESET_EXPIRES_IN_MS: "3600000",
   COMPANY_APPROVAL_CONFIRMATION_EXPIRES_IN_MS: "3600000",
   AUTH_SESSION_EXPIRES_IN_MS: "604800000",
+  GEMINI_API_KEY: "test-gemini-api-key",
+  GEMINI_MODEL: "test-gemini-model",
+  GROQ_API_KEY: "test-groq-api-key",
+  GROQ_MODEL: "test-groq-model",
 };
 
 for (const [key, value] of Object.entries(testEnvironment)) {

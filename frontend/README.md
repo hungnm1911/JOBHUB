@@ -5,7 +5,7 @@ Frontend của JOBHUB là ứng dụng React chạy trên Vite, cung cấp nền
 Ứng dụng hiện có routing, Redux, HTTP client, authentication lifecycle, Socket.IO client, validation, Tailwind CSS, shadcn/ui và hệ thống toast dùng chung. Phạm vi hiện tại vẫn là frontend foundation: chỉ có trang mẫu công khai tại `/`, chưa có màn hình đăng nhập/đăng xuất hoặc màn hình nghiệp vụ hoàn chỉnh.
 
 > [!IMPORTANT]
-> README này mô tả cách chạy và kiến trúc frontend hiện có. Yêu cầu nghiệp vụ chính thức nằm trong [`docs/product/versions/`](../docs/product/versions/), API thực tế do backend routes/controllers quyết định, và trạng thái triển khai được tra cứu từ [Project Status](../docs/project-status/index.md). Không suy ra một màn hình hoặc workflow frontend chỉ từ việc backend đã có endpoint tương ứng.
+> README này mô tả cách chạy và kiến trúc frontend hiện có. Yêu cầu nghiệp vụ chính thức nằm trong [`docs/product/backend/versions/`](../docs/product/backend/versions/), API thực tế do backend routes/controllers quyết định, và trạng thái triển khai được tra cứu từ [Project Status](../docs/project-status/index.md). Không suy ra một màn hình hoặc workflow frontend chỉ từ việc backend đã có endpoint tương ứng.
 
 ## Mục lục
 
@@ -620,7 +620,7 @@ Không sao chép mismatch này thành pattern mới hoặc tự sửa ngoài ph�
 | Kiến trúc hiện tại và target | [Architecture](../docs/engineering/architecture.md) |
 | Quy ước layer, validation, styling và verification | [Frontend Engineering Conventions](../docs/engineering/frontend-conventions.md) |
 | Canonical owner và mismatch | [Frontend Sources of Truth](../docs/engineering/frontend-source-of-truth.md) |
-| Yêu cầu nghiệp vụ từng phiên bản | [`docs/product/versions/`](../docs/product/versions/) |
+| Yêu cầu nghiệp vụ từng phiên bản | [`docs/product/backend/versions/`](../docs/product/backend/versions/) |
 | Backend runtime và API hiện tại | [Backend README](../backend/README.md) |
 
 Khi các nguồn khác nhau mâu thuẫn: Product Specification quyết định nghiệp vụ; backend implementation quyết định API path/payload/response hiện tại; data contract quyết định persistence; engineering docs quyết định kiến trúc và owner; Project Status ghi nhận mức triển khai và bằng chứng xác minh.

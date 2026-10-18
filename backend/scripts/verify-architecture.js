@@ -7,6 +7,7 @@ const backendRoot = path.resolve(scriptDirectory, "..");
 const sourceRoot = path.join(backendRoot, "src");
 
 const canonicalFiles = Object.freeze({
+  aiKitService: path.join(sourceRoot, "services", "ai-kit.service.js"),
   app: path.join(sourceRoot, "app.js"),
   authenticateAccess: path.join(
     sourceRoot,
@@ -614,6 +615,36 @@ const checkConfigurationDependencyDirection = () => {
   }
 };
 
+const checkAiKitImportBoundary = () => {
+  for (const filePath of applicationFiles) {
+    for (const imported of importsByFile.get(filePath)) {
+      if (!isPackageImport(imported.specifier, "@jobhub/ai-kit")) {
+        continue;
+      }
+
+      if (filePath !== canonicalFiles.aiKitService) {
+        addViolation({
+          rule: "ARCH-019",
+          filePath,
+          line: getLineNumber(sourceByFile.get(filePath), imported.index),
+          reason:
+            "Only src/services/ai-kit.service.js may import @jobhub/ai-kit.",
+        });
+      }
+
+      if (imported.specifier !== "@jobhub/ai-kit") {
+        addViolation({
+          rule: "ARCH-019",
+          filePath,
+          line: getLineNumber(sourceByFile.get(filePath), imported.index),
+          reason:
+            "Backend must consume @jobhub/ai-kit through its public package root without deep imports.",
+        });
+      }
+    }
+  }
+};
+
 const checkCallOwnership = ({ rule, pattern, owner, reason }) => {
   for (const [filePath, source] of sourceByFile) {
     for (const match of findCodeMatches(source, pattern)) {
@@ -874,6 +905,7 @@ checkServiceHttpBoundary();
 checkSocketLayerBoundary();
 checkSocketIoOwnership();
 checkConfigurationDependencyDirection();
+checkAiKitImportBoundary();
 checkCallOwnership({
   rule: "ARCH-011",
   pattern: /\bmongoose\s*\.\s*connect\s*\(/g,
@@ -918,5 +950,5 @@ if (violations.length > 0) {
 
   process.exitCode = 1;
 } else {
-  console.log("Architecture verification passed (ARCH-001 through ARCH-018).");
+  console.log("Architecture verification passed (ARCH-001 through ARCH-019).");
 }

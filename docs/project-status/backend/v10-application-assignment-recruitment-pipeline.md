@@ -369,9 +369,9 @@ Applications, plus the V10 F11 business extension — Platform Admin Recruiter
 Account Lock/Terminate → Company Responsibility Recovery. That prior revision's
 Final Acceptance / regression closure passed across F01–F11, BR-01–BR-53, and
 TX-01–TX-05. The canonical Product/Data contract paths are
-`docs/product/versions/v10-application-assignment-recruitment-pipeline.md`
+`docs/product/backend/versions/v10-application-assignment-recruitment-pipeline.md`
 and
-`docs/data/versions/v10-application-assignment-recruitment-pipeline-data-model.md`.
+`docs/data/backend/versions/v10-application-assignment-recruitment-pipeline-data-model.md`.
 Slice 01 extends the canonical Application status vocabulary to the eight V10
 Recruitment Statuses, adds nullable `assignedRecruiterCompanyMemberId`
 (legacy absent and explicit `null` both mean Unassigned; no V9 backfill),

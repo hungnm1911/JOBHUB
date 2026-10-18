@@ -5,7 +5,7 @@ Backend của JOBHUB là REST API và hệ thống phân phối realtime cho n�
 Hệ thống hiện hỗ trợ vòng đời tài khoản, Company và nhân sự tuyển dụng; danh mục dùng chung; Job và đội ngũ tuyển dụng; hồ sơ/CV ứng viên; tìm kiếm việc và CV công khai; Application, pipeline, chat, lịch phỏng vấn, thông báo và Job Invitation.
 
 > [!IMPORTANT]
-> README này là tài liệu vận hành và định hướng kỹ thuật. Yêu cầu nghiệp vụ chính thức nằm trong [`docs/product/versions/`](../docs/product/versions/), hợp đồng dữ liệu nằm trong [`docs/data/versions/`](../docs/data/versions/), còn trạng thái triển khai mới nhất được tra cứu từ [Project Status](../docs/project-status/index.md). Việc một endpoint đã có trong mã nguồn không đồng nghĩa toàn bộ phiên bản sản phẩm chứa endpoint đó đã hoàn tất nghiệm thu.
+> README này là tài liệu vận hành và định hướng kỹ thuật. Yêu cầu nghiệp vụ chính thức nằm trong [`docs/product/backend/versions/`](../docs/product/backend/versions/), hợp đồng dữ liệu nằm trong [`docs/data/backend/versions/`](../docs/data/backend/versions/), còn trạng thái triển khai mới nhất được tra cứu từ [Project Status](../docs/project-status/index.md). Việc một endpoint đã có trong mã nguồn không đồng nghĩa toàn bộ phiên bản sản phẩm chứa endpoint đó đã hoàn tất nghiệm thu.
 
 ## Mục lục
 
@@ -30,7 +30,7 @@ Hệ thống hiện hỗ trợ vòng đời tài khoản, Company và nhân sự
 
 ## Trạng thái hiện tại
 
-Theo [Product Roadmap](../docs/product/roadmap.md):
+Theo [Backend Product Roadmap](../docs/product/backend/roadmap.md):
 
 | Phiên bản | Phạm vi | Trạng thái |
 | --- | --- | --- |
@@ -140,12 +140,18 @@ Nếu một bước bắt buộc thất bại, tiến trình sẽ dừng thay v�
 
 ### 1. Cài dependency
 
-Từ thư mục repository:
+Backend phụ thuộc local package `@jobhub/ai-kit` qua `file:../ai-kit`. `npm ci` trong `backend/` chỉ tạo symlink tới thư mục `ai-kit/` cùng cấp và không cài dependency của AI Kit, nên phải cài `ai-kit/` trước. Từ thư mục repository:
 
 ```bash
-cd backend
+cd ai-kit
+npm ci
+cd ../backend
 npm ci
 ```
+
+`ai-kit/` không có process riêng; chỉ backend được khởi động.
+
+Xem [AI Kit README](../ai-kit/README.md) để biết dependency topology, setup package và cách chạy provider smoke tường minh.
 
 ### 2. Tạo file cấu hình
 
@@ -258,7 +264,13 @@ Các biến dưới đây đang được `src/config/index.js` yêu cầu phải
 | `NOTIFICATION_RECOVERY_INTERVAL_MS` | `60000` | Chu kỳ recovery Notification |
 | `NOTIFICATION_RECOVERY_BATCH_SIZE` | `100` | Kích thước batch recovery |
 | `JOB_INVITATION_EXPIRATION_INTERVAL_MS` | `60000` | Chu kỳ vật chất hóa Invitation hết hạn |
+| `GEMINI_API_KEY` | Không đặt | Gemini credential tùy chọn; cần cho Gemini live smoke hoặc capability được phê duyệt sử dụng Gemini |
+| `GEMINI_MODEL` | Không đặt | Gemini model tùy chọn do Backend chuẩn hóa và inject vào AI Kit |
+| `GROQ_API_KEY` | Không đặt | Groq credential tùy chọn; cần cho Groq live smoke hoặc capability được phê duyệt sử dụng Groq |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model do Backend chuẩn hóa và inject vào AI Kit |
 | `LOG_LEVEL` | `debug` ở development, `info` ở môi trường khác | `silent`, `error`, `warn`, `info` hoặc `debug` |
+
+AI Kit không đọc `process.env`; Backend sở hữu bốn biến provider trên và inject cấu hình đã chuẩn hóa. Xem [AI Kit README](../ai-kit/README.md#configuration) cho setup và smoke checks.
 
 `CORS_ALLOWED_ORIGINS` chỉ nhận HTTP(S) origin, không có path/query/credential. Ví dụ:
 
@@ -660,6 +672,7 @@ backend/
 
 ## Triển khai production
 
+- Deployment/build context phải chứa cả `ai-kit/` và `backend/` cùng cấp, vì `node_modules/@jobhub/ai-kit` là symlink tới `../ai-kit` khi cài và khi chạy; chỉ copy riêng `backend/` là không đủ. Chạy `npm ci` trong `ai-kit/` rồi trong `backend/`; chỉ khởi động backend.
 - Đặt `NODE_ENV=production` để tắt route probe/test file và ẩn stack trace khỏi response.
 - Dùng secret manager của nền tảng triển khai; không đóng gói `.env` hoặc credential vào image/source control.
 - Chạy MongoDB replica set/Atlas và thực hiện migration/cutover bắt buộc trước khi deploy phiên bản mã nguồn phụ thuộc vào chúng.
@@ -677,10 +690,10 @@ backend/
 
 | Cần biết | Tài liệu |
 | --- | --- |
-| Roadmap và trạng thái cấp cao | [Product Roadmap](../docs/product/roadmap.md) |
+| Roadmap và trạng thái cấp cao | [Backend Product Roadmap](../docs/product/backend/roadmap.md) |
 | Bản đồ trạng thái triển khai/verification | [Project Status](../docs/project-status/index.md) |
-| Yêu cầu nghiệp vụ từng phiên bản | [`docs/product/versions/`](../docs/product/versions/) |
-| Hợp đồng persistence từng phiên bản | [`docs/data/versions/`](../docs/data/versions/) |
+| Yêu cầu nghiệp vụ từng phiên bản | [`docs/product/backend/versions/`](../docs/product/backend/versions/) |
+| Hợp đồng persistence từng phiên bản | [`docs/data/backend/versions/`](../docs/data/backend/versions/) |
 | Kiến trúc toàn hệ thống | [Architecture](../docs/engineering/architecture.md) |
 | Quy ước backend | [Backend Engineering Conventions](../docs/engineering/backend-conventions.md) |
 | Canonical owner và mismatch đã biết | [Engineering Source of Truth](../docs/engineering/source-of-truth.md) |
