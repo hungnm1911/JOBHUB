@@ -10,8 +10,12 @@ runtime role, ownership, and architectural constraints. The
 [AI Kit foundation status](../project-status/ai-kit/foundation.md) records
 implementation and verification state; it does not define requirements.
 Approved Product Specifications and Data Contracts remain authoritative for
-business behavior and persistence. No AI #1/#2/#3 capability is currently
-approved or implemented.
+business behavior and persistence. AI-V01 Product/Data authority is approved,
+and its R2 runtime shape contract plus R4 contract-test coverage are complete.
+F01/F02 production implementation does not yet exist; implementation readiness
+does not constitute implemented or verified normalization behavior. AI-V02 and
+AI-V03 are not approved. AI #1/#2/#3 architecture direction does not
+independently approve another business capability.
 
 ## Terminology
 
@@ -146,10 +150,18 @@ future capability.
 
 ### Structured output
 
-A future capability that consumes structured LLM output must validate that
-output before treating it as trusted data. The validation schema belongs to
-that approved capability; AI Kit must not invent one shared JSON schema for
-capabilities that do not yet have specifications.
+[`ai-kit/v01-contract.json`](../../ai-kit/v01-contract.json) is the canonical
+runtime-only shape contract for AI-V01 raw inputs, extraction results,
+`JobMatchProfile`, `CVMatchProfile`, and normalization results. Its JSON Schema
+rules validate structure; its `x-semantic-constraints` record the approved
+cross-field rules that require deterministic runtime enforcement. The contract
+does not implement F01/F02, perform authorization, or create persistence.
+
+An approved capability that consumes structured LLM output must validate that
+output before treating it as trusted data. Consumers of AI-V01 must reuse its
+contract rather than define a parallel profile or result shape. AI Kit must not
+invent one shared JSON schema for capabilities that do not yet have
+specifications.
 
 ## Document extraction
 
@@ -176,6 +188,12 @@ capabilities that do not yet have specifications.
 - Tests cover public exports, dependency boundaries, input/error propagation,
   fallback eligibility and attempt limits, sensitive logging, and resource
   cleanup when the affected behavior changes.
+- `test/v01-contract.test.js` compiles the canonical AI-V01 contract as Draft
+  2020-12 and validates raw input, extraction, normalized profile, and result
+  positive/negative cases. Its exhaustive coverage ledger distinguishes
+  structural guarantees from semantic behavior deferred to F01/F02 runtime;
+  the suite must not simulate normalization merely to claim that behavior is
+  verified.
 - Local deterministic fixtures may exercise a real library, as the current
   text-native PDF fixture does, provided they require no external service.
 - A focused test may import an internal module directly; that import does not

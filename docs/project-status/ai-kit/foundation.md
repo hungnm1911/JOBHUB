@@ -2,12 +2,12 @@
 
 ## Current project state
 
-- **Readiness:** AI Kit technical foundation: ready. AI #1 Product/Data
-  specification: not approved. No AI #1/#2/#3 business capability is
-  implemented, and none is implementation-ready, because
-  `docs/product/ai-kit/roadmap.md` defines no approved business version and
-  `docs/product/ai-kit/versions/` / `docs/data/ai-kit/versions/` contains no
-  approved specification or contract.
+- **Readiness:** AI Kit technical foundation: ready. AI-V01 Product
+  Specification and Data Contract: approved. AI-V01 F01/F02: not implemented
+  and not verified. AI-V01 R2 Runtime Shape Contract correction/validation and
+  R4 contract-test coverage are complete, so AI-V01 is `READY FOR
+  IMPLEMENTATION`. This readiness does not claim that F01/F02 behavior exists.
+  AI-V02 and AI-V03 are not approved by the current roadmap.
 - **Implemented; verified:** `ai-kit/` is the private `@jobhub/ai-kit` npm
   package using Node.js ES modules. Its package root is the only production
   source entrypoint and exports the minimal `createAiKit` composition factory;
@@ -66,6 +66,11 @@
 
 ## Deferred / not started
 
+- AI-V01 F01/F02 normalization implementation has not started. Evidence
+  resolution, consolidation, structured-metadata precedence,
+  REQUIRED-over-OPTIONAL, hallucination prevention, and Backend authorization/
+  ownership enforcement remain runtime responsibilities; R4 records them as
+  deferred rather than claiming they are verified.
 - Wiring Gemini-to-Groq fallback into a provider-backed package capability,
   retry/circuit breaking, CV
   ingestion/document workflows, scanned-PDF coverage, HTTP transport,
@@ -78,6 +83,32 @@
   addressed.
 
 ## Verification status
+
+- 2026-10-19: AI-V01 R4 added `test/v01-contract.test.js` with Ajv Draft
+  2020-12 compilation and positive/negative coverage for raw Job/Generated CV
+  input, LLM extraction, normalized profiles, evidence/reference structures,
+  canonical enums, sparse/conflicting/uncertain READY output, FAILED output,
+  and rejection of BLOCKED, Uploaded CV, matching/scoring, persistence, history,
+  and versioning shapes. The focused suite passed (1 file / 51 tests), and
+  `cd ai-kit && npm run verify:agent` passed (ESLint and Vitest, 8 files / 91
+  tests). The Fxx/BR ledger explicitly leaves implementation-dependent
+  semantics unverified. R4 is complete; F01/F02 remain unimplemented.
+
+- 2026-10-19: AI-V01 R2 corrected and validated the runtime-only JSON Schema in
+  `ai-kit/v01-contract.json` against the approved F01/F02 and BR-AI-01–BR-AI-14
+  authority plus the canonical Backend Job/Generated CV source projections.
+  Python `jsonschema` Draft 2020-12 metaschema validation and focused positive/
+  negative runtime-shape cases passed; `cd ai-kit && npm run verify:agent`
+  passed (ESLint and Vitest, 7 files / 40 tests). This establishes the R2 shape
+  contract only: it does not implement or verify F01/F02 behavior, and R4 had
+  not yet been verified at that checkpoint.
+
+- 2026-10-19: AI-V01 R1 documentation alignment established approved
+  Product/Data authority and retained `NOT IMPLEMENTED` for F01/F02. Canonical
+  links, stale authority statements, tracked/untracked whitespace, and
+  `git diff --check` were checked. This documentation-only verification does
+  not verify a runtime contract, contract tests, or any AI-V01 production
+  behavior; neither R2 nor R4 had been verified at that checkpoint.
 
 - 2026-10-18: `cd ai-kit && npm run lint`, `npm test`, and
   `npm run verify:agent` passed (ESLint and Vitest, 7 files / 40 tests),

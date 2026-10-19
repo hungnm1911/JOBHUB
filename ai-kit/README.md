@@ -2,7 +2,7 @@
 
 `@jobhub/ai-kit` is JOBHUB's private local Node.js package for AI-specific adapters and computation. It uses JavaScript ES modules, lives beside `backend/` and `frontend/`, and is consumed by Backend through `file:../ai-kit`.
 
-AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready, but AI #1/#2/#3 have no implemented business capability or approved Product and Data specification.
+AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready, and AI-V01 Product/Data authority is approved. The R2 runtime shape contract and R4 contract-test coverage are complete, so AI-V01 is ready for implementation. F01/F02 remain unimplemented and their runtime behavior is not verified. AI-V02 and AI-V03 are not approved.
 
 ## Installation
 
@@ -35,13 +35,14 @@ AI Kit has no `.env` file and does not read `process.env`; Backend injects norma
 
 ```text
 ai-kit/
+├── v01-contract.json             # AI-V01 runtime-only shape contract
 ├── src/
 │   ├── index.js                  # Production package facade
 │   ├── create-ai-kit.js          # Dependency-injection factory foundation
 │   ├── llm/                      # Gemini/Groq adapters and fallback policy
 │   └── document/                 # Scribe PDF text extraction adapter
 ├── scripts/                      # Manual Gemini/Groq smoke harnesses
-├── test/                         # Offline tests and local fixtures
+├── test/                         # Offline foundation and AI-V01 contract tests
 ├── AGENTS.md                     # Scoped contributor/agent contract
 └── package.json                  # Package exports and npm commands
 ```
@@ -91,7 +92,8 @@ npm run verify:agent
 
 ## Current limitations
 
-- No AI business capability is implemented or implementation-ready.
+- AI-V01 is ready for implementation after R2/R4, but F01/F02 normalization
+  behavior is not implemented or verified.
 - The Gemini-to-Groq fallback policy exists internally but is not wired into a business operation.
 - Scribe PDF extraction exists, but there is no complete uploaded-CV ingestion pipeline.
 - Buffer input and scanned-PDF/OCR fixture coverage are deferred.
@@ -109,6 +111,6 @@ See the [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) 
 | [AI Kit conventions](../docs/engineering/ai-kit-conventions.md) | Enforceable coding, integration, security, and verification rules |
 | [AI Kit sources of truth](../docs/engineering/ai-kit-source-of-truth.md) | Canonical owners, consumers, and forbidden duplication |
 | [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) | Implementation and verification evidence |
-| [AI Kit Product roadmap](../docs/product/ai-kit/roadmap.md) | AI Kit version and scope authority; no business version is currently approved |
-| [AI Kit Product Specifications](../docs/product/ai-kit/versions/) | Approved detailed AI Kit business requirements, when present |
-| [AI Kit Data Contracts](../docs/data/ai-kit/versions/) | Approved AI Kit persistence and data-defined contracts, when present |
+| [AI Kit Product roadmap](../docs/product/ai-kit/roadmap.md) | AI Kit version and scope authority; AI-V01 is approved and not implemented |
+| [AI Kit Product Specifications](../docs/product/ai-kit/versions/) | Approved detailed AI Kit business requirements, including AI-V01 |
+| [AI Kit Data Contracts](../docs/data/ai-kit/versions/) | Approved AI Kit persistence and data-defined contracts, including AI-V01 |

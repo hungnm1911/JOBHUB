@@ -14,6 +14,21 @@ boundaries and canonical data semantics.
 
 ## Current state
 
-No AI Kit business version has been defined or approved. AI #1, AI #2, and AI
-#3 in Engineering architecture are direction only and are not approved
-versions, scopes, Product Specifications, or Data Contracts.
+### AI-V01 — Job/CV Normalization
+
+- **Product/Data approval status:** `APPROVED`
+- **Implementation status:** `NOT IMPLEMENTED`
+- **Functional requirements:** `F01`, `F02`
+- **Business rules:** `BR-AI-01` through `BR-AI-14`
+- **Canonical Product Specification:**
+  [`versions/v01-job-cv-normalization.md`](versions/v01-job-cv-normalization.md)
+- **Canonical Data Contract:**
+  [`../../data/ai-kit/versions/ai-v01-job-cv-normalization-data-model.md`](../../data/ai-kit/versions/ai-v01-job-cv-normalization-data-model.md)
+
+AI-V01 is the only approved AI Kit business version. Approval establishes
+Product/Data authority; it does not mean that F01 or F02 is implemented,
+verified, or ready for implementation.
+
+AI-V02 and AI-V03 are not approved by this roadmap. AI #1, AI #2, and AI #3 in
+Engineering architecture remain direction only and do not independently
+approve another version, scope, Product Specification, or Data Contract.

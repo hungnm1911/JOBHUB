@@ -39,6 +39,8 @@ implementation evidence only; it does not replace engineering authority.
 | Tooling — Gemini manual live-smoke adapter invocation and response-marker validation | `ai-kit/scripts/smoke-gemini.js` | `backend/scripts/smoke-gemini.js` through `@jobhub/ai-kit/tooling/smoke-gemini`; focused tooling tests when needed | Production capability use; environment reads; Backend imports; direct Gemini SDK use; inclusion in offline test gates |
 | Tooling — Groq manual live-smoke adapter invocation and response-marker validation | `ai-kit/scripts/smoke-groq.js` | `backend/scripts/smoke-groq.js` through `@jobhub/ai-kit/tooling/smoke-groq`; focused tooling tests when needed | Production capability use; environment reads; Backend imports; direct Groq SDK use; inclusion in offline test gates |
 | Tooling — package export map, production root mapping, and explicit tooling-only smoke subpaths | `ai-kit/package.json` (`exports`) | Node.js package resolution; Backend runtime integration at `.`; Backend smoke launchers at the matching tooling subpath | Unapproved production or tooling subpaths; deep filesystem imports used instead of an export; exposing internal modules merely for tests |
+| AI-V01 — runtime-only raw-input, extraction, match-profile, evidence/conflict, and READY/FAILED result shapes (R2; F01/F02; BR-AI-01–BR-AI-14) | `ai-kit/v01-contract.json` | Future approved F01/F02 implementation and R4 contract tests | A parallel AI-V01 schema; treating the contract as an implemented capability; `BLOCKED`; Uploaded CV/PDF or matching/scoring shapes; persisted profile, cache, history, freshness, or versioning fields |
+| AI-V01 — Runtime Shape Contract verification coverage and semantic-coverage boundary (R4; F01/F02; BR-AI-01–BR-AI-14) | `ai-kit/test/v01-contract.test.js` | `npm test` and `npm run verify:agent` | A second runtime schema; mocked normalization behavior presented as production verification; claiming deferred evidence resolution, consolidation, authorization, or inference rules are verified before F01/F02 exist |
 | Cross-boundary — Backend runtime integration, dependency injection, and shared AI Kit instance | `backend/src/services/ai-kit.service.js` | Focused integration tests; future approved Backend services consume its exported instance | Other Backend source imports of `@jobhub/ai-kit`; parallel AI Kit instances; deep imports; reverse AI Kit-to-Backend dependencies |
 | Cross-boundary — environment loading and normalized Gemini/Groq configuration | `backend/src/config/index.js` (`config.aiKit`) | Backend AI Kit integration service; Backend smoke launchers | `process.env` reads or configuration defaults in AI Kit; secondary Backend AI Kit config owners; smoke harness environment loading |
 | Cross-boundary — canonical application logger injected into runtime AI Kit composition | `backend/src/utils/logger.js` | `backend/src/services/ai-kit.service.js` and other approved Backend runtime owners | A second runtime logger in AI Kit; AI Kit logger configuration; logging secrets, private document/prompt content, or raw sensitive provider responses |
@@ -65,15 +67,21 @@ implementation evidence only; it does not replace engineering authority.
 No canonical implementation owner currently exists for:
 
 - AI #1 matching, scoring, explanation, or improvement behavior;
-- `CVMatchProfile` or `JobMatchProfile`;
-- business prompts or capability-specific structured-output schemas;
+- F01/F02 normalization behavior that produces `CVMatchProfile` or
+  `JobMatchProfile`;
+- business prompts or capability-specific structured-output schemas beyond the
+  AI-V01 runtime shape contract;
 - an agent/tool registry, capability-specific callback contract, or CV Agent
   workflow;
 - retrieval, embeddings, or vector search; or
 - AI-specific persistence.
 
-These responsibilities remain unassigned because no approved Product/Data
-contract and corresponding implementation exists. Buffer-based extraction,
-scanned-PDF fixtures, uploaded-CV ingestion, and Backend shutdown wiring for
-Scribe disposal are likewise deferred integration decisions, not current
-canonical owners.
+The AI-V01 runtime shape contract now owns the profile structures, but no
+normalization implementation owner exists because F01/F02 are not implemented
+even though the R2/R4 prerequisites are complete. AI #1 matching/scoring,
+agents, retrieval,
+embeddings, vector search, and any AI-specific persistence beyond AI-V01's
+approved runtime-only boundary remain without approved Product/Data authority
+or implementation owners. Buffer-based extraction, scanned-PDF fixtures,
+uploaded-CV ingestion, and Backend shutdown wiring for Scribe disposal are
+likewise deferred integration decisions, not current canonical owners.

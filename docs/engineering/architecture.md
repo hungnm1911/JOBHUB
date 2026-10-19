@@ -282,6 +282,13 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   entrypoint and currently exports only `createAiKit`. The factory validates
   optional Gemini/Groq configuration and the injected logger contract, then
   returns an empty frozen object; it exposes no AI business capability.
+- AI-V01 Product/Data authority is approved, but F01/F02 remain unimplemented.
+  [`ai-kit/v01-contract.json`](../../ai-kit/v01-contract.json) now owns the
+  validated runtime-only input, extraction, profile, evidence/conflict, and
+  READY/FAILED result shapes. R4 contract tests compile that contract as Draft
+  2020-12 and cover its independently testable boundaries while explicitly
+  deferring runtime semantics. Neither artifact exposes or implements a
+  capability.
 - [`backend/src/services/ai-kit.service.js`](../../backend/src/services/ai-kit.service.js)
   is the sole Backend runtime package consumer and creates the shared instance
   with normalized Backend configuration and the canonical Backend logger.
@@ -419,9 +426,12 @@ Backend authenticates actor
 - CV upload ingestion, Buffer input, scanned-PDF/OCR fixtures, and Backend
   startup/shutdown wiring for extractor disposal are deferred to the document
   capability integration.
-- Match profiles, embeddings/retrieval, tool schemas and limits, persistence,
-  and API workflows are deferred until their Product/Data contracts are
-  approved.
+- AI-V01 match-profile implementation has not started; its R2 runtime shape and
+  R4 contract-test prerequisites are complete, but their completion does not
+  verify F01/F02 normalization behavior.
+  Embeddings/retrieval, tool schemas and limits, persistence beyond the
+  approved AI-V01 runtime-only boundary, and API workflows remain deferred
+  until their applicable Product/Data contracts are approved.
 
 ## Frontend current state
 
