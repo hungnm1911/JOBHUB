@@ -19,7 +19,9 @@ import {
 } from "./company.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
-import buildAuthActionUrl from "../utils/auth-action-url.js";
+import buildAuthActionUrl, {
+  buildFrontendActionUrl,
+} from "../utils/auth-action-url.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
 import { hashPassword, verifyPassword } from "../utils/hash-password.js";
 import { generateAccessToken } from "../utils/jwt.js";
@@ -53,7 +55,7 @@ const assertPasswordPolicy = (password) => {
 };
 
 const buildVerificationEmail = ({ fullName, rawToken }) => {
-  const verificationUrl = buildAuthActionUrl("verify-email", rawToken);
+  const verificationUrl = buildFrontendActionUrl("verify-email", rawToken);
 
   const subject = "Verify your JOBHUB email address";
   const text =

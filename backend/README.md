@@ -256,6 +256,7 @@ Các biến dưới đây đang được `src/config/index.js` yêu cầu phải
 | Biến | Default | Ý nghĩa |
 | --- | --- | --- |
 | `APP_BASE_URL` | `http://localhost:8000` | Origin API dùng để tạo link trong email; không thêm `/api` |
+| `FRONTEND_BASE_URL` | `http://localhost:5173` | Origin frontend cho link email mở màn frontend (hiện là `/verify-email`) |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Danh sách origin frontend, phân cách bằng dấu phẩy |
 | `EMAIL_VERIFICATION_EXPIRES_IN_MS` | `86400000` | TTL xác minh email |
 | `PASSWORD_RESET_EXPIRES_IN_MS` | `3600000` | TTL đặt lại mật khẩu |

@@ -64,6 +64,15 @@ function createHarness({ persisted = null } = {}) {
         session: { id: 'session-1' },
       }
     },
+    async registerCompanyManager() {
+      return {
+        accessToken: 'onboarding-access',
+        refreshToken: 'onboarding-refresh',
+        session: { id: 'onboarding-session' },
+        user: { id: 'manager-1', status: 'PENDING_ACTIVATION' },
+        company: { id: 'company-1' },
+      }
+    },
   }
   const socket = {
     connect(token) {
@@ -245,6 +254,27 @@ test('login synchronizes persistence, state, and realtime before returning', asy
   assert.equal(harness.dispatched.at(-1).type, 'authenticated')
   assert.deepEqual(harness.socketCalls, [['connect', 'login-access']])
   assert.equal(result.user.id, 'user-1')
+})
+
+test('company manager registration establishes the onboarding session like login', async () => {
+  const harness = createHarness({ persisted: persistedAuthentication })
+  const pending = deferred()
+  harness.api.refreshAccess = async () => pending.promise
+
+  const oldRefresh = harness.manager.refreshAuthentication()
+  const result = await harness.manager.registerCompanyManager({
+    fullName: 'Manager',
+    email: 'manager@example.com',
+    password: 'password',
+  })
+  pending.resolve({ accessToken: 'stale-access', session: { id: 'stale' } })
+
+  await assert.rejects(oldRefresh, /superseded/)
+  assert.equal(harness.getStored().refreshToken, 'onboarding-refresh')
+  assert.equal(harness.getStored().accessToken, 'onboarding-access')
+  assert.equal(harness.dispatched.at(-1).type, 'authenticated')
+  assert.deepEqual(harness.socketCalls, [['connect', 'onboarding-access']])
+  assert.equal(result.company.id, 'company-1')
 })
 
 test('logout always clears local authentication even when backend fails', async () => {

@@ -94,9 +94,7 @@ function createAuthenticationManager({
     return refreshPromise
   }
 
-  async function login(credentials) {
-    const authentication = await api.login(credentials)
-
+  function establishAuthentication(authentication) {
     storage.write(authentication)
     authenticationRevision += 1
     invalidated = false
@@ -109,6 +107,16 @@ function createAuthenticationManager({
     socket.connect(authentication.accessToken)
 
     return authentication
+  }
+
+  async function login(credentials) {
+    return establishAuthentication(await api.login(credentials))
+  }
+
+  // V02 BR-21: Company Manager registration returns the initial limited
+  // onboarding session, so it is established exactly like a login.
+  async function registerCompanyManager(registration) {
+    return establishAuthentication(await api.registerCompanyManager(registration))
   }
 
   function bootstrap() {
@@ -178,6 +186,7 @@ function createAuthenticationManager({
     login,
     logout,
     refreshAuthentication,
+    registerCompanyManager,
     retryBootstrap,
   }
 }

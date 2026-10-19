@@ -23,6 +23,7 @@ const testEnvironment = {
   SMTP_PASS: "smtp-password",
   MAIL_FROM_NAME: "JobHub Test",
   APP_BASE_URL: "http://localhost:8001",
+  FRONTEND_BASE_URL: "http://localhost:5173",
   CORS_ALLOWED_ORIGINS: "http://localhost:5173,https://jobhub.example.com",
   EMAIL_VERIFICATION_EXPIRES_IN_MS: "3600000",
   PASSWORD_RESET_EXPIRES_IN_MS: "3600000",
