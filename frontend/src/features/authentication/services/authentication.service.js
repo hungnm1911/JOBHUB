@@ -2,6 +2,7 @@ import {
   loginApi,
   logoutApi,
   refreshAccessApi,
+  registerCompanyManagerApi,
 } from '@/apis/authentication.api'
 import { configureHttpAuthentication } from '@/apis/client'
 import {
@@ -26,6 +27,7 @@ const authenticationManager = createAuthenticationManager({
     login: loginApi,
     logout: logoutApi,
     refreshAccess: refreshAccessApi,
+    registerCompanyManager: registerCompanyManagerApi,
   },
   storage: authenticationStorage,
   dispatch: store.dispatch,
@@ -52,5 +54,6 @@ export const {
   bootstrap: bootstrapAuthentication,
   login,
   logout,
+  registerCompanyManager,
   retryBootstrap: retryAuthenticationBootstrap,
 } = authenticationManager

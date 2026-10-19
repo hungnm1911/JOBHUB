@@ -4,6 +4,8 @@
 
 V1 is `COMPLETED AND VERIFIED`.
 
+- **Implemented; verified (2026-10-19):** The V1 verification email now links to the frontend screen `{FRONTEND_BASE_URL}/verify-email?token=…` (built by `buildFrontendActionUrl` in `backend/src/utils/auth-action-url.js`; `FRONTEND_BASE_URL` defaults to `http://localhost:5173`). The frontend consumes the token through the existing `POST /api/auth/verify-email`; `GET /api/auth/verify-email` remains for links already sent. Password reset, company-approval confirmation, and Recruiter activation links are unchanged. `cd backend && npm run verify:agent` passed (ESLint, architecture checks, `1783/1783` tests). Real SMTP delivery of the new link was not exercised.
+
 ## Previously completed and verified baseline
 
 - **Implemented; verified:** Browser-clickable auth email actions now use the shared `/api/auth/<action>?token=…` URL contract, fixing Gmail/browser `GET` clicks that previously reached non-existent bare-host paths while only body-token `POST` endpoints existed. V2 company-approval confirmation and V1 email verification consume their valid query token on `GET`; V3 Recruiter activation and V1/V3 password reset return a minimal password form on `GET` and consume only on its existing completion `POST`. The change adds no persistence fields or token types and leaves `jwt.js` access-JWT behavior unchanged. `APP_BASE_URL` must resolve to the reachable API origin. Focused auth suites passed; ESLint and architecture checks passed; the full suite passed `323/323` with `--fileParallelism=false`. The default parallel `verify:agent` run flaked twice on unrelated MongoMemoryServer startup timeouts.
