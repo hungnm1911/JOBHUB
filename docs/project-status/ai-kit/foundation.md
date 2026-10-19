@@ -24,6 +24,11 @@
   do not prove free-text semantic support, so priority, experience scope, and
   wording alignment are not verified deterministically (acceptance finding H1,
   resolved by approved option 1); they rely on the prompt and live evaluation.
+  Acceptance finding H2 is partially addressed: enum conflict claims must cite
+  the structured pointer of a value they repeat, and a labeled expected-outcome
+  ledger grades description-level semantic completeness on mocked outputs. A
+  validator PASS is not evidence of semantic completeness, and no live
+  evaluation against that ledger has run.
   `src/normalization/v01-contract.js` is the sole production contract loader;
   `ajv` 8.20.0 moved from dev to production dependency (approved). Not
   exported from the package root and not used by Backend.
@@ -106,6 +111,22 @@
   addressed.
 
 ## Verification status
+
+- 2026-10-19: AI-V01 Slice 01 acceptance finding H2 (missing semantic coverage
+  validation), partial. Root cause: `JobExtractionResult` references are
+  field-level, so omissions inside `jobDescription` cannot be decided without
+  re-interpreting free text; additionally, enum conflict claims were checked
+  by value only and could drop the structured `/employmentType` or
+  `/workModes/<i>` reference. `job-extraction.js` now rejects such conflict
+  claims (2 new regressions failed before the fix; 3 merged-structured-
+  reference regressions lock existing behavior). New
+  `test/job-extraction-semantic-evaluation.test.js` (10 tests) shows that
+  omitted description-only requirements, wrong/strengthened priority, dropped
+  conflict/uncertain/residual claims, and a lost `/jobDescription` reference
+  pass the validator but fail labeled expected-outcome grading. Focused suites
+  passed; `cd ai-kit && npm run verify:agent` passed (ESLint and Vitest, 11
+  files / 185 tests). No live provider was called; prompt, contract, and
+  extraction shape are unchanged.
 
 - 2026-10-19: Fail-fast provider HTTP attempts. Installed `@google/genai`
   2.30.0 retries only when `httpOptions.retryOptions` is set (unset by the

@@ -183,8 +183,10 @@ provider refusals/incomplete responses, non-JSON output, canonical-schema
 violations, invalid or unresolved JSON Pointers, requirement or experience
 claims cited only from the title, enum claims that differ from their cited
 structured value, requirements that do not carry their cited structured skill
-tag, dropped structured metadata, unpreserved enum conflicts, and duplicate
-equivalent requirements. It does not repair schema-invalid output or retry it.
+tag, dropped structured metadata, unpreserved enum conflicts, enum conflict
+claims that repeat a structured value without citing its structured pointer,
+and duplicate equivalent requirements. It does not repair schema-invalid
+output or retry it.
 AI-V01 references are field-level JSON Pointers, which prove provenance but not
 semantic support: whether free text supports a claim's priority, experience
 scope, or wording is not decided by deterministic keyword, token, or number
@@ -233,6 +235,14 @@ have specifications.
   without lexical re-validation, structured-source preservation, and logging
   without Job content. Offline tests cannot measure extraction quality; that
   requires a separately reported live evaluation.
+- `test/job-extraction-semantic-evaluation.test.js` holds human-labeled
+  expected outcomes for representative Jobs and a grader that compares an
+  extraction against those labels without reading the Job description. It
+  proves that omitted description-only requirements, wrong or strengthened
+  priority, dropped conflicts/uncertainty/residual claims, and a lost
+  `/jobDescription` reference pass the extraction validator but fail the
+  expected-outcome grading. It grades mocked outputs only; it is not a live
+  quality measurement.
 - Local deterministic fixtures may exercise a real library, as the current
   text-native PDF fixture does, provided they require no external service.
 - A focused test may import an internal module directly; that import does not

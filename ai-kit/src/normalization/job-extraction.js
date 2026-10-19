@@ -299,8 +299,44 @@ const conflictContainsValues = (extraction, subject, values) => {
   });
 };
 
-const findSourcePreservationIssues = (extraction, sourceDocument) => {
+const listStructuredEnumSources = (sourceDocument, subject) => {
+  if (subject === "employmentType") {
+    return sourceDocument.employmentType === null
+      ? []
+      : [{ value: sourceDocument.employmentType, pointer: "/employmentType" }];
+  }
+
+  if (subject === "workModes") {
+    return sourceDocument.workModes.map((value, index) => ({
+      value,
+      pointer: `/workModes/${index}`,
+    }));
+  }
+
+  return [];
+};
+
+const findConflictProvenanceIssues = (extraction, sourceDocument) => {
   const issues = [];
+
+  extraction.conflictingClaims.forEach((conflict, conflictIndex) => {
+    listStructuredEnumSources(sourceDocument, conflict.subject)
+      .forEach(({ value, pointer }) => {
+        conflict.claims.forEach((claim, claimIndex) => {
+          if (claim.value === value && !claim.references.includes(pointer)) {
+            issues.push(
+              `/conflictingClaims/${conflictIndex}/claims/${claimIndex} omits structured evidence ${pointer}`,
+            );
+          }
+        });
+      });
+  });
+
+  return issues;
+};
+
+const findSourcePreservationIssues = (extraction, sourceDocument) => {
+  const issues = [...findConflictProvenanceIssues(extraction, sourceDocument)];
 
   sourceDocument.requiredSkills.forEach((skill, index) => {
     const pointer = `/requiredSkills/${index}`;

@@ -686,6 +686,91 @@ describe("Job extraction output rejection", () => {
     expect(error.details).toContain("workModes conflict is not preserved");
   });
 
+  it.each([
+    [
+      "employmentType",
+      { jobDescription: "Hình thức bán thời gian." },
+      (extraction) => {
+        extraction.workModes[0].references = ["/workModes/0"];
+        extraction.conflictingClaims = [{
+          subject: "employmentType",
+          claims: [
+            { value: "FULL_TIME", references: ["/jobDescription"] },
+            { value: "PART_TIME", references: ["/jobDescription"] },
+          ],
+        }];
+      },
+      "/conflictingClaims/0/claims/0 omits structured evidence /employmentType",
+    ],
+    [
+      "workModes",
+      { jobDescription: "Làm việc tại văn phòng." },
+      (extraction) => {
+        extraction.workModes[0].references = ["/workModes/0"];
+        extraction.conflictingClaims = [{
+          subject: "workModes",
+          claims: [
+            { value: "REMOTE", references: ["/jobDescription"] },
+            { value: "ONSITE", references: ["/jobDescription"] },
+          ],
+        }];
+      },
+      "/conflictingClaims/0/claims/0 omits structured evidence /workModes/0",
+    ],
+  ])("rejects a %s conflict claim that drops its structured source", async (
+    _subject,
+    inputOverrides,
+    mutate,
+    expectedIssue,
+  ) => {
+    const extraction = makeExtraction();
+    extraction.requirements = extraction.requirements.slice(0, 1);
+    mutate(extraction);
+    const extractor = createJobExtractor({
+      gemini: createGemini(extraction),
+      logger: createLogger(),
+    });
+
+    const error = await expectExtractionError(
+      extractor.extractJob(makeJobRawInput(inputOverrides)),
+      JOB_EXTRACTION_ERROR_CODES.INVALID_EXTRACTION_OUTPUT,
+    );
+
+    expect(error.details).toEqual([expectedIssue]);
+  });
+
+  it.each([
+    ["requirement", (extraction) => {
+      extraction.requirements[0].references = ["/jobDescription"];
+    }, "/requiredSkills/0 is not preserved as a Job requirement"],
+    ["employment type", (extraction) => {
+      extraction.employmentType.references = ["/jobDescription"];
+    }, "/employmentType structured metadata is not preserved"],
+    ["work mode", (extraction) => {
+      extraction.workModes[0].references = ["/jobDescription"];
+    }, "/workModes/0 work mode is not preserved"],
+  ])("rejects a merged %s that loses its structured reference", async (
+    _kind,
+    mutate,
+    expectedIssue,
+  ) => {
+    const extraction = makeExtraction();
+    mutate(extraction);
+    const extractor = createJobExtractor({
+      gemini: createGemini(extraction),
+      logger: createLogger(),
+    });
+
+    const error = await expectExtractionError(
+      extractor.extractJob(makeJobRawInput({
+        jobDescription: "Hình thức toàn thời gian. Bắt buộc Node.js. Ưu tiên Docker. Làm việc từ xa.",
+      })),
+      JOB_EXTRACTION_ERROR_CODES.INVALID_EXTRACTION_OUTPUT,
+    );
+
+    expect(error.details).toContain(expectedIssue);
+  });
+
   it("rejects duplicate REQUIRED/OPTIONAL versions of one requirement", async () => {
     const extraction = makeExtraction();
     extraction.requirements = [
