@@ -20,13 +20,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "ajv": "^8.20.0",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
     "vitest": "^4.1.10"
   },
   "dependencies": {
     "@google/genai": "^2.30.0",
+    "ajv": "^8.20.0",
     "groq-sdk": "^1.6.0",
     "scribe.js-ocr": "^0.16.1"
   }

@@ -3,6 +3,12 @@ import { access, readFile } from "node:fs/promises";
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
+import {
+  buildV01DefinitionSchema,
+  buildV01ProviderSchema,
+  createV01Validator,
+} from "../src/normalization/v01-contract.js";
+
 const contract = JSON.parse(
   await readFile(new URL("../v01-contract.json", import.meta.url), "utf8"),
 );
@@ -882,5 +888,97 @@ describe("AI-V01 READY/FAILED result contract", () => {
     }],
   ])("rejects %s result", (_caseName, result) => {
     expectInvalid(validators.NormalizationResult, result);
+  });
+});
+
+describe("AI-V01 runtime contract loader", () => {
+  it("builds a self-contained definition schema with only reachable $defs", () => {
+    const schema = buildV01DefinitionSchema("JobExtractionResult");
+
+    expect(schema.$ref).toBe("#/$defs/JobExtractionResult");
+    expect(Object.keys(schema.$defs).sort()).toEqual([
+      "ConflictingClaims",
+      "EmploymentType",
+      "EmploymentTypeClaim",
+      "EvidenceClaim",
+      "JobExtractionResult",
+      "JobRequirement",
+      "NumberClaim",
+      "References",
+      "SourceReference",
+      "WorkMode",
+      "WorkModeClaim",
+    ]);
+    expect(schema.$defs.JobExtractionResult).toEqual(
+      contract.$defs.JobExtractionResult,
+    );
+    expect(schema.$defs).not.toBe(contract.$defs);
+  });
+
+  it("rejects an unknown definition name", () => {
+    expect(() => buildV01DefinitionSchema("BlockedResult"))
+      .toThrow("Unknown AI-V01 contract definition: BlockedResult");
+  });
+
+  it.each(["gemini", "groq"])(
+    "derives the %s extraction schema from the canonical definition",
+    (provider) => {
+      const schema = buildV01ProviderSchema("JobExtractionResult", provider);
+
+      expect(Object.keys(schema.properties)).toEqual(
+        Object.keys(contract.$defs.JobExtractionResult.properties),
+      );
+      expect(schema.required).toEqual(contract.$defs.JobExtractionResult.required);
+      expect(schema.additionalProperties).toBe(false);
+      expect(schema.$defs.JobRequirement.properties.priority.enum)
+        .toEqual(["REQUIRED", "OPTIONAL", null]);
+      expect(schema.$defs.References.items.$ref)
+        .toBe("#/$defs/SourceReference");
+      expect(schema).not.toHaveProperty("$schema");
+      expect(schema.$defs.SourceReference).not.toHaveProperty("pattern");
+    },
+  );
+
+  it("makes every Groq object closed with all properties required", () => {
+    const schema = buildV01ProviderSchema("JobExtractionResult", "groq");
+    const visit = (value) => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+
+      if (value === null || typeof value !== "object") {
+        return;
+      }
+
+      if (value.type === "object") {
+        expect(value.additionalProperties).toBe(false);
+        expect([...value.required].sort())
+          .toEqual(Object.keys(value.properties).sort());
+      }
+
+      Object.values(value).forEach(visit);
+    };
+
+    visit(schema);
+  });
+
+  it("rejects an unknown structured-output provider", () => {
+    expect(() => buildV01ProviderSchema("JobExtractionResult", "json-mode"))
+      .toThrow("Unknown AI-V01 structured-output provider: json-mode");
+  });
+
+  it("validates against the canonical definition without echoing data", () => {
+    const validateExtraction = createV01Validator("JobExtractionResult");
+    const invalid = makeJobExtractionResult();
+    invalid.requirements[0].priority = "SECRET_PRIORITY_VALUE";
+
+    expect(validateExtraction(makeJobExtractionResult())).toEqual([]);
+
+    const issues = validateExtraction(invalid);
+
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.join("\n")).toContain("/requirements/0/priority");
+    expect(issues.join("\n")).not.toContain("SECRET_PRIORITY_VALUE");
   });
 });

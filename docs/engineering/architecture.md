@@ -282,13 +282,18 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   entrypoint and currently exports only `createAiKit`. The factory validates
   optional Gemini/Groq configuration and the injected logger contract, then
   returns an empty frozen object; it exposes no AI business capability.
-- AI-V01 Product/Data authority is approved, but F01/F02 remain unimplemented.
-  [`ai-kit/v01-contract.json`](../../ai-kit/v01-contract.json) now owns the
+- AI-V01 Product/Data authority is approved.
+  [`ai-kit/v01-contract.json`](../../ai-kit/v01-contract.json) owns the
   validated runtime-only input, extraction, profile, evidence/conflict, and
-  READY/FAILED result shapes. R4 contract tests compile that contract as Draft
-  2020-12 and cover its independently testable boundaries while explicitly
-  deferring runtime semantics. Neither artifact exposes or implements a
-  capability.
+  READY/FAILED result shapes; R4 contract tests compile it as Draft 2020-12.
+  `src/normalization/v01-contract.js` is its only production loader and Ajv
+  validator. The internal F01 Job extraction stage,
+  `src/normalization/job-extraction.js`, turns a `JobRawInput` into a
+  `JobExtractionResult` through input validation, provider-native structured
+  output, canonical Draft 2020-12 validation, and deterministic
+  semantic/evidence checks. F01 consolidation into `JobMatchProfile`,
+  READY/FAILED results, and all of F02 remain unimplemented, and nothing
+  AI-V01-related is exported from the package root.
 - [`backend/src/services/ai-kit.service.js`](../../backend/src/services/ai-kit.service.js)
   is the sole Backend runtime package consumer and creates the shared instance
   with normalized Backend configuration and the canonical Backend logger.
@@ -307,8 +312,9 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   one fallback attempt. Fallback is eligible only for HTTP 429, 500, 502, 503,
   or 504, or a recognized connection/timeout failure with no HTTP response.
   Authentication, configuration, request-validation, and programming failures
-  are not eligible. This utility is not exported or wired into a business
-  capability, so fallback is not automatic for AI Kit calls.
+  are not eligible. This utility is not exported; its only composition is the
+  internal F01 Job extraction stage (Gemini primary, Groq fallback), so
+  fallback is not automatic for AI Kit calls.
 - `src/document/pdf-text-extractor.js` is the sole direct `scribe.js-ocr`
   consumer. It extracts PDF text, invokes Scribe OCR when `requiresOCR` is set,
   closes each document in a `finally` block, and leaves the shared Scribe
@@ -421,14 +427,15 @@ Backend authenticates actor
 
 ### Deferred decisions
 
-- Wiring provider fallback into a real capability, retries, circuit breakers,
-  and a provider registry are deferred to the capability that needs them.
+- Retries, circuit breakers, and a provider registry are deferred to the
+  capability that needs them; the F01 Job extraction stage composes fallback
+  without retrying invalid output.
 - CV upload ingestion, Buffer input, scanned-PDF/OCR fixtures, and Backend
   startup/shutdown wiring for extractor disposal are deferred to the document
   capability integration.
-- AI-V01 match-profile implementation has not started; its R2 runtime shape and
-  R4 contract-test prerequisites are complete, but their completion does not
-  verify F01/F02 normalization behavior.
+- AI-V01 match-profile construction has not started: F01 consolidation,
+  READY/FAILED results, the package-root capability API with its Backend
+  consumer, and F02 remain deferred. Only the F01 Job extraction stage exists.
   Embeddings/retrieval, tool schemas and limits, persistence beyond the
   approved AI-V01 runtime-only boundary, and API workflows remain deferred
   until their applicable Product/Data contracts are approved.

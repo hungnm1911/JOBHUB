@@ -3,11 +3,26 @@
 ## Current project state
 
 - **Readiness:** AI Kit technical foundation: ready. AI-V01 Product
-  Specification and Data Contract: approved. AI-V01 F01/F02: not implemented
-  and not verified. AI-V01 R2 Runtime Shape Contract correction/validation and
-  R4 contract-test coverage are complete, so AI-V01 is `READY FOR
-  IMPLEMENTATION`. This readiness does not claim that F01/F02 behavior exists.
-  AI-V02 and AI-V03 are not approved by the current roadmap.
+  Specification and Data Contract: approved; R2 Runtime Shape Contract and R4
+  contract-test coverage: complete. AI-V01 is `IN PROGRESS`: Slice 01 (F01 Job
+  extraction stage) is implemented and verified offline and live through
+  Groq; Gemini live extraction remains unverified. F01 consolidation into
+  `JobMatchProfile` and F02 are not
+  implemented, so F01 is not complete. AI-V02 and AI-V03 are not approved by
+  the current roadmap.
+- **AI-V01 Slice 01 — F01 Job extraction stage implemented; verified:**
+  internal `src/normalization/job-extraction.js` (`createJobExtractor`)
+  validates `JobRawInput`, sends the LLM only title, description,
+  `requiredSkills`, `employmentType`, and `workModes`, uses Gemini JSON Schema
+  structured output or Groq strict JSON Schema (`strict: true`), and calls
+  Gemini with Groq fallback (or the single injected provider). It returns a
+  `JobExtractionResult` only after response-completeness, JSON, canonical Draft
+  2020-12, JSON Pointer, claim-evidence, priority/experience, structured-source,
+  and conflict-preservation checks; otherwise it throws a coded
+  `JobExtractionError` or propagates the provider error.
+  `src/normalization/v01-contract.js` is the sole production contract loader;
+  `ajv` 8.20.0 moved from dev to production dependency (approved). Not
+  exported from the package root and not used by Backend.
 - **Implemented; verified:** `ai-kit/` is the private `@jobhub/ai-kit` npm
   package using Node.js ES modules. Its package root is the only production
   source entrypoint and exports the minimal `createAiKit` composition factory;
@@ -23,9 +38,9 @@
   `executeWithLlmFallback` orchestrator accepts provider call functions without
   unifying either adapter contract, preserves successful provider results, and
   performs at most one fallback attempt for HTTP 429/500/502/503/504 or a
-  structured response-free connection/timeout failure. Neither adapter nor the
-  fallback orchestrator is composed until a real package capability needs it,
-  so startup remains valid with neither, either, or both provider
+  structured response-free connection/timeout failure. The adapters and
+  fallback orchestrator are composed only inside the internal F01 Job
+  extraction stage, not by `createAiKit`, so startup remains valid with neither, either, or both provider
   configurations. ESLint and Vitest remain aligned with the backend tooling,
   with a package-local `verify:agent` gate and explicit no-`process.env` and
   provider-SDK-import source boundaries.
@@ -66,13 +81,15 @@
 
 ## Deferred / not started
 
-- AI-V01 F01/F02 normalization implementation has not started. Evidence
-  resolution, consolidation, structured-metadata precedence,
-  REQUIRED-over-OPTIONAL, hallucination prevention, and Backend authorization/
-  ownership enforcement remain runtime responsibilities; R4 records them as
-  deferred rather than claiming they are verified.
-- Wiring Gemini-to-Groq fallback into a provider-backed package capability,
-  retry/circuit breaking, CV
+- AI-V01 F01 consolidation (deterministic structured-metadata precedence,
+  REQUIRED-over-OPTIONAL merge, evidence association, `JobMatchProfile`,
+  READY/FAILED mapping), the package-root capability API and Backend
+  consumer, and all of F02 are not started. Slice 01 validates extraction
+  acceptance but does not create a canonical profile or normalization result.
+  Backend authorization/ownership enforcement remains a Backend responsibility.
+- Live Gemini quality for Job extraction is unverified: every Gemini attempt
+  on 2026-10-19 returned HTTP 503 `UNAVAILABLE` or HTTP 429 quota exhaustion.
+- Retry/circuit breaking, CV
   ingestion/document workflows, scanned-PDF coverage, HTTP transport,
   configuration/environment loading, matching, profiles, agents, vector
   storage, and database integration are not started or not yet verified.
@@ -83,6 +100,24 @@
   addressed.
 
 ## Verification status
+
+- 2026-10-19: AI-V01 Slice 01 (F01 Job extraction stage). Offline: focused
+  `test/job-extraction.test.js` + `test/v01-contract.test.js` passed (2 files
+  / 103 tests); `cd ai-kit && npm run verify:agent` passed (ESLint and Vitest,
+  9 files / 143 tests). Mock assertions cover exact Gemini JSON MIME/schema and
+  Groq `json_schema`/`strict: true` request arguments, while canonical Ajv and
+  semantic/evidence gates reject malformed, truncated, refused, schema-invalid,
+  unresolved, unsupported, lossy, or conflicting output. Live (temporary
+  uncommitted harness, five synthetic representative Jobs): Gemini
+  `gemini-3.8-flash` returned HTTP 503 for four cases and HTTP 429 for the fifth,
+  so Gemini schema acceptance and extraction quality are `NOT VERIFIED`; Groq
+  `openai/gpt-oss-120b` accepted the strict schema and passed 5/5 cases covering
+  required/optional and experience extraction, missing metadata enrichment,
+  structured/description conflict preservation, ambiguous priority, and sparse
+  no-hallucination output. Evidence references remain field-level, so exact
+  text-span alignment is not represented. No credential or private content was
+  printed or stored. Backend verification was not rerun because this acceptance
+  gate changes no Backend integration or behavior.
 
 - 2026-10-19: AI-V01 R4 added `test/v01-contract.test.js` with Ajv Draft
   2020-12 compilation and positive/negative coverage for raw Job/Generated CV

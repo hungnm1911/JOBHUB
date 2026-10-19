@@ -12,8 +12,9 @@ implementation and verification state; it does not define requirements.
 Approved Product Specifications and Data Contracts remain authoritative for
 business behavior and persistence. AI-V01 Product/Data authority is approved,
 and its R2 runtime shape contract plus R4 contract-test coverage are complete.
-F01/F02 production implementation does not yet exist; implementation readiness
-does not constitute implemented or verified normalization behavior. AI-V02 and
+Only the internal F01 Job extraction stage (`JobRawInput` to
+`JobExtractionResult`) exists; F01 consolidation into `JobMatchProfile` and all
+of F02 are not implemented, and no AI-V01 capability is exported. AI-V02 and
 AI-V03 are not approved. AI #1/#2/#3 architecture direction does not
 independently approve another business capability.
 
@@ -76,6 +77,9 @@ src/
 │   ├── gemini-client.js
 │   ├── groq-client.js
 │   └── llm-fallback.js
+├── normalization/
+│   ├── v01-contract.js
+│   └── job-extraction.js
 └── document/
     └── pdf-text-extractor.js
 ```
@@ -129,9 +133,10 @@ future capability.
   response. Error message text alone must not determine eligibility.
 - Authentication, configuration, request-validation, and programming failures
   must propagate without fallback. A failed fallback propagates unchanged.
-- The fallback utility is internal and is not currently composed into a
-  business capability. Its existence must not be described as automatic
-  fallback for all AI requests.
+- The fallback utility is internal. Its only capability composition is the
+  internal F01 Job extraction stage, which uses Gemini as primary and Groq as
+  fallback when both clients are injected. Its existence must not be described
+  as automatic fallback for all AI requests.
 - Do not add retries, a circuit breaker, provider registry, or universal LLM
   abstraction without a concrete capability need and an approved architecture
   change.
@@ -157,11 +162,27 @@ rules validate structure; its `x-semantic-constraints` record the approved
 cross-field rules that require deterministic runtime enforcement. The contract
 does not implement F01/F02, perform authorization, or create persistence.
 
+`src/normalization/v01-contract.js` is the only production loader of that
+contract. It compiles definitions with the production `ajv` dependency and
+derives deterministic provider-compatible projections from the canonical
+`JobExtractionResult`. Gemini receives JSON MIME type plus its JSON Schema
+projection; Groq receives `response_format.type = json_schema`, its projection,
+and `strict: true`. Provider projections may omit unsupported validation
+keywords, but they do not omit canonical fields; Draft 2020-12 Ajv validation
+against the full canonical definition remains mandatory after the response.
+Validation messages carry only instance paths and messages, never validated
+content.
+
 An approved capability that consumes structured LLM output must validate that
-output before treating it as trusted data. Consumers of AI-V01 must reuse its
-contract rather than define a parallel profile or result shape. AI Kit must not
-invent one shared JSON schema for capabilities that do not yet have
-specifications.
+output before treating it as trusted data. The F01 Job extraction stage rejects
+provider refusals/incomplete responses, non-JSON output, canonical-schema
+violations, invalid or unresolved JSON Pointers, references that do not support
+their claims, unsupported experience/priority claims, dropped structured
+metadata, unpreserved enum conflicts, and duplicate equivalent requirements.
+It does not repair schema-invalid output or retry it. Consumers of AI-V01 must
+reuse its contract rather than define a parallel profile or result shape. AI
+Kit must not invent one shared JSON schema for capabilities that do not yet
+have specifications.
 
 ## Document extraction
 
@@ -194,6 +215,13 @@ specifications.
   structural guarantees from semantic behavior deferred to F01/F02 runtime;
   the suite must not simulate normalization merely to claim that behavior is
   verified.
+- `test/job-extraction.test.js` covers the F01 extraction stage with mocked
+  provider clients: input refusal, minimized prompt document, provider request
+  shapes (including Gemini schema output and Groq strict JSON Schema), fallback
+  composition, refusal/truncation, canonical-contract rejection,
+  semantic/evidence rejection, structured-source preservation, and logging
+  without Job content. Offline tests cannot measure extraction quality; that
+  requires a separately reported live evaluation.
 - Local deterministic fixtures may exercise a real library, as the current
   text-native PDF fixture does, provided they require no external service.
 - A focused test may import an internal module directly; that import does not

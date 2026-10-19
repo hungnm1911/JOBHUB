@@ -2,7 +2,7 @@
 
 `@jobhub/ai-kit` is JOBHUB's private local Node.js package for AI-specific adapters and computation. It uses JavaScript ES modules, lives beside `backend/` and `frontend/`, and is consumed by Backend through `file:../ai-kit`.
 
-AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready, and AI-V01 Product/Data authority is approved. The R2 runtime shape contract and R4 contract-test coverage are complete, so AI-V01 is ready for implementation. F01/F02 remain unimplemented and their runtime behavior is not verified. AI-V02 and AI-V03 are not approved.
+AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready, and AI-V01 Product/Data authority is approved. The R2 runtime shape contract and R4 contract-test coverage are complete. The internal F01 Job extraction stage (`JobRawInput` to `JobExtractionResult`) is implemented; F01 consolidation into `JobMatchProfile` and all of F02 remain unimplemented, and no AI-V01 capability is exported. AI-V02 and AI-V03 are not approved.
 
 ## Installation
 
@@ -40,6 +40,7 @@ ai-kit/
 │   ├── index.js                  # Production package facade
 │   ├── create-ai-kit.js          # Dependency-injection factory foundation
 │   ├── llm/                      # Gemini/Groq adapters and fallback policy
+│   ├── normalization/            # AI-V01 contract validation and F01 Job extraction stage
 │   └── document/                 # Scribe PDF text extraction adapter
 ├── scripts/                      # Manual Gemini/Groq smoke harnesses
 ├── test/                         # Offline foundation and AI-V01 contract tests
@@ -83,7 +84,7 @@ npm run smoke:gemini
 npm run smoke:groq
 ```
 
-Smoke may consume quota and reads credentials through Backend configuration. Gemini and Groq have each been live-verified separately; one does not verify the other or the uncomposed fallback path. From the repository root, also run this for Backend integration/runtime changes:
+Smoke may consume quota and reads credentials through Backend configuration. Gemini and Groq have each been live-verified separately; one does not verify the other or the fallback path. From the repository root, also run this for Backend integration/runtime changes:
 
 ```bash
 cd backend
@@ -92,9 +93,8 @@ npm run verify:agent
 
 ## Current limitations
 
-- AI-V01 is ready for implementation after R2/R4, but F01/F02 normalization
-  behavior is not implemented or verified.
-- The Gemini-to-Groq fallback policy exists internally but is not wired into a business operation.
+- Only the internal F01 Job extraction stage exists; F01 consolidation, `JobMatchProfile`, READY/FAILED results, and F02 are not implemented.
+- The Gemini-to-Groq fallback policy is composed only into the internal F01 Job extraction stage, which is not yet exported or used by Backend.
 - Scribe PDF extraction exists, but there is no complete uploaded-CV ingestion pipeline.
 - Buffer input and scanned-PDF/OCR fixture coverage are deferred.
 - Explicit Scribe disposal is not wired into Backend shutdown.
@@ -111,6 +111,6 @@ See the [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) 
 | [AI Kit conventions](../docs/engineering/ai-kit-conventions.md) | Enforceable coding, integration, security, and verification rules |
 | [AI Kit sources of truth](../docs/engineering/ai-kit-source-of-truth.md) | Canonical owners, consumers, and forbidden duplication |
 | [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) | Implementation and verification evidence |
-| [AI Kit Product roadmap](../docs/product/ai-kit/roadmap.md) | AI Kit version and scope authority; AI-V01 is approved and not implemented |
+| [AI Kit Product roadmap](../docs/product/ai-kit/roadmap.md) | AI Kit version and scope authority; AI-V01 is approved and partially implemented (F01 Job extraction stage only) |
 | [AI Kit Product Specifications](../docs/product/ai-kit/versions/) | Approved detailed AI Kit business requirements, including AI-V01 |
 | [AI Kit Data Contracts](../docs/data/ai-kit/versions/) | Approved AI Kit persistence and data-defined contracts, including AI-V01 |
