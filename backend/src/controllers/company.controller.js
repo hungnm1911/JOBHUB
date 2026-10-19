@@ -5,6 +5,7 @@ import {
   submitOwnedCompany,
   updateOwnedCompanyActiveProfile,
   updateOwnedCompanyDraft,
+  uploadOwnedCompanyImage,
 } from "../services/company.service.js";
 
 const getOwnedCompanyHandler = async (request, response, next) => {
@@ -78,9 +79,26 @@ const resendApprovalConfirmationHandler = async (request, response, next) => {
   }
 };
 
+const uploadOwnedCompanyImageHandler = async (request, response, next) => {
+  try {
+    const image = await uploadOwnedCompanyImage({
+      kind: request.params.kind,
+      file: request.file,
+    });
+
+    return response.status(201).json({
+      message: "Company image uploaded.",
+      image,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   getOwnedCompanyHandler,
   resendApprovalConfirmationHandler,
   submitOwnedCompanyHandler,
   updateOwnedCompanyHandler,
+  uploadOwnedCompanyImageHandler,
 };

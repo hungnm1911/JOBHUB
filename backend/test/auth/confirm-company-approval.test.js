@@ -8,6 +8,7 @@ import {
   vi,
 } from "vitest";
 
+import config from "../../src/config/index.js";
 import AUTH_TOKEN_TYPE from "../../src/constants/auth-token-type.js";
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
 import COMPANY_MEMBER_ROLE from "../../src/constants/company-member-role.js";
@@ -131,7 +132,7 @@ describe("confirm-company-approval email link and HTTP consume", () => {
     await disconnectTestDatabase();
   });
 
-  it("emails a browser-clickable /api/auth/confirm-company-approval link", async () => {
+  it("emails a frontend /confirm-company-approval screen link", async () => {
     const agent = createTestAgent();
 
     await registerSubmitAndApproveCompany(agent, {
@@ -143,14 +144,12 @@ describe("confirm-company-approval email link and HTTP consume", () => {
 
     const mailCall = sendMail.mock.calls.at(-1)[0];
     expect(mailCall.text).toContain(
-      "/api/auth/confirm-company-approval?token=",
+      `${config.frontendBaseUrl}/confirm-company-approval?token=`,
     );
     expect(mailCall.html).toContain(
-      "/api/auth/confirm-company-approval?token=",
+      `${config.frontendBaseUrl}/confirm-company-approval?token=`,
     );
-    expect(mailCall.html).not.toMatch(
-      /https?:\/\/[^/]+\/confirm-company-approval\?token=/,
-    );
+    expect(mailCall.html).not.toContain("/api/auth/confirm-company-approval");
   });
 
   it("activates via GET query token the same way a Gmail link click would", async () => {

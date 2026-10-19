@@ -21,6 +21,7 @@ function createAuthenticationManager({
   let bootstrapPromise = null
   let invalidated = false
   let authenticationRevision = 0
+  let knownRefreshToken = null
 
   function invalidateAuthentication() {
     if (invalidated) {
@@ -28,6 +29,7 @@ function createAuthenticationManager({
     }
 
     invalidated = true
+    knownRefreshToken = null
     authenticationRevision += 1
     storage.clear()
     dispatch(actions.unauthenticated())
@@ -98,6 +100,7 @@ function createAuthenticationManager({
     storage.write(authentication)
     authenticationRevision += 1
     invalidated = false
+    knownRefreshToken = authentication.refreshToken
     dispatch(
       actions.authenticated({
         user: authentication.user,
@@ -138,6 +141,8 @@ function createAuthenticationManager({
         const restoredAuthentication = storage.read()
 
         invalidated = false
+        knownRefreshToken =
+          restoredAuthentication?.refreshToken ?? persistedAuthentication.refreshToken
         dispatch(
           actions.authenticated({
             user: restoredAuthentication?.user ?? persistedAuthentication.user,
@@ -180,6 +185,47 @@ function createAuthenticationManager({
     }
   }
 
+  // Persisted credentials are shared by every tab while Redux state is per tab,
+  // so a login, logout, or refresh written by another tab is mirrored here.
+  function synchronizeExternalChange() {
+    const persistedAuthentication = storage.read()
+
+    if (!persistedAuthentication?.refreshToken) {
+      if (invalidated) {
+        return
+      }
+
+      invalidated = true
+      knownRefreshToken = null
+      authenticationRevision += 1
+      dispatch(actions.unauthenticated())
+      socket.disconnect()
+      return
+    }
+
+    if (persistedAuthentication.refreshToken === knownRefreshToken) {
+      if (persistedAuthentication.accessToken) {
+        socket.updateAccessToken(persistedAuthentication.accessToken)
+      }
+      return
+    }
+
+    authenticationRevision += 1
+    invalidated = false
+    knownRefreshToken = persistedAuthentication.refreshToken
+    dispatch(
+      actions.authenticated({
+        user: persistedAuthentication.user,
+        session: persistedAuthentication.session,
+      }),
+    )
+    socket.disconnect()
+
+    if (persistedAuthentication.accessToken) {
+      socket.connect(persistedAuthentication.accessToken)
+    }
+  }
+
   return {
     bootstrap,
     invalidateAuthentication,
@@ -188,6 +234,7 @@ function createAuthenticationManager({
     refreshAuthentication,
     registerCompanyManager,
     retryBootstrap,
+    synchronizeExternalChange,
   }
 }
 

@@ -1,4 +1,5 @@
 import RootLayout from '@/layouts/RootLayout'
+import ConfirmCompanyApprovalPage from '@/pages/ConfirmCompanyApprovalPage'
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
 import HomePage from '@/pages/HomePage'
 import LoginPage from '@/pages/LoginPage'
@@ -8,6 +9,7 @@ import RegisterCompanyManagerPage from '@/pages/RegisterCompanyManagerPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import VerifyEmailPage from '@/pages/VerifyEmailPage'
 
+import companyOnboardingRoutes from './company-onboarding.routes'
 const publicRoutes = [
   {
     path: '/',
@@ -34,6 +36,10 @@ const publicRoutes = [
         element: <VerifyEmailPage />,
       },
       {
+        path: 'confirm-company-approval',
+        element: <ConfirmCompanyApprovalPage />,
+      },
+      {
         path: 'register',
         element: <RegisterAccountTypePage />,
       },
@@ -45,6 +51,7 @@ const publicRoutes = [
         path: 'register/company',
         element: <RegisterCompanyManagerPage />,
       },
+      companyOnboardingRoutes,
     ],
   },
 ]

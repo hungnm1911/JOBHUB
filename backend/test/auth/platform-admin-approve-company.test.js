@@ -201,10 +201,10 @@ describe("POST /api/platform-admin/company-registrations/:companyId/approve", ()
         to: "manager.approve@example.com",
         subject: expect.stringMatching(/confirm/i),
         text: expect.stringContaining(
-          "/api/auth/confirm-company-approval?token=",
+          `${config.frontendBaseUrl}/confirm-company-approval?token=`,
         ),
         html: expect.stringContaining(
-          "/api/auth/confirm-company-approval?token=",
+          `${config.frontendBaseUrl}/confirm-company-approval?token=`,
         ),
       }),
     );

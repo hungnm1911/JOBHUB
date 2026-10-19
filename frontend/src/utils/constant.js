@@ -12,6 +12,8 @@ const API_CONFIG = Object.freeze({
   TIMEOUT_MS: 15_000,
   // Requests whose backend handler sends email synchronously before responding.
   EMAIL_DELIVERY_TIMEOUT_MS: 60_000,
+  // Cloudinary image uploads for company logo/banner.
+  FILE_UPLOAD_TIMEOUT_MS: 60_000,
 })
 
 const FLASH_MESSAGE_TYPE = Object.freeze({
@@ -36,7 +38,60 @@ const API_ERROR_MESSAGE = Object.freeze({
   ACCOUNT_ACCESS_DENIED: 'Tài khoản hiện không được phép đăng nhập.',
   PASSWORD_RESET_EMAIL_UNAVAILABLE:
     'Không thể gửi email đặt lại mật khẩu. Vui lòng thử lại sau.',
+  BUSINESS_REGISTRATION_NUMBER_TAKEN:
+    'Mã số doanh nghiệp này đã được một doanh nghiệp khác sử dụng.',
+  APPROVAL_CONFIRMATION_STILL_VALID:
+    'Email kích hoạt đã gửi trước đó vẫn còn hiệu lực. Vui lòng kiểm tra hộp thư của bạn.',
+  APPROVAL_CONFIRMATION_NOT_AVAILABLE:
+    'Hồ sơ doanh nghiệp chưa được chấp thuận hoặc không còn ở trạng thái chờ kích hoạt.',
+  APPROVAL_CONFIRMATION_EMAIL_UNAVAILABLE:
+    'Không thể gửi email kích hoạt. Vui lòng thử lại sau.',
+  COMPANY_REGISTRATION_NOT_FOUND: 'Không tìm thấy hồ sơ doanh nghiệp này.',
+  COMPANY_REGISTRATION_STATE_CHANGED:
+    'Hồ sơ không còn ở trạng thái chờ duyệt hoặc tài khoản Company Manager không còn hợp lệ. Dữ liệu đã được tải lại.',
+  COMPANY_APPROVAL_EMAIL_FAILED:
+    'Hồ sơ đã được phê duyệt nhưng chưa gửi được email kích hoạt. Company Manager có thể tự yêu cầu gửi lại email.',
 })
+
+// Must stay aligned with backend/src/constants/user-role.js.
+const USER_ROLE = Object.freeze({
+  CANDIDATE: 'CANDIDATE',
+  COMPANY_STAFF: 'COMPANY_STAFF',
+  PLATFORM_ADMIN: 'PLATFORM_ADMIN',
+})
+
+// Must stay aligned with backend/src/constants/company-approval-status.js and
+// company-operational-status.js.
+const COMPANY_APPROVAL_STATUS = Object.freeze({
+  NOT_SUBMITTED: 'NOT_SUBMITTED',
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+})
+
+const COMPANY_OPERATIONAL_STATUS = Object.freeze({
+  INACTIVE: 'INACTIVE',
+  ACTIVE: 'ACTIVE',
+  LOCKED: 'LOCKED',
+})
+
+// Must stay aligned with backend/src/middlewares/validate-company-draft-update.js.
+const COMPANY_PROFILE_LIMIT = Object.freeze({
+  NAME_MAX_LENGTH: 200,
+  BUSINESS_REGISTRATION_NUMBER_MAX_LENGTH: 100,
+  URL_MAX_LENGTH: 500,
+  ADDRESS_MAX_LENGTH: 500,
+  CONTACT_INFO_MAX_LENGTH: 500,
+  DESCRIPTION_MAX_LENGTH: 5000,
+})
+
+// Must stay aligned with backend/src/constants/company-image-kind.js and FILE_TYPE.IMAGE.
+const COMPANY_IMAGE_KIND = Object.freeze({
+  LOGO: 'logo',
+  BANNER: 'banner',
+})
+
+const COMPANY_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
 
 // Must stay aligned with backend/src/constants/user-status.js.
 const USER_STATUS = Object.freeze({
@@ -73,6 +128,7 @@ const VALIDATION_MESSAGE = Object.freeze({
   FULL_NAME_TOO_LONG: `Họ và tên không được vượt quá ${ACCOUNT_FIELD_LIMIT.FULL_NAME_MAX_LENGTH} ký tự.`,
   PASSWORD_LENGTH: `Mật khẩu phải từ ${ACCOUNT_FIELD_LIMIT.PASSWORD_MIN_LENGTH} đến ${ACCOUNT_FIELD_LIMIT.PASSWORD_MAX_LENGTH} ký tự.`,
   PASSWORD_MISMATCH: 'Mật khẩu xác nhận không khớp.',
+  MAX_LENGTH: (maxLength) => `Không được vượt quá ${maxLength} ký tự.`,
 })
 
 const TOASTER_CONFIG = Object.freeze({
@@ -102,6 +158,11 @@ export {
   API_CONFIG,
   API_ERROR_MESSAGE,
   AUTH_STORAGE_KEY,
+  COMPANY_APPROVAL_STATUS,
+  COMPANY_IMAGE_ACCEPT,
+  COMPANY_IMAGE_KIND,
+  COMPANY_OPERATIONAL_STATUS,
+  COMPANY_PROFILE_LIMIT,
   FLASH_MESSAGE_CONFIG,
   FLASH_MESSAGE_TYPE,
   HTTP_HEADER,
@@ -109,6 +170,7 @@ export {
   RUNTIME_ENV,
   SOCKET_CONFIG,
   TOASTER_CONFIG,
+  USER_ROLE,
   USER_STATUS,
   VALIDATION_MESSAGE,
 }

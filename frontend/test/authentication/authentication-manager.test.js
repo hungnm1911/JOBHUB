@@ -99,6 +99,9 @@ function createHarness({ persisted = null } = {}) {
     apiCalls,
     dispatched,
     getStored: () => stored,
+    setStored: (value) => {
+      stored = value
+    },
     manager,
     socketCalls,
   }
@@ -275,6 +278,36 @@ test('company manager registration establishes the onboarding session like login
   assert.equal(harness.dispatched.at(-1).type, 'authenticated')
   assert.deepEqual(harness.socketCalls, [['connect', 'onboarding-access']])
   assert.equal(result.company.id, 'company-1')
+})
+
+test('another tab switching account, refreshing, or logging out is mirrored', async () => {
+  const harness = createHarness()
+  await harness.manager.login({ email: 'candidate@example.com', password: 'password' })
+  harness.socketCalls.length = 0
+
+  harness.setStored({ ...harness.getStored(), accessToken: 'other-tab-access' })
+  harness.manager.synchronizeExternalChange()
+  assert.equal(harness.dispatched.at(-1).type, 'authenticated')
+  assert.equal(harness.dispatched.length, 1)
+  assert.deepEqual(harness.socketCalls, [['update', 'other-tab-access']])
+
+  harness.setStored({
+    accessToken: 'admin-access',
+    refreshToken: 'admin-refresh',
+    session: { id: 'admin-session' },
+    user: { id: 'admin-1', role: 'PLATFORM_ADMIN' },
+  })
+  harness.manager.synchronizeExternalChange()
+  assert.equal(harness.dispatched.length, 2)
+  assert.deepEqual(harness.dispatched.at(-1).payload.user, { id: 'admin-1', role: 'PLATFORM_ADMIN' })
+  assert.deepEqual(harness.socketCalls.slice(1), [['disconnect'], ['connect', 'admin-access']])
+
+  harness.setStored(null)
+  harness.manager.synchronizeExternalChange()
+  harness.manager.synchronizeExternalChange()
+  assert.equal(harness.dispatched.at(-1).type, 'unauthenticated')
+  assert.equal(harness.dispatched.length, 3)
+  assert.deepEqual(harness.socketCalls.at(-1), ['disconnect'])
 })
 
 test('logout always clears local authentication even when backend fails', async () => {
