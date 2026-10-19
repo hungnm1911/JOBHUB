@@ -1,7 +1,9 @@
 import mongoose from "mongoose";
 
 import AUTH_TOKEN_TYPE from "../constants/auth-token-type.js";
+import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
+import COMPANY_IMAGE_KIND from "../constants/company-image-kind.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
@@ -12,6 +14,7 @@ import AuthToken from "../models/auth-token.model.js";
 import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import User from "../models/user.model.js";
+import { uploadFileBuffer } from "./file.service.js";
 import sendMail from "./mail.service.js";
 import AppError from "../utils/app-error.js";
 import buildCompanyApprovalConfirmationEmail from "../utils/company-approval-confirmation-email.js";
@@ -40,6 +43,46 @@ const ACTIVE_PROFILE_FIELDS = Object.freeze([
   "description",
   "contactInfo",
 ]);
+
+const COMPANY_IMAGE_FOLDER_BY_KIND = Object.freeze({
+  [COMPANY_IMAGE_KIND.LOGO]: CLOUDINARY_FOLDER.COMPANY_LOGOS,
+  [COMPANY_IMAGE_KIND.BANNER]: CLOUDINARY_FOLDER.COMPANY_BANNERS,
+});
+
+// Upload returns a public image URL for the caller to persist on logoUrl /
+// bannerUrl through the existing draft or active profile PATCH. It does not
+// mutate Company by itself.
+const uploadOwnedCompanyImage = async ({ kind, file }) => {
+  const assetFolder = COMPANY_IMAGE_FOLDER_BY_KIND[kind];
+
+  if (!assetFolder) {
+    throw new AppError(400, "Invalid company image kind", {
+      field: "kind",
+    });
+  }
+
+  if (!file?.buffer) {
+    throw new AppError(400, "File is required", {
+      field: "file",
+    });
+  }
+
+  const uploadedFile = await uploadFileBuffer({
+    buffer: file.buffer,
+    assetFolder,
+    resourceType: "image",
+  });
+
+  return {
+    kind,
+    url: uploadedFile.secureUrl,
+    publicId: uploadedFile.publicId,
+    bytes: uploadedFile.bytes,
+    width: uploadedFile.width,
+    height: uploadedFile.height,
+    format: uploadedFile.format,
+  };
+};
 
 const toPublicCompany = (company, managerUserId) => {
   return {
@@ -938,4 +981,5 @@ export {
   toPublicCompany,
   updateOwnedCompanyActiveProfile,
   updateOwnedCompanyDraft,
+  uploadOwnedCompanyImage,
 };

@@ -59,6 +59,7 @@ Reading rules:
 ## Frontend
 
 - [V1 — Authentication foundation](frontend/v01-authentication-foundation.md)
+- [V2 — Company onboarding](frontend/v02-company-onboarding.md)
 
 ## AI Kit
 

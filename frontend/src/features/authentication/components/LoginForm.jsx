@@ -6,13 +6,26 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { useAppDispatch } from '@/store/hooks'
-import { API_ERROR_MESSAGE, USER_STATUS } from '@/utils/constant'
+import { API_ERROR_MESSAGE, USER_ROLE, USER_STATUS } from '@/utils/constant'
 import { loginSchema, zodResolver } from '@/validation'
 
 import { loginThunk } from '../services/authentication-thunks'
 import { AuthFormField, PasswordVisibilityToggle } from './AuthFormFields'
 
 const LOGIN_FIELDS = ['email', 'password']
+
+function toPostLoginDestination(user) {
+  // V02 BR-21: a PENDING_ACTIVATION Company Manager only has an onboarding session.
+  if (user?.status === USER_STATUS.PENDING_ACTIVATION) {
+    return '/onboarding/company'
+  }
+
+  if (user?.role === USER_ROLE.PLATFORM_ADMIN) {
+    return '/admin'
+  }
+
+  return '/'
+}
 
 function getLoginRejectionMessage(error) {
   const field = error.details?.field
@@ -67,12 +80,7 @@ function LoginForm({ defaultEmail = '' }) {
 
     toast.success('Đăng nhập thành công.')
 
-    // V02 BR-21: a PENDING_ACTIVATION Company Manager only has an onboarding session.
-    const destination =
-      authentication.user?.status === USER_STATUS.PENDING_ACTIVATION
-        ? '/onboarding/company'
-        : '/'
-    navigate(destination, { replace: true })
+    navigate(toPostLoginDestination(authentication.user), { replace: true })
   }
 
   return (

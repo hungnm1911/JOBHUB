@@ -73,6 +73,15 @@ async function refreshAccessApi(refreshToken) {
   return response.data
 }
 
+async function confirmCompanyApprovalApi({ token }) {
+  const response = await apiClient.post(
+    '/auth/confirm-company-approval',
+    { token },
+    PUBLIC_AUTH_REQUEST,
+  )
+  return response.data
+}
+
 async function logoutApi() {
   const response = await apiClient.post('/auth/logout', undefined, {
     requiresAuthentication: true,
@@ -81,6 +90,7 @@ async function logoutApi() {
 }
 
 export {
+  confirmCompanyApprovalApi,
   forgotPasswordApi,
   loginApi,
   logoutApi,

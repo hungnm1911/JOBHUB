@@ -94,3 +94,13 @@ The HTTP client, API error normalizer, socket client, common validators, and
   the invalid-link state from the real `400`; the success state was checked
   with a simulated `200` response in the browser. A real verification link was
   not consumed end to end.
+
+- Cross-tab authentication sync (2026-10-19): fixes a stale-tab defect where a
+  tab kept the previous user's Redux state while requests used the newer
+  account's shared `localStorage` access token (seen as a Platform Admin
+  screen receiving `403`). `synchronizeExternalChange` mirrors another tab's
+  account switch, refresh, or logout. `cd frontend && yarn verify:agent`
+  passed 13 focused tests (new cross-tab test), ESLint, and the Vite build. In
+  the browser, a simulated `storage` logout moved the admin tab to `/login`,
+  and restoring the credential re-authenticated it. Two real tabs were not
+  exercised.

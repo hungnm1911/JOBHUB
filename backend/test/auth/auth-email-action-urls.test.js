@@ -20,15 +20,6 @@ describe("auth email action URLs", () => {
       `${config.appBaseUrl}/api/auth/activate-recruiter?token=abc123`,
     );
 
-    const confirmation = buildCompanyApprovalConfirmationEmail({
-      fullName: "Chris",
-      companyName: "Acme",
-      rawToken,
-    });
-    expect(confirmation.html).toContain(
-      `${config.appBaseUrl}/api/auth/confirm-company-approval?token=abc123`,
-    );
-
     const activation = buildRecruiterActivationEmail({
       fullName: "Riley",
       companyName: "Acme",
@@ -72,6 +63,18 @@ describe("auth email action URLs", () => {
 
     expect(buildFrontendActionUrl("verify-email", rawToken)).toBe(
       `${config.frontendBaseUrl}/verify-email?token=abc123`,
+    );
+
+    const confirmation = buildCompanyApprovalConfirmationEmail({
+      fullName: "Chris",
+      companyName: "Acme",
+      rawToken,
+    });
+    expect(confirmation.html).toContain(
+      `${config.frontendBaseUrl}/confirm-company-approval?token=abc123`,
+    );
+    expect(confirmation.text).toContain(
+      `${config.frontendBaseUrl}/confirm-company-approval?token=abc123`,
     );
     expect(
       buildFrontendActionUrlFromBase(

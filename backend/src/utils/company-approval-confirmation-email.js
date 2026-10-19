@@ -1,11 +1,11 @@
-import buildAuthActionUrl from "./auth-action-url.js";
+import { buildFrontendActionUrl } from "./auth-action-url.js";
 
 const buildCompanyApprovalConfirmationEmail = ({
   fullName,
   companyName,
   rawToken,
 }) => {
-  const confirmationUrl = buildAuthActionUrl(
+  const confirmationUrl = buildFrontendActionUrl(
     "confirm-company-approval",
     rawToken,
   );

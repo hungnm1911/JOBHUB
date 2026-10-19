@@ -30,6 +30,8 @@
   --hero: oklch(0.26 0.11 264);
   --hero-foreground: oklch(0.985 0.004 247.858);
   --hero-muted: oklch(0.8 0.04 260);
+  --warning: oklch(0.666 0.179 58.318);
+  --warning-foreground: oklch(0.414 0.112 45.904);
 }
 
 @theme inline {
@@ -58,6 +60,8 @@
   --color-hero: var(--hero);
   --color-hero-foreground: var(--hero-foreground);
   --color-hero-muted: var(--hero-muted);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
 }
 
 @layer base {
