@@ -45,7 +45,10 @@ describe("Gemini client adapter", () => {
       response,
     );
     expect(GoogleGenAI).toHaveBeenCalledOnce();
-    expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: "test-api-key" });
+    expect(GoogleGenAI).toHaveBeenCalledWith({
+      apiKey: "test-api-key",
+      httpOptions: { retryOptions: { attempts: 1 } },
+    });
     expect(generateContentMock).toHaveBeenCalledOnce();
     expect(generateContentMock).toHaveBeenCalledWith({
       model: "test-model",

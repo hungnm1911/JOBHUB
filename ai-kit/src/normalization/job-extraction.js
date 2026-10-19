@@ -247,156 +247,39 @@ const normalizeEvidenceText = (value) => {
     .replace(/\s+/g, " ");
 };
 
-const asEvidenceTexts = (value) => {
-  return Array.isArray(value) ? value.map(String) : [String(value)];
+const STRUCTURED_ENUM_POINTER = /^\/(?:employmentType|workModes\/\d+)$/;
+const REQUIRED_SKILL_POINTER = /^\/requiredSkills\/\d+$/;
+const ENUM_CLAIM_KINDS = new Set(["employmentType", "workMode"]);
+const ENUM_CONFLICT_SUBJECTS = new Set(["employmentType", "workModes"]);
+
+const requirementCarriesSkill = (skill, requirementName) => {
+  const normalizedSkill = normalizeEvidenceText(skill);
+
+  return normalizedSkill.length > 0
+    && ` ${normalizeEvidenceText(requirementName)} `.includes(` ${normalizedSkill} `);
 };
 
-const textSupportsClaim = (sourceValue, claimValue) => {
-  const claim = normalizeEvidenceText(claimValue);
-
-  if (claim.length === 0) {
+// Field-level pointers prove provenance only. Whether free text semantically
+// supports a claim (priority, experience scope, negation, paraphrase) cannot be
+// decided deterministically here and remains an extraction-quality concern.
+const sourceSupportsClaim = ({ kind, item, subject }, sourceValue, pointer) => {
+  if (pointer === "/title"
+    && (kind === "requirement" || kind === "minimumExperienceYears")) {
     return false;
   }
 
-  return asEvidenceTexts(sourceValue).some((sourcePart) => {
-    const source = normalizeEvidenceText(sourcePart);
+  const isEnumClaim = ENUM_CLAIM_KINDS.has(kind)
+    || (kind === "conflict" && ENUM_CONFLICT_SUBJECTS.has(subject));
 
-    if (source.includes(claim)) {
-      return true;
-    }
-
-    const tokens = claim.split(" ").filter((token) => token.length >= 2);
-
-    return tokens.length > 0 && tokens.every((token) => source.includes(token));
-  });
-};
-
-const sourceSupportsEnum = (sourceValue, claimValue, termMap) => {
-  return asEvidenceTexts(sourceValue).some((sourcePart) => {
-    const source = normalizeEvidenceText(sourcePart);
-
-    return source === normalizeEvidenceText(claimValue)
-      || (termMap[claimValue] ?? []).some((term) => source.includes(term));
-  });
-};
-
-const sourceSupportsExperienceYears = (sourceValue, claimValue) => {
-  if (typeof sourceValue === "number") {
-    return sourceValue === claimValue;
+  if (isEnumClaim && STRUCTURED_ENUM_POINTER.test(pointer)) {
+    return sourceValue === item.value;
   }
 
-  const source = normalizeEvidenceText(sourceValue);
-
-  if (claimValue === 0
-    && /(khong yeu cau|no)\s+(?:[^. ]+\s+){0,2}(kinh nghiem|experience)/.test(source)) {
-    return true;
+  if (kind === "requirement" && REQUIRED_SKILL_POINTER.test(pointer)) {
+    return requirementCarriesSkill(sourceValue, item.name);
   }
 
-  const yearMatches = [...source.matchAll(
-    /(\d+(?:[.,]\d+)?)\s*(?:\+|\s*-\s*\d+(?:[.,]\d+)?)?\s*(?:nam|year|years)\b/g,
-  )];
-  const monthMatches = [...source.matchAll(
-    /(\d+(?:[.,]\d+)?)\s*(?:thang|month|months)\b/g,
-  )];
-
-  return yearMatches.some(([, years]) => Number(years.replace(",", ".")) === claimValue)
-    || monthMatches.some(([, months]) => Number(months.replace(",", ".")) / 12 === claimValue);
-};
-
-const sourceSupportsClaim = ({ kind, item, subject }, sourceValue, pointer) => {
-  if (kind === "requirement") {
-    return pointer !== "/title" && textSupportsClaim(sourceValue, item.name);
-  }
-
-  if (kind === "minimumExperienceYears") {
-    return pointer !== "/title"
-      && sourceSupportsExperienceYears(sourceValue, item.value);
-  }
-
-  if (kind === "employmentType") {
-    return sourceSupportsEnum(sourceValue, item.value, EMPLOYMENT_TYPE_TERMS);
-  }
-
-  if (kind === "workMode") {
-    return sourceSupportsEnum(sourceValue, item.value, WORK_MODE_TERMS);
-  }
-
-  if (kind === "conflict" && subject === "employmentType") {
-    return sourceSupportsEnum(sourceValue, item.value, EMPLOYMENT_TYPE_TERMS);
-  }
-
-  if (kind === "conflict" && subject === "workModes") {
-    return sourceSupportsEnum(sourceValue, item.value, WORK_MODE_TERMS);
-  }
-
-  return textSupportsClaim(sourceValue, item.value);
-};
-
-const priorityMarkersForClaim = (description, claimName) => {
-  const claimTokens = normalizeEvidenceText(claimName)
-    .split(" ")
-    .filter((token) => token.length >= 2);
-  const segments = String(description)
-    .split(/[;\n]+|\.(?=\s|$)/)
-    .map(normalizeEvidenceText)
-    .filter(Boolean);
-  const relevantSegments = segments.filter((segment) => {
-    const containsClaim = claimTokens.length > 0
-      && claimTokens.every((token) => segment.includes(token));
-
-    return containsClaim;
-  });
-  const context = relevantSegments.join(" ");
-  const underRequirementHeading = relevantSegments.some((segment) => {
-    const index = segments.indexOf(segment);
-    const previous = segments[index - 1];
-
-    return previous
-      && previous.split(" ").length <= 4
-      && /^(yeu cau|yeu cau ung vien|yeu cau cong viec|requirements?|qualifications?|must have)$/.test(previous);
-  });
-  const optional = /\b(uu tien|loi the|diem cong|nice to have|preferred|a plus|bonus)\b/.test(context);
-  const strongRequired = /\b(bat buoc|phai|toi thieu|must|required|must have)\b/.test(context);
-  const softRequired = /\b(yeu cau|can co|need|qualifications?)\b/.test(context);
-
-  return {
-    optional,
-    required: strongRequired
-      || (!optional && (softRequired || underRequirementHeading)),
-  };
-};
-
-const findPriorityIssues = (extraction, sourceDocument) => {
-  const issues = [];
-
-  extraction.requirements.forEach((requirement, index) => {
-    if (requirement.priority === null) {
-      return;
-    }
-
-    const markers = requirement.references
-      .filter((pointer) => pointer === "/jobDescription")
-      .map(() => priorityMarkersForClaim(
-        sourceDocument.jobDescription ?? "",
-        requirement.name,
-      ))
-      .reduce(
-        (combined, current) => ({
-          optional: combined.optional || current.optional,
-          required: combined.required || current.required,
-        }),
-        { optional: false, required: false },
-      );
-    const supported = requirement.priority === "REQUIRED"
-      ? markers.required
-      : markers.optional && !markers.required;
-
-    if (!supported) {
-      issues.push(`/requirements/${index}/priority is not supported by the cited Job content`);
-    }
-  });
-
-  return issues;
+  return true;
 };
 
 const findMentionedEnums = (description, termMap) => {
@@ -423,7 +306,7 @@ const findSourcePreservationIssues = (extraction, sourceDocument) => {
     const pointer = `/requiredSkills/${index}`;
     const preserved = extraction.requirements.some((requirement) => {
       return requirement.references.includes(pointer)
-        && textSupportsClaim(skill, requirement.name);
+        && requirementCarriesSkill(skill, requirement.name);
     });
 
     if (!preserved) {
@@ -540,7 +423,6 @@ const findReferenceAndEvidenceIssues = (extraction, sourceDocument) => {
 
   return [
     ...issues,
-    ...findPriorityIssues(extraction, sourceDocument),
     ...findSourcePreservationIssues(extraction, sourceDocument),
   ];
 };

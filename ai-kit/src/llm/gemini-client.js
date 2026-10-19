@@ -15,7 +15,11 @@ function createGeminiClient({ apiKey, model, logger }) {
   }
 
   const configuredModel = model.trim();
-  const sdkClient = new GoogleGenAI({ apiKey: apiKey.trim() });
+  // One HTTP attempt per call; provider recovery belongs to llm-fallback.js.
+  const sdkClient = new GoogleGenAI({
+    apiKey: apiKey.trim(),
+    httpOptions: { retryOptions: { attempts: 1 } },
+  });
 
   const generateContent = async ({ contents, config } = {}) => {
     try {

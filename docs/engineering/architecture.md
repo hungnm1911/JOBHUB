@@ -291,7 +291,9 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   `src/normalization/job-extraction.js`, turns a `JobRawInput` into a
   `JobExtractionResult` through input validation, provider-native structured
   output, canonical Draft 2020-12 validation, and deterministic
-  semantic/evidence checks. F01 consolidation into `JobMatchProfile`,
+  provenance/structured-evidence checks; field-level references do not prove
+  free-text semantic support, which is evaluated live rather than by keyword
+  matching. F01 consolidation into `JobMatchProfile`,
   READY/FAILED results, and all of F02 remain unimplemented, and nothing
   AI-V01-related is exported from the package root.
 - [`backend/src/services/ai-kit.service.js`](../../backend/src/services/ai-kit.service.js)

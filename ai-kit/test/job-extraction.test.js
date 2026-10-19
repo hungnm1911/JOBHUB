@@ -350,6 +350,97 @@ describe("Job extraction output acceptance", () => {
     }))).resolves.toEqual(extraction);
   });
 
+  it.each([
+    [
+      "a range minimum written as 'từ 2 đến 4 năm'",
+      "Yêu cầu từ 2 đến 4 năm kinh nghiệm phát triển frontend.",
+      {
+        requirements: [{
+          name: "từ 2 đến 4 năm kinh nghiệm phát triển frontend",
+          priority: "REQUIRED",
+          references: ["/jobDescription"],
+        }],
+        minimumExperienceYears: { value: 2, references: ["/jobDescription"] },
+      },
+    ],
+    [
+      "a minimum written in words",
+      "Bắt buộc có ít nhất hai năm kinh nghiệm làm việc.",
+      {
+        minimumExperienceYears: { value: 2, references: ["/jobDescription"] },
+      },
+    ],
+    [
+      "every bullet under a requirements heading as REQUIRED",
+      "Yêu cầu ứng viên:\n- Node.js\n- Docker",
+      {
+        requirements: [
+          { name: "Node.js", priority: "REQUIRED", references: ["/jobDescription"] },
+          { name: "Docker", priority: "REQUIRED", references: ["/jobDescription"] },
+        ],
+      },
+    ],
+  ])("accepts %s without lexical re-validation", async (_name, jobDescription, claims) => {
+    const extraction = { ...makeSparseExtraction(), ...claims };
+    const extractor = createJobExtractor({
+      gemini: createGemini(extraction),
+      logger: createLogger(),
+    });
+
+    await expect(extractor.extractJob(makeJobRawInput({
+      jobDescription,
+      requiredSkills: [],
+      employmentType: null,
+      workModes: [],
+    }))).resolves.toEqual(extraction);
+  });
+
+  it("accepts a qualified requirement merged with its structured skill tag", async () => {
+    const extraction = makeExtraction();
+    extraction.requirements[0] = {
+      name: "Thành thạo Node.js",
+      priority: "REQUIRED",
+      references: ["/requiredSkills/0", "/jobDescription"],
+    };
+    const extractor = createJobExtractor({
+      gemini: createGemini(extraction),
+      logger: createLogger(),
+    });
+
+    await expect(extractor.extractJob(makeJobRawInput({
+      jobDescription: "Bắt buộc thành thạo Node.js. Ưu tiên Docker. Làm việc từ xa.",
+    }))).resolves.toEqual(extraction);
+  });
+
+  it.each([
+    ["a requirement absent from the description", (extraction) => {
+      extraction.requirements[1] = {
+        name: "Kubernetes",
+        priority: null,
+        references: ["/jobDescription"],
+      };
+    }],
+    ["an experience minimum absent from the description", (extraction) => {
+      extraction.minimumExperienceYears = {
+        value: 5,
+        references: ["/jobDescription"],
+      };
+    }],
+    ["a priority the description does not state", (extraction) => {
+      extraction.requirements[1].priority = "REQUIRED";
+    }],
+  ])("does not certify free-text semantics for %s from a field-level pointer", async (_name, mutate) => {
+    const extraction = makeExtraction();
+    mutate(extraction);
+    const extractor = createJobExtractor({
+      gemini: createGemini(extraction),
+      logger: createLogger(),
+    });
+
+    await expect(extractor.extractJob(makeJobRawInput()))
+      .resolves.toEqual(extraction);
+  });
+
   it("rejects duplicate references instead of repairing schema-invalid output", async () => {
     const extraction = makeExtraction();
     extraction.requirements[0].references = [
@@ -512,25 +603,36 @@ describe("Job extraction output rejection", () => {
   });
 
   it.each([
-    ["a fabricated requirement", (extraction) => {
-      extraction.requirements[1] = {
-        name: "Kubernetes",
-        priority: null,
-        references: ["/jobDescription"],
-      };
-    }],
-    ["an inferred experience minimum", (extraction) => {
-      extraction.minimumExperienceYears = {
-        value: 5,
-        references: ["/jobDescription"],
-      };
-    }],
-    ["an unsupported REQUIRED priority", (extraction) => {
-      extraction.requirements[1].priority = "REQUIRED";
-    }],
-    ["an unrelated but non-empty pointer", (extraction) => {
+    ["a requirement cited only from the title", (extraction) => {
       extraction.requirements[1].references = ["/title"];
       extraction.requirements[1].priority = null;
+    }],
+    ["an experience minimum cited only from the title", (extraction) => {
+      extraction.minimumExperienceYears = {
+        value: 5,
+        references: ["/title"],
+      };
+    }],
+    ["a requirement that does not carry its cited skill tag", (extraction) => {
+      extraction.requirements[1].references = ["/requiredSkills/0", "/jobDescription"];
+    }],
+    ["a work-mode claim that differs from its cited structured value", (extraction) => {
+      extraction.conflictingClaims = [{
+        subject: "workModes",
+        claims: [
+          { value: "ONSITE", references: ["/workModes/0"] },
+          { value: "REMOTE", references: ["/jobDescription"] },
+        ],
+      }];
+    }],
+    ["an employment type that differs from its cited structured value", (extraction) => {
+      extraction.conflictingClaims = [{
+        subject: "employmentType",
+        claims: [
+          { value: "PART_TIME", references: ["/employmentType"] },
+          { value: "FULL_TIME", references: ["/employmentType"] },
+        ],
+      }];
     }],
   ])("rejects %s despite a resolving pointer", async (_name, mutate) => {
     const extraction = makeExtraction();

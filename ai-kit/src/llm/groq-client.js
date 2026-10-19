@@ -15,7 +15,8 @@ function createGroqClient({ apiKey, model, logger }) {
   }
 
   const configuredModel = model.trim();
-  const sdkClient = new Groq({ apiKey: apiKey.trim() });
+  // One HTTP attempt per call; provider recovery belongs to llm-fallback.js.
+  const sdkClient = new Groq({ apiKey: apiKey.trim(), maxRetries: 0 });
 
   const createChatCompletion = async ({ messages, ...options } = {}) => {
     try {

@@ -17,9 +17,13 @@
   structured output or Groq strict JSON Schema (`strict: true`), and calls
   Gemini with Groq fallback (or the single injected provider). It returns a
   `JobExtractionResult` only after response-completeness, JSON, canonical Draft
-  2020-12, JSON Pointer, claim-evidence, priority/experience, structured-source,
-  and conflict-preservation checks; otherwise it throws a coded
-  `JobExtractionError` or propagates the provider error.
+  2020-12, JSON Pointer provenance, structured-evidence (title-only, structured
+  enum value, structured skill tag), structured-source, and
+  conflict-preservation checks; otherwise it throws a coded
+  `JobExtractionError` or propagates the provider error. Field-level pointers
+  do not prove free-text semantic support, so priority, experience scope, and
+  wording alignment are not verified deterministically (acceptance finding H1,
+  resolved by approved option 1); they rely on the prompt and live evaluation.
   `src/normalization/v01-contract.js` is the sole production contract loader;
   `ajv` 8.20.0 moved from dev to production dependency (approved). Not
   exported from the package root and not used by Backend.
@@ -38,7 +42,9 @@
   `executeWithLlmFallback` orchestrator accepts provider call functions without
   unifying either adapter contract, preserves successful provider results, and
   performs at most one fallback attempt for HTTP 429/500/502/503/504 or a
-  structured response-free connection/timeout failure. The adapters and
+  structured response-free connection/timeout failure. Both adapters disable
+  SDK-level automatic retries, so a fallback-composed call sends at most one
+  Gemini and one Groq HTTP attempt. The adapters and
   fallback orchestrator are composed only inside the internal F01 Job
   extraction stage, not by `createAiKit`, so startup remains valid with neither, either, or both provider
   configurations. ESLint and Vitest remain aligned with the backend tooling,
@@ -100,6 +106,34 @@
   addressed.
 
 ## Verification status
+
+- 2026-10-19: Fail-fast provider HTTP attempts. Installed `@google/genai`
+  2.30.0 retries only when `httpOptions.retryOptions` is set (unset by the
+  adapter, so already one attempt); `groq-sdk` 1.6.0 defaulted to
+  `maxRetries: 2` (up to 3 HTTP attempts for 408/409/429/5xx/connection
+  failures). The Gemini adapter now pins `retryOptions.attempts: 1` and the
+  Groq adapter sets `maxRetries: 0`; fallback policy and extraction are
+  unchanged. New `test/llm-http-attempts.test.js` (19 tests) drives the real
+  SDKs through a stubbed `fetch`: Gemini 503/429 falls back to Groq after one
+  Gemini request, each provider receives exactly one request, ineligible
+  400/401/403 does not reach Groq, and API keys are absent from logs; with the
+  retry settings removed, 16 of its 19 tests failed. Focused adapter, fallback,
+  extraction, and new tests passed; `cd ai-kit && npm run verify:agent` passed
+  (ESLint and Vitest, 10 files / 170 tests). No live provider was called;
+  Backend verification was not rerun because no Backend integration changed.
+
+- 2026-10-19: AI-V01 Slice 01 acceptance finding H1 (evidence validator
+  accepted claims stronger than source evidence and rejected legitimate ones
+  through lexical heuristics). Approved option 1: removed keyword/token/number
+  claim-support and priority heuristics from `job-extraction.js`; kept pointer
+  provenance, title-only exclusion, structured enum equality, and structured
+  skill-tag preservation (now tag-in-requirement at token boundaries). Focused
+  `test/job-extraction.test.js` passed (53 tests; the 7 new acceptance
+  regressions failed before the fix); `cd ai-kit && npm run verify:agent`
+  passed (ESLint and Vitest, 9 files / 151 tests). No live re-evaluation was
+  run; prompt-level semantic quality is unchanged and unverified by this fix.
+  Description-derived enum preservation/conflict checks still use term
+  matching and were left out of H1 scope.
 
 - 2026-10-19: AI-V01 Slice 01 (F01 Job extraction stage). Offline: focused
   `test/job-extraction.test.js` + `test/v01-contract.test.js` passed (2 files

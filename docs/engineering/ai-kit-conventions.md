@@ -118,6 +118,10 @@ future capability.
   provider-boundary validation, and minimal provider failure logging. It must
   not own business prompts, matching/scoring rules, authorization, or
   persistence.
+- Each adapter call sends at most one HTTP attempt. Adapters disable SDK-level
+  automatic retries explicitly (Gemini `httpOptions.retryOptions.attempts: 1`;
+  Groq `maxRetries: 0`, whose SDK default is 2 retries) so provider recovery
+  stays owned by the fallback policy.
 - Provider-specific request and response shapes must not be declared a
   universal LLM contract merely to hide differences between SDKs.
 
@@ -176,10 +180,16 @@ content.
 An approved capability that consumes structured LLM output must validate that
 output before treating it as trusted data. The F01 Job extraction stage rejects
 provider refusals/incomplete responses, non-JSON output, canonical-schema
-violations, invalid or unresolved JSON Pointers, references that do not support
-their claims, unsupported experience/priority claims, dropped structured
-metadata, unpreserved enum conflicts, and duplicate equivalent requirements.
-It does not repair schema-invalid output or retry it. Consumers of AI-V01 must
+violations, invalid or unresolved JSON Pointers, requirement or experience
+claims cited only from the title, enum claims that differ from their cited
+structured value, requirements that do not carry their cited structured skill
+tag, dropped structured metadata, unpreserved enum conflicts, and duplicate
+equivalent requirements. It does not repair schema-invalid output or retry it.
+AI-V01 references are field-level JSON Pointers, which prove provenance but not
+semantic support: whether free text supports a claim's priority, experience
+scope, or wording is not decided by deterministic keyword, token, or number
+matching. That alignment (BR-AI-01/09) is owned by the extraction prompt and
+measured by reported live evaluation. Consumers of AI-V01 must
 reuse its contract rather than define a parallel profile or result shape. AI
 Kit must not invent one shared JSON schema for capabilities that do not yet
 have specifications.
@@ -219,7 +229,8 @@ have specifications.
   provider clients: input refusal, minimized prompt document, provider request
   shapes (including Gemini schema output and Groq strict JSON Schema), fallback
   composition, refusal/truncation, canonical-contract rejection,
-  semantic/evidence rejection, structured-source preservation, and logging
+  provenance/structured-evidence rejection, acceptance of legitimate claims
+  without lexical re-validation, structured-source preservation, and logging
   without Job content. Offline tests cannot measure extraction quality; that
   requires a separately reported live evaluation.
 - Local deterministic fixtures may exercise a real library, as the current

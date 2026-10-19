@@ -48,7 +48,10 @@ describe("Groq client adapter", () => {
       max_completion_tokens: 128,
     })).resolves.toBe(response);
     expect(Groq).toHaveBeenCalledOnce();
-    expect(Groq).toHaveBeenCalledWith({ apiKey: "test-groq-api-key" });
+    expect(Groq).toHaveBeenCalledWith({
+      apiKey: "test-groq-api-key",
+      maxRetries: 0,
+    });
     expect(createCompletionMock).toHaveBeenCalledOnce();
     expect(createCompletionMock).toHaveBeenCalledWith({
       model: "openai/gpt-oss-120b",
