@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url";
+
 let configuredApiKey;
 let providerErrorLogged = false;
 const REQUIRED_GROQ_MODEL = "openai/gpt-oss-120b";
@@ -33,11 +35,16 @@ const formatError = (error) => {
 };
 
 const smokeLogger = Object.freeze({
-  error: (message, { error, model } = {}) => {
+  error: (message, { error, ...metadata } = {}) => {
     providerErrorLogged = true;
+    const details = error === undefined ? "" : `: ${formatError(error)}`;
+
     console.error(
-      `${message}: ${formatError(error)} | model=${redactApiKey(model)}`,
+      redactApiKey(`${message}${details} | ${JSON.stringify(metadata)}`),
     );
+  },
+  info: (message, metadata = {}) => {
+    console.info(redactApiKey(`${message}: ${JSON.stringify(metadata)}`));
   },
 });
 
@@ -57,32 +64,37 @@ const requireSmokeConfiguration = (llm) => {
   }
 };
 
+const runBackendGroqSmoke = async ({ config, runGroqSmoke }) => {
+  const { groq } = config.aiKit.llm;
+
+  providerErrorLogged = false;
+  configuredApiKey = groq.apiKey;
+  requireSmokeConfiguration(groq);
+
+  return runGroqSmoke({
+    apiKey: groq.apiKey,
+    model: groq.model,
+    logger: smokeLogger,
+  });
+};
+
 const main = async () => {
   const [{ default: config }, { runGroqSmoke }] = await Promise.all([
     import("../src/config/index.js"),
     import("@jobhub/ai-kit/tooling/smoke-groq"),
   ]);
-  const { groq } = config.aiKit.llm;
 
-  configuredApiKey = groq.apiKey;
-  requireSmokeConfiguration(groq);
-
-  const result = await runGroqSmoke({
-    apiKey: groq.apiKey,
-    model: groq.model,
-    logger: smokeLogger,
-  });
-
-  console.log(
-    `Groq smoke test passed | model=${result.model}`
-      + ` | response=${JSON.stringify(result.responseText)}`,
-  );
+  await runBackendGroqSmoke({ config, runGroqSmoke });
 };
 
-main().catch((error) => {
-  if (!providerErrorLogged) {
-    console.error(`Groq smoke test failed: ${formatError(error)}`);
-  }
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    if (!providerErrorLogged) {
+      console.error(`Groq smoke test failed: ${formatError(error)}`);
+    }
 
-  process.exitCode = 1;
-});
+    process.exitCode = 1;
+  });
+}
+
+export { runBackendGroqSmoke };

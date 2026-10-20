@@ -312,6 +312,11 @@ const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:8000";
 // AI Kit:
 const aiKit = Object.freeze({
   llm: Object.freeze({
+    codex: Object.freeze({
+      apiKey: process.env.CCPRO_API_KEY?.trim() || undefined,
+      baseURL: process.env.CCPRO_BASE_URL?.trim() || undefined,
+      model: process.env.CCPRO_MODEL?.trim() || undefined,
+    }),
     gemini: Object.freeze({
       apiKey: process.env.GEMINI_API_KEY?.trim() || undefined,
       model: process.env.GEMINI_MODEL?.trim() || undefined,

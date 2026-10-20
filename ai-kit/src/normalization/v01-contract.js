@@ -9,6 +9,21 @@ const V01_CONTRACT = JSON.parse(
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 
 const PROVIDER_SCHEMA_KEYWORDS = Object.freeze({
+  codex: new Set([
+    "$defs",
+    "$ref",
+    "additionalProperties",
+    "anyOf",
+    "enum",
+    "items",
+    "maxItems",
+    "maximum",
+    "minItems",
+    "minimum",
+    "properties",
+    "required",
+    "type",
+  ]),
   gemini: new Set([
     "$defs",
     "$ref",
@@ -114,10 +129,10 @@ const projectSchemaNode = (schema, allowedKeywords) => {
   return projected;
 };
 
-const assertGroqStrictObjects = (schema, path = "#") => {
+const assertStrictProviderObjects = (schema, path = "#") => {
   if (Array.isArray(schema)) {
     schema.forEach((value, index) => {
-      assertGroqStrictObjects(value, `${path}/${index}`);
+      assertStrictProviderObjects(value, `${path}/${index}`);
     });
     return;
   }
@@ -133,13 +148,13 @@ const assertGroqStrictObjects = (schema, path = "#") => {
     if (schema.additionalProperties !== false
       || JSON.stringify(propertyNames) !== JSON.stringify(requiredNames)) {
       throw new TypeError(
-        `AI-V01 provider schema is not Groq-strict at ${path}`,
+        `AI-V01 provider schema is not strict at ${path}`,
       );
     }
   }
 
   for (const [keyword, value] of Object.entries(schema)) {
-    assertGroqStrictObjects(value, `${path}/${keyword}`);
+    assertStrictProviderObjects(value, `${path}/${keyword}`);
   }
 };
 
@@ -168,8 +183,8 @@ const buildV01ProviderSchema = (definitionName, provider) => {
     allowedKeywords,
   );
 
-  if (provider === "groq") {
-    assertGroqStrictObjects(projected);
+  if (["codex", "groq"].includes(provider)) {
+    assertStrictProviderObjects(projected);
   }
 
   return projected;

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { executeWithLlmFallback } from "../src/llm/llm-fallback.js";
+import {
+  executeWithLlmFallback,
+  executeWithLlmProviderChain,
+} from "../src/llm/llm-fallback.js";
 
 const createHttpError = (status, message = "provider request failed") => {
   return Object.assign(new Error(message), { status });
@@ -68,8 +71,8 @@ describe("LLM fallback orchestration", () => {
     expect(primary).toHaveBeenCalledOnce();
     expect(fallback).toHaveBeenCalledOnce();
     expect(logger.warn).toHaveBeenCalledWith(
-      "Primary LLM provider failed",
-      { status: null },
+      "LLM provider attempt failed",
+      { provider: "primary", attempt: 1, status: null },
     );
   });
 
@@ -100,8 +103,8 @@ describe("LLM fallback orchestration", () => {
 
     expect(result).toBe(fallbackResult);
     expect(logger.info).toHaveBeenCalledWith(
-      "LLM fallback succeeded",
-      { status: 503 },
+      "LLM provider fallback succeeded",
+      { provider: "fallback", attempt: 1 },
     );
   });
 
@@ -117,8 +120,8 @@ describe("LLM fallback orchestration", () => {
     })).rejects.toBe(fallbackError);
 
     expect(logger.error).toHaveBeenCalledWith(
-      "LLM fallback failed",
-      { fallbackStatus: 500, status: 429 },
+      "LLM provider chain failed",
+      { provider: "fallback", attempt: 1, status: 500 },
     );
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
       "fallback secret response",
@@ -185,5 +188,95 @@ describe("LLM fallback orchestration", () => {
     })).rejects.toBe(primaryError);
 
     expect(fallback).not.toHaveBeenCalled();
+  });
+});
+
+describe("LLM provider priority chain", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("retries Codex once before falling back to Gemini and leaves Groq unused", async () => {
+    const codex = vi.fn()
+      .mockRejectedValueOnce(createHttpError(503))
+      .mockRejectedValueOnce(createHttpError(503));
+    const geminiResult = { text: "Gemini result" };
+    const gemini = vi.fn().mockResolvedValue(geminiResult);
+    const groq = vi.fn();
+
+    await expect(executeWithLlmProviderChain({
+      providers: [
+        { name: "codex", execute: codex, maxAttempts: 2 },
+        { name: "gemini", execute: gemini, maxAttempts: 1 },
+        { name: "groq", execute: groq, maxAttempts: 1 },
+      ],
+      logger,
+    })).resolves.toBe(geminiResult);
+
+    expect(codex).toHaveBeenCalledTimes(2);
+    expect(gemini).toHaveBeenCalledOnce();
+    expect(groq).not.toHaveBeenCalled();
+  });
+
+  it("falls through Codex and Gemini to Groq in priority order", async () => {
+    const order = [];
+    const createFailure = (provider) => vi.fn(async () => {
+      order.push(provider);
+      throw createHttpError(503);
+    });
+    const codex = createFailure("codex");
+    const gemini = createFailure("gemini");
+    const groq = vi.fn(async () => {
+      order.push("groq");
+      return { choices: [] };
+    });
+
+    await executeWithLlmProviderChain({
+      providers: [
+        { name: "codex", execute: codex, maxAttempts: 2 },
+        { name: "gemini", execute: gemini, maxAttempts: 1 },
+        { name: "groq", execute: groq, maxAttempts: 1 },
+      ],
+      logger,
+    });
+
+    expect(order).toEqual(["codex", "codex", "gemini", "groq"]);
+  });
+
+  it("propagates a non-transient Codex failure without retry or fallback", async () => {
+    const providerError = createHttpError(400);
+    const codex = vi.fn().mockRejectedValue(providerError);
+    const gemini = vi.fn();
+
+    await expect(executeWithLlmProviderChain({
+      providers: [
+        { name: "codex", execute: codex, maxAttempts: 2 },
+        { name: "gemini", execute: gemini, maxAttempts: 1 },
+      ],
+      logger,
+    })).rejects.toBe(providerError);
+
+    expect(codex).toHaveBeenCalledOnce();
+    expect(gemini).not.toHaveBeenCalled();
+  });
+
+  it("propagates the final Groq failure after bounded attempts", async () => {
+    const finalError = createHttpError(503);
+    const codex = vi.fn().mockRejectedValue(createHttpError(503));
+    const gemini = vi.fn().mockRejectedValue(createHttpError(503));
+    const groq = vi.fn().mockRejectedValue(finalError);
+
+    await expect(executeWithLlmProviderChain({
+      providers: [
+        { name: "codex", execute: codex, maxAttempts: 2 },
+        { name: "gemini", execute: gemini, maxAttempts: 1 },
+        { name: "groq", execute: groq, maxAttempts: 1 },
+      ],
+      logger,
+    })).rejects.toBe(finalError);
+
+    expect(codex).toHaveBeenCalledTimes(2);
+    expect(gemini).toHaveBeenCalledOnce();
+    expect(groq).toHaveBeenCalledOnce();
   });
 });

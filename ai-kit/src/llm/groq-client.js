@@ -1,5 +1,7 @@
 import Groq from "groq-sdk";
 
+import { logProviderUsage } from "./provider-usage.js";
+
 const assertNonEmptyString = (value, fieldName) => {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new TypeError(`${fieldName} must be a non-empty string`);
@@ -10,8 +12,8 @@ function createGroqClient({ apiKey, model, logger }) {
   assertNonEmptyString(apiKey, "apiKey");
   assertNonEmptyString(model, "model");
 
-  if (!logger || typeof logger.error !== "function") {
-    throw new TypeError("logger must provide an error method");
+  if (!logger || ["error", "info"].some((method) => typeof logger[method] !== "function")) {
+    throw new TypeError("logger must provide error and info methods");
   }
 
   const configuredModel = model.trim();
@@ -20,11 +22,31 @@ function createGroqClient({ apiKey, model, logger }) {
 
   const createChatCompletion = async ({ messages, ...options } = {}) => {
     try {
-      return await sdkClient.chat.completions.create({
+      logger.info("AI provider API request started", {
+        provider: "groq",
+        model: configuredModel,
+        operation: "chat.completions.create",
+      });
+
+      const response = await sdkClient.chat.completions.create({
         ...options,
         model: configuredModel,
         messages,
       });
+
+      logProviderUsage({
+        logger,
+        provider: "groq",
+        model: configuredModel,
+        usage: {
+          inputTokens: response?.usage?.prompt_tokens,
+          outputTokens: response?.usage?.completion_tokens,
+          totalTokens: response?.usage?.total_tokens,
+          cachedTokens: response?.usage?.prompt_tokens_details?.cached_tokens,
+        },
+      });
+
+      return response;
     } catch (error) {
       logger.error("Groq createChatCompletion failed", {
         error,

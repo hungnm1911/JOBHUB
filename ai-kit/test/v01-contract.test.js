@@ -920,7 +920,7 @@ describe("AI-V01 runtime contract loader", () => {
       .toThrow("Unknown AI-V01 contract definition: BlockedResult");
   });
 
-  it.each(["gemini", "groq"])(
+  it.each(["codex", "gemini", "groq"])(
     "derives the %s extraction schema from the canonical definition",
     (provider) => {
       const schema = buildV01ProviderSchema("JobExtractionResult", provider);
@@ -939,8 +939,10 @@ describe("AI-V01 runtime contract loader", () => {
     },
   );
 
-  it("makes every Groq object closed with all properties required", () => {
-    const schema = buildV01ProviderSchema("JobExtractionResult", "groq");
+  it.each(["codex", "groq"])(
+    "makes every %s object closed with all properties required",
+    (provider) => {
+      const schema = buildV01ProviderSchema("JobExtractionResult", provider);
     const visit = (value) => {
       if (Array.isArray(value)) {
         value.forEach(visit);
@@ -961,7 +963,8 @@ describe("AI-V01 runtime contract loader", () => {
     };
 
     visit(schema);
-  });
+    },
+  );
 
   it("rejects an unknown structured-output provider", () => {
     expect(() => buildV01ProviderSchema("JobExtractionResult", "json-mode"))

@@ -1,235 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createJobExtractor } from "../src/normalization/job-extraction.js";
-
-// Expected outcomes are human-labeled for each source Job. The grader compares
-// an extraction against those labels only; it never reads the Job description,
-// so it measures semantic completeness without re-deriving it from free text.
-const EVALUATION_CASES = Object.freeze({
-  requiredOptionalResidual: {
-    input: {
-      jobId: "job-eval-1",
-      title: "Backend Developer",
-      jobDescription: [
-        "Yêu cầu ứng viên:",
-        "- Tối thiểu 2 năm kinh nghiệm phát triển backend.",
-        "- Thành thạo Node.js.",
-        "- Ưu tiên ứng viên biết Docker.",
-        "Team đang sử dụng Kubernetes.",
-        "Phát triển hệ thống thanh toán cho mảng fintech.",
-      ].join("\n"),
-      requiredSkills: ["Node.js"],
-      fieldCategoryIds: [],
-      positionCategoryIds: [],
-      experienceLevelId: null,
-      employmentType: "FULL_TIME",
-      workModes: ["REMOTE"],
-      location: null,
-    },
-    expected: {
-      requirements: [
-        {
-          label: "Node.js",
-          anyOf: ["node.js"],
-          priority: "REQUIRED",
-          references: ["/requiredSkills/0", "/jobDescription"],
-        },
-        {
-          label: "Docker",
-          anyOf: ["docker"],
-          priority: "OPTIONAL",
-          references: ["/jobDescription"],
-        },
-        {
-          label: "2 years backend experience",
-          anyOf: ["2 nam kinh nghiem"],
-          priority: "REQUIRED",
-          references: ["/jobDescription"],
-        },
-      ],
-      minimumExperienceYears: 2,
-      conflicts: [],
-      uncertainClaims: [],
-      residualClaims: [
-        { label: "Kubernetes environment", anyOf: ["kubernetes"] },
-        { label: "fintech domain", anyOf: ["fintech", "thanh toan"] },
-      ],
-    },
-    reference: {
-      requirements: [
-        {
-          name: "Thành thạo Node.js",
-          priority: "REQUIRED",
-          references: ["/requiredSkills/0", "/jobDescription"],
-        },
-        {
-          name: "Docker",
-          priority: "OPTIONAL",
-          references: ["/jobDescription"],
-        },
-        {
-          name: "Tối thiểu 2 năm kinh nghiệm phát triển backend",
-          priority: "REQUIRED",
-          references: ["/jobDescription"],
-        },
-      ],
-      minimumExperienceYears: { value: 2, references: ["/jobDescription"] },
-      employmentType: { value: "FULL_TIME", references: ["/employmentType"] },
-      workModes: [{ value: "REMOTE", references: ["/workModes/0"] }],
-      residualClaims: [
-        { value: "Team đang sử dụng Kubernetes", references: ["/jobDescription"] },
-        {
-          value: "Phát triển hệ thống thanh toán cho mảng fintech",
-          references: ["/jobDescription"],
-        },
-      ],
-      uncertainClaims: [],
-      conflictingClaims: [],
-    },
-  },
-  ambiguityAndConflict: {
-    input: {
-      jobId: "job-eval-2",
-      title: "Data Engineer",
-      jobDescription: [
-        "Công việc: xây dựng API cho hệ thống bán lẻ.",
-        "Kỹ năng: SQL.",
-        "Có kinh nghiệm làm việc với hệ thống lớn.",
-        "Yêu cầu tối thiểu 1 năm kinh nghiệm.",
-        "Yêu cầu tối thiểu 3 năm kinh nghiệm.",
-      ].join("\n"),
-      requiredSkills: [],
-      fieldCategoryIds: [],
-      positionCategoryIds: [],
-      experienceLevelId: null,
-      employmentType: null,
-      workModes: [],
-      location: null,
-    },
-    expected: {
-      requirements: [
-        {
-          label: "SQL",
-          anyOf: ["sql"],
-          priority: null,
-          references: ["/jobDescription"],
-        },
-      ],
-      minimumExperienceYears: null,
-      conflicts: [
-        { label: "minimum experience", claims: [["1 nam"], ["3 nam"]] },
-      ],
-      uncertainClaims: [
-        { label: "vague experience", anyOf: ["he thong lon"] },
-      ],
-      residualClaims: [
-        { label: "API responsibility", anyOf: ["api"] },
-      ],
-    },
-    reference: {
-      requirements: [
-        { name: "SQL", priority: null, references: ["/jobDescription"] },
-      ],
-      minimumExperienceYears: null,
-      employmentType: null,
-      workModes: [],
-      residualClaims: [
-        {
-          value: "Xây dựng API cho hệ thống bán lẻ",
-          references: ["/jobDescription"],
-        },
-      ],
-      uncertainClaims: [
-        {
-          value: "Có kinh nghiệm làm việc với hệ thống lớn",
-          references: ["/jobDescription"],
-        },
-      ],
-      conflictingClaims: [{
-        subject: "minimumExperienceYears",
-        claims: [
-          { value: "Tối thiểu 1 năm kinh nghiệm", references: ["/jobDescription"] },
-          { value: "Tối thiểu 3 năm kinh nghiệm", references: ["/jobDescription"] },
-        ],
-      }],
-    },
-  },
-});
-
-const normalizeLabelText = (value) => {
-  return String(value)
-    .normalize("NFKD")
-    .replaceAll("đ", "d")
-    .replaceAll("Đ", "D")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-};
-
-const matchesLabel = (text, anyOf) => {
-  const normalized = normalizeLabelText(text);
-
-  return anyOf.some((phrase) => normalized.includes(phrase));
-};
-
-const gradeJobExtraction = (extraction, expected) => {
-  const issues = [];
-
-  expected.requirements.forEach(({ label, anyOf, priority, references }) => {
-    const requirement = extraction.requirements
-      .find(({ name }) => matchesLabel(name, anyOf));
-
-    if (!requirement) {
-      issues.push(`missing requirement: ${label}`);
-      return;
-    }
-
-    if (requirement.priority !== priority) {
-      issues.push(
-        `priority of ${label}: expected ${priority}, got ${requirement.priority}`,
-      );
-    }
-
-    references
-      .filter((pointer) => !requirement.references.includes(pointer))
-      .forEach((pointer) => {
-        issues.push(`requirement ${label} lost reference ${pointer}`);
-      });
-  });
-
-  const minimumExperienceYears = extraction.minimumExperienceYears?.value ?? null;
-
-  if (minimumExperienceYears !== expected.minimumExperienceYears) {
-    issues.push(
-      `minimumExperienceYears: expected ${expected.minimumExperienceYears}, got ${minimumExperienceYears}`,
-    );
-  }
-
-  expected.conflicts.forEach(({ label, claims }) => {
-    const preserved = extraction.conflictingClaims.some((conflict) => {
-      return claims.every((anyOf) => {
-        return conflict.claims.some(({ value }) => matchesLabel(value, anyOf));
-      });
-    });
-
-    if (!preserved) {
-      issues.push(`missing conflict: ${label}`);
-    }
-  });
-
-  [
-    ["uncertain claim", expected.uncertainClaims, extraction.uncertainClaims],
-    ["residual claim", expected.residualClaims, extraction.residualClaims],
-  ].forEach(([kind, expectedClaims, actualClaims]) => {
-    expectedClaims.forEach(({ label, anyOf }) => {
-      if (!actualClaims.some(({ value }) => matchesLabel(value, anyOf))) {
-        issues.push(`missing ${kind}: ${label}`);
-      }
-    });
-  });
-
-  return issues;
-};
+import {
+  EVALUATION_CASES,
+  gradeJobExtraction,
+} from "./support/job-extraction-evaluation.js";
 
 const extractWithMockedOutput = (input, extraction) => {
   const extractor = createJobExtractor({
@@ -284,9 +59,50 @@ describe("Job extraction semantic evaluation ledger", () => {
     ["a residual claim omitted", "requiredOptionalResidual", (extraction) => {
       extraction.residualClaims.splice(1, 1);
     }, "missing residual claim: fintech domain"],
-    ["the description reference lost when merging a skill tag", "requiredOptionalResidual", (extraction) => {
-      extraction.requirements[0].references = ["/requiredSkills/0"];
-    }, "requirement Node.js lost reference /jobDescription"],
+    ["a skill-tag association lost", "requiredOptionalResidual", (extraction) => {
+      extraction.requirements[0].references = ["/jobDescription"];
+    }, "requirement Node.js lost reference /requiredSkills/0"],
+    ["a lexical employment-type false positive", "lexicalTrapsWithoutMetadata", (extraction) => {
+      extraction.employmentType = { value: "INTERNSHIP", references: ["/jobDescription"] };
+    }, "employmentType: expected null, got INTERNSHIP"],
+    ["a lexical work-mode false positive", "lexicalTrapsWithoutMetadata", (extraction) => {
+      extraction.workModes = [{ value: "HYBRID", references: ["/jobDescription"] }];
+    }, "workModes: expected [], got [HYBRID]"],
+    ["a negated work mode mapped as stated", "lexicalTrapsWithStructuredType", (extraction) => {
+      extraction.workModes.push({ value: "REMOTE", references: ["/jobDescription"] });
+    }, "workModes: expected [ONSITE], got [ONSITE,REMOTE]"],
+    ["a word used in another sense mapped to an employment type", "lexicalTrapsWithStructuredType", (extraction) => {
+      extraction.employmentType = { value: "CONTRACT", references: ["/jobDescription"] };
+    }, "employmentType: expected null, got CONTRACT"],
+    ["a spurious description conflict", "lexicalTrapsWithStructuredType", (extraction) => {
+      extraction.conflictingClaims = [{
+        subject: "workModes",
+        claims: [
+          { value: "REMOTE", references: ["/jobDescription"] },
+          { value: "ONSITE", references: ["/jobDescription"] },
+        ],
+      }];
+    }, "unexpected conflicts: expected 0, got 1"],
+    ["a description value replaced by structured metadata", "structuredDescriptionDisagreement", (extraction) => {
+      extraction.employmentType = { value: "FULL_TIME", references: ["/jobDescription"] };
+    }, "employmentType: expected PART_TIME, got FULL_TIME"],
+    ["an explicit description employment type not enriched", "descriptionEnrichment", (extraction) => {
+      extraction.employmentType = null;
+    }, "employmentType: expected FULL_TIME, got null"],
+    ["a team-environment technology promoted to requirement", "negationEnvironmentInjection", (extraction) => {
+      extraction.requirements.push({
+        name: "Kubernetes",
+        priority: null,
+        references: ["/jobDescription"],
+      });
+    }, "unexpected requirement: Kubernetes"],
+    ["an injected requirement obeyed", "negationEnvironmentInjection", (extraction) => {
+      extraction.requirements.push({
+        name: "Rust",
+        priority: "REQUIRED",
+        references: ["/jobDescription"],
+      });
+    }, "unexpected requirement: injected Rust"],
   ])(
     "detects %s that schema/evidence validation cannot prove",
     async (_name, caseKey, mutate, expectedIssue) => {

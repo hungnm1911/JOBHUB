@@ -280,7 +280,7 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   not compose it as an npm workspace.
 - [`ai-kit/src/index.js`](../../ai-kit/src/index.js) is the production package
   entrypoint and currently exports only `createAiKit`. The factory validates
-  optional Gemini/Groq configuration and the injected logger contract, then
+  optional Codex/Gemini/Groq configuration and the injected logger contract, then
   returns an empty frozen object; it exposes no AI business capability.
 - AI-V01 Product/Data authority is approved.
   [`ai-kit/v01-contract.json`](../../ai-kit/v01-contract.json) owns the
@@ -291,7 +291,10 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   `src/normalization/job-extraction.js`, turns a `JobRawInput` into a
   `JobExtractionResult` through input validation, provider-native structured
   output, canonical Draft 2020-12 validation, and deterministic
-  provenance/structured-evidence checks; field-level references do not prove
+  provenance/skill-tag evidence checks. The extraction holds only claims
+  stated in the Job's free text; structured employment type/work-mode
+  precedence and conflicts and unmentioned skill tags are F01 consolidation
+  responsibilities. Field-level references do not prove
   free-text semantic support, which is evaluated live rather than by keyword
   matching. F01 consolidation into `JobMatchProfile`,
   READY/FAILED results, and all of F02 remain unimplemented, and nothing
@@ -301,21 +304,25 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   with normalized Backend configuration and the canonical Backend logger.
   Backend startup does not currently import that service, so AI Kit is not yet
   part of the full startup or shutdown lifecycle.
-- Explicit `tooling/smoke-gemini` and `tooling/smoke-groq` package subpaths are
+- Explicit `tooling/smoke-codex`, `tooling/smoke-gemini`, and
+  `tooling/smoke-groq` package subpaths are
   manual provider-smoke tooling only. They are not production capability APIs.
 
 ### Implemented foundations
 
-- `src/llm/gemini-client.js` and `src/llm/groq-client.js` are internal,
-  provider-specific adapters and the only direct consumers of `@google/genai`
-  and `groq-sdk`, respectively. Manual live smoke tests have verified Gemini
-  with `gemini-3.8-flash` and Groq with `openai/gpt-oss-120b`.
-- `src/llm/llm-fallback.js` implements one primary attempt followed by at most
-  one fallback attempt. Fallback is eligible only for HTTP 429, 500, 502, 503,
+- `src/llm/codex-client.js`, `src/llm/gemini-client.js`, and
+  `src/llm/groq-client.js` are internal, provider-specific adapters and the
+  only direct consumers of `openai`, `@google/genai`, and `groq-sdk`,
+  respectively. Manual live smoke tests have verified Codex through the
+  compatible endpoint with `gpt-5.6-sol`, Gemini with `gemini-3.8-flash`, and
+  Groq with `openai/gpt-oss-120b`.
+- `src/llm/llm-fallback.js` implements the Job extraction priority chain:
+  Codex receives at most two attempts, then Gemini and Groq receive at most one
+  attempt each. Retry or fallback is eligible only for HTTP 429, 500, 502, 503,
   or 504, or a recognized connection/timeout failure with no HTTP response.
   Authentication, configuration, request-validation, and programming failures
   are not eligible. This utility is not exported; its only composition is the
-  internal F01 Job extraction stage (Gemini primary, Groq fallback), so
+  internal F01 Job extraction stage, so
   fallback is not automatic for AI Kit calls.
 - `src/document/pdf-text-extractor.js` is the sole direct `scribe.js-ocr`
   consumer. It extracts PDF text, invokes Scribe OCR when `requiresOCR` is set,

@@ -131,38 +131,100 @@ const assertLogger = (logger) => {
   }
 };
 
+const assertProviderChain = (providers) => {
+  if (!Array.isArray(providers) || providers.length === 0) {
+    throw new TypeError("providers must be a non-empty array");
+  }
+
+  providers.forEach((provider, index) => {
+    if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
+      throw new TypeError(`providers[${index}] must be an object`);
+    }
+
+    if (typeof provider.name !== "string" || provider.name.trim().length === 0) {
+      throw new TypeError(`providers[${index}].name must be a non-empty string`);
+    }
+
+    assertFunction(provider.execute, `providers[${index}].execute`);
+
+    if (!Number.isInteger(provider.maxAttempts) || provider.maxAttempts < 1) {
+      throw new TypeError(`providers[${index}].maxAttempts must be a positive integer`);
+    }
+  });
+};
+
+async function executeWithLlmProviderChain({ providers, logger } = {}) {
+  assertProviderChain(providers);
+  assertLogger(logger);
+
+  for (let providerIndex = 0; providerIndex < providers.length; providerIndex += 1) {
+    const provider = providers[providerIndex];
+
+    for (let attempt = 1; attempt <= provider.maxAttempts; attempt += 1) {
+      try {
+        const result = await provider.execute();
+
+        if (providerIndex > 0) {
+          logger.info("LLM provider fallback succeeded", {
+            provider: provider.name,
+            attempt,
+          });
+        }
+
+        return result;
+      } catch (error) {
+        const { shouldFallback, status } = classifyPrimaryFailure(error);
+        const canRetry = shouldFallback && attempt < provider.maxAttempts;
+        const fallback = providers[providerIndex + 1];
+
+        logger.warn("LLM provider attempt failed", {
+          provider: provider.name,
+          attempt,
+          status,
+        });
+
+        if (canRetry) {
+          logger.info("LLM provider retry attempted", {
+            provider: provider.name,
+            nextAttempt: attempt + 1,
+            status,
+          });
+          continue;
+        }
+
+        if (shouldFallback && fallback) {
+          logger.info("LLM provider fallback attempted", {
+            fromProvider: provider.name,
+            toProvider: fallback.name,
+            status,
+          });
+          break;
+        }
+
+        logger.error("LLM provider chain failed", {
+          provider: provider.name,
+          attempt,
+          status,
+        });
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("LLM provider chain exhausted without a result");
+}
+
 async function executeWithLlmFallback({ primary, fallback, logger } = {}) {
   assertFunction(primary, "primary");
   assertFunction(fallback, "fallback");
-  assertLogger(logger);
 
-  try {
-    return await primary();
-  } catch (primaryError) {
-    const { shouldFallback, status } = classifyPrimaryFailure(primaryError);
-
-    logger.warn("Primary LLM provider failed", { status });
-
-    if (!shouldFallback) {
-      throw primaryError;
-    }
-
-    logger.info("LLM fallback attempted", { status });
-
-    try {
-      const result = await fallback();
-
-      logger.info("LLM fallback succeeded", { status });
-
-      return result;
-    } catch (fallbackError) {
-      const fallbackStatus = getHttpStatus(getErrorChain(fallbackError)) ?? null;
-
-      logger.error("LLM fallback failed", { fallbackStatus, status });
-
-      throw fallbackError;
-    }
-  }
+  return executeWithLlmProviderChain({
+    providers: [
+      { name: "primary", execute: primary, maxAttempts: 1 },
+      { name: "fallback", execute: fallback, maxAttempts: 1 },
+    ],
+    logger,
+  });
 }
 
-export { executeWithLlmFallback };
+export { executeWithLlmFallback, executeWithLlmProviderChain };

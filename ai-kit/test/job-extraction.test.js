@@ -44,14 +44,11 @@ const makeExtraction = () => ({
     },
   ],
   minimumExperienceYears: null,
-  employmentType: {
-    value: "FULL_TIME",
-    references: ["/employmentType"],
-  },
+  employmentType: null,
   workModes: [
     {
       value: "REMOTE",
-      references: ["/workModes/0", "/jobDescription"],
+      references: ["/jobDescription"],
     },
   ],
   residualClaims: [],
@@ -73,6 +70,14 @@ const createGemini = (payload) => ({
   generateContent: vi.fn().mockResolvedValue({
     text: typeof payload === "string" ? payload : JSON.stringify(payload),
     candidates: [{ finishReason: "STOP" }],
+  }),
+});
+
+const createCodex = (payload) => ({
+  createResponse: vi.fn().mockResolvedValue({
+    output_text: typeof payload === "string" ? payload : JSON.stringify(payload),
+    output: [],
+    status: "completed",
   }),
 });
 
@@ -108,10 +113,11 @@ describe("createJobExtractor boundary", () => {
 
   it("requires at least one provider client", () => {
     expect(() => createJobExtractor({ logger: createLogger() }))
-      .toThrow("At least one of gemini or groq must be provided");
+      .toThrow("At least one of codex, gemini, or groq must be provided");
   });
 
   it.each([
+    ["codex", { codex: {} }, "codex must provide a createResponse method"],
     ["gemini", { gemini: {} }, "gemini must provide a generateContent method"],
     ["groq", { groq: {} }, "groq must provide a createChatCompletion method"],
   ])("rejects a malformed %s client", (_name, clients, message) => {
@@ -158,6 +164,27 @@ describe("Job extraction input contract", () => {
 });
 
 describe("Job extraction provider requests", () => {
+  it("sends Codex the canonical strict JSON schema through the Responses API", async () => {
+    const codex = createCodex(makeExtraction());
+    const extractor = createJobExtractor({ codex, logger: createLogger() });
+
+    await extractor.extractJob(makeJobRawInput());
+
+    expect(codex.createResponse).toHaveBeenCalledOnce();
+    const [request] = codex.createResponse.mock.calls[0];
+
+    expect(request.input.map(({ role }) => role)).toEqual(["system", "user"]);
+    expect(request.input[1].content).not.toContain("job-1");
+    expect(request.input[1].content).not.toContain("provinceCode");
+    expect(request.input[1].content).not.toContain("FULL_TIME");
+    expect(request.text.format).toEqual({
+      type: "json_schema",
+      name: "job_extraction_result",
+      schema: buildV01ProviderSchema("JobExtractionResult", "codex"),
+      strict: true,
+    });
+  });
+
   it("sends Gemini a minimized source document with the canonical response schema", async () => {
     const gemini = createGemini(makeExtraction());
     const extractor = createJobExtractor({ gemini, logger: createLogger() });
@@ -174,8 +201,6 @@ describe("Job extraction provider requests", () => {
       title: "Backend Engineer",
       jobDescription: JOB_DESCRIPTION,
       requiredSkills: ["Node.js"],
-      employmentType: "FULL_TIME",
-      workModes: ["REMOTE"],
     });
     expect(config).toMatchObject({
       responseMimeType: "application/json",
@@ -196,6 +221,7 @@ describe("Job extraction provider requests", () => {
     expect(request.messages.map(({ role }) => role)).toEqual(["system", "user"]);
     expect(request.messages[1].content).not.toContain("job-1");
     expect(request.messages[1].content).not.toContain("provinceCode");
+    expect(request.messages[1].content).not.toContain("FULL_TIME");
     expect(request.response_format).toEqual({
       type: "json_schema",
       json_schema: {
@@ -218,6 +244,42 @@ describe("Job extraction provider requests", () => {
       .resolves.toEqual(makeExtraction());
     expect(gemini.generateContent).toHaveBeenCalledTimes(1);
     expect(groq.createChatCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses Codex first, retries once, then falls back through Gemini to Groq", async () => {
+    const order = [];
+    const codex = {
+      createResponse: vi.fn(async () => {
+        order.push("codex");
+        throw createHttpError(503);
+      }),
+    };
+    const gemini = {
+      generateContent: vi.fn(async () => {
+        order.push("gemini");
+        throw createHttpError(503);
+      }),
+    };
+    const groq = createGroq(makeExtraction());
+    groq.createChatCompletion.mockImplementation(async () => {
+      order.push("groq");
+      return {
+        choices: [{
+          finish_reason: "stop",
+          message: { content: JSON.stringify(makeExtraction()) },
+        }],
+      };
+    });
+    const extractor = createJobExtractor({
+      codex,
+      gemini,
+      groq,
+      logger: createLogger(),
+    });
+
+    await expect(extractor.extractJob(makeJobRawInput()))
+      .resolves.toEqual(makeExtraction());
+    expect(order).toEqual(["codex", "codex", "gemini", "groq"]);
   });
 
   it("propagates a non-fallback Gemini failure unchanged", async () => {
@@ -270,7 +332,7 @@ describe("Job extraction output acceptance", () => {
     }))).resolves.toEqual(makeSparseExtraction());
   });
 
-  it("preserves explicit description metadata when structured fields are missing", async () => {
+  it("extracts explicit description metadata when structured fields are missing", async () => {
     const extraction = {
       ...makeSparseExtraction(),
       employmentType: {
@@ -310,12 +372,13 @@ describe("Job extraction output acceptance", () => {
         },
       ],
       minimumExperienceYears: null,
+      workModes: [],
       residualClaims: [{ value: "Fintech domain", references: ["/jobDescription"] }],
       uncertainClaims: [{ value: "Some travel", references: ["/jobDescription"] }],
       conflictingClaims: [{
         subject: "workModes",
         claims: [
-          { value: "REMOTE", references: ["/workModes/0"] },
+          { value: "REMOTE", references: ["/jobDescription"] },
           { value: "ONSITE", references: ["/jobDescription"] },
         ],
       }],
@@ -439,6 +502,98 @@ describe("Job extraction output acceptance", () => {
 
     await expect(extractor.extractJob(makeJobRawInput()))
       .resolves.toEqual(extraction);
+  });
+
+  it.each([
+    [
+      "'internal tooling' read as an internship",
+      { jobDescription: "Phát triển internal tooling cho đội vận hành." },
+      {
+        residualClaims: [{
+          value: "Phát triển internal tooling cho đội vận hành",
+          references: ["/jobDescription"],
+        }],
+      },
+    ],
+    [
+      "'contract testing' read as a contract against structured FULL_TIME",
+      {
+        jobDescription: "Yêu cầu kinh nghiệm contract testing với Pact.",
+        employmentType: "FULL_TIME",
+      },
+      {
+        requirements: [{
+          name: "kinh nghiệm contract testing với Pact",
+          priority: "REQUIRED",
+          references: ["/jobDescription"],
+        }],
+      },
+    ],
+    [
+      "a commercial-contract duty read as a contract employment type",
+      { jobDescription: "Soạn thảo và rà soát hợp đồng thương mại." },
+      {
+        residualClaims: [{
+          value: "Soạn thảo và rà soát hợp đồng thương mại",
+          references: ["/jobDescription"],
+        }],
+      },
+    ],
+    [
+      "'tự động hóa' read as freelance",
+      { jobDescription: "Viết test tự động hóa cho hệ thống thanh toán." },
+      {
+        residualClaims: [{
+          value: "Viết test tự động hóa cho hệ thống thanh toán",
+          references: ["/jobDescription"],
+        }],
+      },
+    ],
+    [
+      "a negated internship read as an internship",
+      { jobDescription: "Vị trí này không tuyển thực tập sinh." },
+      {
+        uncertainClaims: [{
+          value: "Vị trí này không tuyển thực tập sinh",
+          references: ["/jobDescription"],
+        }],
+      },
+    ],
+    [
+      "'không làm việc từ xa' read as remote",
+      { jobDescription: "Không làm việc từ xa; làm việc tại văn phòng." },
+      {
+        workModes: [{ value: "ONSITE", references: ["/jobDescription"] }],
+      },
+    ],
+    [
+      "'không làm việc từ xa' read as a conflict with structured ONSITE",
+      { jobDescription: "Không làm việc từ xa.", workModes: ["ONSITE"] },
+      {},
+    ],
+    [
+      "'kết hợp với team' read as hybrid",
+      { jobDescription: "Kết hợp với team sản phẩm để thiết kế API." },
+      {
+        residualClaims: [{
+          value: "Kết hợp với team sản phẩm để thiết kế API",
+          references: ["/jobDescription"],
+        }],
+      },
+    ],
+  ])("accepts %s without lexical enum inference", async (_name, inputOverrides, claims) => {
+    const extraction = { ...makeSparseExtraction(), ...claims };
+    const extractor = createJobExtractor({
+      gemini: createGemini(extraction),
+      logger: createLogger(),
+    });
+
+    await expect(extractor.extractJob(makeJobRawInput({
+      requiredSkills: [],
+      employmentType: null,
+      workModes: [],
+      ...inputOverrides,
+    }))).resolves.toEqual(extraction);
   });
 
   it("rejects duplicate references instead of repairing schema-invalid output", async () => {
@@ -568,11 +723,14 @@ describe("Job extraction output rejection", () => {
     ["an out-of-range skill index", {}, (extraction) => {
       extraction.requirements[0].references = ["/requiredSkills/3"];
     }],
-    ["an empty structured work-mode list", { workModes: [] }, (extraction) => {
+    ["a structured work mode withheld from the prompt", {}, (extraction) => {
       extraction.workModes[0].references = ["/workModes/0"];
     }],
-    ["a null structured employment type", { employmentType: null }, (extraction) => {
-      extraction.employmentType.references = ["/employmentType"];
+    ["a structured employment type withheld from the prompt", {}, (extraction) => {
+      extraction.employmentType = {
+        value: "FULL_TIME",
+        references: ["/employmentType"],
+      };
     }],
     ["a field withheld from the prompt", {}, (extraction) => {
       extraction.residualClaims = [{ value: "Hanoi", references: ["/location"] }];
@@ -616,23 +774,8 @@ describe("Job extraction output rejection", () => {
     ["a requirement that does not carry its cited skill tag", (extraction) => {
       extraction.requirements[1].references = ["/requiredSkills/0", "/jobDescription"];
     }],
-    ["a work-mode claim that differs from its cited structured value", (extraction) => {
-      extraction.conflictingClaims = [{
-        subject: "workModes",
-        claims: [
-          { value: "ONSITE", references: ["/workModes/0"] },
-          { value: "REMOTE", references: ["/jobDescription"] },
-        ],
-      }];
-    }],
-    ["an employment type that differs from its cited structured value", (extraction) => {
-      extraction.conflictingClaims = [{
-        subject: "employmentType",
-        claims: [
-          { value: "PART_TIME", references: ["/employmentType"] },
-          { value: "FULL_TIME", references: ["/employmentType"] },
-        ],
-      }];
+    ["a requirement cited only from its skill tag", (extraction) => {
+      extraction.requirements[0].references = ["/requiredSkills/0"];
     }],
   ])("rejects %s despite a resolving pointer", async (_name, mutate) => {
     const extraction = makeExtraction();
@@ -647,112 +790,25 @@ describe("Job extraction output rejection", () => {
       JOB_EXTRACTION_ERROR_CODES.INVALID_EXTRACTION_OUTPUT,
     );
 
-    expect(error.details.join("\n")).toMatch(/does not support|priority is not supported/);
-  });
-
-  it("rejects output that silently drops a structured required skill", async () => {
-    const extraction = makeExtraction();
-    extraction.requirements.shift();
-    const extractor = createJobExtractor({
-      gemini: createGemini(extraction),
-      logger: createLogger(),
-    });
-
-    const error = await expectExtractionError(
-      extractor.extractJob(makeJobRawInput()),
-      JOB_EXTRACTION_ERROR_CODES.INVALID_EXTRACTION_OUTPUT,
-    );
-
-    expect(error.details).toContain(
-      "/requiredSkills/0 is not preserved as a Job requirement",
-    );
-  });
-
-  it("rejects output that silently drops a structured/description conflict", async () => {
-    const extraction = makeExtraction();
-    extraction.workModes[0].references = ["/workModes/0"];
-    const extractor = createJobExtractor({
-      gemini: createGemini(extraction),
-      logger: createLogger(),
-    });
-
-    const error = await expectExtractionError(
-      extractor.extractJob(makeJobRawInput({
-        jobDescription: `${JOB_DESCRIPTION} Làm việc tại văn phòng.`,
-      })),
-      JOB_EXTRACTION_ERROR_CODES.INVALID_EXTRACTION_OUTPUT,
-    );
-
-    expect(error.details).toContain("workModes conflict is not preserved");
+    expect(error.details.join("\n")).toMatch(/does not support|does not cite the Job description/);
   });
 
   it.each([
-    [
-      "employmentType",
-      { jobDescription: "Hình thức bán thời gian." },
-      (extraction) => {
-        extraction.workModes[0].references = ["/workModes/0"];
-        extraction.conflictingClaims = [{
-          subject: "employmentType",
-          claims: [
-            { value: "FULL_TIME", references: ["/jobDescription"] },
-            { value: "PART_TIME", references: ["/jobDescription"] },
-          ],
-        }];
-      },
-      "/conflictingClaims/0/claims/0 omits structured evidence /employmentType",
-    ],
-    [
-      "workModes",
-      { jobDescription: "Làm việc tại văn phòng." },
-      (extraction) => {
-        extraction.workModes[0].references = ["/workModes/0"];
-        extraction.conflictingClaims = [{
-          subject: "workModes",
-          claims: [
-            { value: "REMOTE", references: ["/jobDescription"] },
-            { value: "ONSITE", references: ["/jobDescription"] },
-          ],
-        }];
-      },
-      "/conflictingClaims/0/claims/0 omits structured evidence /workModes/0",
-    ],
-  ])("rejects a %s conflict claim that drops its structured source", async (
-    _subject,
+    ["a skill tag the description does not mention", { requiredSkills: ["Node.js", "Kafka"] }, () => {}],
+    ["a description requirement without its skill-tag association", {}, (extraction) => {
+      extraction.requirements[0].references = ["/jobDescription"];
+    }],
+    ["structured employment type and work modes", {}, () => {}],
+    ["a description value that differs from structured metadata", {
+      jobDescription: "Yêu cầu: Node.js bắt buộc. Ưu tiên Docker. Làm việc tại văn phòng. Bán thời gian.",
+    }, (extraction) => {
+      extraction.employmentType = { value: "PART_TIME", references: ["/jobDescription"] };
+      extraction.workModes = [{ value: "ONSITE", references: ["/jobDescription"] }];
+    }],
+  ])("leaves %s to consolidation instead of requiring it in the extraction", async (
+    _name,
     inputOverrides,
     mutate,
-    expectedIssue,
-  ) => {
-    const extraction = makeExtraction();
-    extraction.requirements = extraction.requirements.slice(0, 1);
-    mutate(extraction);
-    const extractor = createJobExtractor({
-      gemini: createGemini(extraction),
-      logger: createLogger(),
-    });
-
-    const error = await expectExtractionError(
-      extractor.extractJob(makeJobRawInput(inputOverrides)),
-      JOB_EXTRACTION_ERROR_CODES.INVALID_EXTRACTION_OUTPUT,
-    );
-
-    expect(error.details).toEqual([expectedIssue]);
-  });
-
-  it.each([
-    ["requirement", (extraction) => {
-      extraction.requirements[0].references = ["/jobDescription"];
-    }, "/requiredSkills/0 is not preserved as a Job requirement"],
-    ["employment type", (extraction) => {
-      extraction.employmentType.references = ["/jobDescription"];
-    }, "/employmentType structured metadata is not preserved"],
-    ["work mode", (extraction) => {
-      extraction.workModes[0].references = ["/jobDescription"];
-    }, "/workModes/0 work mode is not preserved"],
-  ])("rejects a merged %s that loses its structured reference", async (
-    _kind,
-    mutate,
-    expectedIssue,
   ) => {
     const extraction = makeExtraction();
     mutate(extraction);
@@ -761,14 +817,8 @@ describe("Job extraction output rejection", () => {
       logger: createLogger(),
     });
 
-    const error = await expectExtractionError(
-      extractor.extractJob(makeJobRawInput({
-        jobDescription: "Hình thức toàn thời gian. Bắt buộc Node.js. Ưu tiên Docker. Làm việc từ xa.",
-      })),
-      JOB_EXTRACTION_ERROR_CODES.INVALID_EXTRACTION_OUTPUT,
-    );
-
-    expect(error.details).toContain(expectedIssue);
+    await expect(extractor.extractJob(makeJobRawInput(inputOverrides)))
+      .resolves.toEqual(extraction);
   });
 
   it("rejects duplicate REQUIRED/OPTIONAL versions of one requirement", async () => {

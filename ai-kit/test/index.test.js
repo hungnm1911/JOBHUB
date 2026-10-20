@@ -17,13 +17,25 @@ describe("AI Kit public entrypoint", () => {
 
   it.each([
     ["neither provider", {}],
+    ["Codex only", {
+      codex: {
+        apiKey: "codex-key",
+        baseURL: "https://codex.example.test/v1",
+        model: "codex-model",
+      },
+    }],
     ["Gemini only", {
       gemini: { apiKey: "gemini-key", model: "gemini-model" },
     }],
     ["Groq only", {
       groq: { apiKey: "groq-key", model: "groq-model" },
     }],
-    ["both providers", {
+    ["all providers", {
+      codex: {
+        apiKey: "codex-key",
+        baseURL: "https://codex.example.test/v1",
+        model: "codex-model",
+      },
       gemini: { apiKey: "gemini-key", model: "gemini-model" },
       groq: { apiKey: "groq-key", model: "groq-model" },
     }],
@@ -56,5 +68,10 @@ describe("AI Kit public entrypoint", () => {
       llm: { groq: null },
       logger,
     })).toThrow("llm.groq must be an object when provided");
+
+    expect(() => aiKit.createAiKit({
+      llm: { codex: { baseURL: "" } },
+      logger,
+    })).toThrow("llm.codex.baseURL must be a non-empty string when provided");
   });
 });

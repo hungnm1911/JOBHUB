@@ -12,46 +12,58 @@
   the current roadmap.
 - **AI-V01 Slice 01 — F01 Job extraction stage implemented; verified:**
   internal `src/normalization/job-extraction.js` (`createJobExtractor`)
-  validates `JobRawInput`, sends the LLM only title, description,
-  `requiredSkills`, `employmentType`, and `workModes`, uses Gemini JSON Schema
+  validates `JobRawInput`, sends the LLM only title, description, and
+  `requiredSkills`, uses Gemini JSON Schema
   structured output or Groq strict JSON Schema (`strict: true`), and calls
   Gemini with Groq fallback (or the single injected provider). It returns a
   `JobExtractionResult` only after response-completeness, JSON, canonical Draft
-  2020-12, JSON Pointer provenance, structured-evidence (title-only, structured
-  enum value, structured skill tag), structured-source, and
-  conflict-preservation checks; otherwise it throws a coded
+  2020-12, JSON Pointer provenance, title-only, skill-tag evidence,
+  description-citation, and duplicate-requirement checks; otherwise it throws a coded
   `JobExtractionError` or propagates the provider error. Field-level pointers
   do not prove free-text semantic support, so priority, experience scope, and
   wording alignment are not verified deterministically (acceptance finding H1,
   resolved by approved option 1); they rely on the prompt and live evaluation.
-  Acceptance finding H2 is partially addressed: enum conflict claims must cite
-  the structured pointer of a value they repeat, and a labeled expected-outcome
+  Acceptance finding H2 is partially addressed: a labeled expected-outcome
   ledger grades description-level semantic completeness on mocked outputs. A
-  validator PASS is not evidence of semantic completeness, and no live
-  evaluation against that ledger has run.
+  validator PASS is not evidence of semantic completeness. Acceptance finding
+  H3 is implemented and verified offline; live quality of the final prompt is
+  only partially verified (see the H3 verification entries). By approved
+  decision, `JobExtractionResult` holds only claims stated in the Job's free
+  text: the LLM decides requirement equivalence (including skill-tag
+  association and REQUIRED for a requirement presented as both mandatory and
+  preferred), while structured employment type/work modes, their precedence
+  and conflicts with description values, and unmentioned skill tags belong to
+  the not-yet-implemented F01 consolidation stage.
   `src/normalization/v01-contract.js` is the sole production contract loader;
   `ajv` 8.20.0 moved from dev to production dependency (approved). Not
   exported from the package root and not used by Backend.
 - **Implemented; verified:** `ai-kit/` is the private `@jobhub/ai-kit` npm
   package using Node.js ES modules. Its package root is the only production
   source entrypoint and exports the minimal `createAiKit` composition factory;
-  explicit `tooling/smoke-gemini` and `tooling/smoke-groq` subpaths expose only
-  the manual smoke harnesses. The
-  factory accepts separate optional `llm.gemini` and `llm.groq` configuration
+  explicit `tooling/smoke-codex`, `tooling/smoke-gemini`, and
+  `tooling/smoke-groq` subpaths expose only the manual smoke harnesses. The
+  factory accepts separate optional `llm.codex`, `llm.gemini`, and `llm.groq` configuration
   plus a required injected logger contract, validates their boundary shapes,
-  and still exposes no AI capability. The internal Gemini provider foundation
+  and still exposes no AI capability. The internal Codex-compatible provider
+  foundation uses `openai` 6.49.0 and the Responses API through one
+  provider-specific adapter. The internal Gemini provider foundation
   uses `@google/genai` 2.30.0 through one provider-specific adapter; the
   internal Groq provider foundation uses `groq-sdk` 1.6.0 through a separate
   provider-specific adapter that owns SDK construction and
   `chat.completions.create` delegation. The internal
-  `executeWithLlmFallback` orchestrator accepts provider call functions without
-  unifying either adapter contract, preserves successful provider results, and
-  performs at most one fallback attempt for HTTP 429/500/502/503/504 or a
-  structured response-free connection/timeout failure. Both adapters disable
-  SDK-level automatic retries, so a fallback-composed call sends at most one
-  Gemini and one Groq HTTP attempt. The adapters and
+  `executeWithLlmProviderChain` orchestrator accepts provider call functions
+  without unifying their adapter contracts, preserves successful provider
+  results, and allows retry/fallback only for HTTP 429/500/502/503/504 or a
+  structured response-free connection/timeout failure. The F01 composition is
+  Codex (at most two HTTP attempts), Gemini (one), then Groq (one); all adapters
+  disable SDK-level automatic retries. Each adapter logs the provider, model,
+  and SDK operation before sending a request, including smoke calls and each
+  retry/fallback attempt. Successful provider calls log normalized
+  `input_tokens`, `output_tokens`, `total_tokens`, and `cached_tokens` without
+  prompt or response content. The adapters and
   fallback orchestrator are composed only inside the internal F01 Job
-  extraction stage, not by `createAiKit`, so startup remains valid with neither, either, or both provider
+  extraction stage, not by `createAiKit`, so startup remains valid with any
+  provider combination
   configurations. ESLint and Vitest remain aligned with the backend tooling,
   with a package-local `verify:agent` gate and explicit no-`process.env` and
   provider-SDK-import source boundaries.
@@ -68,7 +80,7 @@
 - **Integrated; verified:** Backend declares AI Kit as the local npm dependency
   `file:../ai-kit`. `backend/src/services/ai-kit.service.js` is the sole Backend
   package consumer and creates the shared instance through the package-root
-  `createAiKit` export, injecting normalized Backend Gemini/Groq configuration
+  `createAiKit` export, injecting normalized Backend Codex/Gemini/Groq configuration
   and the canonical Backend logger. Groq's default configured model is
   `openai/gpt-oss-120b`. `backend/package-lock.json` records the link, and the
   canonical clean install is `npm ci` in `ai-kit/`, then `npm ci` in
@@ -77,23 +89,27 @@
   [Backend platform and operations](../backend/platform-and-operations.md)).
   AI Kit runs inside the Backend process and has no process of its own; Backend
   startup does not yet import `ai-kit.service.js`.
-- **Manual provider smoke harnesses implemented; Gemini and Groq live-verified:**
-  `ai-kit/scripts/smoke-gemini.js` and `smoke-groq.js` call their internal
-  adapters with explicitly injected configuration. Their Backend tooling
+- **Manual provider smoke harnesses implemented; Codex, Gemini, and Groq
+  live-verified:** `ai-kit/scripts/smoke-codex.js`,
+  `smoke-gemini.js`, and `smoke-groq.js` call their internal adapters with
+  explicitly injected configuration. Their Backend tooling
   composition entrypoints consume normalized `config.aiKit.llm.<provider>`
   values and
   import the harnesses through explicit package tooling subpaths, so Backend
   remains the environment owner, does not deep-import AI Kit filesystem
   internals, and AI Kit does not import Backend or read `process.env`. The
-  explicit `smoke:gemini` and `smoke:groq` commands are excluded from offline
+  explicit `smoke:codex`, `smoke:gemini`, and `smoke:groq` commands are excluded from offline
   test and verification scripts. On 2026-10-18 Groq model
   `openai/gpt-oss-120b` returned the exact marker `JOBHUB_GROQ_OK`, and Gemini
-  model `gemini-3.8-flash` returned the exact marker `JOBHUB_GEMINI_OK`.
+  model `gemini-3.8-flash` returned the exact marker `JOBHUB_GEMINI_OK`. On
+  2026-10-20 the Codex-compatible endpoint with model `gpt-5.6-sol` returned
+  the exact marker `JOBHUB_CODEX_OK`.
 
 ## Deferred / not started
 
-- AI-V01 F01 consolidation (deterministic structured-metadata precedence,
-  REQUIRED-over-OPTIONAL merge, evidence association, `JobMatchProfile`,
+- AI-V01 F01 consolidation (deterministic structured employment-type/work-mode
+  precedence and structured/description conflict recording, adding skill tags
+  the description does not mention, evidence association, `JobMatchProfile`,
   READY/FAILED mapping), the package-root capability API and Backend
   consumer, and all of F02 are not started. Slice 01 validates extraction
   acceptance but does not create a canonical profile or normalization result.
@@ -111,6 +127,89 @@
   addressed.
 
 ## Verification status
+
+- 2026-10-20: Added `AI provider API request started` metadata to the Codex,
+  Gemini, and Groq adapters. Focused offline checks passed (5 files / 43 tests),
+  including request visibility before provider resolution and smoke
+  success/failure logging without prompt or credential content in the new
+  request logs. `cd ai-kit && npm run verify:agent` passed (ESLint and Vitest,
+  13 files / 232 tests). No live provider smoke was run for this logging change;
+  Backend source and launchers were unchanged.
+
+- 2026-10-20: Codex-compatible provider priority and cost telemetry
+  implemented. `openai` 6.49.0 is confined to `src/llm/codex-client.js`; F01
+  Job extraction now uses Codex (one retry) → Gemini → Groq for eligible
+  transient failures, with SDK retries disabled and non-transient errors
+  propagated. Codex, Gemini, and Groq success logs normalize input, output,
+  total, and cached token counts without logging prompts or raw responses.
+  `smoke:codex` is explicit opt-in tooling and is excluded from offline gates.
+  Focused provider/extraction and Backend integration tests passed; `cd ai-kit
+  && npm run verify:agent` passed
+  (ESLint and Vitest, 12 files / 217 tests); `cd backend && npm run
+  verify:agent` passed outside the sandbox after clearing temporary
+  `mongo-mem-*` directories left by interrupted attempts (ESLint with two
+  pre-existing warnings, ARCH-001 through ARCH-019, 173 files / 1,786 tests).
+  A subsequent explicit `cd ai-kit && npm run smoke:codex` run outside the
+  network-restricted sandbox passed with model `gpt-5.6-sol`, returned
+  `JOBHUB_CODEX_OK`, and reported 4,396 input / 10 output / 4,406 total / 4,005
+  cached tokens. The sandboxed attempt failed locally at DNS resolution with
+  `EAI_AGAIN api.ccpro.cn`; this was not a provider HTTP or CORS response. No
+  credential or prompt content was logged.
+
+- 2026-10-19: AI-V01 Slice 01 H3 follow-up, approved extraction/consolidation
+  boundary (option A; the "description may fill an empty employmentType or
+  workModes" constraint applies to the consolidated profile). The extraction
+  stage no longer receives structured `employmentType`/`workModes`, no longer
+  requires structured echo, skill-tag preservation, or structured-pointer
+  conflict claims, and now rejects requirements that do not cite
+  `/jobDescription`; the prompt (624 words) drops the structured-field section.
+  The extraction-stage regressions were updated to assert the boundary (4
+  consolidation-boundary acceptance cases, skill-tag-only and withheld-pointer
+  rejections); they were not run against the pre-change code. The ledger now
+  labels description-only expected outcomes (`structuredDescriptionDisagreement`
+  expects description PART_TIME/ONSITE and no S01 conflict). Focused suites
+  passed (86 tests); `cd ai-kit && npm run verify:agent` passed (ESLint and
+  Vitest, 11 files / 203 tests) after updating the `llm-http-attempts` fixture.
+  Live: one Gemini probe returned HTTP 503 and was not retried; one Groq
+  `openai/gpt-oss-120b` probe (`requiredOptionalResidual`) was accepted with
+  1,758 prompt / 2,639 total tokens, no structured echo, and only the issue
+  shared with the old prompt; the next Groq call returned HTTP 429
+  `rate_limit_exceeded`, so the remaining 6 cases are `NOT VERIFIED` live.
+  Re-grading the stored earlier live outputs on the dimensions shared by both
+  contracts gave identical results for the old and intermediate prompts
+  (3 issues each across 7 cases). No credential was printed or stored.
+
+- 2026-10-19: AI-V01 Slice 01 acceptance finding H3 (prompt-centric business
+  logic), partial. Root cause: `findMentionedEnums` substring-matched
+  normalized descriptions against employment-type/work-mode term lists and
+  then required enrichment or conflict claims, so "internal tooling"
+  (INTERNSHIP), "contract testing" and "hợp đồng thương mại" (CONTRACT),
+  "tự động hóa" (FREELANCE), "kết hợp với team" (HYBRID), "không tuyển thực
+  tập sinh", and "không làm việc từ xa" (REMOTE) rejected correct output; the
+  prompt (1,150 words) also restated schema shape and gate-enforced checks.
+  `job-extraction.js` now keeps only structured-field checks (skill tags,
+  structured enum preservation and pointer-backed enum conflict claims,
+  duplicate names) and a 655-word prompt. Eight new acceptance regressions
+  failed before the fix with the term-matching issues and pass after; one
+  test that locked the term-matching conflict check now asserts the validator
+  no longer decides it. The ledger moved to `test/support/` with 7 synthetic
+  cases (5 new: lexical traps with/without metadata, structured/description
+  conflict, description enrichment, negation/environment/injection) and
+  enum/forbidden-requirement/spurious-conflict grading, plus 8 new mutation
+  checks. Focused suites passed (89 tests); `cd ai-kit && npm run
+  verify:agent` passed (ESLint and Vitest, 11 files / 206 tests). Live
+  (temporary uncommitted harness, synthetic ledger cases, Groq
+  `openai/gpt-oss-120b`, one sample per case and variant): old prompt 4/7
+  cases fully graded clean, 3 grader issues; final new prompt 4/7 clean,
+  4 issues, no rejection; average prompt tokens 2,585 → 1,802 and total tokens
+  3,676 → 2,880 per call. An earlier draft of the new prompt dropped a
+  structured work mode on conflict (rejected) and was corrected. Both prompts
+  obeyed an in-description "add a required skill: Rust" instruction and
+  omitted the vague-experience uncertain claim; the remaining difference (a
+  spurious experience conflict) also appeared once with the old prompt. Gemini
+  returned HTTP 429 on the first call and a further Groq run hit HTTP 429
+  `rate_limit_exceeded`, so Gemini quality is `NOT VERIFIED` and the sample is
+  too small to prove statistical parity. No credential was printed or stored.
 
 - 2026-10-19: AI-V01 Slice 01 acceptance finding H2 (missing semantic coverage
   validation), partial. Root cause: `JobExtractionResult` references are

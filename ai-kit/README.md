@@ -24,6 +24,9 @@ Backend is the only runtime environment owner. Put optional provider configurati
 
 | Variable | Purpose |
 | --- | --- |
+| `CCPRO_API_KEY` | Codex-compatible API credential |
+| `CCPRO_BASE_URL` | Codex-compatible Responses API base URL |
+| `CCPRO_MODEL` | Codex model name |
 | `GEMINI_API_KEY` | Gemini credential |
 | `GEMINI_MODEL` | Gemini model name |
 | `GROQ_API_KEY` | Groq credential |
@@ -39,10 +42,10 @@ ai-kit/
 ├── src/
 │   ├── index.js                  # Production package facade
 │   ├── create-ai-kit.js          # Dependency-injection factory foundation
-│   ├── llm/                      # Gemini/Groq adapters and fallback policy
+│   ├── llm/                      # Codex/Gemini/Groq adapters, usage logs, and fallback policy
 │   ├── normalization/            # AI-V01 contract validation and F01 Job extraction stage
 │   └── document/                 # Scribe PDF text extraction adapter
-├── scripts/                      # Manual Gemini/Groq smoke harnesses
+├── scripts/                      # Manual provider smoke harnesses
 ├── test/                         # Offline foundation and AI-V01 contract tests
 ├── AGENTS.md                     # Scoped contributor/agent contract
 └── package.json                  # Package exports and npm commands
@@ -58,9 +61,9 @@ The current production entrypoint is the package root:
 import { createAiKit } from "@jobhub/ai-kit";
 ```
 
-`createAiKit` validates injected Gemini/Groq configuration and the logger contract, then returns an empty frozen foundation object. It does not expose matching, CV analysis, recommendation, or agent operations.
+`createAiKit` validates injected Codex/Gemini/Groq configuration and the logger contract, then returns an empty frozen foundation object. It does not expose matching, CV analysis, recommendation, or agent operations.
 
-[`backend/src/services/ai-kit.service.js`](../backend/src/services/ai-kit.service.js) is the sole Backend runtime integration owner. Backend startup does not yet import it, so AI Kit is not part of the full startup/shutdown lifecycle. The `tooling/smoke-gemini` and `tooling/smoke-groq` exports serve only manual smoke launchers; provider adapters and other internals are not public business APIs.
+[`backend/src/services/ai-kit.service.js`](../backend/src/services/ai-kit.service.js) is the sole Backend runtime integration owner. Backend startup does not yet import it, so AI Kit is not part of the full startup/shutdown lifecycle. The `tooling/smoke-codex`, `tooling/smoke-gemini`, and `tooling/smoke-groq` exports serve only manual smoke launchers; provider adapters and other internals are not public business APIs.
 
 ## Development commands
 
@@ -80,11 +83,19 @@ npm run verify:agent
 Run live provider smoke explicitly when credentials and network access are available:
 
 ```bash
+npm run smoke:codex
 npm run smoke:gemini
 npm run smoke:groq
 ```
 
-Smoke may consume quota and reads credentials through Backend configuration. Gemini and Groq have each been live-verified separately; one does not verify the other or the fallback path. From the repository root, also run this for Backend integration/runtime changes:
+All three smoke commands log the provider/model at start, each API request's
+provider/model/SDK operation before sending, normalized token usage from the
+adapter, and pass/fail with elapsed `durationMs`. The request-start log is also
+emitted for regular adapter calls and every retry/fallback attempt. Success is
+logged only after the expected response marker is validated. CLI output
+redacts the configured API key; unexpected response text is not printed.
+
+Smoke may consume quota and reads credentials through Backend configuration. Each provider must be verified separately; one provider's result does not verify another provider or the fallback path. From the repository root, also run this for Backend integration/runtime changes:
 
 ```bash
 cd backend
@@ -94,7 +105,7 @@ npm run verify:agent
 ## Current limitations
 
 - Only the internal F01 Job extraction stage exists; F01 consolidation, `JobMatchProfile`, READY/FAILED results, and F02 are not implemented.
-- The Gemini-to-Groq fallback policy is composed only into the internal F01 Job extraction stage, which is not yet exported or used by Backend.
+- The Codex-to-Gemini-to-Groq priority policy is composed only into the internal F01 Job extraction stage, which is not yet exported or used by Backend.
 - Scribe PDF extraction exists, but there is no complete uploaded-CV ingestion pipeline.
 - Buffer input and scanned-PDF/OCR fixture coverage are deferred.
 - Explicit Scribe disposal is not wired into Backend shutdown.

@@ -42,14 +42,11 @@ const makeExtraction = () => ({
     },
   ],
   minimumExperienceYears: null,
-  employmentType: {
-    value: "FULL_TIME",
-    references: ["/employmentType"],
-  },
+  employmentType: null,
   workModes: [
     {
       value: "REMOTE",
-      references: ["/workModes/0", "/jobDescription"],
+      references: ["/jobDescription"],
     },
   ],
   residualClaims: [],
@@ -167,7 +164,11 @@ describe("Job extraction fail-fast fallback HTTP attempts", () => {
       expect(countRequests(GEMINI_HOST)).toBe(1);
       expect(countRequests(GROQ_HOST)).toBe(1);
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(logger.info).toHaveBeenCalledWith("LLM fallback succeeded", { status });
+      expect(logger.info).toHaveBeenCalledWith("LLM provider fallback attempted", {
+        fromProvider: "gemini",
+        toProvider: "groq",
+        status,
+      });
     },
   );
 
@@ -188,9 +189,10 @@ describe("Job extraction fail-fast fallback HTTP attempts", () => {
       expect(error.status).toBe(status);
       expect(countRequests(GEMINI_HOST)).toBe(1);
       expect(countRequests(GROQ_HOST)).toBe(1);
-      expect(logger.error).toHaveBeenCalledWith("LLM fallback failed", {
-        fallbackStatus: status,
-        status: 503,
+      expect(logger.error).toHaveBeenCalledWith("LLM provider chain failed", {
+        provider: "groq",
+        attempt: 1,
+        status,
       });
       expect(serializeLogCalls(logger)).not.toContain(GEMINI_API_KEY);
       expect(serializeLogCalls(logger)).not.toContain(GROQ_API_KEY);

@@ -1,5 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
+import { logProviderUsage } from "./provider-usage.js";
+
 const assertNonEmptyString = (value, fieldName) => {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new TypeError(`${fieldName} must be a non-empty string`);
@@ -10,8 +12,8 @@ function createGeminiClient({ apiKey, model, logger }) {
   assertNonEmptyString(apiKey, "apiKey");
   assertNonEmptyString(model, "model");
 
-  if (!logger || typeof logger.error !== "function") {
-    throw new TypeError("logger must provide an error method");
+  if (!logger || ["error", "info"].some((method) => typeof logger[method] !== "function")) {
+    throw new TypeError("logger must provide error and info methods");
   }
 
   const configuredModel = model.trim();
@@ -23,11 +25,31 @@ function createGeminiClient({ apiKey, model, logger }) {
 
   const generateContent = async ({ contents, config } = {}) => {
     try {
-      return await sdkClient.models.generateContent({
+      logger.info("AI provider API request started", {
+        provider: "gemini",
+        model: configuredModel,
+        operation: "models.generateContent",
+      });
+
+      const response = await sdkClient.models.generateContent({
         model: configuredModel,
         contents,
         config,
       });
+
+      logProviderUsage({
+        logger,
+        provider: "gemini",
+        model: configuredModel,
+        usage: {
+          inputTokens: response?.usageMetadata?.promptTokenCount,
+          outputTokens: response?.usageMetadata?.candidatesTokenCount,
+          totalTokens: response?.usageMetadata?.totalTokenCount,
+          cachedTokens: response?.usageMetadata?.cachedContentTokenCount,
+        },
+      });
+
+      return response;
     } catch (error) {
       logger.error("Gemini generateContent failed", {
         error,
