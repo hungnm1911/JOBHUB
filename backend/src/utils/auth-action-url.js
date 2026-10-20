@@ -19,5 +19,25 @@ const buildAuthActionUrlFromBase = (appBaseUrl, actionPath, rawToken) => {
 const buildAuthActionUrl = (actionPath, rawToken) =>
   buildAuthActionUrlFromBase(config.appBaseUrl, actionPath, rawToken);
 
-export { buildAuthActionUrlFromBase };
+/**
+ * Build a link to a frontend screen that consumes the token through the API.
+ * The path is resolved from the FRONTEND_BASE_URL origin.
+ */
+const buildFrontendActionUrlFromBase = (frontendBaseUrl, screenPath, rawToken) => {
+  const normalizedPath = String(screenPath).replace(/^\/+/, "");
+  const url = new URL(`/${normalizedPath}`, frontendBaseUrl);
+
+  url.searchParams.set("token", String(rawToken));
+
+  return url.href;
+};
+
+const buildFrontendActionUrl = (screenPath, rawToken) =>
+  buildFrontendActionUrlFromBase(config.frontendBaseUrl, screenPath, rawToken);
+
+export {
+  buildAuthActionUrlFromBase,
+  buildFrontendActionUrl,
+  buildFrontendActionUrlFromBase,
+};
 export default buildAuthActionUrl;

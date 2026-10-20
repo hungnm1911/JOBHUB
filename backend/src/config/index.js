@@ -308,6 +308,7 @@ const cors = Object.freeze({
 });
 
 const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:8000";
+const frontendBaseUrl = process.env.FRONTEND_BASE_URL || "http://localhost:5173";
 
 // AI Kit:
 const aiKit = Object.freeze({
@@ -360,6 +361,7 @@ export default Object.freeze({
   jobInvitationExpiration,
   cors,
   appBaseUrl,
+  frontendBaseUrl,
   aiKit,
   logging,
 });

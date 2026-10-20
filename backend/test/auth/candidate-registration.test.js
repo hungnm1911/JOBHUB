@@ -8,6 +8,7 @@ import {
   vi,
 } from "vitest";
 
+import config from "../../src/config/index.js";
 import AUTH_TOKEN_TYPE from "../../src/constants/auth-token-type.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import USER_STATUS from "../../src/constants/user-status.js";
@@ -82,8 +83,12 @@ describe("POST /api/auth/register/candidate", () => {
       expect.objectContaining({
         to: "jane@example.com",
         subject: expect.stringMatching(/verify/i),
-        text: expect.stringContaining("/api/auth/verify-email?token="),
-        html: expect.stringContaining("/api/auth/verify-email?token="),
+        text: expect.stringContaining(
+          `${config.frontendBaseUrl}/verify-email?token=`,
+        ),
+        html: expect.stringContaining(
+          `${config.frontendBaseUrl}/verify-email?token=`,
+        ),
       }),
     );
   });

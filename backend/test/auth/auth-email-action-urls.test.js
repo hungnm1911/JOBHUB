@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import config from "../../src/config/index.js";
 import buildAuthActionUrl, {
   buildAuthActionUrlFromBase,
+  buildFrontendActionUrl,
+  buildFrontendActionUrlFromBase,
 } from "../../src/utils/auth-action-url.js";
 import buildCompanyApprovalConfirmationEmail from "../../src/utils/company-approval-confirmation-email.js";
 import buildRecruiterActivationEmail from "../../src/utils/recruiter-activation-email.js";
@@ -16,15 +18,6 @@ describe("auth email action URLs", () => {
     );
     expect(buildAuthActionUrl("/activate-recruiter", rawToken)).toBe(
       `${config.appBaseUrl}/api/auth/activate-recruiter?token=abc123`,
-    );
-
-    const confirmation = buildCompanyApprovalConfirmationEmail({
-      fullName: "Chris",
-      companyName: "Acme",
-      rawToken,
-    });
-    expect(confirmation.html).toContain(
-      `${config.appBaseUrl}/api/auth/confirm-company-approval?token=abc123`,
     );
 
     const activation = buildRecruiterActivationEmail({
@@ -63,5 +56,32 @@ describe("auth email action URLs", () => {
         rawToken,
       ),
     ).toBe(expected);
+  });
+
+  it("builds frontend screen links against FRONTEND_BASE_URL without /api", () => {
+    const rawToken = "abc123";
+
+    expect(buildFrontendActionUrl("verify-email", rawToken)).toBe(
+      `${config.frontendBaseUrl}/verify-email?token=abc123`,
+    );
+
+    const confirmation = buildCompanyApprovalConfirmationEmail({
+      fullName: "Chris",
+      companyName: "Acme",
+      rawToken,
+    });
+    expect(confirmation.html).toContain(
+      `${config.frontendBaseUrl}/confirm-company-approval?token=abc123`,
+    );
+    expect(confirmation.text).toContain(
+      `${config.frontendBaseUrl}/confirm-company-approval?token=abc123`,
+    );
+    expect(
+      buildFrontendActionUrlFromBase(
+        "https://jobhub.example.com/",
+        "/verify-email",
+        rawToken,
+      ),
+    ).toBe("https://jobhub.example.com/verify-email?token=abc123");
   });
 });

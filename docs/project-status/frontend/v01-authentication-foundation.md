@@ -24,8 +24,15 @@ requests and performs reactive, single-flight `401` refresh with a one-retry
 limit; login/refresh remain public, business `403` responses do not refresh,
 and logout remains protected so it may refresh before revoking the session.
 The focused authentication tests, frontend ESLint, and Vite production build
-passed. No login/logout page or concrete protected route was introduced because
-none is currently approved in the frontend route contract. Sonner (`sonner`
+passed. Public authentication screens now exist under `/register`,
+`/register/candidate`, `/register/company`, `/login`, `/forgot-password`,
+`/reset-password`, and `/verify-email` (opened from the verification email;
+consumes the token once through `POST /api/auth/verify-email`); login and both registrations dispatch Redux Toolkit
+`createAsyncThunk` actions from
+`features/authentication/services/authentication-thunks.js`, which delegate to
+the authentication manager (login, Company Manager onboarding session) or the
+auth API module (Candidate registration). No logout control or concrete
+protected route exists yet. Sonner (`sonner`
 2.0.8) is the transient toast library: `App.jsx` mounts the single
 `<Toaster />` by spreading the application-wide `TOASTER_CONFIG`, and
 consumers call `toast` from `sonner` directly without extra setup. The defaults
@@ -73,3 +80,27 @@ The HTTP client, API error normalizer, socket client, common validators, and
   and logout cleanup. `cd frontend && yarn verify:agent` passed the focused
   tests, ESLint, and the Vite production build. No browser/end-to-end check was
   performed.
+
+- Frontend authentication screens and thunks (2026-10-18): `cd frontend &&
+  yarn verify:agent` passed 12 focused tests (including Company Manager
+  registration establishing the onboarding session), ESLint, and the Vite
+  build. A browser check against the running local backend confirmed a login
+  with unknown credentials renders the `401` credentials message. Successful
+  login, both registrations, forgot password, and reset password were not
+  exercised end to end.
+
+- Frontend email verification screen (2026-10-19): `cd frontend && yarn
+  verify:agent` passed. Against the running backend, an unknown token rendered
+  the invalid-link state from the real `400`; the success state was checked
+  with a simulated `200` response in the browser. A real verification link was
+  not consumed end to end.
+
+- Cross-tab authentication sync (2026-10-19): fixes a stale-tab defect where a
+  tab kept the previous user's Redux state while requests used the newer
+  account's shared `localStorage` access token (seen as a Platform Admin
+  screen receiving `403`). `synchronizeExternalChange` mirrors another tab's
+  account switch, refresh, or logout. `cd frontend && yarn verify:agent`
+  passed 13 focused tests (new cross-tab test), ESLint, and the Vite build. In
+  the browser, a simulated `storage` logout moved the admin tab to `/login`,
+  and restoring the credential re-authenticated it. Two real tabs were not
+  exercised.

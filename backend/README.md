@@ -256,6 +256,7 @@ Các biến dưới đây đang được `src/config/index.js` yêu cầu phải
 | Biến | Default | Ý nghĩa |
 | --- | --- | --- |
 | `APP_BASE_URL` | `http://localhost:8000` | Origin API dùng để tạo link trong email; không thêm `/api` |
+| `FRONTEND_BASE_URL` | `http://localhost:5173` | Origin frontend cho link email mở màn frontend (hiện là `/verify-email` và `/confirm-company-approval`) |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Danh sách origin frontend, phân cách bằng dấu phẩy |
 | `EMAIL_VERIFICATION_EXPIRES_IN_MS` | `86400000` | TTL xác minh email |
 | `PASSWORD_RESET_EXPIRES_IN_MS` | `3600000` | TTL đặt lại mật khẩu |
@@ -382,6 +383,7 @@ Ký hiệu quyền:
 | --- | --- | --- | --- |
 | `GET` | `/api/company` | Company self-service | Xem Company sở hữu |
 | `PATCH` | `/api/company` | Company self-service | Cập nhật Company theo trạng thái onboarding/active |
+| `POST` | `/api/company/images/:kind` | Company self-service | Upload logo (`kind=logo`) hoặc banner (`kind=banner`); trả URL công khai để lưu vào `logoUrl`/`bannerUrl` |
 | `POST` | `/api/company/submit` | Onboarding Company Manager | Gửi Company để duyệt |
 | `POST` | `/api/company/resend-approval-confirmation` | Onboarding Company Manager | Gửi lại email xác nhận phê duyệt |
 | `GET` | `/api/company/recruiters` | Company Manager | Danh sách Recruiter |
