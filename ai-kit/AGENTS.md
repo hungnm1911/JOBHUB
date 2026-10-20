@@ -70,6 +70,7 @@ Live provider smoke is opt-in, may consume quota, and is never part of an
 offline gate:
 
 ```sh
+cd ai-kit && npm run smoke:codex
 cd ai-kit && npm run smoke:gemini
 cd ai-kit && npm run smoke:groq
 ```

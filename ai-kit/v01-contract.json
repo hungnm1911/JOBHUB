@@ -1,0 +1,856 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JOBHUB AI-V01 Runtime Shape Contract",
+  "description": "Runtime-only shapes for AI-V01 Job and Generated CV normalization. This contract does not define persistence or implement F01/F02.",
+  "x-version": "AI-V01",
+  "x-persistence": "RUNTIME_ONLY",
+  "x-authority": {
+    "product": "docs/product/ai-kit/versions/v01-job-cv-normalization.md",
+    "data": "docs/data/ai-kit/versions/ai-v01-job-cv-normalization-data-model.md",
+    "functionalRequirements": ["F01", "F02"],
+    "businessRules": [
+      "BR-AI-01",
+      "BR-AI-02",
+      "BR-AI-03",
+      "BR-AI-04",
+      "BR-AI-05",
+      "BR-AI-06",
+      "BR-AI-07",
+      "BR-AI-08",
+      "BR-AI-09",
+      "BR-AI-10",
+      "BR-AI-11",
+      "BR-AI-12",
+      "BR-AI-13",
+      "BR-AI-14"
+    ]
+  },
+  "x-stage-contracts": {
+    "rawInput": {
+      "job": "#/$defs/JobRawInput",
+      "generatedCv": "#/$defs/CVRawInput"
+    },
+    "llmExtraction": {
+      "job": "#/$defs/JobExtractionResult",
+      "generatedCv": "#/$defs/CVExtractionResult"
+    },
+    "canonicalOutput": {
+      "job": "#/$defs/JobMatchProfile",
+      "generatedCv": "#/$defs/CVMatchProfile",
+      "result": "#/$defs/NormalizationResult"
+    }
+  },
+  "x-semantic-constraints": [
+    "Every populated normalized claim must resolve to at least one valid source pointer, either through its embedded references or a profile evidence association.",
+    "References are JSON Pointer paths into the corresponding JobRawInput or CVRawInput; JSON Schema validates pointer shape but runtime consolidation must validate that each pointer resolves.",
+    "Structured metadata is preserved. Job description extraction may fill an empty employmentType or workModes value when evidence and canonical mapping exist, but conflicting source claims must not silently overwrite structured metadata.",
+    "Equivalent claims may be consolidated only when all supporting references are retained.",
+    "The same Job requirement must resolve to REQUIRED when valid evidence classifies it as both REQUIRED and OPTIONAL; unresolved priority remains null.",
+    "Missing data remains null or an empty array and does not by itself prevent READY.",
+    "Conflicting and uncertain claims remain represented with source references and do not by themselves prevent READY.",
+    "Candidate experience remains declared and must not be upgraded to independently verified experience or inferred from skill presence alone.",
+    "hiddenSections preserves presentation state and must not be interpreted as absence of the corresponding qualification.",
+    "Only GENERATED Candidate CV input is allowed. Uploaded CV/PDF processing and matching/scoring are outside this contract.",
+    "The only normalization result statuses are READY and FAILED."
+  ],
+  "$defs": {
+    "EmploymentType": {
+      "type": "string",
+      "enum": [
+        "FULL_TIME",
+        "PART_TIME",
+        "INTERNSHIP",
+        "CONTRACT",
+        "TEMPORARY",
+        "FREELANCE",
+        "SEASONAL",
+        "APPRENTICESHIP"
+      ]
+    },
+    "WorkMode": {
+      "type": "string",
+      "enum": ["ONSITE", "HYBRID", "REMOTE"]
+    },
+    "LanguageProficiency": {
+      "type": "string",
+      "enum": [
+        "BEGINNER",
+        "INTERMEDIATE",
+        "ADVANCED",
+        "FLUENT",
+        "NATIVE"
+      ]
+    },
+    "HiddenSection": {
+      "type": "string",
+      "enum": [
+        "professionalSummary",
+        "educations",
+        "skills",
+        "workExperiences",
+        "projects",
+        "certifications",
+        "languages"
+      ]
+    },
+    "NullableString": {
+      "type": ["string", "null"]
+    },
+    "StringArray": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "SourceReference": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/"
+    },
+    "References": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/SourceReference" },
+      "uniqueItems": true
+    },
+    "Location": {
+      "type": "object",
+      "properties": {
+        "provinceCode": { "type": "string", "minLength": 1 },
+        "districtCode": { "$ref": "#/$defs/NullableString" }
+      },
+      "required": ["provinceCode", "districtCode"],
+      "additionalProperties": false
+    },
+    "EvidenceClaim": {
+      "type": "object",
+      "properties": {
+        "value": { "type": "string", "minLength": 1 },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": ["value", "references"],
+      "additionalProperties": false
+    },
+    "NumberClaim": {
+      "type": "object",
+      "properties": {
+        "value": { "type": "number", "minimum": 0 },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": ["value", "references"],
+      "additionalProperties": false
+    },
+    "EmploymentTypeClaim": {
+      "type": "object",
+      "properties": {
+        "value": { "$ref": "#/$defs/EmploymentType" },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": ["value", "references"],
+      "additionalProperties": false
+    },
+    "WorkModeClaim": {
+      "type": "object",
+      "properties": {
+        "value": { "$ref": "#/$defs/WorkMode" },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": ["value", "references"],
+      "additionalProperties": false
+    },
+    "EvidenceAssociation": {
+      "type": "object",
+      "properties": {
+        "claimPath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/"
+        },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": ["claimPath", "references"],
+      "additionalProperties": false
+    },
+    "ConflictingClaims": {
+      "type": "object",
+      "properties": {
+        "subject": { "type": "string", "minLength": 1 },
+        "claims": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        }
+      },
+      "required": ["subject", "claims"],
+      "additionalProperties": false
+    },
+    "JobRequirement": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "priority": {
+          "type": ["string", "null"],
+          "enum": ["REQUIRED", "OPTIONAL", null]
+        },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": ["name", "priority", "references"],
+      "additionalProperties": false
+    },
+    "SourceEducation": {
+      "type": "object",
+      "properties": {
+        "institutionName": { "$ref": "#/$defs/NullableString" },
+        "degree": { "$ref": "#/$defs/NullableString" },
+        "fieldOfStudy": { "$ref": "#/$defs/NullableString" },
+        "startDate": { "$ref": "#/$defs/NullableString" },
+        "endDate": { "$ref": "#/$defs/NullableString" }
+      },
+      "required": [
+        "institutionName",
+        "degree",
+        "fieldOfStudy",
+        "startDate",
+        "endDate"
+      ],
+      "additionalProperties": false
+    },
+    "SourceWorkExperience": {
+      "type": "object",
+      "properties": {
+        "companyName": { "$ref": "#/$defs/NullableString" },
+        "position": { "$ref": "#/$defs/NullableString" },
+        "startDate": { "$ref": "#/$defs/NullableString" },
+        "endDate": { "$ref": "#/$defs/NullableString" },
+        "description": { "$ref": "#/$defs/NullableString" },
+        "achievements": { "$ref": "#/$defs/StringArray" }
+      },
+      "required": [
+        "companyName",
+        "position",
+        "startDate",
+        "endDate",
+        "description",
+        "achievements"
+      ],
+      "additionalProperties": false
+    },
+    "SourceProject": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/NullableString" },
+        "role": { "$ref": "#/$defs/NullableString" },
+        "description": { "$ref": "#/$defs/NullableString" },
+        "technologies": { "$ref": "#/$defs/StringArray" },
+        "projectUrl": { "$ref": "#/$defs/NullableString" }
+      },
+      "required": [
+        "name",
+        "role",
+        "description",
+        "technologies",
+        "projectUrl"
+      ],
+      "additionalProperties": false
+    },
+    "SourceCertification": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/NullableString" },
+        "issuer": { "$ref": "#/$defs/NullableString" },
+        "issueDate": { "$ref": "#/$defs/NullableString" },
+        "expirationDate": { "$ref": "#/$defs/NullableString" },
+        "credentialId": { "$ref": "#/$defs/NullableString" },
+        "credentialUrl": { "$ref": "#/$defs/NullableString" }
+      },
+      "required": [
+        "name",
+        "issuer",
+        "issueDate",
+        "expirationDate",
+        "credentialId",
+        "credentialUrl"
+      ],
+      "additionalProperties": false
+    },
+    "SourceLanguage": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/NullableString" },
+        "proficiency": {
+          "anyOf": [
+            { "$ref": "#/$defs/LanguageProficiency" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": ["name", "proficiency"],
+      "additionalProperties": false
+    },
+    "GeneratedContent": {
+      "type": "object",
+      "properties": {
+        "professionalSummary": { "$ref": "#/$defs/NullableString" },
+        "educations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceEducation" }
+        },
+        "skills": { "$ref": "#/$defs/StringArray" },
+        "workExperiences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceWorkExperience" }
+        },
+        "projects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceProject" }
+        },
+        "certifications": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceCertification" }
+        },
+        "languages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceLanguage" }
+        },
+        "hiddenSections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/HiddenSection" },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "professionalSummary",
+        "educations",
+        "skills",
+        "workExperiences",
+        "projects",
+        "certifications",
+        "languages",
+        "hiddenSections"
+      ],
+      "additionalProperties": false
+    },
+    "JobRawInput": {
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/NullableString" },
+        "jobDescription": { "$ref": "#/$defs/NullableString" },
+        "requiredSkills": { "$ref": "#/$defs/StringArray" },
+        "fieldCategoryIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "positionCategoryIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "experienceLevelId": { "$ref": "#/$defs/NullableString" },
+        "employmentType": {
+          "anyOf": [
+            { "$ref": "#/$defs/EmploymentType" },
+            { "type": "null" }
+          ]
+        },
+        "workModes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WorkMode" },
+          "uniqueItems": true
+        },
+        "location": {
+          "anyOf": [
+            { "$ref": "#/$defs/Location" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": [
+        "jobId",
+        "title",
+        "jobDescription",
+        "requiredSkills",
+        "fieldCategoryIds",
+        "positionCategoryIds",
+        "experienceLevelId",
+        "employmentType",
+        "workModes",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "CVRawInput": {
+      "type": "object",
+      "properties": {
+        "cvId": { "type": "string", "minLength": 1 },
+        "sourceType": { "const": "GENERATED" },
+        "categoryId": { "type": "string", "minLength": 1 },
+        "experienceLevelId": { "$ref": "#/$defs/NullableString" },
+        "skillTags": { "$ref": "#/$defs/StringArray" },
+        "employmentTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EmploymentType" },
+          "uniqueItems": true
+        },
+        "workModes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WorkMode" },
+          "uniqueItems": true
+        },
+        "preferredLocations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Location" }
+        },
+        "generatedContent": { "$ref": "#/$defs/GeneratedContent" }
+      },
+      "required": [
+        "cvId",
+        "sourceType",
+        "categoryId",
+        "experienceLevelId",
+        "skillTags",
+        "employmentTypes",
+        "workModes",
+        "preferredLocations",
+        "generatedContent"
+      ],
+      "additionalProperties": false
+    },
+    "JobExtractionResult": {
+      "type": "object",
+      "properties": {
+        "requirements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/JobRequirement" }
+        },
+        "minimumExperienceYears": {
+          "anyOf": [
+            { "$ref": "#/$defs/NumberClaim" },
+            { "type": "null" }
+          ]
+        },
+        "employmentType": {
+          "anyOf": [
+            { "$ref": "#/$defs/EmploymentTypeClaim" },
+            { "type": "null" }
+          ]
+        },
+        "workModes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WorkModeClaim" }
+        },
+        "residualClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "uncertainClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "conflictingClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConflictingClaims" }
+        }
+      },
+      "required": [
+        "requirements",
+        "minimumExperienceYears",
+        "employmentType",
+        "workModes",
+        "residualClaims",
+        "uncertainClaims",
+        "conflictingClaims"
+      ],
+      "additionalProperties": false
+    },
+    "CVExtractionResult": {
+      "type": "object",
+      "properties": {
+        "professionalSummary": {
+          "anyOf": [
+            { "$ref": "#/$defs/EvidenceClaim" },
+            { "type": "null" }
+          ]
+        },
+        "skills": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "declaredExperienceClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "residualClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "uncertainClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "conflictingClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConflictingClaims" }
+        }
+      },
+      "required": [
+        "professionalSummary",
+        "skills",
+        "declaredExperienceClaims",
+        "residualClaims",
+        "uncertainClaims",
+        "conflictingClaims"
+      ],
+      "additionalProperties": false
+    },
+    "Skill": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": ["name", "references"],
+      "additionalProperties": false
+    },
+    "Education": {
+      "type": "object",
+      "properties": {
+        "institutionName": { "$ref": "#/$defs/NullableString" },
+        "degree": { "$ref": "#/$defs/NullableString" },
+        "fieldOfStudy": { "$ref": "#/$defs/NullableString" },
+        "startDate": { "$ref": "#/$defs/NullableString" },
+        "endDate": { "$ref": "#/$defs/NullableString" },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": [
+        "institutionName",
+        "degree",
+        "fieldOfStudy",
+        "startDate",
+        "endDate",
+        "references"
+      ],
+      "additionalProperties": false
+    },
+    "WorkExperience": {
+      "type": "object",
+      "properties": {
+        "companyName": { "$ref": "#/$defs/NullableString" },
+        "position": { "$ref": "#/$defs/NullableString" },
+        "startDate": { "$ref": "#/$defs/NullableString" },
+        "endDate": { "$ref": "#/$defs/NullableString" },
+        "description": { "$ref": "#/$defs/NullableString" },
+        "achievements": { "$ref": "#/$defs/StringArray" },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": [
+        "companyName",
+        "position",
+        "startDate",
+        "endDate",
+        "description",
+        "achievements",
+        "references"
+      ],
+      "additionalProperties": false
+    },
+    "Project": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/NullableString" },
+        "role": { "$ref": "#/$defs/NullableString" },
+        "description": { "$ref": "#/$defs/NullableString" },
+        "technologies": { "$ref": "#/$defs/StringArray" },
+        "projectUrl": { "$ref": "#/$defs/NullableString" },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": [
+        "name",
+        "role",
+        "description",
+        "technologies",
+        "projectUrl",
+        "references"
+      ],
+      "additionalProperties": false
+    },
+    "Certification": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/NullableString" },
+        "issuer": { "$ref": "#/$defs/NullableString" },
+        "issueDate": { "$ref": "#/$defs/NullableString" },
+        "expirationDate": { "$ref": "#/$defs/NullableString" },
+        "credentialId": { "$ref": "#/$defs/NullableString" },
+        "credentialUrl": { "$ref": "#/$defs/NullableString" },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": [
+        "name",
+        "issuer",
+        "issueDate",
+        "expirationDate",
+        "credentialId",
+        "credentialUrl",
+        "references"
+      ],
+      "additionalProperties": false
+    },
+    "Language": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "proficiency": {
+          "anyOf": [
+            { "$ref": "#/$defs/LanguageProficiency" },
+            { "type": "null" }
+          ]
+        },
+        "rawProficiency": { "$ref": "#/$defs/NullableString" },
+        "references": { "$ref": "#/$defs/References" }
+      },
+      "required": [
+        "name",
+        "proficiency",
+        "rawProficiency",
+        "references"
+      ],
+      "additionalProperties": false
+    },
+    "JobPositioning": {
+      "type": "object",
+      "properties": {
+        "fieldCategoryIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "positionCategoryIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "declaredExperienceLevelId": { "$ref": "#/$defs/NullableString" }
+      },
+      "required": [
+        "fieldCategoryIds",
+        "positionCategoryIds",
+        "declaredExperienceLevelId"
+      ],
+      "additionalProperties": false
+    },
+    "CVPositioning": {
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string", "minLength": 1 },
+        "declaredExperienceLevelId": { "$ref": "#/$defs/NullableString" }
+      },
+      "required": ["categoryId", "declaredExperienceLevelId"],
+      "additionalProperties": false
+    },
+    "Preferences": {
+      "type": "object",
+      "properties": {
+        "preferredLocations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Location" }
+        },
+        "employmentTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EmploymentType" },
+          "uniqueItems": true
+        },
+        "workModes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WorkMode" },
+          "uniqueItems": true
+        }
+      },
+      "required": ["preferredLocations", "employmentTypes", "workModes"],
+      "additionalProperties": false
+    },
+    "JobMatchProfile": {
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/NullableString" },
+        "positioning": { "$ref": "#/$defs/JobPositioning" },
+        "employmentType": {
+          "anyOf": [
+            { "$ref": "#/$defs/EmploymentType" },
+            { "type": "null" }
+          ]
+        },
+        "workModes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WorkMode" },
+          "uniqueItems": true
+        },
+        "location": {
+          "anyOf": [
+            { "$ref": "#/$defs/Location" },
+            { "type": "null" }
+          ]
+        },
+        "minimumExperienceYears": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "requirements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/JobRequirement" }
+        },
+        "residualClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "uncertainClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "conflictingClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConflictingClaims" }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/EvidenceAssociation" }
+        }
+      },
+      "required": [
+        "jobId",
+        "title",
+        "positioning",
+        "employmentType",
+        "workModes",
+        "location",
+        "minimumExperienceYears",
+        "requirements",
+        "residualClaims",
+        "uncertainClaims",
+        "conflictingClaims",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "CVMatchProfile": {
+      "type": "object",
+      "properties": {
+        "cvId": { "type": "string", "minLength": 1 },
+        "positioning": { "$ref": "#/$defs/CVPositioning" },
+        "professionalSummary": { "$ref": "#/$defs/NullableString" },
+        "qualifications": {
+          "type": "object",
+          "properties": {
+            "skills": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Skill" }
+            },
+            "educations": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Education" }
+            },
+            "certifications": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Certification" }
+            },
+            "languages": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Language" }
+            }
+          },
+          "required": [
+            "skills",
+            "educations",
+            "certifications",
+            "languages"
+          ],
+          "additionalProperties": false
+        },
+        "workExperiences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WorkExperience" }
+        },
+        "projects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Project" }
+        },
+        "declaredExperienceClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "preferences": { "$ref": "#/$defs/Preferences" },
+        "hiddenSections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/HiddenSection" },
+          "uniqueItems": true
+        },
+        "residualClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "uncertainClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceClaim" }
+        },
+        "conflictingClaims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConflictingClaims" }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/EvidenceAssociation" }
+        }
+      },
+      "required": [
+        "cvId",
+        "positioning",
+        "professionalSummary",
+        "qualifications",
+        "workExperiences",
+        "projects",
+        "declaredExperienceClaims",
+        "preferences",
+        "hiddenSections",
+        "residualClaims",
+        "uncertainClaims",
+        "conflictingClaims",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "ReadyNormalizationResult": {
+      "type": "object",
+      "properties": {
+        "status": { "const": "READY" },
+        "profile": {
+          "oneOf": [
+            { "$ref": "#/$defs/JobMatchProfile" },
+            { "$ref": "#/$defs/CVMatchProfile" }
+          ]
+        },
+        "error": { "type": "null" }
+      },
+      "required": ["status", "profile", "error"],
+      "additionalProperties": false
+    },
+    "FailedNormalizationResult": {
+      "type": "object",
+      "properties": {
+        "status": { "const": "FAILED" },
+        "profile": { "type": "null" },
+        "error": { "type": "string" }
+      },
+      "required": ["status", "profile", "error"],
+      "additionalProperties": false
+    },
+    "NormalizationResult": {
+      "oneOf": [
+        { "$ref": "#/$defs/ReadyNormalizationResult" },
+        { "$ref": "#/$defs/FailedNormalizationResult" }
+      ]
+    }
+  },
+  "$ref": "#/$defs/NormalizationResult"
+}

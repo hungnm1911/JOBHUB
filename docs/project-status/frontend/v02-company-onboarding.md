@@ -20,6 +20,19 @@ Company Manager registration (F01) or after login with `PENDING_ACTIVATION`.
   client-side confirmation checkbox, and submits through
   `POST /api/company/submit`. Field rejections return the user to the form with
   the field error.
+- **Company Preview design pilot (2026-10-21):** presentation implemented
+  with a single reading flow, key–value sections, full profile values, image
+  inspection, and warning/checkbox/actions together. `CompanyProfileCard`
+  exposes an opt-in `presentation="review"`; its default Admin presentation
+  remains unchanged. Business/API/validation/session behavior and the Design
+  Contract are unchanged. The approved Contemporary Product + Enterprise
+  prototype is now implemented: company identity anchors the profile, section
+  headings align with compact metadata, prose has a reading measure, full URLs
+  use sans-serif, and media frames fit uncropped images. The confirmation area
+  ends the main surface; account controls remain secondary. Code gate and
+  isolated-fixture Chrome checks passed; human visual review, native 200% zoom
+  and live authenticated workflow validation remain pending. `[Đo]` values have
+  fixture evidence only; none have become fixed Design Contract tokens.
 - **After submit / F08:** onboarding access only reads the Company while
   `NOT_SUBMITTED`, so `GET /api/company` answering `409` on `approvalStatus` is
   shown as one combined "submitted" screen. It explains the remaining steps and
@@ -40,6 +53,51 @@ Company Manager registration (F01) or after login with `PENDING_ACTIVATION`.
 
 ## Verification status
 
+- Company Preview approved-prototype implementation (2026-10-21):
+  `cd frontend && yarn verify:agent` passed (13 authentication tests, ESLint,
+  production build; existing >500 kB chunk warning). Chrome DevTools MCP
+  exercised the production components in a temporary Vite fixture at
+  360/768/1024/1440px with normal, long, portrait, wide, broken-image and empty
+  data (24 combinations). Full fields, no horizontal overflow, uncropped
+  image ratios, fallbacks and initial controls passed. Keyboard checkbox
+  enable/disable, focus and action traversal passed at 360/1440px. A
+  fixture-only Axios adapter verified edit, both actions disabled while
+  submitting, loading indicator, one POST and the success callback; no real
+  submit/logout or DB writes occurred. Long-content reflow passed at
+  720/512/384 CSS px; native 200% zoom remains unverified. Screenshots and JSON
+  evidence are under `/tmp/jobhub-preview-implementation/` (temporary).
+  Source comparison preserves the default profile branch, `SafeImage`, submit
+  handler, Admin Detail, Pending, API/auth/validation, shared defaults and
+  Design Contract. Current `[Đo]` candidates: identity 32/40 desktop and 26/34
+  mobile, prose 16/28 with max 65ch, section-heading column 10rem, asset URLs
+  14/20 sans-serif, banner max 15rem in a content-fitting frame. Human review,
+  native zoom, assistive-technology and live authenticated integration checks
+  remain open; this fixture evidence does not approve those values as tokens.
+- Earlier Company Preview visual refinement (2026-10-21; presentation superseded
+  by the implementation above): `cd frontend && yarn verify:agent`
+  passed (13 authentication tests, ESLint, production build; chunk-size warning
+  >500 kB). Existing Chrome DevTools MCP 1.9.0 and Windows Chrome exercised the
+  real presentation components in a temporary Vite fixture with the existing
+  header, footer, stepper and account component; no DB records were seeded.
+  All 24 combinations passed: 360/768/1024/1440px × normal, portrait (300×1500),
+  wide (6000×160), long content, empty fields and failed images. Checked full
+  name/URL text, no page/pilot overflow, contained image ratio, fallbacks and
+  initial unchecked/disabled controls. Tab/Shift+Tab/Space, visible focus and
+  checkbox enable/disable passed at 360/1440px without submit/logout requests.
+  Baseline/after/focus screenshots and measurements are under
+  `/tmp/jobhub-preview-refinement/` (temporary local artifacts).
+  Native zoom shortcuts had no effect in headless Chrome. Equivalent 200%
+  reflow passed at 720/512/384 CSS px (1440/1024/768 physical px, DPR 2);
+  at 180 CSS px the unchanged global navigation overflowed to 261px while
+  Preview itself did not overflow. This is not a native browser zoom pass.
+  Source/hash checks preserve default profile JSX, Admin Detail, Pending,
+  onboarding/API/auth behavior, global styles, dependencies and Design Contract.
+  Fixture-validated candidates: content max 64rem, title 24/32, section title
+  16/24, section gap 24px, label column 11rem, URL 14/20 monospace, banner max
+  20rem with frame min 8rem. Native 200% zoom, loading/API integration, actual
+  font delivery, contrast measurement and human visual approval remain open;
+  candidates are not fixed tokens. Earlier static SSR checks covered four
+  default-profile baselines (identical) and four review fixtures.
 - `cd frontend && yarn verify:agent` passed (12 focused tests, ESLint, Vite
   build).
 - Browser run against the local backend: registered a test Company Manager

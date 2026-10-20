@@ -15,6 +15,7 @@ import { createGeminiClient } from "../src/llm/gemini-client.js";
 
 const logger = Object.freeze({
   error: vi.fn(),
+  info: vi.fn(),
 });
 
 describe("Gemini client adapter", () => {
@@ -30,7 +31,15 @@ describe("Gemini client adapter", () => {
   });
 
   it("initializes the SDK with injected config and delegates generation", async () => {
-    const response = { text: "offline mocked response" };
+    const response = {
+      text: "offline mocked response",
+      usageMetadata: {
+        promptTokenCount: 11,
+        candidatesTokenCount: 7,
+        totalTokenCount: 18,
+        cachedContentTokenCount: 3,
+      },
+    };
     const contents = [{ role: "user", parts: [{ text: "test" }] }];
     const config = { temperature: 0.2 };
     generateContentMock.mockResolvedValue(response);
@@ -45,12 +54,23 @@ describe("Gemini client adapter", () => {
       response,
     );
     expect(GoogleGenAI).toHaveBeenCalledOnce();
-    expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: "test-api-key" });
+    expect(GoogleGenAI).toHaveBeenCalledWith({
+      apiKey: "test-api-key",
+      httpOptions: { retryOptions: { attempts: 1 } },
+    });
     expect(generateContentMock).toHaveBeenCalledOnce();
     expect(generateContentMock).toHaveBeenCalledWith({
       model: "test-model",
       contents,
       config,
+    });
+    expect(logger.info).toHaveBeenCalledWith("AI provider API usage", {
+      provider: "gemini",
+      model: "test-model",
+      input_tokens: 11,
+      output_tokens: 7,
+      total_tokens: 18,
+      cached_tokens: 3,
     });
   });
 

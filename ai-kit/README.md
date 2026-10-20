@@ -2,7 +2,7 @@
 
 `@jobhub/ai-kit` is JOBHUB's private local Node.js package for AI-specific adapters and computation. It uses JavaScript ES modules, lives beside `backend/` and `frontend/`, and is consumed by Backend through `file:../ai-kit`.
 
-AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready, but AI #1/#2/#3 have no implemented business capability or approved Product and Data specification.
+AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready, and AI-V01 Product/Data authority is approved. The R2 runtime shape contract and R4 contract-test coverage are complete. The internal F01 Job extraction stage (`JobRawInput` to `JobExtractionResult`) is implemented; F01 consolidation into `JobMatchProfile` and all of F02 remain unimplemented, and no AI-V01 capability is exported. AI-V02 and AI-V03 are not approved.
 
 ## Installation
 
@@ -24,6 +24,9 @@ Backend is the only runtime environment owner. Put optional provider configurati
 
 | Variable | Purpose |
 | --- | --- |
+| `CCPRO_API_KEY` | Codex-compatible API credential |
+| `CCPRO_BASE_URL` | Codex-compatible Responses API base URL |
+| `CCPRO_MODEL` | Codex model name |
 | `GEMINI_API_KEY` | Gemini credential |
 | `GEMINI_MODEL` | Gemini model name |
 | `GROQ_API_KEY` | Groq credential |
@@ -35,13 +38,15 @@ AI Kit has no `.env` file and does not read `process.env`; Backend injects norma
 
 ```text
 ai-kit/
+├── v01-contract.json             # AI-V01 runtime-only shape contract
 ├── src/
 │   ├── index.js                  # Production package facade
 │   ├── create-ai-kit.js          # Dependency-injection factory foundation
-│   ├── llm/                      # Gemini/Groq adapters and fallback policy
+│   ├── llm/                      # Codex/Gemini/Groq adapters, usage logs, and fallback policy
+│   ├── normalization/            # AI-V01 contract validation and F01 Job extraction stage
 │   └── document/                 # Scribe PDF text extraction adapter
-├── scripts/                      # Manual Gemini/Groq smoke harnesses
-├── test/                         # Offline tests and local fixtures
+├── scripts/                      # Manual provider smoke harnesses
+├── test/                         # Offline foundation and AI-V01 contract tests
 ├── AGENTS.md                     # Scoped contributor/agent contract
 └── package.json                  # Package exports and npm commands
 ```
@@ -56,9 +61,9 @@ The current production entrypoint is the package root:
 import { createAiKit } from "@jobhub/ai-kit";
 ```
 
-`createAiKit` validates injected Gemini/Groq configuration and the logger contract, then returns an empty frozen foundation object. It does not expose matching, CV analysis, recommendation, or agent operations.
+`createAiKit` validates injected Codex/Gemini/Groq configuration and the logger contract, then returns an empty frozen foundation object. It does not expose matching, CV analysis, recommendation, or agent operations.
 
-[`backend/src/services/ai-kit.service.js`](../backend/src/services/ai-kit.service.js) is the sole Backend runtime integration owner. Backend startup does not yet import it, so AI Kit is not part of the full startup/shutdown lifecycle. The `tooling/smoke-gemini` and `tooling/smoke-groq` exports serve only manual smoke launchers; provider adapters and other internals are not public business APIs.
+[`backend/src/services/ai-kit.service.js`](../backend/src/services/ai-kit.service.js) is the sole Backend runtime integration owner. Backend startup does not yet import it, so AI Kit is not part of the full startup/shutdown lifecycle. The `tooling/smoke-codex`, `tooling/smoke-gemini`, and `tooling/smoke-groq` exports serve only manual smoke launchers; provider adapters and other internals are not public business APIs.
 
 ## Development commands
 
@@ -78,11 +83,19 @@ npm run verify:agent
 Run live provider smoke explicitly when credentials and network access are available:
 
 ```bash
+npm run smoke:codex
 npm run smoke:gemini
 npm run smoke:groq
 ```
 
-Smoke may consume quota and reads credentials through Backend configuration. Gemini and Groq have each been live-verified separately; one does not verify the other or the uncomposed fallback path. From the repository root, also run this for Backend integration/runtime changes:
+All three smoke commands log the provider/model at start, each API request's
+provider/model/SDK operation before sending, normalized token usage from the
+adapter, and pass/fail with elapsed `durationMs`. The request-start log is also
+emitted for regular adapter calls and every retry/fallback attempt. Success is
+logged only after the expected response marker is validated. CLI output
+redacts the configured API key; unexpected response text is not printed.
+
+Smoke may consume quota and reads credentials through Backend configuration. Each provider must be verified separately; one provider's result does not verify another provider or the fallback path. From the repository root, also run this for Backend integration/runtime changes:
 
 ```bash
 cd backend
@@ -91,8 +104,8 @@ npm run verify:agent
 
 ## Current limitations
 
-- No AI business capability is implemented or implementation-ready.
-- The Gemini-to-Groq fallback policy exists internally but is not wired into a business operation.
+- Only the internal F01 Job extraction stage exists; F01 consolidation, `JobMatchProfile`, READY/FAILED results, and F02 are not implemented.
+- The Codex-to-Gemini-to-Groq priority policy is composed only into the internal F01 Job extraction stage, which is not yet exported or used by Backend.
 - Scribe PDF extraction exists, but there is no complete uploaded-CV ingestion pipeline.
 - Buffer input and scanned-PDF/OCR fixture coverage are deferred.
 - Explicit Scribe disposal is not wired into Backend shutdown.
@@ -109,6 +122,6 @@ See the [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) 
 | [AI Kit conventions](../docs/engineering/ai-kit-conventions.md) | Enforceable coding, integration, security, and verification rules |
 | [AI Kit sources of truth](../docs/engineering/ai-kit-source-of-truth.md) | Canonical owners, consumers, and forbidden duplication |
 | [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) | Implementation and verification evidence |
-| [AI Kit Product roadmap](../docs/product/ai-kit/roadmap.md) | AI Kit version and scope authority; no business version is currently approved |
-| [AI Kit Product Specifications](../docs/product/ai-kit/versions/) | Approved detailed AI Kit business requirements, when present |
-| [AI Kit Data Contracts](../docs/data/ai-kit/versions/) | Approved AI Kit persistence and data-defined contracts, when present |
+| [AI Kit Product roadmap](../docs/product/ai-kit/roadmap.md) | AI Kit version and scope authority; AI-V01 is approved and partially implemented (F01 Job extraction stage only) |
+| [AI Kit Product Specifications](../docs/product/ai-kit/versions/) | Approved detailed AI Kit business requirements, including AI-V01 |
+| [AI Kit Data Contracts](../docs/data/ai-kit/versions/) | Approved AI Kit persistence and data-defined contracts, including AI-V01 |

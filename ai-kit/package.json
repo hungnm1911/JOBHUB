@@ -6,6 +6,7 @@
   "main": "./src/index.js",
   "exports": {
     ".": "./src/index.js",
+    "./tooling/smoke-codex": "./scripts/smoke-codex.js",
     "./tooling/smoke-gemini": "./scripts/smoke-gemini.js",
     "./tooling/smoke-groq": "./scripts/smoke-groq.js"
   },
@@ -14,6 +15,7 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke:codex": "cd ../backend && node scripts/smoke-codex.js",
     "smoke:gemini": "cd ../backend && node scripts/smoke-gemini.js",
     "smoke:groq": "cd ../backend && node scripts/smoke-groq.js",
     "verify:agent": "npm run lint && npm run test"
@@ -26,7 +28,9 @@
   },
   "dependencies": {
     "@google/genai": "^2.30.0",
+    "ajv": "^8.20.0",
     "groq-sdk": "^1.6.0",
+    "openai": "^6.49.0",
     "scribe.js-ocr": "^0.16.1"
   }
 }

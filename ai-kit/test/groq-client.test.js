@@ -15,6 +15,7 @@ import { createGroqClient } from "../src/llm/groq-client.js";
 
 const logger = Object.freeze({
   error: vi.fn(),
+  info: vi.fn(),
 });
 
 describe("Groq client adapter", () => {
@@ -32,7 +33,15 @@ describe("Groq client adapter", () => {
   });
 
   it("injects provider config and forwards messages and options", async () => {
-    const response = { choices: [{ message: { content: "offline response" } }] };
+    const response = {
+      choices: [{ message: { content: "offline response" } }],
+      usage: {
+        prompt_tokens: 13,
+        completion_tokens: 5,
+        total_tokens: 18,
+        prompt_tokens_details: { cached_tokens: 4 },
+      },
+    };
     const messages = [{ role: "user", content: "test" }];
     createCompletionMock.mockResolvedValue(response);
 
@@ -48,13 +57,24 @@ describe("Groq client adapter", () => {
       max_completion_tokens: 128,
     })).resolves.toBe(response);
     expect(Groq).toHaveBeenCalledOnce();
-    expect(Groq).toHaveBeenCalledWith({ apiKey: "test-groq-api-key" });
+    expect(Groq).toHaveBeenCalledWith({
+      apiKey: "test-groq-api-key",
+      maxRetries: 0,
+    });
     expect(createCompletionMock).toHaveBeenCalledOnce();
     expect(createCompletionMock).toHaveBeenCalledWith({
       model: "openai/gpt-oss-120b",
       messages,
       temperature: 0.2,
       max_completion_tokens: 128,
+    });
+    expect(logger.info).toHaveBeenCalledWith("AI provider API usage", {
+      provider: "groq",
+      model: "openai/gpt-oss-120b",
+      input_tokens: 13,
+      output_tokens: 5,
+      total_tokens: 18,
+      cached_tokens: 4,
     });
   });
 

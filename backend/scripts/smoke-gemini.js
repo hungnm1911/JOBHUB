@@ -33,11 +33,16 @@ const formatError = (error) => {
 };
 
 const smokeLogger = Object.freeze({
-  error: (message, { error, model } = {}) => {
+  error: (message, { error, ...metadata } = {}) => {
     providerErrorLogged = true;
+    const details = error === undefined ? "" : `: ${formatError(error)}`;
+
     console.error(
-      `${message}: ${formatError(error)} | model=${redactApiKey(model)}`,
+      redactApiKey(`${message}${details} | ${JSON.stringify(metadata)}`),
     );
+  },
+  info: (message, metadata = {}) => {
+    console.info(redactApiKey(`${message}: ${JSON.stringify(metadata)}`));
   },
 });
 
@@ -54,6 +59,7 @@ const requireSmokeConfiguration = (gemini) => {
 const runBackendGeminiSmoke = async ({ config, runGeminiSmoke }) => {
   const { gemini } = config.aiKit.llm;
 
+  providerErrorLogged = false;
   configuredApiKey = gemini.apiKey;
   requireSmokeConfiguration(gemini);
 
@@ -69,12 +75,7 @@ const main = async () => {
     import("../src/config/index.js"),
     import("@jobhub/ai-kit/tooling/smoke-gemini"),
   ]);
-  const result = await runBackendGeminiSmoke({ config, runGeminiSmoke });
-
-  console.log(
-    `Gemini smoke test passed | model=${result.model}`
-      + ` | response=${JSON.stringify(result.responseText)}`,
-  );
+  await runBackendGeminiSmoke({ config, runGeminiSmoke });
 };
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -72,6 +72,15 @@ describe("AI Kit environment boundary", () => {
     expect(sdkConsumers).toEqual([path.join("llm", "groq-client.js")]);
   });
 
+  it("keeps the direct OpenAI SDK import inside the Codex adapter", async () => {
+    const sources = await readJavaScriptSources([sourceRoot]);
+    const sdkConsumers = sources
+      .filter(({ source }) => source.includes('from "openai"'))
+      .map(({ filePath }) => path.relative(sourceRoot, filePath));
+
+    expect(sdkConsumers).toEqual([path.join("llm", "codex-client.js")]);
+  });
+
   it("keeps the direct Scribe import inside the PDF text extractor", async () => {
     const sources = await readJavaScriptSources([sourceRoot, scriptsRoot]);
     const scribeConsumers = sources

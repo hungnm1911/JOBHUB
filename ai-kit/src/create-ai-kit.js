@@ -33,12 +33,21 @@ const assertOptionalProviderConfig = (provider, fieldName) => {
   assertOptionalNonEmptyString(provider.model, `${fieldName}.model`);
 };
 
+const assertOptionalCodexConfig = (codex) => {
+  assertOptionalProviderConfig(codex, "llm.codex");
+
+  if (codex !== undefined) {
+    assertOptionalNonEmptyString(codex.baseURL, "llm.codex.baseURL");
+  }
+};
+
 function createAiKit({ llm = {}, logger } = {}) {
   if (llm === null || typeof llm !== "object" || Array.isArray(llm)) {
     throw new TypeError("llm must be an object");
   }
 
   assertLogger(logger);
+  assertOptionalCodexConfig(llm.codex);
   assertOptionalProviderConfig(llm.gemini, "llm.gemini");
   assertOptionalProviderConfig(llm.groq, "llm.groq");
 

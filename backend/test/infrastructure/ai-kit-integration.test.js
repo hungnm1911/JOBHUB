@@ -27,6 +27,11 @@ describe("AI Kit backend integration", () => {
       logger,
     });
     expect(config.aiKit.llm).toEqual({
+      codex: {
+        apiKey: "test-codex-api-key",
+        baseURL: "https://codex.example.test/v1",
+        model: "test-codex-model",
+      },
       gemini: {
         apiKey: "test-gemini-api-key",
         model: "test-gemini-model",

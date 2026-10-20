@@ -10,27 +10,45 @@ const SMOKE_MESSAGES = Object.freeze([
 
 const runGroqSmoke = async ({ apiKey, model, logger }) => {
   const client = createGroqClient({ apiKey, model, logger });
-  const response = await client.createChatCompletion({
-    messages: SMOKE_MESSAGES,
-  });
-  const responseText = typeof response?.choices?.[0]?.message?.content === "string"
-    ? response.choices[0].message.content.trim()
-    : "";
+  const startedAt = performance.now();
+  const metadata = { provider: "groq", model: model.trim() };
 
-  if (responseText.length === 0) {
-    throw new Error("Groq returned an empty text response");
+  logger.info("AI provider smoke started", metadata);
+
+  try {
+    const response = await client.createChatCompletion({
+      messages: SMOKE_MESSAGES,
+    });
+    const responseText = typeof response?.choices?.[0]?.message?.content === "string"
+      ? response.choices[0].message.content.trim()
+      : "";
+
+    if (responseText.length === 0) {
+      throw new Error("Groq returned an empty text response");
+    }
+
+    if (responseText !== EXPECTED_RESPONSE) {
+      throw new Error("Groq returned unexpected text");
+    }
+
+    logger.info("AI provider smoke passed", {
+      ...metadata,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+
+    return Object.freeze({
+      model: model.trim(),
+      responseText,
+    });
+  } catch (error) {
+    logger.error("AI provider smoke failed", {
+      error,
+      ...metadata,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+
+    throw error;
   }
-
-  if (responseText !== EXPECTED_RESPONSE) {
-    throw new Error(
-      `Groq returned unexpected text: ${JSON.stringify(responseText)}`,
-    );
-  }
-
-  return Object.freeze({
-    model: model.trim(),
-    responseText,
-  });
 };
 
 export { runGroqSmoke };

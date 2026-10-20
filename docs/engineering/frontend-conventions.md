@@ -460,6 +460,11 @@ function ExampleForm() {
 
 ## Styling and themes
 
+The approved visual baseline is [JOBHUB Design Contract v1](frontend-design-contract.md).
+Read its relevant sections before presentation changes; it owns visual rules,
+values awaiting browser measurement, and the Company Preview pilot reference.
+These conventions continue to own code architecture and dependency boundaries.
+
 `frontend/src/styles/` owns application-global CSS, theme tokens, and global
 styling rules.
 

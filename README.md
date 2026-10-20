@@ -565,6 +565,7 @@ Checklist chi tiết nằm trong [Backend README](backend/README.md#triển-khai
 | Canonical frontend owners ở đâu? | [Frontend Sources of Truth](docs/engineering/frontend-source-of-truth.md) |
 | Quy ước backend? | [Backend Engineering Conventions](docs/engineering/backend-conventions.md) |
 | Quy ước frontend? | [Frontend Engineering Conventions](docs/engineering/frontend-conventions.md) |
+| Baseline thiết kế frontend và Company Preview pilot? | [JOBHUB Design Contract v1](docs/engineering/frontend-design-contract.md) |
 | Cách cài đặt, cấu hình và kiểm tra AI Kit? | [AI Kit README](ai-kit/README.md) |
 | Quy ước AI Kit? | [AI Kit Engineering Conventions](docs/engineering/ai-kit-conventions.md) |
 | Canonical AI Kit owners ở đâu? | [AI Kit Sources of Truth](docs/engineering/ai-kit-source-of-truth.md) |
