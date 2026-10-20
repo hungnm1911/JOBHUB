@@ -12,6 +12,15 @@ Before any significant frontend modification, read:
 
 These engineering documents are the canonical frontend architecture contract. Follow their distinction between current state and target convention.
 
+## Canonical visual design contract
+
+Before planning or editing frontend presentation, read the relevant sections of
+[`../docs/engineering/frontend-design-contract.md`](../docs/engineering/frontend-design-contract.md).
+It is the approved visual baseline, including component reuse rules and the
+Company Preview pilot reference. Preserve its `[Chuẩn]`, `[Đo]`, and
+`[Ngoài scope]` distinctions; baseline approval alone does not authorize a UI
+implementation or override Product/Data/API and architectural authority.
+
 ## Task-specific canonical context
 
 For frontend work that implements or changes the client behavior of a product version, read all of the following before planning or editing:
@@ -59,6 +68,31 @@ Before a significant frontend change, state:
 - If a task appears to conflict with the documented architecture, stop before implementation and report the conflict.
 - For non-trivial changes, provide a short plan before editing.
 - After implementation, inspect the final diff for architecture violations and unrelated changes.
+
+## Primer Design Reference Policy
+
+For new screens or significant UI redesigns:
+
+1. Read the canonical JOBHUB Design Contract.
+2. Before choosing layout and components, consult
+   the relevant Primer patterns through Primer MCP.
+3. Use `list_patterns`/`get_pattern` for UX structure,
+   forms, navigation, disclosure and data presentation.
+4. Consult component usage, typography and color
+   guidelines when making visual decisions.
+5. Apply Impeccable to design the screen using
+   those patterns and JOBHUB's visual identity,
+   when available.
+6. Implement using existing React/shadcn components,
+   not Primer React.
+7. Briefly explain chosen patterns and why they fit.
+8. Do not copy Primer's tokens, palette or branding.
+9. Never introduce business states or actions
+   without canonical product authority.
+
+Do not consult every Primer pattern unnecessarily.
+Use only guidance relevant to the current screen.
+
 
 ## Verification
 

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "primer": {
+      "command": "npx",
+      "args": ["-y", "@primer/mcp@latest"]
+    }
+  }
+}
