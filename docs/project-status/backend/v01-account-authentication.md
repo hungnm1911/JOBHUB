@@ -2,9 +2,14 @@
 
 ## Current project state
 
-V1 is `COMPLETED AND VERIFIED`.
+V1 API completion is implemented and verified (2026-10-21), including Me, Admin Accounts list/detail, Change Password, Resend Verification and Company Manager self forgot/reset-password via membership roles (including onboarding). Existing lifecycle and activation boundaries are preserved.
 
-- **Implemented; verified (2026-10-19):** The V1 verification email now links to the frontend screen `{FRONTEND_BASE_URL}/verify-email?token=…` (built by `buildFrontendActionUrl` in `backend/src/utils/auth-action-url.js`; `FRONTEND_BASE_URL` defaults to `http://localhost:5173`). The frontend consumes the token through the existing `POST /api/auth/verify-email`; `GET /api/auth/verify-email` remains for links already sent. Password reset, company-approval confirmation, and Recruiter activation links are unchanged. `cd backend && npm run verify:agent` passed (ESLint, architecture checks, `1783/1783` tests). Real SMTP delivery of the new link was not exercised.
+- Change Password atomically revokes every session and old reset credentials. Token replacement is serialized with consumption; verification consumption is transactional, and failed mail issuance cleans up only its own token.
+- The common backend gate passed: 178 files / 1,823 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 pre-existing warnings. Shared gate evidence is recorded in [Platform and operations](platform-and-operations.md).
+
+## Deferred / not started
+
+- No implementation or verification item remains in the approved V1–V4 API completion scope. Held lifecycle/identity operations remain outside scope.
 
 ## Previously completed and verified baseline
 
@@ -26,6 +31,7 @@ V1 is `COMPLETED AND VERIFIED`.
 
 ## Verification status
 
-- Focused automated tests cover V1 Slices 1–10 in `test/auth/*.test.js`.
-
-- The latest auth-email-action change passed its focused suites, ESLint, architecture verification, and the full suite with `--fileParallelism=false`; the default parallel `verify:agent` run flaked twice on unrelated MongoMemoryServer startup timeouts.
+- 2026-10-21 final common backend gate passed with `VITEST_MAX_WORKERS=2 npm run verify:agent`: ESLint 0 errors / 2 pre-existing V6 test warnings; ARCH-001–ARCH-019; 178/178 files and 1,823/1,823 tests. No tests were excluded and timeouts were unchanged. The earlier default-worker run's unrelated V15 timeout passed alone (33/33) before the clean gate rerun.
+- Focused completion run: five files / 39 tests passed (`v1-api-completion`, `v2-v3-api-completion`, `v3-recruiter-password-reset`, `v3-acceptance`, `v4-optional-pagination`). After reusing the existing regex helper, the two affected completion suites passed again (16/16).
+- `git diff --check` and whitespace checks on the seven new files passed. Shared environment and gate evidence: [Platform and operations](platform-and-operations.md).
+- Real SMTP, live MongoDB/provider and frontend runtime checks were not performed. Integration tests use MongoMemoryReplSet, mocked mail and stubbed Location provider.

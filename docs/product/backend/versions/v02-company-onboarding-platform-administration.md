@@ -39,6 +39,7 @@ Sau khi V02 hoàn thành, hệ thống phải:
 - Gửi hồ sơ Company để Platform Admin xét duyệt.
 - Ghi nhận snapshot hồ sơ tại thời điểm gửi.
 - Platform Admin xem danh sách và chi tiết đăng ký Company.
+- Platform Admin xem danh sách/chi tiết Company hiện tại, bao gồm chưa submit, tách biệt đăng ký xét duyệt.
 - Platform Admin chấp thuận Company.
 - Platform Admin từ chối Company.
 - Company Manager xác nhận chấp thuận qua email.
@@ -1555,3 +1556,7 @@ Tài liệu này không quy định endpoint, HTTP contract, controller/service,
 Các artifact dữ liệu và engineering phải phục vụ business truth trong tài liệu này, không được tự tạo thêm hoặc thay đổi requirement.
 
 Nếu data design hoặc implementation mâu thuẫn với tài liệu này, tài liệu này là authority đối với business behavior cho tới khi được con người cập nhật và phê duyệt lại.
+
+## API completion được duyệt — 2026-10-21
+
+F11 — Platform Admin đọc Company hiện tại: list/search/filter approvalStatus, operationalStatus/sort/pagination, bao gồm NOT_SUBMITTED. Detail trả public Company hiện tại và manager summary resolve qua CompanyMember. Đây là chức năng riêng F04 xét duyệt snapshot; F04 chỉ liệt kê hồ sơ đã submit và bổ sung search/filter/sort/pagination. Giữ nguyên snapshot và mọi lifecycle. Không unlock/reactivate Company.

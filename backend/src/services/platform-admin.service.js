@@ -17,6 +17,8 @@ import {
   findCompanyManagerMembership,
   toPublicCompany,
 } from "./company.service.js";
+import { paginationMetadata } from "../utils/list-query.js";
+import { escapeRegex } from "../utils/escape-regex.js";
 import AppError from "../utils/app-error.js";
 import buildCompanyApprovalConfirmationEmail from "../utils/company-approval-confirmation-email.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
@@ -192,29 +194,22 @@ const toCompanyRegistrationDetail = (company, manager) => {
   };
 };
 
-const listCompanyRegistrations = async () => {
-  const companies = await Company.find({
+const listCompanyRegistrations = async (options) => {
+  const filter = {
     approvalStatus: { $ne: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED },
-    reviewSnapshot: { $ne: null },
-    submittedAt: { $ne: null },
-  });
-
-  const managersByCompanyId = await loadManagersByCompanyIds(
-    companies.map((company) => company._id),
-  );
-
-  return companies.map((company) => {
-    const manager = managersByCompanyId.get(company._id.toString());
-
-    if (!manager) {
-      throw new AppError(
-        500,
-        "Company Manager for submitted registration is missing",
-      );
-    }
-
+    reviewSnapshot: { $ne: null }, submittedAt: { $ne: null },
+  };
+  applyCompanyFilters(filter, options, "reviewSnapshot.");
+  const [companies, total] = await Promise.all([
+    Company.find(filter).sort(options.sort).skip(options.skip).limit(options.limit),
+    Company.countDocuments(filter),
+  ]);
+  const managers = await loadManagersByCompanyIds(companies.map((company) => company._id));
+  return { companyRegistrations: companies.map((company) => {
+    const manager = managers.get(company._id.toString());
+    if (!manager) throw new AppError(500, "Company Manager for submitted registration is missing");
     return toCompanyRegistrationSummary(company, manager);
-  });
+  }), pagination: paginationMetadata(options, total) };
 };
 
 const getCompanyRegistration = async ({ companyId }) => {
@@ -768,7 +763,97 @@ const terminateAccount = async ({ targetUserId, actorUserId }) => {
   return toPublicUser(targetUser);
 };
 
+const assertReadId = (value, field) => {
+  if (typeof value !== "string" || !/^[a-fA-F0-9]{24}$/.test(value)) {
+    throw new AppError(400, `Invalid ${field}`, { field });
+  }
+};
+
+const accountReadPipeline = () => [
+  { $lookup: { from: CompanyMember.collection.name, localField: "_id", foreignField: "userId", as: "membership" } },
+  { $unwind: { path: "$membership", preserveNullAndEmptyArrays: true } },
+];
+const toPublicAccount = (user) => ({
+  ...toPublicUser(user),
+  actorType: user.role === USER_ROLE.COMPANY_STAFF ? user.membership?.role ?? null : user.role,
+  membership: user.membership ? {
+    id: user.membership._id.toString(), companyId: user.membership.companyId.toString(),
+    role: user.membership.role, status: user.membership.status,
+    employeeCode: user.membership.employeeCode, jobTitle: user.membership.jobTitle,
+  } : null,
+});
+const listAccounts = async (options) => {
+  const filter = {};
+  if (options.userStatus) filter.status = options.userStatus;
+  if (options.companyId) filter["membership.companyId"] = new mongoose.Types.ObjectId(options.companyId);
+  if (options.actorType) {
+    if (Object.values(COMPANY_MEMBER_ROLE).includes(options.actorType)) {
+      filter.role = USER_ROLE.COMPANY_STAFF;
+      filter["membership.role"] = options.actorType;
+    } else filter.role = options.actorType;
+  }
+  if (options.q) {
+    const regex = { $regex: escapeRegex(options.q), $options: "i" };
+    filter.$or = [{ fullName: regex }, { email: regex }];
+  }
+  const [result] = await User.aggregate([
+    ...accountReadPipeline(), { $match: filter },
+    { $project: { passwordHash: 0 } },
+    { $facet: {
+      items: [{ $sort: options.sort }, { $skip: options.skip }, { $limit: options.limit }],
+      count: [{ $count: "total" }],
+    } },
+  ]);
+  return { accounts: result.items.map(toPublicAccount),
+    pagination: paginationMetadata(options, result.count[0]?.total ?? 0) };
+};
+const getAccount = async ({ userId }) => {
+  assertReadId(userId, "userId");
+  const [user] = await User.aggregate([
+    { $match: { _id: new mongoose.Types.ObjectId(userId) } },
+    ...accountReadPipeline(), { $project: { passwordHash: 0 } },
+  ]);
+  if (!user) throw new AppError(404, "Account not found");
+  return toPublicAccount(user);
+};
+const applyCompanyFilters = (filter, options, prefix = "") => {
+  for (const field of ["approvalStatus", "operationalStatus"]) {
+    if (options[field]) filter[field] = options[field];
+  }
+  // Submitted registrations can never expand to NOT_SUBMITTED through a filter.
+  if (prefix && options.approvalStatus === COMPANY_APPROVAL_STATUS.NOT_SUBMITTED) {
+    filter._id = { $in: [] };
+  }
+  if (options.q) {
+    const regex = { $regex: escapeRegex(options.q), $options: "i" };
+    filter.$or = [{ [`${prefix}name`]: regex }, { [`${prefix}businessRegistrationNumber`]: regex }];
+  }
+};
+const listCompanies = async (options) => {
+  const filter = {};
+  applyCompanyFilters(filter, options);
+  const [companies, total] = await Promise.all([
+    Company.find(filter).sort(options.sort).skip(options.skip).limit(options.limit),
+    Company.countDocuments(filter),
+  ]);
+  const managers = await loadManagersByCompanyIds(companies.map((company) => company._id));
+  return { companies: companies.map((company) => {
+    const manager = managers.get(company._id.toString());
+    if (!manager) throw new AppError(500, "Company Manager for Company is missing");
+    return { ...toPublicCompany(company, manager._id), manager: toPublicManagerSummary(manager) };
+  }), pagination: paginationMetadata(options, total) };
+};
+const getCompany = async ({ companyId }) => {
+  assertReadId(companyId, "companyId");
+  const company = await Company.findById(companyId);
+  if (!company) throw new AppError(404, "Company not found");
+  const manager = await loadManagerForCompany({ companyId: company._id });
+  if (!manager) throw new AppError(500, "Company Manager for Company is missing");
+  return { company: toPublicCompany(company, manager._id), manager: toPublicManagerSummary(manager) };
+};
+
 export {
+  listAccounts, getAccount, listCompanies, getCompany,
   approveCompanyRegistration,
   getCompanyRegistration,
   listCompanyRegistrations,

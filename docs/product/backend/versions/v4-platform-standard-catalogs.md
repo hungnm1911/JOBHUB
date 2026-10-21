@@ -1426,3 +1426,7 @@ Implementation
 ```
 
 Nếu implementation hoặc data design mâu thuẫn với tài liệu này, Product Specification là authority đối với business behavior, trừ khi Product Specification được con người cập nhật và phê duyệt lại.
+
+## Optional catalog pagination được duyệt — 2026-10-21
+
+Chỉ mở rộng năm GET catalog hiện có: fields, positions theo fieldId, provinces, district-level-units theo provinceCode và experience-levels. Không có page và limit: giữ nguyên response và toàn bộ danh sách. Có ít nhất một tham số: page mặc định 1, limit mặc định 20 (tối đa 100), validation strict HTTP 400; giữ thứ tự catalog hiện có, giữ list key và thêm pagination {page,limit,total,totalPages}. Location giữ contract V4.1, Category/ExperienceLevel giữ contract đọc hiện hành V4.2; không thay đổi dataset, mutation hoặc V5–V17.

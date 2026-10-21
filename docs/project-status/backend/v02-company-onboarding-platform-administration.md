@@ -2,7 +2,11 @@
 
 ## Current project state
 
-V2 is `COMPLETED AND VERIFIED`: F01–F10 and BR-01–BR-21 are implemented, including F01/BR-21 immediate onboarding-session issuance, and the final Architecture Review (2026-10-15) found no Critical, High, or blocking Medium finding. The required common backend gate passed cleanly.
+V2 current Company read APIs and submitted-registration list completion are implemented and verified (2026-10-21).
+
+- Platform Admin Companies list/detail includes NOT_SUBMITTED and current Company plus public manager summary. Submitted registrations remain a distinct snapshot-based read with search/filter/sort/pagination.
+- No Company lifecycle, approval, snapshot mutation, unlock or reactivation workflow changed.
+- Common backend gate: 178 files / 1,823 tests passed; see [Platform and operations](platform-and-operations.md) for shared evidence.
 
 ## Deferred / not started
 
@@ -41,6 +45,7 @@ V2 is `COMPLETED AND VERIFIED`: F01–F10 and BR-01–BR-21 are implemented, inc
 
 ## Verification status
 
-- Final Architecture Review (2026-10-15), `cd backend && npm run verify:agent`: ESLint 0 errors (2 pre-existing warnings), ARCH-001 through ARCH-018 passed, Vitest 169/169 files and 1750/1750 tests passed. An earlier run in the same review failed two unrelated V9/V15 suites on MongoMemoryServer startup timeouts; both passed alone (19/19) and the full rerun was clean.
-- The 13 V2 suites (registration, BR-21 onboarding auth, draft, submit, Platform Admin registrations/approve/reject, confirm, resend, active profile, lock Company, state matrix, lifecycle concurrency) passed 72/72 when run together.
-- Not verified: frontend (V2 has no frontend status leaf and no frontend gate was run); runtime behavior against real MongoDB/SMTP.
+- 2026-10-21 final common backend gate passed with `VITEST_MAX_WORKERS=2 npm run verify:agent`: ESLint 0 errors / 2 pre-existing V6 test warnings; ARCH-001–ARCH-019; 178/178 files and 1,823/1,823 tests. No tests were excluded and timeouts were unchanged. The earlier default-worker run's unrelated V15 timeout passed alone (33/33) before the clean gate rerun.
+- Focused completion run: five files / 39 tests passed (`v1-api-completion`, `v2-v3-api-completion`, `v3-recruiter-password-reset`, `v3-acceptance`, `v4-optional-pagination`). After reusing the existing regex helper, the two affected completion suites passed again (16/16).
+- `git diff --check` and whitespace checks on the seven new files passed. Shared environment and gate evidence: [Platform and operations](platform-and-operations.md).
+- Real SMTP, live MongoDB/provider and frontend runtime checks were not performed. Integration tests use MongoMemoryReplSet, mocked mail and stubbed Location provider.

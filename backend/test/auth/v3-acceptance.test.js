@@ -627,7 +627,7 @@ describe("V3 Slice 09 acceptance and regression closure (F01–F09, F11–F17)",
     );
   });
 
-  it("does not implement F10 Recruiter update routes (BR-29/§15)", async () => {
+  it("supports F10 employee metadata update, rejects identity edits and keeps PUT unsupported (BR-29)", async () => {
     const agent = createTestAgent();
     const manager = await createActiveCompanyManagerContext({
       email: "cm.no-f10@example.com",
@@ -660,13 +660,18 @@ describe("V3 Slice 09 acceptance and regression closure (F01–F09, F11–F17)",
         jobTitle: "Updated Title",
       });
 
-    expect([404, 405]).toContain(patch.status);
+    expect(patch.status).toBe(400);
+    const allowedPatch = await agent.patch(path)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({ employeeCode: "NV-UPDATED", jobTitle: "Updated Title" });
+    expect(allowedPatch.status).toBe(200);
     expect([404, 405]).toContain(put.status);
 
     const membership = await CompanyMember.findById(recruiter.membership._id);
     const user = await User.findById(recruiter.user._id);
 
     expect(user.fullName).toBe("Active Recruiter");
-    expect(membership.jobTitle).toBe("Original Title");
+    expect(membership.jobTitle).toBe("Updated Title");
+    expect(membership.employeeCode).toBe("NV-UPDATED");
   });
 });

@@ -1592,3 +1592,7 @@ Raw idea / macro database / diagrams
 ```
 
 Nếu raw macro database hoặc entity diagram cũ mâu thuẫn với Product Specification hoặc Data Contract này, raw design không có authority để override canonical contract.
+
+## Optional catalog pagination — approved 2026-10-21
+
+Năm catalog reads giữ nguyên DTO/dataset/order hiện có (bao gồm Location V4.1 và public metadata V4.2). Optional pagination chỉ cắt trang kết quả đọc, không persist pagination, không sửa schema/index hoặc consumer của V5–V17.

@@ -41,9 +41,7 @@ applications.
   changed.
 
 **Verification:**
-- Backend `npm run verify:agent` passed: lint with 2 pre-existing test
-  warnings, ARCH-001–ARCH-019, and 171 files / 1,779 tests, including the AI
-  Kit runtime-dependency injection integration test.
+- Latest backend gate (2026-10-21): `VITEST_MAX_WORKERS=2 npm run verify:agent` passed: 178 files / 1,823 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 pre-existing warnings. The AI Kit integration suite is included. Details and earlier failed attempts are in Verification status below.
 - 2026-10-18 clean-install check on temporary `ai-kit/` + `backend/` copies
   without `node_modules`/`.env` (Node 20.19.1, npm 10.8.2): after the
   canonical two-step install, `npm ls @jobhub/ai-kit --depth=0` passed,
@@ -85,6 +83,10 @@ applications.
 - **Documented only:** repository-level and backend-specific agent contracts exist.
 
 ## Verification status
+
+- 2026-10-21 V1–V4 API completion final gate passed with `VITEST_MAX_WORKERS=2 npm run verify:agent`: ESLint 0 errors / 2 pre-existing V6 test warnings; ARCH-001–ARCH-019; 178/178 files and 1,823/1,823 tests. Worker concurrency was limited to two; no tests were excluded and timeout values were unchanged. Focused completion run passed 5 files / 39 tests; the two affected suites passed again after regex-helper reuse (16/16). Diff and new-file whitespace checks passed.
+- Verification history for this completion: the first gate failed because the declared `@jobhub/ai-kit` workspace dependency was not installed and one old test excluded Company Manager self forgot-password. That expectation was updated for the approved V1 extension and passed in focused tests. After explicit user approval, `npm ci` succeeded in ai-kit and backend using existing lockfiles; manifests/lockfiles and AI Kit source stayed unchanged. The next default-worker gate passed 177/178 files and 1,822/1,823 tests, with one unrelated V15 concurrency test timing out at 30 seconds. Its entire suite passed alone (33/33), followed by the clean two-worker common gate above. No V5–V17 source or rules were changed.
+- Dependency restoration audit output: AI Kit reported 0 vulnerabilities; backend reported 16 (4 moderate, 11 high, 1 critical) in its existing locked dependency graph. No audit fix or dependency version upgrade was performed as part of this scoped completion.
 
 - Deterministic architecture verification exists, and the official backend verification command is `cd backend && npm run verify:agent`.
 

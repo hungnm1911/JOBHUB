@@ -1,3 +1,4 @@
+import { parseListQuery, catalogPage } from "../utils/list-query.js";
 import {
   createFieldCategory,
   createPositionCategory,
@@ -38,9 +39,10 @@ const createPositionCategoryHandler = async (request, response, next) => {
 
 const listFieldCategoriesHandler = async (request, response, next) => {
   try {
+    const options = parseListQuery(request.query, { optional: true });
     const fields = await listFieldCategories();
 
-    return response.status(200).json({ fields });
+    return response.status(200).json(catalogPage("fields", fields, options));
   } catch (error) {
     return next(error);
   }
@@ -48,11 +50,12 @@ const listFieldCategoriesHandler = async (request, response, next) => {
 
 const listPositionCategoriesHandler = async (request, response, next) => {
   try {
+    const options = parseListQuery(request.query, { optional: true });
     const positions = await listPositionCategoriesByField(
       request.params.fieldId,
     );
 
-    return response.status(200).json({ positions });
+    return response.status(200).json(catalogPage("positions", positions, options));
   } catch (error) {
     return next(error);
   }

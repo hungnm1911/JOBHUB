@@ -2059,3 +2059,7 @@ Company LOCK
 ```
 
 Không được khôi phục behavior cũ từ macro database hoặc entity diagram nếu behavior đó trái Product Specification.
+
+## Admin Company read completion — approved 2026-10-21
+
+Đọc Company hiện tại bao gồm NOT_SUBMITTED, resolve manager qua CompanyMember theo V3. Registrations chỉ match submittedAt và reviewSnapshot tồn tại và approvalStatus khác NOT_SUBMITTED; dùng reviewSnapshot cho search/display. Search/filter được áp dụng trước count/sort/skip/limit. Không sửa snapshot, reference hay lifecycle; không thêm persistence.

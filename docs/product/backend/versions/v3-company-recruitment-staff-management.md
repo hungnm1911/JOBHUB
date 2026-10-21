@@ -43,6 +43,7 @@ V3 bao gồm:
 * Company Manager yêu cầu reset mật khẩu Recruiter;
 * xem danh sách Recruiter;
 * xem thông tin và trạng thái Recruiter;
+* cập nhật employeeCode và jobTitle của Recruiter chưa TERMINATED;
 * khóa Recruiter;
 * mở khóa Recruiter;
 * chấm dứt Recruiter;
@@ -54,7 +55,7 @@ V3 bao gồm:
 
 V3 không bao gồm:
 
-* Company Manager cập nhật thông tin Recruiter sau khi Recruiter đã được tạo;
+* Company Manager sửa fullName, email, role, companyId hoặc lifecycle status qua Update Recruiter;
 * Recruiter tự đăng ký;
 * Recruiter tự chọn Company;
 * Recruiter chuyển từ Company này sang Company khác;
@@ -862,13 +863,19 @@ Company Manager có đủ thông tin để thực hiện các chức năng quả
 
 ---
 
-### F10 — Không sử dụng trong V3
+## F10 — Company Manager cập nhật Recruiter
 
-`F10` trước đây được dự kiến cho chức năng **Company Manager cập nhật Recruiter**.
+### Actor và tiền điều kiện
 
-Chức năng này đã được chủ động loại khỏi V3.
+Company Manager hợp lệ theo BR-06/BR-07; Recruiter thuộc Company của actor và CompanyMember.status chưa TERMINATED.
 
-Mã `F10` không được tái sử dụng cho chức năng khác nhằm giữ ổn định numbering của specification.
+### Luồng chính và kết quả
+
+Company Manager cung cấp ít nhất một trong employeeCode, jobTitle. Hệ thống cập nhật chỉ các trường được cung cấp, giữ nguyên các trường khác. Hai trường là chuỗi không rỗng sau trim, tối đa 100 ký tự. Employee code phải unique trong Company theo BR-09, kể cả mã của membership TERMINATED. Trùng mã bị từ chối và không ghi một phần.
+
+### Ranh giới
+
+Không sửa fullName, email, role, companyId, User.status hoặc CompanyMember.status. Không đổi activation readiness, password, session hay Company lifecycle. Recruiter ACTIVE hoặc LOCKED đều có thể được cập nhật; TERMINATED bị từ chối. Không hỗ trợ PUT. BR-06, BR-07, BR-09, BR-25 và BR-29 áp dụng.
 
 ---
 
@@ -1466,14 +1473,9 @@ Recruiter không dùng trạng thái này chỉ vì chưa hoàn tất activation
 
 ---
 
-## BR-29 — Company Manager không cập nhật Recruiter trong V3
+## BR-29 — Company Manager cập nhật employee metadata của Recruiter
 
-Sau khi Recruiter được tạo, V3 không cung cấp chức năng để Company Manager sửa:
-
-* họ tên;
-* email;
-* employee code;
-* job title.
+Company Manager chỉ được sửa employeeCode và jobTitle của Recruiter cùng Company chưa TERMINATED, theo F10. Không được sửa fullName, email, role, companyId hoặc lifecycle status. Giữ nguyên authorization và tenant isolation; employeeCode unique trong Company theo BR-09. Không thay đổi Lock, Unlock, Terminate hoặc Activation.
 
 ---
 
@@ -1536,6 +1538,7 @@ Chỉ các transition được định nghĩa trong tài liệu này mới thu�
 | Tạo Recruiter            | Company Manager | Company của chính CM     | CM và Company hợp lệ         |
 | Xem danh sách Recruiter  | Company Manager | Recruiter cùng Company   | CM và Company hợp lệ         |
 | Xem Recruiter            | Company Manager | Recruiter cùng Company   | Same-company                 |
+| Cập nhật Recruiter       | Company Manager | Recruiter cùng Company   | Chỉ employeeCode/jobTitle, chưa TERMINATED |
 | Reset password Recruiter | Company Manager | Recruiter cùng Company   | Recruiter chưa terminated    |
 | Lock Recruiter           | Company Manager | Recruiter cùng Company   | Recruiter chưa terminated    |
 | Unlock Recruiter         | Company Manager | Recruiter cùng Company   | Recruiter đang locked        |
@@ -1625,7 +1628,7 @@ Các invariant sau phải luôn đúng trong toàn bộ V3:
 37. Company Membership là nguồn business truth duy nhất xác định Company Manager.
 38. `PENDING_ACTIVATION` giữ nguyên semantics của Company Manager onboarding từ V2.
 39. Recruiter không sử dụng `PENDING_ACTIVATION` chỉ vì chưa hoàn tất thiết lập mật khẩu.
-40. Company Manager không được cập nhật thông tin Recruiter trong V3.
+40. Company Manager chỉ cập nhật employeeCode/jobTitle của Recruiter cùng Company chưa TERMINATED theo F10/BR-29.
 
 ---
 
@@ -1633,7 +1636,7 @@ Các invariant sau phải luôn đúng trong toàn bộ V3:
 
 Các nội dung sau đã được xem xét nhưng chủ động không thuộc V3:
 
-* Company Manager cập nhật thông tin Recruiter;
+* Company Manager cập nhật identity, role, Company hoặc lifecycle status qua Update Recruiter;
 * thay thế Company Manager;
 * chấm dứt Company Manager Membership;
 * transfer Company Manager;
@@ -1671,7 +1674,7 @@ Các lựa chọn về persistence, API contract, token representation, delivery
 V3 được coi là hoàn thành về mặt nghiệp vụ khi:
 
 * `F01` đến `F09` được đáp ứng;
-* `F10` không được implementation trong V3;
+* `F10` cập nhật employee metadata được đáp ứng;
 * `F11` đến `F17` được đáp ứng;
 * toàn bộ `BR-01` đến `BR-29` được giữ;
 * Recruiter chỉ được tạo bởi Company Manager hợp lệ;
@@ -1749,3 +1752,9 @@ Implementation
 ```
 
 Nếu data design, diagram hoặc implementation mâu thuẫn với tài liệu này, **Product Specification V3 là authority đối với business behavior**, trừ khi Product Specification được con người cập nhật và phê duyệt lại.
+
+## API completion được duyệt — 2026-10-21
+
+F08 bổ sung search q (fullName/email/employeeCode/jobTitle), filter membershipStatus/userStatus, sort và pagination. Platform Admin được đọc danh sách Recruiter theo Company ID mà không trở thành Company Member. Company Manager chỉ đọc tenant của mình.
+
+Company Manager được resend activation cho Recruiter cùng Company còn mustChangePassword=true và membership chưa TERMINATED; User phải ACTIVE. Yêu cầu mới thay thế token activation cũ, gửi tới Recruiter, không trả credential cho manager. SMTP lỗi không để token mới còn dùng được. Không dùng PASSWORD_RESET cho Recruiter chưa activation và không thay đổi lifecycle.

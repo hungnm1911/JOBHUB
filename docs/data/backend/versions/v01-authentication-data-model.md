@@ -518,3 +518,7 @@ Those decisions belong to the implementation and engineering layers.
 Implementation must satisfy this data contract without changing the business behavior defined in:
 
 `docs/product/backend/versions/v01-account-authentication.md`
+
+## API completion data invariants — approved 2026-10-21
+
+Me/Admin Accounts chỉ dùng public projections; Company roles/tenant resolve qua CompanyMember theo V3, không thêm User.companyId hoặc role mới. Change Password atomically kiểm tra password/session còn hợp lệ, cập nhật passwordHash, xóa mọi AuthSession và PASSWORD_RESET của User; không sửa status/emailVerifiedAt/mustChangePassword. Resend verification dùng EMAIL_VERIFICATION hiện có; replace token cũ được serialize trên User với verification completion. SMTP ngoài transaction; failure xóa token mới, giữ account. Password reset issuance được serialize để chỉ còn request mới nhất. Không thêm collection/field/token type.

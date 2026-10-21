@@ -8,10 +8,11 @@ import USER_STATUS from "../constants/user-status.js";
 import config from "../config/index.js";
 import AuthSession from "../models/auth-session.model.js";
 import AuthToken from "../models/auth-token.model.js";
+import Company from "../models/company.model.js";
 import CompanyMember from "../models/company-member.model.js";
 import User from "../models/user.model.js";
 import { resolveCompanyManagerRecruiterManagementContext } from "./company.service.js";
-import { issuePasswordReset } from "./auth.service.js";
+import { issuePasswordReset, issueEmailActionToken } from "./auth.service.js";
 import {
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
   assertNoOutstandingRecruiterTeamResponsibility,
@@ -25,6 +26,8 @@ import {
   automaticallyUnassignCurrentResponsibilitiesOfRecruiter,
 } from "./application.service.js";
 import sendMail from "./mail.service.js";
+import { paginationMetadata } from "../utils/list-query.js";
+import { escapeRegex } from "../utils/escape-regex.js";
 import AppError from "../utils/app-error.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
 import { hashPassword } from "../utils/hash-password.js";
@@ -239,37 +242,34 @@ const createRecruiter = async ({
   return toPublicRecruiter(recruiterUser, membership);
 };
 
-const listRecruiters = async ({ managerUser, clientCompanyId }) => {
-  const context = await resolveCompanyManagerRecruiterManagementContext({
-    user: managerUser,
-    clientCompanyId,
-  });
+const listRecruiters = async ({ managerUser, clientCompanyId, options }) => {
+  const context = await resolveCompanyManagerRecruiterManagementContext({ user: managerUser, clientCompanyId });
+  return listRecruitersByCompany({ companyId: context.companyId, options });
+};
 
-  const memberships = await CompanyMember.find({
-    companyId: context.companyId,
-    role: COMPANY_MEMBER_ROLE.RECRUITER,
-  }).sort({ createdAt: 1 });
-
-  if (memberships.length === 0) {
-    return [];
+const listRecruitersByCompany = async ({ companyId, options }) => {
+  if (!mongoose.isObjectIdOrHexString(companyId)) throw new AppError(400, "Invalid company id");
+  if (!(await Company.exists({ _id: companyId }))) throw new AppError(404, "Company not found");
+  const filter = { companyId: new mongoose.Types.ObjectId(companyId.toString()), role: COMPANY_MEMBER_ROLE.RECRUITER };
+  if (options.membershipStatus) filter.status = options.membershipStatus;
+  const userFilter = { "user.role": USER_ROLE.COMPANY_STAFF };
+  if (options.userStatus) userFilter["user.status"] = options.userStatus;
+  if (options.q) {
+    const regex = { $regex: escapeRegex(options.q), $options: "i" };
+    userFilter.$or = ["user.fullName", "user.email", "employeeCode", "jobTitle"].map((field) => ({ [field]: regex }));
   }
-
-  const users = await User.find({
-    _id: { $in: memberships.map((membership) => membership.userId) },
-  });
-  const usersById = new Map(
-    users.map((user) => [user._id.toString(), user]),
-  );
-
-  return memberships.flatMap((membership) => {
-    const user = usersById.get(membership.userId.toString());
-
-    if (!user) {
-      return [];
-    }
-
-    return [toPublicRecruiter(user, membership)];
-  });
+  const sort = {};
+  for (const [field, direction] of Object.entries(options.sort)) {
+    sort[["fullName", "email"].includes(field) ? `user.${field}` : field] = direction;
+  }
+  const [result] = await CompanyMember.aggregate([
+    { $match: filter },
+    { $lookup: { from: User.collection.name, localField: "userId", foreignField: "_id", as: "user" } },
+    { $unwind: "$user" }, { $match: userFilter }, { $project: { "user.passwordHash": 0 } },
+    { $facet: { items: [{ $sort: sort }, { $skip: options.skip }, { $limit: options.limit }], count: [{ $count: "total" }] } },
+  ]);
+  return { recruiters: result.items.map((member) => toPublicRecruiter(member.user, member)),
+    pagination: paginationMetadata(options, result.count[0]?.total ?? 0) };
 };
 
 const getRecruiterDetail = async ({
@@ -876,7 +876,49 @@ const terminateRecruiter = async ({
   return toPublicRecruiter(user, terminatedMembership);
 };
 
+const updateRecruiter = async ({ managerUser, recruiterId, updates }) => {
+  const context = await resolveCompanyManagerRecruiterManagementContext({ user: managerUser });
+  const { membership, user } = await loadSameTenantRecruiterMembership({ companyId: context.companyId, recruiterId });
+  const fields = Object.keys(updates);
+  if (!fields.length || fields.some((key) => !["employeeCode", "jobTitle"].includes(key))) {
+    throw new AppError(400, "Only employeeCode and jobTitle can be updated");
+  }
+  const normalized = {};
+  for (const field of fields) {
+    if (typeof updates[field] !== "string" || updates[field].trim().length > 100) throw new AppError(400, `Invalid ${field}`);
+    normalized[field] = normalizeRequiredText(updates[field], field);
+  }
+  let updated;
+  try {
+    updated = await CompanyMember.findOneAndUpdate({
+      _id: membership._id, companyId: context.companyId, role: COMPANY_MEMBER_ROLE.RECRUITER,
+      status: { $ne: COMPANY_MEMBER_STATUS.TERMINATED },
+    }, { $set: normalized }, { returnDocument: "after", runValidators: true });
+  } catch (error) {
+    assertDuplicateKey(error, { emailFieldMessage: "Email is already registered", employeeCodeMessage: "Employee code is already used in this company" });
+    throw error;
+  }
+  if (!updated) throw new AppError(409, "Terminated Recruiter cannot be updated");
+  return toPublicRecruiter(user, updated);
+};
+
+const resendRecruiterActivation = async ({ managerUser, recruiterId, clientCompanyId }) => {
+  const context = await resolveCompanyManagerRecruiterManagementContext({ user: managerUser, clientCompanyId });
+  const { membership, user } = await loadSameTenantRecruiterMembership({ companyId: context.companyId, recruiterId });
+  if (membership.status === COMPANY_MEMBER_STATUS.TERMINATED || user.status !== USER_STATUS.ACTIVE || !user.mustChangePassword) {
+    throw new AppError(409, "Recruiter is not eligible for activation resend");
+  }
+  await issueEmailActionToken({
+    user, type: AUTH_TOKEN_TYPE.RECRUITER_ACTIVATION,
+    expiresInMs: config.authToken.emailVerificationExpiresInMs,
+    eligible: { status: USER_STATUS.ACTIVE, mustChangePassword: true },
+    buildEmail: ({ fullName, rawToken }) => buildRecruiterActivationEmail({ fullName, rawToken, companyName: context.company.name ?? "your company" }),
+  });
+  return { message: "Recruiter activation instructions sent." };
+};
+
 export {
+  listRecruitersByCompany, updateRecruiter, resendRecruiterActivation,
   createRecruiter,
   getRecruiterDetail,
   initiateRecruiterPasswordReset,

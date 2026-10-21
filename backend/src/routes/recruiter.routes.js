@@ -1,6 +1,7 @@
 import express from "express";
 
 import {
+  updateRecruiterHandler, resendRecruiterActivationHandler,
   createRecruiterHandler,
   getRecruiterDetailHandler,
   initiateRecruiterPasswordResetHandler,
@@ -12,6 +13,8 @@ import {
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCompanyManagerBusinessAccess from "../middlewares/authorize-company-manager-business-access.js";
 import validateCreateRecruiter from "../middlewares/validate-create-recruiter.js";
+
+import validateUpdateRecruiter from "../middlewares/validate-update-recruiter.js";
 
 const router = express.Router();
 
@@ -64,5 +67,8 @@ router.post(
   validateCreateRecruiter,
   createRecruiterHandler,
 );
+
+router.patch("/:recruiterId", authenticateAccess, authorizeCompanyManagerBusinessAccess, validateUpdateRecruiter, updateRecruiterHandler);
+router.post("/:recruiterId/resend-activation", authenticateAccess, authorizeCompanyManagerBusinessAccess, resendRecruiterActivationHandler);
 
 export default router;
