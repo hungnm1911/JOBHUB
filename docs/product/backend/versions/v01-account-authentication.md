@@ -41,6 +41,7 @@ V1 bao gồm:
 - Thu hồi phiên đăng nhập.
 - Platform Admin khóa tài khoản.
 - Platform Admin chấm dứt tài khoản.
+- Xem account hiện tại, Admin Accounts list/detail, chủ động đổi mật khẩu và gửi lại xác thực email theo API completion được duyệt.
 
 ### 2.2. Ngoài phạm vi
 
@@ -475,7 +476,7 @@ Muốn sử dụng lại hệ thống với phiên mới, User phải thực hi�
 
 ### Actor
 
-Candidate trong phạm vi V1.
+Candidate, Company Manager (qua CompanyMember) và Recruiter đã activation theo API completion được duyệt.
 
 ### Mục tiêu
 
@@ -640,6 +641,7 @@ Phạm vi thu hồi phiên theo từng sự kiện:
 | --- | --- |
 | Logout | Chỉ phiên hiện tại |
 | Reset Password | Tất cả phiên của User |
+| Change Password | Tất cả phiên của User |
 | Account `LOCKED` | Tất cả phiên của User |
 | Account `TERMINATED` | Tất cả phiên của User |
 
@@ -870,6 +872,10 @@ Candidate tự đăng ký trong V1 không thuộc luồng bắt buộc đổi m�
 | F09 | Reset mật khẩu                         | User           |
 | F10 | Khóa tài khoản                         | Platform Admin |
 | F11 | Chấm dứt tài khoản                     | Platform Admin |
+| F12 | Xem account hiện tại                  | User |
+| F13 | Danh sách/chi tiết account             | Platform Admin |
+| F14 | Đổi mật khẩu                          | User |
+| F15 | Gửi lại xác thực email                 | Candidate |
 
 ---
 
@@ -946,3 +952,14 @@ Có **một chi tiết tôi chủ động giữ nguyên thay vì “sửa cho đ
 
 Tương tự, tôi **không thêm Unlock Account**, resend verification, logout-all, change password, rate limit, password policy hay bất kỳ chức năng “thường nên có” nào, vì chúng không nằm trong V1 đã chốt. Đó chính là nguyên tắc ta muốn Cursor/Codex tuân thủ sau này: **canonical requirement nói gì thì implement cái đó, không tự hoàn thiện sản phẩm theo suy đoán của agent**. 
 ```
+
+## API completion được duyệt — 2026-10-21
+
+- F08 mở rộng self forgot-password cho Company Manager qua CompanyMember.role, kể cả onboarding; không thay đổi activation hay lifecycle. Recruiter giữ post-activation reset boundary.
+- F12 — Me: User có session hợp lệ xem public account và membership của chính mình, kể cả limited onboarding; không trả password/token/refresh credential.
+- F13 — Admin Accounts: chỉ Platform Admin đọc list/detail account; filter actorType (CANDIDATE, COMPANY_MANAGER, RECRUITER, PLATFORM_ADMIN), q (fullName/email), userStatus, companyId. Company roles resolve qua CompanyMember; không có Company Manager API riêng.
+- F14 — Change Password: User ACTIVE đã verify và hoàn tất activation, có session hợp lệ, cung cấp currentPassword đúng và password mới theo F09 (8–64 ký tự, không trim). Cập nhật password và revoke mọi session, vô hiệu PASSWORD_RESET cũ trong cùng transaction; không sửa lifecycle hoặc activation. Không có forced-change flow mới.
+- F15 — Resend Verification: email của Candidate ACTIVE chưa verify được nhận EMAIL_VERIFICATION mới thay thế token cũ. Email không tồn tại/đã verify/không đủ điều kiện nhận cùng success response. Company Manager và Recruiter tiếp tục dùng activation riêng, không được bypass qua endpoint này. SMTP lỗi xóa token mới; không xóa account.
+- BR-05, BR-10, BR-13, BR-14, BR-15 vẫn áp dụng; change-password cũng revoke mọi session. Không unlock/reactivate account.
+
+Dynamic lists dùng page=1, limit=20 (max 100), validation strict, filter trước count/sort/skip/limit, sort có unique tie-breaker; giữ list response key và thêm pagination {page,limit,total,totalPages}.

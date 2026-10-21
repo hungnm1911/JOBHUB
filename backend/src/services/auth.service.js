@@ -331,49 +331,24 @@ const registerCompanyManager = async ({ fullName, email, password }) => {
 };
 
 const verifyEmail = async ({ token }) => {
-  const tokenHash = hashAuthToken(token);
-  const authToken = await AuthToken.findOne({
-    type: AUTH_TOKEN_TYPE.EMAIL_VERIFICATION,
-    tokenHash,
-    expiresAt: { $gt: new Date() },
-  }).select("+tokenHash");
-
-  if (!authToken) {
-    throw new AppError(400, "Invalid or expired email verification token", {
-      field: "token",
+  const session = await mongoose.startSession();
+  let user;
+  try {
+    await session.withTransaction(async () => {
+      const authToken = await AuthToken.findOneAndDelete({
+        type: AUTH_TOKEN_TYPE.EMAIL_VERIFICATION,
+        tokenHash: hashAuthToken(token), expiresAt: { $gt: new Date() },
+      }).session(session);
+      if (!authToken) throw new AppError(400, "Invalid or expired email verification token", { field: "token" });
+      user = await User.findById(authToken.userId).session(session);
+      if (!user) throw new AppError(400, "Invalid or expired email verification token", { field: "token" });
+      if (user.emailVerifiedAt) throw new AppError(409, "Email is already verified", { field: "email" });
+      user.emailVerifiedAt = new Date();
+      await user.save({ session });
     });
+  } finally {
+    await session.endSession();
   }
-
-  const user = await User.findById(authToken.userId);
-
-  if (!user) {
-    throw new AppError(400, "Invalid or expired email verification token", {
-      field: "token",
-    });
-  }
-
-  if (user.emailVerifiedAt) {
-    throw new AppError(409, "Email is already verified", {
-      field: "email",
-    });
-  }
-
-  const consumedToken = await AuthToken.findOneAndDelete({
-    _id: authToken._id,
-    type: AUTH_TOKEN_TYPE.EMAIL_VERIFICATION,
-    tokenHash,
-    expiresAt: { $gt: new Date() },
-  }).select("+tokenHash");
-
-  if (!consumedToken) {
-    throw new AppError(400, "Invalid or expired email verification token", {
-      field: "token",
-    });
-  }
-
-  user.emailVerifiedAt = new Date();
-  await user.save();
-
   return toPublicUser(user);
 };
 
@@ -618,45 +593,42 @@ const logoutCurrentSession = async ({ sessionId }) => {
   };
 };
 
-const issuePasswordReset = async (user) => {
-  await AuthToken.deleteMany({
-    userId: user._id,
-    type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
-  });
-
+// Serialize token replacement against password/activation/verification completion.
+// SMTP remains outside the transaction; cleanup is scoped to this issuance only.
+const issueEmailActionToken = async ({ user, type, expiresInMs, buildEmail, eligible = {} }) => {
   const rawToken = generateAuthToken();
-  const tokenHash = hashAuthToken(rawToken);
-  const expiresAt = new Date(
-    Date.now() + config.authToken.passwordResetExpiresInMs,
-  );
-
-  const createdToken = await AuthToken.create({
-    userId: user._id,
-    type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
-    tokenHash,
-    expiresAt,
-  });
-
-  const { subject, text, html } = buildPasswordResetEmail({
-    fullName: user.fullName,
-    rawToken,
-  });
-
+  const session = await mongoose.startSession();
+  let createdToken;
   try {
-    await sendMail({
-      to: user.email,
-      subject,
-      text,
-      html,
+    await session.withTransaction(async () => {
+      const current = await User.findOneAndUpdate(
+        { _id: user._id, ...eligible },
+        { $currentDate: { updatedAt: true } },
+        { session, returnDocument: "after" },
+      );
+      if (!current) throw new AppError(409, "Account is no longer eligible for this email action");
+      await AuthToken.deleteMany({ userId: user._id, type }).session(session);
+      [createdToken] = await AuthToken.create([{
+        userId: user._id, type, tokenHash: hashAuthToken(rawToken),
+        expiresAt: new Date(Date.now() + expiresInMs),
+      }], { session });
     });
+  } finally {
+    await session.endSession();
+  }
+  try {
+    await sendMail({ to: user.email, ...buildEmail({ fullName: user.fullName, rawToken }) });
   } catch {
     await AuthToken.deleteOne({ _id: createdToken._id });
-    throw new AppError(
-      503,
-      "Unable to send password reset email. Please try again later.",
-    );
+    throw new AppError(503, "Unable to send email. Please try again later.");
   }
 };
+
+const issuePasswordReset = async (user) => issueEmailActionToken({
+  user, type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
+  expiresInMs: config.authToken.passwordResetExpiresInMs,
+  buildEmail: buildPasswordResetEmail,
+});
 
 const isEligibleSelfPasswordResetUser = async (user) => {
   if (user.role === USER_ROLE.CANDIDATE) {
@@ -674,7 +646,7 @@ const isEligibleSelfPasswordResetUser = async (user) => {
 
   const membership = await CompanyMember.findOne({
     userId: user._id,
-    role: COMPANY_MEMBER_ROLE.RECRUITER,
+    role: { $in: [COMPANY_MEMBER_ROLE.RECRUITER, COMPANY_MEMBER_ROLE.COMPANY_MANAGER] },
   }).select("_id");
 
   return membership != null;
@@ -899,7 +871,61 @@ const completeRecruiterActivation = async ({ token, password }) => {
   };
 };
 
+const getCurrentAccount = async ({ user }) => {
+  const membership = await CompanyMember.findOne({ userId: user._id });
+  return { user: toPublicUser(user), membership: membership ? {
+    id: membership._id.toString(), companyId: membership.companyId.toString(),
+    role: membership.role, status: membership.status,
+    employeeCode: membership.employeeCode, jobTitle: membership.jobTitle,
+  } : null };
+};
+
+const changePassword = async ({ userId, sessionId, currentPassword, password }) => {
+  assertPasswordPolicy(password);
+  const nextHash = await hashPassword(password);
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const user = await User.findOne({ _id: userId, status: USER_STATUS.ACTIVE,
+        emailVerifiedAt: { $ne: null }, mustChangePassword: false,
+      }).select("+passwordHash").session(session);
+      const currentSession = await AuthSession.findOne({ _id: sessionId, userId,
+        expiresAt: { $gt: new Date() },
+      }).session(session);
+      if (!user || !currentSession) throw new AppError(401, "Authentication required");
+      if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+        throw new AppError(400, "Current password is incorrect", { field: "currentPassword" });
+      }
+      user.passwordHash = nextHash;
+      await user.save({ session });
+      await AuthSession.deleteMany({ userId }).session(session);
+      await AuthToken.deleteMany({ userId, type: AUTH_TOKEN_TYPE.PASSWORD_RESET }).session(session);
+    });
+  } finally {
+    await session.endSession();
+  }
+  return { message: "Password changed successfully. Please sign in again." };
+};
+
+const resendVerification = async ({ email }) => {
+  const message = "If the account is eligible, verification instructions have been sent.";
+  const user = await User.findOne({ email: normalizeEmail(email), role: USER_ROLE.CANDIDATE,
+    status: USER_STATUS.ACTIVE, emailVerifiedAt: null,
+  });
+  if (user) await issueEmailActionToken({
+    user, type: AUTH_TOKEN_TYPE.EMAIL_VERIFICATION,
+    expiresInMs: config.authToken.emailVerificationExpiresInMs,
+    buildEmail: buildVerificationEmail,
+    eligible: { role: USER_ROLE.CANDIDATE, status: USER_STATUS.ACTIVE, emailVerifiedAt: null },
+  });
+  return { message };
+};
+
 export {
+  getCurrentAccount,
+  changePassword,
+  resendVerification,
+  issueEmailActionToken,
   completeRecruiterActivation,
   confirmCompanyApproval,
   issuePasswordReset,

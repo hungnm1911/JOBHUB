@@ -1,4 +1,12 @@
+import { parseListQuery } from "../utils/list-query.js";
+import USER_ROLE from "../constants/user-role.js";
+import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
+import USER_STATUS from "../constants/user-status.js";
+import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
+import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
+
 import {
+  listAccounts, getAccount, listCompanies, getCompany,
   approveCompanyRegistration,
   getCompanyRegistration,
   listCompanyRegistrations,
@@ -8,6 +16,16 @@ import {
   terminateAccount,
 } from "../services/platform-admin.service.js";
 
+const companyListOptions = (query, registration = false) => {
+  const options = parseListQuery(query, {
+    filters: { approvalStatus: Object.values(COMPANY_APPROVAL_STATUS), operationalStatus: Object.values(COMPANY_OPERATIONAL_STATUS) },
+    sorts: ["createdAt", "updatedAt", "name", "submittedAt"],
+  });
+  if (registration && Object.hasOwn(options.sort, "name")) {
+    options.sort = { "reviewSnapshot.name": options.sort.name, _id: options.sort._id };
+  }
+  return options;
+};
 const lockAccountHandler = async (request, response, next) => {
   try {
     const user = await lockAccount({
@@ -42,11 +60,8 @@ const terminateAccountHandler = async (request, response, next) => {
 
 const listCompanyRegistrationsHandler = async (request, response, next) => {
   try {
-    const companyRegistrations = await listCompanyRegistrations();
-
-    return response.status(200).json({
-      companyRegistrations,
-    });
+    const result = await listCompanyRegistrations(companyListOptions(request.query, true));
+    return response.status(200).json(result);
   } catch (error) {
     next(error);
   }
@@ -122,4 +137,27 @@ export {
   lockCompanyHandler,
   rejectCompanyRegistrationHandler,
   terminateAccountHandler,
+};
+
+export const listAccountsHandler = async (request, response, next) => {
+  try {
+    const options = parseListQuery(request.query, {
+      filters: { actorType: [USER_ROLE.CANDIDATE, ...Object.values(COMPANY_MEMBER_ROLE), USER_ROLE.PLATFORM_ADMIN],
+        userStatus: Object.values(USER_STATUS), companyId: null },
+      sorts: ["createdAt", "updatedAt", "fullName", "email"],
+    });
+    return response.json(await listAccounts(options));
+  } catch (error) { next(error); }
+};
+export const getAccountHandler = async (request, response, next) => {
+  try { return response.json({ account: await getAccount({ userId: request.params.userId }) }); }
+  catch (error) { next(error); }
+};
+export const listCompaniesHandler = async (request, response, next) => {
+  try { return response.json(await listCompanies(companyListOptions(request.query))); }
+  catch (error) { next(error); }
+};
+export const getCompanyHandler = async (request, response, next) => {
+  try { return response.json(await getCompany({ companyId: request.params.companyId })); }
+  catch (error) { next(error); }
 };

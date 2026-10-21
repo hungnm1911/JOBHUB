@@ -1,6 +1,7 @@
 import express from "express";
 
 import {
+  currentAccountHandler, changePasswordHandler, resendVerificationHandler,
   activateRecruiterHandler,
   activateRecruiterLinkHandler,
   confirmCompanyApprovalHandler,
@@ -26,6 +27,9 @@ import validateRefreshAccess from "../middlewares/validate-refresh-access.js";
 import validateResetPassword from "../middlewares/validate-reset-password.js";
 import validateResetPasswordLink from "../middlewares/validate-reset-password-link.js";
 import validateVerifyEmail from "../middlewares/validate-verify-email.js";
+
+import authenticateAccess from "../middlewares/authenticate-access.js";
+import validateChangePassword from "../middlewares/validate-change-password.js";
 
 const router = express.Router();
 
@@ -112,5 +116,9 @@ router.post(
   validateActivateRecruiter,
   activateRecruiterHandler,
 );
+
+router.get("/me", authenticateSessionAccess, currentAccountHandler);
+router.post("/change-password", authenticateAccess, validateChangePassword, changePasswordHandler);
+router.post("/resend-verification", validateForgotPassword, resendVerificationHandler);
 
 export default router;

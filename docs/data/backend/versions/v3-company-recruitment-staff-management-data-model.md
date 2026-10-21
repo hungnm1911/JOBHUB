@@ -2052,3 +2052,9 @@ Raw idea / macro database / diagrams
 Nếu macro database, entity diagram hoặc implementation hiện tại mâu thuẫn với Product Specification V3, chúng không được dùng để thay đổi business behavior.
 
 Nếu persistence design trong tương lai cần một behavior chưa tồn tại trong Product Specification, vấn đề đó phải được đưa trở lại Product layer để được quyết định trước.
+
+## F10 employee metadata update — approved 2026-10-21
+
+Chỉ CompanyMember.employeeCode và CompanyMember.jobTitle có thể cập nhật theo Product F10/BR-29. Không thêm entity/field/history. Một atomic conditional write phải kiểm tra companyId, role=RECRUITER và status != TERMINATED ngay tại thời điểm ghi. Unique index {companyId,employeeCode} hiện có bảo vệ cả concurrent update và các membership terminated; duplicate không ghi một phần. User, role/company references, status, activation, sessions không thay đổi. PUT không được hỗ trợ.
+
+Resend activation dùng RECRUITER_ACTIVATION hiện có, hash-only, expiry hiện hành và replace token cũ; serialize issuance với activation completion trên User. SMTP ngoài transaction; mail failure chỉ xóa token của issuance bị lỗi. Không thêm delivery persistence hoặc lifecycle transition.

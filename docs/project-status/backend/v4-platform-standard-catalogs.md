@@ -2,7 +2,9 @@
 
 ## Current project state
 
-V4 Slices 01–05 are implemented and verified.
+V4 optional pagination is implemented and verified (2026-10-21) on exactly five existing public catalogs. No page/limit preserves the complete legacy response; either parameter enables validated pagination and metadata with unchanged catalog order. Catalog services, datasets and V5–V17 consumers are unchanged.
+
+- Common backend gate: 178 files / 1,823 tests passed; see [Platform and operations](platform-and-operations.md) for shared evidence.
 
 ## Deferred / not started
 
@@ -24,4 +26,7 @@ V4 Slices 01–05 are implemented and verified.
 
 ## Verification status
 
-- Focused automated tests cover `test/catalog/v4-fixed-vocabularies.test.js`, `test/catalog/v4-category-field-creation.test.js`, `test/catalog/v4-category-position-creation.test.js`, `test/catalog/v4-experience-level-dataset.test.js`, and `test/catalog/v4-acceptance.test.js`.
+- 2026-10-21 final common backend gate passed with `VITEST_MAX_WORKERS=2 npm run verify:agent`: ESLint 0 errors / 2 pre-existing V6 test warnings; ARCH-001–ARCH-019; 178/178 files and 1,823/1,823 tests. No tests were excluded and timeouts were unchanged. The earlier default-worker run's unrelated V15 timeout passed alone (33/33) before the clean gate rerun.
+- Focused completion run: five files / 39 tests passed (`v1-api-completion`, `v2-v3-api-completion`, `v3-recruiter-password-reset`, `v3-acceptance`, `v4-optional-pagination`). After reusing the existing regex helper, the two affected completion suites passed again (16/16).
+- `git diff --check` and whitespace checks on the seven new files passed. Shared environment and gate evidence: [Platform and operations](platform-and-operations.md).
+- Real SMTP, live MongoDB/provider and frontend runtime checks were not performed. Integration tests use MongoMemoryReplSet, mocked mail and stubbed Location provider.

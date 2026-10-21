@@ -1,4 +1,5 @@
 import {
+  getCurrentAccount, changePassword, resendVerification,
   completeRecruiterActivation,
   confirmCompanyApproval,
   login,
@@ -223,4 +224,18 @@ export {
   resetPasswordHandler,
   resetPasswordLinkHandler,
   verifyEmailHandler,
+};
+
+export const currentAccountHandler = async (request, response, next) => {
+  try { return response.json(await getCurrentAccount({ user: request.auth.user })); }
+  catch (error) { next(error); }
+};
+export const changePasswordHandler = async (request, response, next) => {
+  try { return response.json(await changePassword({ userId: request.auth.user._id,
+    sessionId: request.auth.session._id, ...request.body })); }
+  catch (error) { next(error); }
+};
+export const resendVerificationHandler = async (request, response, next) => {
+  try { return response.json(await resendVerification({ email: request.body.email })); }
+  catch (error) { next(error); }
 };

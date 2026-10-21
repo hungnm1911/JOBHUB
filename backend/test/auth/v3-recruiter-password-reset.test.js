@@ -133,7 +133,7 @@ describe("V3 Slice 06 Recruiter password recovery and CM-initiated reset (F06/F0
     );
   });
 
-  it("silently skips self forgot for pending-activation Recruiter and Company Manager", async () => {
+  it("silently skips pending-activation Recruiter but supports Company Manager self forgot", async () => {
     const agent = createTestAgent();
     const manager = await createActiveCompanyManagerContext({
       email: "cm.pending-skip@example.com",
@@ -148,6 +148,9 @@ describe("V3 Slice 06 Recruiter password recovery and CM-initiated reset (F06/F0
     const pendingForgot = await agent.post("/api/auth/forgot-password").send({
       email: "pending.reset@example.com",
     });
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(await AuthToken.countDocuments({ type: AUTH_TOKEN_TYPE.PASSWORD_RESET })).toBe(0);
+
     const managerForgot = await agent.post("/api/auth/forgot-password").send({
       email: manager.user.email,
     });
@@ -156,10 +159,9 @@ describe("V3 Slice 06 Recruiter password recovery and CM-initiated reset (F06/F0
     expect(pendingForgot.body.message).toBe(SUCCESS_MESSAGE);
     expect(managerForgot.status).toBe(200);
     expect(managerForgot.body.message).toBe(SUCCESS_MESSAGE);
-    expect(sendMail).not.toHaveBeenCalled();
-    expect(await AuthToken.countDocuments({ type: AUTH_TOKEN_TYPE.PASSWORD_RESET })).toBe(
-      0,
-    );
+    expect(sendMail).toHaveBeenCalledOnce();
+    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: manager.user.email }));
+    expect(await AuthToken.countDocuments({ userId: manager.user._id, type: AUTH_TOKEN_TYPE.PASSWORD_RESET })).toBe(1);
   });
 
   it("lets CM initiate reset for activated same-tenant Recruiter without exposing credentials (F07/BR-12)", async () => {

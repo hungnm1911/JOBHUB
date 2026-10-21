@@ -5,6 +5,7 @@ import {
   createPositionCategoryHandler,
 } from "../controllers/category.controller.js";
 import {
+  listAccountsHandler, getAccountHandler, listCompaniesHandler, getCompanyHandler,
   approveCompanyRegistrationHandler,
   getCompanyRegistrationHandler,
   listCompanyRegistrationsHandler,
@@ -17,6 +18,8 @@ import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizePlatformAdmin from "../middlewares/authorize-platform-admin.js";
 import validateCreateFieldCategory from "../middlewares/validate-create-field-category.js";
 import validateCreatePositionCategory from "../middlewares/validate-create-position-category.js";
+
+import { listCompanyRecruitersHandler } from "../controllers/recruiter.controller.js";
 
 const router = express.Router();
 
@@ -84,5 +87,12 @@ router.post(
   authorizePlatformAdmin,
   lockCompanyHandler,
 );
+
+router.get("/accounts", authenticateAccess, authorizePlatformAdmin, listAccountsHandler);
+router.get("/accounts/:userId", authenticateAccess, authorizePlatformAdmin, getAccountHandler);
+router.get("/companies", authenticateAccess, authorizePlatformAdmin, listCompaniesHandler);
+router.get("/companies/:companyId", authenticateAccess, authorizePlatformAdmin, getCompanyHandler);
+
+router.get("/companies/:companyId/recruiters", authenticateAccess, authorizePlatformAdmin, listCompanyRecruitersHandler);
 
 export default router;
