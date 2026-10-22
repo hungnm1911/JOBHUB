@@ -191,6 +191,107 @@ const resolveSourcePath = (source, sourcePath) => {
     .reduce((value, token) => value?.[token], source);
 };
 
+const NON_EMPTY_TEXT_ITEM = Object.freeze({
+  isValidItem: isNonEmptyTrimmedString,
+  itemRule: "a non-empty string",
+});
+
+// CandidateCV metadata (Data Backend V7) shared by the Generated and Uploaded
+// CVMatchProfile variants; JSON Pointer paths are relative to the CV source.
+const findPreferredLocationIssues = (preferredLocations) => {
+  if (!Array.isArray(preferredLocations)) {
+    return ["/preferredLocations must be an array"];
+  }
+
+  return preferredLocations.flatMap((location, index) => {
+    const path = `/preferredLocations/${index}`;
+
+    if (!isPlainObject(location)) {
+      return [`${path} must be a PreferredLocationSelection object`];
+    }
+
+    const keyIssues = findExactKeyIssues(location, LOCATION_FIELDS, path);
+
+    if (keyIssues.length > 0) {
+      return keyIssues;
+    }
+
+    return [
+      ...(isNonEmptyTrimmedString(location.provinceCode)
+        ? []
+        : [`${path}/provinceCode must be a non-empty string`]),
+      ...findNullableTextIssues(location.districtCode, `${path}/districtCode`),
+    ];
+  });
+};
+
+const CV_TAXONOMY_FIELDS = Object.freeze(["category", "experienceLevel"]);
+
+const findCvTaxonomyIssues = (taxonomy) => {
+  if (!isPlainObject(taxonomy)) {
+    return ["/taxonomy must be a resolved taxonomy object"];
+  }
+
+  const keyIssues = findExactKeyIssues(taxonomy, CV_TAXONOMY_FIELDS, "/taxonomy");
+
+  if (keyIssues.length > 0) {
+    return keyIssues;
+  }
+
+  return [
+    ...findCategoryIssues(taxonomy.category, "/taxonomy/category"),
+    ...findExperienceLevelIssues(taxonomy.experienceLevel),
+  ];
+};
+
+// Data Backend V7 §4.2, §4.3: exactly one main Category (FIELD or POSITION)
+// and at most one ExperienceLevel, each resolved by Backend.
+const findCvTaxonomyReferenceIssues = (cvSource) => {
+  const { category, experienceLevel } = cvSource.taxonomy;
+
+  return [
+    ...(category.id === cvSource.categoryId
+      ? []
+      : ["/taxonomy/category must resolve /categoryId"]),
+    ...findExperienceLevelReferenceIssues(
+      cvSource.experienceLevelId,
+      experienceLevel,
+    ),
+  ];
+};
+
+const buildCvMetadata = (cvSource) => {
+  const { taxonomy } = cvSource;
+
+  return {
+    categoryId: sourced(cvSource.categoryId, "/categoryId"),
+    category: sourced(
+      pickFields(taxonomy.category, CATEGORY_FIELDS),
+      "/taxonomy/category",
+    ),
+    experienceLevelId: sourcedOrNull(
+      cvSource.experienceLevelId,
+      "/experienceLevelId",
+    ),
+    experienceLevel:
+      taxonomy.experienceLevel === null
+        ? null
+        : sourced(
+            pickFields(taxonomy.experienceLevel, EXPERIENCE_LEVEL_FIELDS),
+            "/taxonomy/experienceLevel",
+          ),
+    skillTags: sourcedList(cvSource.skillTags, "/skillTags"),
+    employmentTypes: sourcedList(cvSource.employmentTypes, "/employmentTypes"),
+    workModes: sourcedList(cvSource.workModes, "/workModes"),
+    preferredLocations: cvSource.preferredLocations.map((location, index) => {
+      return sourced(
+        pickFields(location, LOCATION_FIELDS),
+        `/preferredLocations/${index}`,
+      );
+    }),
+  };
+};
+
 const deepFreeze = (value) => {
   if (value !== null && typeof value === "object") {
     Object.values(value).forEach(deepFreeze);
@@ -207,15 +308,20 @@ export {
   EXPERIENCE_LEVEL_FIELDS,
   FAILED_RESULT,
   LOCATION_FIELDS,
+  NON_EMPTY_TEXT_ITEM,
   NORMALIZATION_STATUS,
   WORK_MODES,
+  buildCvMetadata,
   deepFreeze,
   findCategoryIssues,
+  findCvTaxonomyIssues,
+  findCvTaxonomyReferenceIssues,
   findExactKeyIssues,
   findExperienceLevelIssues,
   findExperienceLevelReferenceIssues,
   findListIssues,
   findNullableTextIssues,
+  findPreferredLocationIssues,
   isNonEmptyTrimmedString,
   isPlainObject,
   pickFields,

@@ -160,7 +160,9 @@ describe("AI-V01 public runtime entry", () => {
   it("exposes normalizeJob and normalizeGeneratedCv on the createAiKit instance only", () => {
     const aiKit = createAiKit({ logger: makeLogger() });
 
-    expect(Object.keys(aiKit)).toEqual(["normalizeJob", "normalizeGeneratedCv"]);
+    expect(Object.keys(aiKit)).toEqual([
+      "normalizeJob", "normalizeGeneratedCv", "normalizeUploadedCv",
+    ]);
     expect(Object.isFrozen(aiKit)).toBe(true);
     expect(aiKit.normalizeJob).toBeTypeOf("function");
     expect(aiKit.normalizeGeneratedCv).toBeTypeOf("function");

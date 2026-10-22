@@ -201,6 +201,33 @@ describe("Gemini-to-Groq provider chain fail-fast HTTP attempts", () => {
 });
 
 describe("Provider adapters perform no hidden SDK retries", () => {
+  it("sends one Gemini HTTP request when the SDK receives a continuation token", async () => {
+    respondWith({
+      gemini: () => jsonResponse(200, {
+        candidates: [countRequests(GEMINI_HOST) === 1
+          ? {
+            content: { role: "model", parts: [{ text: '{"partial":true}' }] },
+            finishReason: "CONTINUATION",
+            continuationToken: "offline-continuation-token",
+          }
+          : {
+            content: { role: "model", parts: [{ text: '{"complete":true}' }] },
+            finishReason: "STOP",
+          }],
+      }),
+    });
+    const client = createClients(createLogger()).gemini;
+
+    const response = await client.generateContent({
+      contents: [{ role: "user", parts: [{ text: "ping" }] }],
+      config: { automaticContinuation: true },
+    });
+
+    expect(response.candidates[0].finishReason).toBe("CONTINUATION");
+    expect(countRequests(GEMINI_HOST)).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it.each([408, 429, 500, 503, 504])(
     "sends one Gemini HTTP attempt for status %i",
     async (status) => {

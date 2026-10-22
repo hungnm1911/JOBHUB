@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.js",
     "./tooling/smoke-codex": "./scripts/smoke-codex.js",
+    "./tooling/smoke-uploaded-cv-codex": "./scripts/smoke-uploaded-cv-codex.js",
     "./tooling/smoke-gemini": "./scripts/smoke-gemini.js",
     "./tooling/smoke-groq": "./scripts/smoke-groq.js"
   },
@@ -16,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke:codex": "cd ../backend && node scripts/smoke-codex.js",
+    "smoke:uploaded-cv:codex": "cd ../backend && node scripts/smoke-uploaded-cv-codex.js",
     "smoke:gemini": "cd ../backend && node scripts/smoke-gemini.js",
     "smoke:groq": "cd ../backend && node scripts/smoke-groq.js",
     "verify:agent": "npm run lint && npm run test"

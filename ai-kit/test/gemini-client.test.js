@@ -62,7 +62,7 @@ describe("Gemini client adapter", () => {
     expect(generateContentMock).toHaveBeenCalledWith({
       model: "test-model",
       contents,
-      config,
+      config: { ...config, automaticContinuation: false },
     });
     expect(logger.info).toHaveBeenCalledWith("AI provider API usage", {
       provider: "gemini",

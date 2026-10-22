@@ -19,7 +19,7 @@ import logger from "../../src/utils/logger.js";
 
 describe("AI Kit backend integration", () => {
   it("creates the shared instance with normalized config and the canonical logger", () => {
-    expect(Object.keys(aiKit)).toEqual(["normalizeJob", "normalizeGeneratedCv"]);
+    expect(Object.keys(aiKit)).toEqual(["normalizeJob", "normalizeGeneratedCv", "normalizeUploadedCv"]);
     expect(Object.isFrozen(aiKit)).toBe(true);
     expect(createAiKitSpy).toHaveBeenCalledOnce();
     expect(createAiKitSpy).toHaveBeenCalledWith({
