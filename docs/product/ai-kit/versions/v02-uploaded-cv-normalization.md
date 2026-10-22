@@ -5,7 +5,7 @@
 > **Phase:** JOBHUB AI Phase
 > **Ngôn ngữ:** Tiếng Việt
 > **Mục đích:** Xác định business truth, AI capability boundary và quality requirement cho việc chuyển Uploaded CV thành canonical `CVMatchProfile`.
-> **Trạng thái:** `DRAFT — BASELINE / NOT APPROVED`
+> **Trạng thái:** `APPROVED`
 
 ---
 
@@ -800,7 +800,7 @@ Các capability trên chỉ được triển khai khi có Product authority phù
 
 # 19. Quyết định baseline D1–D4
 
-Bốn quyết định dưới đây đã được thống nhất cho phạm vi F01. Chúng không tự thay đổi trạng thái `DRAFT — BASELINE / NOT APPROVED` hoặc phê duyệt AI-V02 để implementation.
+Bốn quyết định dưới đây đã được thống nhất cho phạm vi F01 và được Product Owner phê duyệt cùng Product Specification AI-V02. Phê duyệt Product/Data không tự xác nhận implementation hoặc Final Acceptance.
 
 ### D1 — Runtime-only, không persistence/cache
 
@@ -874,7 +874,7 @@ CANONICAL AI PRODUCT SPECIFICATION
 Ở trạng thái hiện tại:
 
 ```text
-DRAFT BASELINE — NOT APPROVED
+APPROVED
 ```
 
 Nó xác định:
@@ -973,4 +973,4 @@ là authority đối với business behavior.
 
 Implementation phải được điều chỉnh, hoặc Product Specification phải được con người chủ động cập nhật và phê duyệt lại.
 
-Bản draft này chưa tự tạo Product authority cho AI-V02 và chưa thay đổi trạng thái phê duyệt trong AI Kit roadmap.
+Product Owner đã phê duyệt Product Specification AI-V02; trạng thái Product/Data được ghi trong AI Kit roadmap. Phê duyệt này không tự xác nhận implementation hoặc Final Acceptance.

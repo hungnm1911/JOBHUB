@@ -28,7 +28,7 @@ boundaries and canonical data semantics.
 - **Canonical Data Contract:**
   [`../../data/ai-kit/versions/ai-v01-job-cv-normalization-data-model.md`](../../data/ai-kit/versions/ai-v01-job-cv-normalization-data-model.md)
 
-AI-V01 is the only approved AI Kit business version. Approval establishes
+AI-V01 is an approved AI Kit business version. Approval establishes
 Product/Data authority; it does not itself establish implementation or Final
 Acceptance. Implementation and verification evidence, including resolved
 Final Acceptance H1/H2/H3 findings, is recorded in the
@@ -36,6 +36,22 @@ Final Acceptance H1/H2/H3 findings, is recorded in the
 Public Job access, Uploaded CV processing, HTTP integration, Job/CV CRUD hooks,
 and AI-specific persistence remain deferred/outside this runtime scope.
 
-AI-V02 and AI-V03 are not approved by this roadmap. AI #1, AI #2, and AI #3 in
+### AI-V02 — Uploaded CV Normalization
+
+- **Product/Data approval status:** `APPROVED` (F01, BR-AI-15–BR-AI-22,
+  baseline decisions D1–D4)
+- **Implementation status:** `NOT IMPLEMENTED — NOT VERIFIED`
+- **Final Acceptance status:** `NOT COMPLETE`
+- **Functional requirements:** `F01`
+- **Business rules:** `BR-AI-15` through `BR-AI-22`
+- **Canonical Product Specification:**
+  [`versions/v02-uploaded-cv-normalization.md`](versions/v02-uploaded-cv-normalization.md)
+- **Canonical Data Contract:**
+  [`../../data/ai-kit/versions/ai-v02-uploaded-cv-normalization-data-model.md`](../../data/ai-kit/versions/ai-v02-uploaded-cv-normalization-data-model.md)
+
+Product/Data approval establishes authority for AI-V02; it does not establish
+implementation verification or Final Acceptance.
+
+AI-V03 is not approved by this roadmap. AI #1, AI #2, and AI #3 in
 Engineering architecture remain direction only and do not independently
 approve another version, scope, Product Specification, or Data Contract.

@@ -4,7 +4,11 @@ const pdfjs = vi.hoisted(() => ({ getDocument: vi.fn() }));
 
 vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => pdfjs);
 
-import { extractPdfText } from "../src/document/pdf-text-extractor.js";
+import {
+  extractPdfText,
+  extractPdfTextFromBuffer,
+  PDF_TEXT_EXTRACTION_ERROR_CODE,
+} from "../src/document/pdf-text-extractor.js";
 
 const createDeferred = () => {
   let resolve;
@@ -154,5 +158,79 @@ describe("PDF text extractor lifecycle", () => {
     const third = loadPages([createPage()]);
     await expect(extractPdfText("third.pdf")).resolves.toBe("text");
     expect(third.task.destroy).toHaveBeenCalledOnce();
+  });
+});
+
+describe("PDF Buffer text extractor lifecycle", () => {
+  beforeEach(() => {
+    pdfjs.getDocument.mockReset();
+  });
+
+  it.each([undefined, null, "file.pdf", [1, 2], new ArrayBuffer(4), Buffer.alloc(0)])(
+    "refuses invalid input before creating resources: %j",
+    async (input) => {
+      await expect(extractPdfTextFromBuffer(input)).rejects.toMatchObject({
+        name: "PdfTextExtractionError",
+        code: PDF_TEXT_EXTRACTION_ERROR_CODE.INVALID_PDF_INPUT,
+      });
+      expect(pdfjs.getDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it("passes a copy of the bytes to PDF.js and cleans up after success", async () => {
+    const page = createPage([{ str: "Uploaded CV text", hasEOL: false }]);
+    const { task } = loadPages([page]);
+    const pdfBuffer = Buffer.from("%PDF-bytes");
+
+    await expect(extractPdfTextFromBuffer(pdfBuffer)).resolves.toBe("Uploaded CV text");
+
+    const [{ data, url }] = pdfjs.getDocument.mock.calls[0];
+    expect(url).toBeUndefined();
+    expect(data).toBeInstanceOf(Uint8Array);
+    expect(data).not.toBe(pdfBuffer);
+    expect(data.buffer).not.toBe(pdfBuffer.buffer);
+    expect(Buffer.from(data).equals(pdfBuffer)).toBe(true);
+    expect(page.cleanup).toHaveBeenCalledOnce();
+    expect(task.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("fails pages without a text layer as not extractable, without OCR", async () => {
+    const { task } = loadPages([createPage([]), createPage([{ str: " " }])]);
+
+    await expect(extractPdfTextFromBuffer(Buffer.from("scan"))).rejects.toMatchObject({
+      code: PDF_TEXT_EXTRACTION_ERROR_CODE.PDF_TEXT_NOT_EXTRACTABLE,
+    });
+    expect(task.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("wraps loading failures as unreadable with the cause and destroys the task", async () => {
+    const cause = new Error("invalid PDF structure");
+    const task = {
+      promise: Promise.reject(cause),
+      destroy: vi.fn().mockResolvedValue(undefined),
+    };
+    pdfjs.getDocument.mockReturnValue(task);
+
+    const error = await extractPdfTextFromBuffer(Buffer.from("broken")).catch((e) => e);
+
+    expect(error).toMatchObject({
+      name: "PdfTextExtractionError",
+      code: PDF_TEXT_EXTRACTION_ERROR_CODE.PDF_UNREADABLE,
+      cause,
+    });
+    expect(error.message).not.toContain("invalid PDF structure");
+    expect(task.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("wraps text-content failures as unreadable and cleans up the page and task", async () => {
+    const page = createPage();
+    page.getTextContent.mockRejectedValue(new Error("extraction failed"));
+    const { task } = loadPages([page]);
+
+    await expect(extractPdfTextFromBuffer(Buffer.from("pdf"))).rejects.toMatchObject({
+      code: PDF_TEXT_EXTRACTION_ERROR_CODE.PDF_UNREADABLE,
+    });
+    expect(page.cleanup).toHaveBeenCalledOnce();
+    expect(task.destroy).toHaveBeenCalledOnce();
   });
 });

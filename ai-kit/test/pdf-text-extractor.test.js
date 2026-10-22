@@ -1,8 +1,13 @@
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { extractPdfText } from "../src/document/pdf-text-extractor.js";
+import {
+  extractPdfText,
+  extractPdfTextFromBuffer,
+  PDF_TEXT_EXTRACTION_ERROR_CODE,
+} from "../src/document/pdf-text-extractor.js";
 
 const fixturePath = (name = "pdf-text-extraction.pdf") => fileURLToPath(
   new URL(`./fixtures/${name}`, import.meta.url),
@@ -41,5 +46,50 @@ describe("PDF text extractor", () => {
     await expect(extractPdfText(fixturePath("missing.pdf"))).rejects.toThrow();
     await expect(extractPdfText(fixturePath()))
       .resolves.toContain("JOBHUB PDF EXTRACTION OK");
+  });
+});
+
+describe("PDF text extractor from an uploaded PDF Buffer", () => {
+  const readFixture = (name) => readFile(fixturePath(name));
+
+  it("extracts free text from a text-native PDF Buffer and leaves the Buffer intact", async () => {
+    const pdfBuffer = await readFixture("pdf-text-extraction.pdf");
+    const original = Buffer.from(pdfBuffer);
+
+    await expect(extractPdfTextFromBuffer(pdfBuffer))
+      .resolves.toContain("JOBHUB PDF EXTRACTION OK");
+    expect(pdfBuffer.equals(original)).toBe(true);
+  });
+
+  it("retains line breaks and page order for a multi-page Uint8Array", async () => {
+    const pdfBytes = new Uint8Array(await readFixture("pdf-text-multipage.pdf"));
+
+    await expect(extractPdfTextFromBuffer(pdfBytes))
+      .resolves.toBe("FIRST PAGE\nSECOND LINE\n\nSECOND PAGE");
+  });
+
+  it("fails an image-only PDF as not extractable instead of returning empty text", async () => {
+    await expect(extractPdfTextFromBuffer(await readFixture("pdf-image-only.pdf")))
+      .rejects.toMatchObject({
+        name: "PdfTextExtractionError",
+        code: PDF_TEXT_EXTRACTION_ERROR_CODE.PDF_TEXT_NOT_EXTRACTABLE,
+      });
+  });
+
+  it("fails unreadable bytes as an extraction failure and can extract afterwards", async () => {
+    await expect(extractPdfTextFromBuffer(Buffer.from("not a pdf document")))
+      .rejects.toMatchObject({ code: PDF_TEXT_EXTRACTION_ERROR_CODE.PDF_UNREADABLE });
+    await expect(extractPdfTextFromBuffer(await readFixture("pdf-text-extraction.pdf")))
+      .resolves.toContain("JOBHUB PDF EXTRACTION OK");
+  });
+
+  it("supports concurrent Buffer and path extractions", async () => {
+    const results = await Promise.all([
+      extractPdfTextFromBuffer(await readFixture("pdf-text-multipage.pdf")),
+      extractPdfText(fixturePath()),
+    ]);
+
+    expect(results[0]).toContain("SECOND PAGE");
+    expect(results[1]).toContain("JOBHUB PDF EXTRACTION OK");
   });
 });

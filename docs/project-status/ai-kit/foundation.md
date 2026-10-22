@@ -42,8 +42,10 @@
   `src/document/pdf-text-extractor.js` adapter. `extractPdfText(pdfPath)` extracts
   existing text layers in page order, cleans pages, and destroys its loading
   task/worker per call. Image-only PDFs return empty text; there is no OCR or
-  shared-runtime disposal operation. The extractor is not exported from the
-  package root or integrated with Uploaded CV normalization. Historical Scribe
+  shared-runtime disposal operation. `extractPdfTextFromBuffer` adds the
+  AI-V02 Buffer boundary with coded extraction failures (see the
+  [AI-V02 leaf](v02-uploaded-cv-normalization.md)). The extractor is not
+  exported from the package root or integrated with Uploaded CV normalization. Historical Scribe
   evidence below does not verify this PDF.js implementation.
 
 - **Integrated; verified:** Backend declares AI Kit as the local npm dependency

@@ -227,8 +227,17 @@ have specifications.
   extractor; no environment setting or remote font service is required.
 - `extractPdfText(pdfPath)` accepts a non-empty path string and extracts the
   existing text layer in page order, retaining line and page boundaries.
-- PDF.js does not perform OCR; a document without extractable text returns an
-  empty string. OCR and uploaded-CV business workflows remain deferred.
+- PDF.js does not perform OCR; for `extractPdfText`, a document without
+  extractable text returns an empty string. OCR remains out of scope.
+- `extractPdfTextFromBuffer(pdfBuffer)` is the AI-V02 F01 extraction boundary
+  for an uploaded PDF Buffer supplied by Backend. It accepts a non-empty
+  `Buffer`/`Uint8Array`, passes PDF.js a copy so the caller's bytes are never
+  detached or altered, and returns the same text-layer format. Failures throw
+  `PdfTextExtractionError` with `code` `INVALID_PDF_INPUT` (refused before PDF.js
+  resources are created), `PDF_UNREADABLE` (PDF.js failure, original error as
+  `cause`, no content in the message), or `PDF_TEXT_NOT_EXTRACTABLE` (empty text
+  layer). Empty text is never a successful result on this boundary. It is not
+  exported from the package root and does not call providers, persist, or cache.
 - Each extraction owns its loading task and worker. Page resources must be
   cleaned after text extraction; the loading task must be destroyed in a
   `finally` block on success or failure, including loading failures.
@@ -236,8 +245,9 @@ have specifications.
   is required. Finishing one extraction must not affect concurrent calls.
 - `pdfjs-dist` is pinned to `5.6.205` for Node 20.19 compatibility; dependency
   upgrades must check the Node engine requirement.
-- Buffer input remains deferred; focused fixtures do not prove an uploaded-CV
-  ingestion pipeline or OCR capability.
+- Focused fixtures prove the extraction boundary only; they do not prove the
+  AI-V02 semantic extraction, `CVMatchProfile` composition, Backend
+  integration, or an OCR capability.
 
 ## Tests and verification
 

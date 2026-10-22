@@ -344,8 +344,11 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   consumer, using the legacy ESM Node build. It extracts existing text layers
   in page order, cleans each page, and destroys its loading task/worker in a
   `finally` block, including loading failures. PDF.js does not perform OCR;
-  documents without extractable text return an empty string. The extractor
-  is internal, with no shared disposal or Backend lifecycle hook.
+  path extraction returns an empty string for documents without extractable
+  text, while the AI-V02 Buffer boundary (`extractPdfTextFromBuffer`) reports
+  invalid input, unreadable PDFs, and empty text layers as coded extraction
+  failures. The extractor is internal, with no shared disposal or Backend
+  lifecycle hook.
 - The package-local verification gate covers the public boundary, provider
   adapters, fallback policy, dependency boundaries, a real text-native PDF
   fixture, and per-extraction resource lifecycle behavior. Detailed evidence is
@@ -457,8 +460,9 @@ Backend authenticates actor
 
 - Retries, circuit breakers, and a provider registry are deferred to the
   capability that needs them.
-- CV upload ingestion, Buffer input, and OCR are deferred to an approved
-  document capability integration. PDF.js task cleanup is owned by each
+- OCR is out of scope. Buffer text extraction exists for AI-V02; Backend
+  uploaded-CV integration and the rest of AI-V02 F01 remain to be
+  implemented. PDF.js task cleanup is owned by each
   extraction and does not require Backend shutdown wiring.
 - Public Job access and Recruiter/application access to Generated CV
   normalization remain deferred; the implemented Backend entries cover only

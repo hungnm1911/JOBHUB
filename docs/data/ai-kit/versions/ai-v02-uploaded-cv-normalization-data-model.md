@@ -5,7 +5,7 @@
 > **Phase:** JOBHUB AI Phase
 > **Ngôn ngữ:** Tiếng Việt
 > **Product authority:** `docs/product/ai-kit/versions/v02-uploaded-cv-normalization.md`
-> **Trạng thái:** `DRAFT — BASELINE / NOT APPROVED`
+> **Trạng thái:** `APPROVED`
 
 ---
 
@@ -710,7 +710,7 @@ tự quyết định các data architecture
 quan trọng.
 ```
 
-**Baseline này vẫn ở trạng thái Data Contract DRAFT — NOT APPROVED.** D1–D4 đã được đồng bộ; việc phê duyệt Product/Data, Engineering Contract và kế hoạch đánh giá vẫn thuộc các bước riêng trước implementation.
+**Data Contract AI-V02 đã được Product Owner phê duyệt.** D1–D4 đã được đồng bộ; Engineering Contract và kế hoạch đánh giá vẫn thuộc các bước riêng trước implementation. Phê duyệt Product/Data không tự xác nhận implementation hoặc Final Acceptance.
 
 ---
 
@@ -725,7 +725,7 @@ CANONICAL AI PERSISTENCE / DATA CONTRACT
 Ở trạng thái hiện tại:
 
 ```text
-DRAFT BASELINE — NOT APPROVED
+APPROVED
 ```
 
 Tài liệu xác định:
