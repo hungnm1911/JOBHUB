@@ -2,41 +2,136 @@
 
 ## Current project state
 
-- **Readiness:** AI Kit technical foundation: ready. AI-V01 Product
-  Specification and Data Contract: approved; R2 Runtime Shape Contract and R4
-  contract-test coverage: complete. AI-V01 is `IN PROGRESS`: Slice 01 (F01 Job
-  extraction stage) is implemented and verified offline and live through
-  Groq; Gemini live extraction remains unverified. F01 consolidation into
-  `JobMatchProfile` and F02 are not
-  implemented, so F01 is not complete. AI-V02 and AI-V03 are not approved by
-  the current roadmap.
-- **AI-V01 Slice 01 — F01 Job extraction stage implemented; verified:**
-  internal `src/normalization/job-extraction.js` (`createJobExtractor`)
-  validates `JobRawInput`, sends the LLM only title, description, and
-  `requiredSkills`, uses Gemini JSON Schema
-  structured output or Groq strict JSON Schema (`strict: true`), and calls
-  Gemini with Groq fallback (or the single injected provider). It returns a
-  `JobExtractionResult` only after response-completeness, JSON, canonical Draft
-  2020-12, JSON Pointer provenance, title-only, skill-tag evidence,
-  description-citation, and duplicate-requirement checks; otherwise it throws a coded
-  `JobExtractionError` or propagates the provider error. Field-level pointers
-  do not prove free-text semantic support, so priority, experience scope, and
-  wording alignment are not verified deterministically (acceptance finding H1,
-  resolved by approved option 1); they rely on the prompt and live evaluation.
-  Acceptance finding H2 is partially addressed: a labeled expected-outcome
-  ledger grades description-level semantic completeness on mocked outputs. A
-  validator PASS is not evidence of semantic completeness. Acceptance finding
-  H3 is implemented and verified offline; live quality of the final prompt is
-  only partially verified (see the H3 verification entries). By approved
-  decision, `JobExtractionResult` holds only claims stated in the Job's free
-  text: the LLM decides requirement equivalence (including skill-tag
-  association and REQUIRED for a requirement presented as both mandatory and
-  preferred), while structured employment type/work modes, their precedence
-  and conflicts with description values, and unmentioned skill tags belong to
-  the not-yet-implemented F01 consolidation stage.
-  `src/normalization/v01-contract.js` is the sole production contract loader;
-  `ajv` 8.20.0 moved from dev to production dependency (approved). Not
-  exported from the package root and not used by Backend.
+- **Readiness:** AI Kit technical foundation: ready. AI-V01 Product/Data
+  authority was updated on 2026-10-21 to deterministic input normalization.
+  Revised **F01 Job normalization and F02 Generated CV normalization are
+  implemented and verified offline** and are reachable through the public
+  runtime entry: the `createAiKit` instance exposes `normalizeJob` and
+  `normalizeGeneratedCv` (package root still exports only `createAiKit`).
+  Backend Slice B1 (internal Job → F01) calls `normalizeJob`; Backend Slice B2
+  (own Generated CV → F02) calls `normalizeGeneratedCv`. The previous LLM extraction design
+  (extraction stage, R2 Runtime Shape Contract and loader, R4 tests) was
+  retired on 2026-10-21.
+  AI-V02 and AI-V03 remain unapproved by the current roadmap.
+- **AI-V01 acceptance:** F01/F02 and Backend B1/B2 implementation is complete
+  and verified offline in the scope above. Final Acceptance H1 (persisted-source
+  integrity and B1 visibility recheck), H2 (canonical local Location validity),
+  and H3 (typed source-dependency failure semantics) are resolved with the
+  evidence below. **Final Acceptance remains pending recheck and has not been
+  approved; AI-V01 is not declared COMPLETE.**
+- **AI-V01 H1 residual — persisted Undefined defaulting (2026-10-22):** the
+  existing persisted-source overlay distinguishes absent object keys and array
+  indices from present `undefined` values. B1/B2 regression coverage now
+  confirms projection refusal through their authorized raw-read paths, while
+  sparse persisted DRAFTs still receive defaults only for absent fields.
+  BSON type 6 was checked at the decoder/helper boundary; an end-to-end
+  persisted type-6 round trip remains unverified because the current driver
+  writes new JavaScript `undefined` values as BSON Null.
+- **Revised AI-V01 F01 — implemented; verified offline:** internal
+  `src/normalization/job-normalization.js` (`normalizeJob`) accepts a strict
+  career-relevant Job source projection (`jobId`, `title`, `jobDescription`,
+  `requiredSkills`, V4.2 `salary`, `fieldCategoryIds`, `positionCategoryIds`,
+  `experienceLevelId`, `employmentType`, `workModes`, `location`; string IDs,
+  explicit nulls/empty arrays) plus Backend-resolved `taxonomy`
+  (`categories[]` with `id`/`name`/`level`/`parentCategoryId`;
+  `experienceLevel` `id`/`code` or null) that must cover exactly the Job's
+  IDs at the required FIELD/POSITION level (acceptance finding F01-TAXONOMY
+  fixed 2026-10-21; profile adds `fieldCategories`, `positionCategories`,
+  `experienceLevel` beside the IDs), and returns a frozen `READY` `JobMatchProfile`
+  (`source`, `freeText`, `metadata`, each value with a JSON Pointer
+  `sourcePath`) or `FAILED` with no profile; invalid input is refused with
+  `JobNormalizationError` `INVALID_JOB_INPUT`. No LLM, Ajv, contract JSON, or
+  persistence; exposed only as `createAiKit(...).normalizeJob`.
+  `requiredSkills` carry no priority because the Job source has no explicit
+  priority, so `BR-AI-09` has no structured input to act on.
+- **AI-V01 Backend Slice B1 (internal Job → F01) — implemented; verified:**
+  `backend/src/services/job-ai-normalization.service.js`
+  (`normalizeInternalJob`) loads the Job through `job.service.js`
+  `loadInternalJob` (the authorization/visibility of `getInternalJob`, which is
+  unchanged), projects the raw document losslessly (not `toPublicJob`),
+  resolves Category/ExperienceLevel records, and returns the AI Kit result
+  unchanged. Unknown or wrong-level references are refused (400 with `field`);
+  a typed DB availability failure during canonical source, raw re-read, or
+  taxonomy lookup returns `FAILED` with no profile and logs safe classification;
+  unexpected errors propagate. AI Kit
+  `INVALID_JOB_INPUT` becomes a 500 projection error with `issues`. Sparse
+  DRAFTs normalize without submit/completeness checks. No HTTP endpoint,
+  public Job, CRUD hook, or persistence. The source is projected from the
+  persisted (`lean`, tenant/visibility-scoped) document, not Mongoose-hydrated values;
+  hydrated schema defaults fill only absent keys, and a non-ObjectId persisted
+  ID is a 500 projection error (Final Acceptance H1 fixed 2026-10-22).
+  H1 B1 authorization follow-up (2026-10-22): the raw source read now uses
+  `loadInternalJob` with the existing business context and canonical internal
+  visibility filter. A peer loses access if the Job closes between reads;
+  Current Primary and Company Manager retain access, with Backend domain errors
+  preserved and no cross-tenant access.
+- **AI-V01 Backend Slice B2 (own Generated CV → F02) — implemented; verified:**
+  `backend/src/services/candidate-cv-ai-normalization.service.js`
+  (`normalizeOwnGeneratedCandidateCv`) loads the CV through
+  `candidate-cv.service.js` `loadOwnActiveCandidateCv` (the Candidate,
+  ownership, and non-archived checks of `getOwnActiveCandidateCv`, which is
+  unchanged), refuses non-Generated sources (409 `sourceType`), projects the
+  raw document losslessly (not `toPublicGeneratedContent` or the persistence
+  normalizer; string IDs, `toISOString()` dates, `personalInfo` reduced to
+  `links`), resolves Category/ExperienceLevel records, and returns the AI Kit
+  result unchanged. Unknown or non-FIELD/POSITION references are refused (400
+  with `field`); typed DB availability failure during canonical source, raw
+  re-read, or taxonomy lookup returns `FAILED` with no profile and logs safe
+  classification; unexpected errors propagate.
+  AI Kit `INVALID_GENERATED_CV_INPUT` becomes a 500 projection error with
+  `issues`. PRIVATE DRAFTs normalize without completeness, default, or PUBLIC
+  gates. No Uploaded CV, Recruiter access, HTTP endpoint, CRUD hook, or
+  persistence. As in B1, the source is projected from the persisted
+  (`lean`, owner/active-scoped) document; a non-ObjectId ID or non-Date date is
+  a 500 projection error (Final Acceptance H1 fixed 2026-10-22).
+- **AI-V01 Final Acceptance H3 — fixed; verified offline (2026-10-22):**
+  B1/B2 classify DB availability failures by driver/Mongoose type and explicit
+  server codes across canonical source load, raw re-read, and taxonomy lookup.
+  FAILED has `profile: null` and never calls the normalizer. Backend refusals,
+  not-found, invalid references, projection defects, and unexpected errors
+  propagate. Canonical authorization/visibility/tenant owners are unchanged;
+  warnings exclude source data and raw driver diagnostics.
+- **AI-V01 Final Acceptance H2 — fixed at the Backend source boundary
+  (2026-10-22):** B1/B2 reuse canonical model validators on the lossless
+  persisted source to refuse `FOREIGN` Province codes, duplicate preferred
+  selections, and Province-wide/District-subset overlap as 500 projection
+  errors before taxonomy or AI Kit. No repair, deduplication, catalog lookup,
+  CRUD/DTO change, or source write. Valid sparse, Province-only, and District
+  subset sources remain READY with order and provenance preserved. Per AI
+  Data §11.2, public F01/F02 still validate projection shape and consume
+  Backend-validated domain sources; domain rules are not duplicated in AI Kit.
+- **AI-V01 F02 — implemented; verified offline:** internal
+  `src/normalization/cv-normalization.js` (`normalizeGeneratedCv`) accepts a
+  strict career-relevant Generated CV projection (`candidateCvId`,
+  `categoryId`, `experienceLevelId`, `skillTags`, `employmentTypes`,
+  `workModes`, `preferredLocations`, and V7 `generatedContent` whose
+  `personalInfo` carries only `links`; other contact fields are refused;
+  explicit nulls/empty arrays; dates as `toISOString()` strings) plus
+  Backend-resolved `taxonomy` (`category`, `experienceLevel` or null) that
+  must resolve exactly those IDs. It returns a frozen `READY`
+  `CVMatchProfile` (`source`, `freeText.professionalSummary`, `metadata`,
+  `content` keeping section/item order with per-item `sourcePath` and item
+  free text under `freeText`, plus `content.links` verbatim in source order
+  with `/generatedContent/personalInfo/links/<i>` provenance; acceptance
+  finding F02-01 fixed 2026-10-21) or `FAILED` with no profile; invalid input is
+  refused with `CvNormalizationError` `INVALID_GENERATED_CV_INPUT`. It keeps
+  `skillTags`, content skills, and project technologies separate and derives
+  no skills, seniority, or durations. F01 and F02 share
+  `src/normalization/normalization-support.js` (helpers and Backend-mirrored
+  code sets). No LLM, Ajv, contract JSON, or persistence; exposed only as
+  `createAiKit(...).normalizeGeneratedCv`.
+- **Previous AI-V01 LLM extraction design — retired 2026-10-21:**
+  `src/normalization/job-extraction.js`, `src/normalization/v01-contract.js`,
+  `ai-kit/v01-contract.json`, and their extraction, semantic-evaluation, and
+  contract tests were removed; F01/F02, the public runtime entry, and Backend
+  did not depend on them. `test/llm-http-attempts.test.js` now drives the
+  Gemini/Groq adapters through `executeWithLlmProviderChain` directly. The
+  unused `ajv` production dependency and its exclusive transitive dependencies
+  were removed on 2026-10-21 after checking source, tests, and tooling for
+  consumers. AI Kit npm/Yarn locks and Backend's linked-package npm metadata
+  reflect the removal; ESLint's development-only transitive Ajv remains.
+  README and Product/Data/Engineering references now describe the retired
+  contract, the F01/F02 factory entry, and normalizer-owned runtime shapes.
 - **Implemented; verified:** `ai-kit/` is the private `@jobhub/ai-kit` npm
   package using Node.js ES modules. Its package root is the only production
   source entrypoint and exports the minimal `createAiKit` composition factory;
@@ -44,7 +139,7 @@
   `tooling/smoke-groq` subpaths expose only the manual smoke harnesses. The
   factory accepts separate optional `llm.codex`, `llm.gemini`, and `llm.groq` configuration
   plus a required injected logger contract, validates their boundary shapes,
-  and still exposes no AI capability. The internal Codex-compatible provider
+  and exposes only the AI-V01 F01/F02 runtime entry. The internal Codex-compatible provider
   foundation uses `openai` 6.49.0 and the Responses API through one
   provider-specific adapter. The internal Gemini provider foundation
   uses `@google/genai` 2.30.0 through one provider-specific adapter; the
@@ -54,29 +149,25 @@
   `executeWithLlmProviderChain` orchestrator accepts provider call functions
   without unifying their adapter contracts, preserves successful provider
   results, and allows retry/fallback only for HTTP 429/500/502/503/504 or a
-  structured response-free connection/timeout failure. The F01 composition is
-  Codex (at most two HTTP attempts), Gemini (one), then Groq (one); all adapters
+  structured response-free connection/timeout failure. All adapters
   disable SDK-level automatic retries. Each adapter logs the provider, model,
   and SDK operation before sending a request, including smoke calls and each
   retry/fallback attempt. Successful provider calls log normalized
   `input_tokens`, `output_tokens`, `total_tokens`, and `cached_tokens` without
-  prompt or response content. The adapters and
-  fallback orchestrator are composed only inside the internal F01 Job
-  extraction stage, not by `createAiKit`, so startup remains valid with any
-  provider combination
-  configurations. ESLint and Vitest remain aligned with the backend tooling,
+  prompt or response content. No capability
+  currently composes the adapters or the fallback orchestrator, and
+  `createAiKit` does not construct them, so startup remains valid with any
+  provider combination configurations. ESLint and Vitest remain aligned with the backend tooling,
   with a package-local `verify:agent` gate and explicit no-`process.env` and
   provider-SDK-import source boundaries.
-- **Document extraction foundation implemented; verified:** AI Kit locks
-  `scribe.js-ocr` 0.16.1 and confines its direct import to the internal
-  `src/document/pdf-text-extractor.js` adapter. `extractPdfText(pdfPath)` opens
-  a PDF, uses Scribe's native-text result or its OCR flow when Scribe reports
-  that OCR is required, exports plain text, and always closes its document-
-  scoped resources without terminating Scribe's process-wide runtime, so one
-  finishing extraction no longer tears down an overlapping one. The same
-  internal adapter owns the explicit `disposePdfTextExtractor()` shared-runtime
-  shutdown operation; neither document operation is exported from the package
-  root or wired into Backend lifecycle yet.
+- **Document extraction foundation implemented:** AI Kit locks `pdfjs-dist`
+  5.6.205 and confines its import to the internal
+  `src/document/pdf-text-extractor.js` adapter. `extractPdfText(pdfPath)` extracts
+  existing text layers in page order, cleans pages, and destroys its loading
+  task/worker per call. Image-only PDFs return empty text; there is no OCR or
+  shared-runtime disposal operation. The extractor is not exported from the
+  package root or integrated with Uploaded CV normalization. Historical Scribe
+  evidence below does not verify this PDF.js implementation.
 - **Integrated; verified:** Backend declares AI Kit as the local npm dependency
   `file:../ai-kit`. `backend/src/services/ai-kit.service.js` is the sole Backend
   package consumer and creates the shared instance through the package-root
@@ -107,19 +198,15 @@
 
 ## Deferred / not started
 
-- AI-V01 F01 consolidation (deterministic structured employment-type/work-mode
-  precedence and structured/description conflict recording, adding skill tags
-  the description does not mention, evidence association, `JobMatchProfile`,
-  READY/FAILED mapping), the package-root capability API and Backend
-  consumer, and all of F02 are not started. Slice 01 validates extraction
-  acceptance but does not create a canonical profile or normalization result.
-  Backend authorization/ownership enforcement remains a Backend responsibility.
-- Live Gemini quality for Job extraction is unverified: every Gemini attempt
-  on 2026-10-19 returned HTTP 503 `UNAVAILABLE` or HTTP 429 quota exhaustion.
-- Retry/circuit breaking, CV
-  ingestion/document workflows, scanned-PDF coverage, HTTP transport,
-  configuration/environment loading, matching, profiles, agents, vector
-  storage, and database integration are not started or not yet verified.
+- Public-Job normalization, Recruiter/application access to Generated CV
+  normalization, Job/CV CRUD hooks, and HTTP integration remain absent; Backend
+  retains authorization/ownership/visibility enforcement.
+- Uploaded CV ingestion/normalization, OCR, AI #1/#2/#3 (matching/scoring,
+  recommendation/retrieval, and CV agents), AI-specific persistence, and profile
+  history/freshness remain deferred. Runtime Job/CV profiles are implemented;
+  provider/configuration and PDF extraction foundations do not implement these
+  deferred business workflows. Additional retry/circuit-breaking policy beyond
+  the implemented bounded provider chain remains deferred.
 - AI Kit is not integrated into the frontend and is not configured as a
   repository workspace.
 - The Node.js engine mismatch reported by `npm ci` (`file-type@22.0.1`
@@ -127,6 +214,206 @@
   addressed.
 
 ## Verification status
+
+- 2026-10-22: AI-V01 H1 residual — persisted Undefined defaulting. Focused
+  `cd backend && npx --no-install vitest run test/job/ai-v01-b1-job-normalization.test.js test/candidate/ai-v01-b2-generated-cv-normalization.test.js --reporter=dot`
+  passed (2 files / 83 tests). The overlay was already presence-aware in the
+  working tree at task start, so there was no pre-fix red run. BSON
+  decoder/helper cases distinguish absent keys and array indices from present
+  Undefined; service-path cases inject decoded `undefined` after the actual
+  authorized raw read and get a 500 projection error without changing the
+  persisted source. A real MongoDB
+  write/read case confirms this driver's new JavaScript `undefined` write
+  persists as BSON Null, so it does not establish a stored BSON type-6 case.
+  The default `cd backend && npm run verify:agent` run passed ESLint (0 errors,
+  2 existing warnings) and ARCH-001–019, but 2 unrelated suites failed to
+  start MongoMemoryServer within 10 seconds (176 files / 1885 tests passed;
+  22 tests skipped). The complete rerun with
+  `cd backend && npm run verify:agent -- -- --maxWorkers=4` passed (ESLint
+  0 errors / 2 existing warnings, ARCH-001–019, 178 files / 1907 tests).
+  No F01/F02 shape, loader, source validator, authorization, or persistence
+  behavior was changed by this residual regression work.
+
+- 2026-10-22: AI-V01 Final Acceptance H3 (source dependency failure semantics).
+  Before the fix, focused B1/B2 regression execution failed 14 tests (62 passed),
+  reproducing source outage rejection, taxonomy masking unexpected errors, and
+  unsafe raw-driver warning payloads. Final focused
+  `cd backend && npx --no-install vitest run test/job/ai-v01-b1-job-normalization.test.js test/candidate/ai-v01-b2-generated-cv-normalization.test.js test/infrastructure/mongodb-availability-error.test.js --reporter=dot`
+  passed (3 files / 105 tests). Coverage includes first/raw reads, incomplete
+  authorization during a loader outage, taxonomy outage, refusal/not-found/
+  invalid references, projection defects, unexpected TypeError/plain errors,
+  trusted type/code classification, no profile/normalizer on FAILED, and safe
+  warnings. The default Backend gate attempt failed with module-resolution,
+  MongoMemoryServer startup, and assertion failures; seven of eight affected
+  files passed on focused recheck, with one MongoDB startup timeout remaining.
+  The final complete Backend gate used a task-local temporary directory because
+  `/tmp` was full:
+  `cd backend && TMPDIR=/home/manhung/projects/JOBHUB/.tmp-h3-verification npm run verify:agent -- -- --maxWorkers=4`
+  passed (ESLint 0 errors / 2 existing warnings, ARCH-001–019, 178 files /
+  1902 tests). No tests were skipped in this successful gate. The task-local
+  temporary directory was removed afterwards. Outages were fault-injected;
+  live MongoDB failover and live provider calls were not performed.
+
+- 2026-10-22: AI-V01 Final Acceptance H2 (non-canonical Location accepted as
+  READY). Before the fix, 8 new B1/B2 regressions failed because malformed
+  persisted sources normalized successfully (52 other tests passed).
+  Focused Backend `npx --no-install vitest run
+  test/job/ai-v01-b1-job-normalization.test.js
+  test/candidate/ai-v01-b2-generated-cv-normalization.test.js
+  test/job/v41-slice02-job-location.test.js
+  test/candidate/v41-slice03-candidate-preferred-locations.test.js --reporter=dot`
+  passed (4 files / 108 tests). Covered: forbidden Province with/without
+  District, duplicate Province-wide/exact District selections, overlap in both
+  orders, mixed valid/forbidden preferences, 500 projection refusal before
+  taxonomy/AI Kit, no warning or source mutation; valid null/empty,
+  Province-only, ordered multi-Province/District-subset sources remain READY.
+  Focused AI Kit `npx --no-install vitest run
+  test/v01-normalization-public-api.test.js test/job-normalization.test.js
+  test/cv-normalization.test.js --reporter=dot` passed (3 files / 128 tests),
+  including public Location shape refusal and valid-source preservation.
+  `cd backend && npm run verify:agent` passed (ESLint 0 errors / 2 existing
+  warnings, ARCH-001–019, 177 files / 1857 tests);
+  `cd ai-kit && npm run verify:agent` passed (ESLint, 13 files / 211 tests).
+  External catalog existence/membership revalidation and live provider calls
+  were not added or run.
+
+- 2026-10-22: AI-V01 H1 B1 authorization follow-up (BR-AI-06). Regression
+  closes a `PUBLISHED` Job through `closePublishedJob` after the authorized
+  load and before the raw query. Before the fix, the peer case failed because
+  normalization succeeded instead of rejecting with 403 (25 other tests passed).
+  After the fix, focused `npx vitest run
+  test/job/ai-v01-b1-job-normalization.test.js
+  test/job/v5-job-internal-visibility.test.js
+  test/job/v5-job-manual-close.test.js` in `backend/` passed (3 files / 45 tests).
+  Covered: peer rejection matching `getInternalJob` message/details without
+  taxonomy/AI Kit calls; Current Primary and Company Manager READY after close;
+  cross-tenant Recruiter/Manager rejection for PUBLISHED/CLOSED, including forged
+  client Company IDs; existing hydration-integrity cases remain green.
+  `cd backend && npm run verify:agent` passed (ESLint 0 errors / 2 pre-existing
+  warnings, ARCH-001–019, 177 files / 1843 tests). B2, AI Kit, and F01/F02 shapes
+  were not changed by this follow-up.
+
+- 2026-10-22: AI-V01 Final Acceptance H1 (Mongoose hydration masked malformed
+  persisted B1/B2 sources). Focused `npx vitest run
+  test/job/ai-v01-b1-job-normalization.test.js
+  test/candidate/ai-v01-b2-generated-cv-normalization.test.js` in `backend/`
+  passed (2 files / 40 tests); against the pre-fix services the 13 new
+  hydration cases failed (READY, `TypeError`, or wrong 400 taxonomy refusal).
+  Covered: uncastable/string-typed IDs, scalar arrays (`preferredLocations:
+  "bad"`), numeric strings, ISO-string dates → 500 projection error with the
+  persisted document unchanged; absent fields → schema defaults and READY
+  without contact data. `cd backend && npm run verify:agent` passed (ESLint
+  0 errors / 2 pre-existing warnings, ARCH-001–019, 177 files / 1837 tests)
+  on the third run; earlier runs failed only on MongoDB memory-server startup
+  (`/tmp` full with 176 stale `/tmp/mongo-mem-*` directories, then one
+  unrelated startup timeout that passed in isolation). AI Kit source was not
+  changed.
+
+- 2026-10-21: AI-V01 Backend Slice B2 (own Generated CV → F02). Focused
+  `npx --no-install vitest run
+  test/candidate/ai-v01-b2-generated-cv-normalization.test.js` in `backend/`
+  passed (1 file / 13 tests; real AI Kit and MongoDB memory server: PRIVATE
+  DRAFT READY with exact source, ISO dates, links, preferences, order,
+  duplicates, partial items, hidden sections, provenance, no contact data, and
+  unchanged document; sparse DRAFT READY; unknown/non-FIELD/POSITION Category
+  and unknown ExperienceLevel refused before AI Kit; Category/ExperienceLevel
+  lookup failure → FAILED; non-canonical hidden section, blank link, and
+  uncastable date → projection error; other owner, mismatched owner,
+  non-Candidate, archived, unknown, malformed id, and Uploaded CV refused;
+  `getOwnActiveCandidateCv` output unchanged). `cd backend && npm run
+  verify:agent` passed (ESLint 0 errors / 2 pre-existing warnings,
+  ARCH-001–019, 177 files / 1823 tests) after removing 93 stale
+  `/tmp/mongo-mem-*` directories; the first run failed only because `/tmp` was
+  full (MongoDB memory server `ENOSPC`). AI Kit source was not changed, so its
+  gate was not rerun. No live provider was called.
+
+- 2026-10-21: AI-V01 Backend Slice B1 (internal Job → F01). Focused
+  `npx --no-install vitest run test/job/ai-v01-b1-job-normalization.test.js
+  test/job/v5-job-internal-visibility.test.js
+  test/infrastructure/ai-kit-integration.test.js` in `backend/` passed
+  (3 files / 23 tests; real AI Kit and MongoDB memory server: complete Job
+  READY with lossless source and unchanged document, sparse DRAFT READY,
+  unknown/wrong-level Category and unknown ExperienceLevel refused before AI
+  Kit, Category/ExperienceLevel lookup failure → FAILED, corrupt persisted
+  location → projection error, peer/Manager DRAFT, cross-tenant, Candidate,
+  unknown, malformed id and client `companyId` refused, `getInternalJob`
+  output unchanged). `cd backend && npm run verify:agent` passed (ESLint
+  0 errors / 2 pre-existing warnings, ARCH-001–019, 176 files / 1810 tests)
+  on the second run; the first run failed only on MongoDB memory-server
+  startup/hook timeouts in 6 unrelated suites, which passed in isolation
+  (6 files / 141 tests). AI Kit source was not changed, so its gate was not
+  rerun. No live provider was called.
+
+- 2026-10-21: Completed AI-V01 legacy dependency/documentation cleanup after
+  retirement of the extraction stage, contract loader, `v01-contract.json`,
+  and their four test files. `npm ls ajv --all` in `ai-kit/` confirms only
+  ESLint's Ajv 6 remains. `cd ai-kit && npm run verify:agent` passed (ESLint
+  and Vitest, 13 files / 201 tests). Focused `npx --no-install vitest run
+  test/infrastructure/ai-kit-integration.test.js` in `backend/` passed
+  (1 file / 1 test). Local documentation links and Markdown anchors passed
+  (7 files / 42 links), as did `git diff --check` and separate untracked-file
+  whitespace checks. Runtime source, public API, F01/F02 shapes, tests, and
+  provider/PDF foundation were unchanged by this cleanup. The full Backend
+  gate was not run: Backend runtime/integration behavior did not change.
+  No live provider was called.
+
+- 2026-10-21: AI-V01 public runtime entry (`createAiKit` instance exposes
+  `normalizeJob` and `normalizeGeneratedCv`; package root unchanged). Focused
+  `npx vitest run test/v01-normalization-public-api.test.js test/index.test.js
+  test/cv-normalization.test.js test/job-normalization.test.js` passed
+  (4 files / 126 tests; public-boundary cases: exact instance keys, no provider
+  config and no logging, results equal to the F01/F02 owners for complete and
+  sparse/DRAFT-like READY, FAILED without profile, unresolved or wrong-level
+  taxonomy refused with `INVALID_JOB_INPUT` / `INVALID_GENERATED_CV_INPUT`
+  without echoing content). `cd ai-kit && npm run verify:agent` passed (ESLint
+  and Vitest, 16 files / 350 tests). No Backend source changed; only the
+  instance-shape assertion in `backend/test/infrastructure/ai-kit-integration.test.js`
+  was updated. `cd backend && npm run verify:agent` passed (175 files / 1797
+  tests) with `TMPDIR` on the main disk, because the default `/tmp` tmpfs was
+  full (`ENOSPC`). No live provider was called.
+
+- 2026-10-21: AI-V01 F02 acceptance finding F02-01 (professional links dropped
+  before the boundary). Regression tests first failed for the expected reason
+  (`/generatedContent/personalInfo is not an allowed field`). After the fix,
+  focused `npx vitest run test/cv-normalization.test.js
+  test/job-normalization.test.js` passed (2 files / 106 tests; new F02 cases:
+  links with data and empty, order/duplicates/verbatim provenance, refusal of
+  other contact fields, missing projection, missing or empty link, FAILED when
+  links are not all preserved). `cd ai-kit && npm run verify:agent` passed
+  (ESLint and Vitest, 15 files / 338 tests). Backend gate not run: no Backend
+  source or integration changed. No live provider was called.
+
+- 2026-10-21: AI-V01 F02 deterministic Generated CV normalization, with F01
+  helpers moved to the shared normalization support module. Focused
+  `npx vitest run test/cv-normalization.test.js test/job-normalization.test.js`
+  passed (2 files / 101 tests; F02 file 35 tests: complete and near-empty
+  READY, missing sections and draft items left empty, metadata not filled from
+  free text, separate skill sources with duplicates, conflicting experience
+  claims without derived durations, unmappable language proficiency, hidden
+  sections, no deduplication, determinism/immutability, refusal without
+  echoing CV content, FAILED without profile, import/package-root
+  boundaries). `cd ai-kit && npm run verify:agent` passed (ESLint and Vitest,
+  15 files / 333 tests). Backend gate not run: no Backend source or
+  integration changed. No live provider was called.
+
+- 2026-10-21: Revised AI-V01 F01 deterministic Job normalization. Focused
+  `npx vitest run test/job-normalization.test.js` passed (1 file / 50 tests:
+  complete/sparse READY, empty metadata not filled from description,
+  metadata/description differences preserved, no priority or free-text
+  requirement, verbatim free text, five valid Structured Salary variants,
+  determinism and immutability, refusal of invalid/extra/missing fields and
+  invalid Salary without echoing Job content, FAILED without profile, and the
+  `node:util`-only import boundary). `cd ai-kit && npm run verify:agent`
+  passed (ESLint and Vitest, 14 files / 282 tests). Backend gate not run: no
+  Backend source or integration changed. No live provider was called.
+
+- 2026-10-21: Documentation-only AI-V01 Product/Data revision to the approved
+  deterministic normalization direction. Reference resolution, requirement ID
+  and cross-reference consistency, unchanged source/authorization/persistence
+  sections, and documentation-only scope checks passed; `git diff --check`
+  passed. No JSON Shape, source, dependencies, or tests changed. AI Kit/Backend
+  code gates and live provider checks were not run because this change only
+  updates documentation; revised F01/F02 runtime behavior remains unverified.
 
 - 2026-10-20: Added `AI provider API request started` metadata to the Codex,
   Gemini, and Groq adapters. Focused offline checks passed (5 files / 43 tests),

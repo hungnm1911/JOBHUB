@@ -1,3 +1,6 @@
+import { normalizeGeneratedCv } from "./normalization/cv-normalization.js";
+import { normalizeJob } from "./normalization/job-normalization.js";
+
 const LOGGER_METHODS = Object.freeze(["error", "warn", "info", "debug"]);
 
 const assertLogger = (logger) => {
@@ -51,7 +54,7 @@ function createAiKit({ llm = {}, logger } = {}) {
   assertOptionalProviderConfig(llm.gemini, "llm.gemini");
   assertOptionalProviderConfig(llm.groq, "llm.groq");
 
-  return Object.freeze({});
+  return Object.freeze({ normalizeJob, normalizeGeneratedCv });
 }
 
 export { createAiKit };

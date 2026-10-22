@@ -279,31 +279,48 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   process, deployment service, or `start`/`dev` entrypoint. The repository does
   not compose it as an npm workspace.
 - [`ai-kit/src/index.js`](../../ai-kit/src/index.js) is the production package
-  entrypoint and currently exports only `createAiKit`. The factory validates
+  entrypoint and exports only `createAiKit`. The factory validates
   optional Codex/Gemini/Groq configuration and the injected logger contract, then
-  returns an empty frozen object; it exposes no AI business capability.
-- AI-V01 Product/Data authority is approved.
-  [`ai-kit/v01-contract.json`](../../ai-kit/v01-contract.json) owns the
-  validated runtime-only input, extraction, profile, evidence/conflict, and
-  READY/FAILED result shapes; R4 contract tests compile it as Draft 2020-12.
-  `src/normalization/v01-contract.js` is its only production loader and Ajv
-  validator. The internal F01 Job extraction stage,
-  `src/normalization/job-extraction.js`, turns a `JobRawInput` into a
-  `JobExtractionResult` through input validation, provider-native structured
-  output, canonical Draft 2020-12 validation, and deterministic
-  provenance/skill-tag evidence checks. The extraction holds only claims
-  stated in the Job's free text; structured employment type/work-mode
-  precedence and conflicts and unmentioned skill tags are F01 consolidation
-  responsibilities. Field-level references do not prove
-  free-text semantic support, which is evaluated live rather than by keyword
-  matching. F01 consolidation into `JobMatchProfile`,
-  READY/FAILED results, and all of F02 remain unimplemented, and nothing
-  AI-V01-related is exported from the package root.
+  returns a frozen instance whose only AI-V01 runtime entry is
+  `normalizeJob` (F01) and `normalizeGeneratedCv` (F02). Both are synchronous,
+  deterministic, and provider-free; they need no LLM configuration and do not
+  log.
+- AI-V01 Product/Data authority is approved and deterministic. The F01 owner,
+  `src/normalization/job-normalization.js` (`normalizeJob`), turns a
+  career-relevant Job source projection plus Backend-resolved taxonomy into a
+  runtime-only READY `JobMatchProfile` or FAILED result; the F02 owner,
+  `src/normalization/cv-normalization.js` (`normalizeGeneratedCv`), does the
+  same for a Generated CV projection and `CVMatchProfile`. Each owner defines
+  its source projection and profile shape, refuses invalid input (including
+  taxonomy that does not resolve the source references) with a coded error
+  (`JobNormalizationError` `INVALID_JOB_INPUT`,
+  `CvNormalizationError` `INVALID_GENERATED_CV_INPUT`), and returns FAILED with
+  no profile when normalization cannot complete. Both share
+  `src/normalization/normalization-support.js` for source-gate helpers, the
+  Backend-mirrored EmploymentType/WorkMode/CategoryLevel/ExperienceLevel code
+  sets, provenance helpers, and the READY/FAILED result. They use no LLM or
+  JSON Schema validator. The earlier LLM extraction design for F01 (its
+  extraction stage, contract loader, and `v01-contract.json`) has been retired.
 - [`backend/src/services/ai-kit.service.js`](../../backend/src/services/ai-kit.service.js)
-  is the sole Backend runtime package consumer and creates the shared instance
+  is the sole Backend package importer and creates the shared runtime instance
   with normalized Backend configuration and the canonical Backend logger.
-  Backend startup does not currently import that service, so AI Kit is not yet
-  part of the full startup or shutdown lifecycle.
+  B1 `job-ai-normalization.service.js` (`normalizeInternalJob`) and B2
+  `candidate-cv-ai-normalization.service.js` (`normalizeOwnGeneratedCandidateCv`)
+  consume that instance for F01/F02. They reuse `job.service.js`
+  `loadInternalJob` and `candidate-cv.service.js` `loadOwnActiveCandidateCv`
+  for canonical authorization, visibility, ownership, and tenant boundaries.
+  Backend owns canonical source validation, lossless persisted-source
+  projection, string-ID/ISO-date serialization, and taxonomy resolution. AI Kit
+  receives valid plain projections, validates their shape and resolved-reference
+  consistency, and performs deterministic normalization. B1/B2 reuse canonical
+  model validators for local Location invariants; AI Kit does not duplicate
+  domain validation or perform catalog lookups.
+  Malformed persisted sources become projection errors rather than being
+  repaired by hydration or public serializers. Typed MongoDB availability
+  failures in source or taxonomy reads return FAILED with no profile;
+  domain refusals and unexpected errors propagate. These service entries have
+  no HTTP/CRUD callers, source writes, or profile persistence; Backend startup
+  does not yet import the integration service or wire an AI Kit lifecycle.
 - Explicit `tooling/smoke-codex`, `tooling/smoke-gemini`, and
   `tooling/smoke-groq` package subpaths are
   manual provider-smoke tooling only. They are not production capability APIs.
@@ -316,22 +333,22 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   respectively. Manual live smoke tests have verified Codex through the
   compatible endpoint with `gpt-5.6-sol`, Gemini with `gemini-3.8-flash`, and
   Groq with `openai/gpt-oss-120b`.
-- `src/llm/llm-fallback.js` implements the Job extraction priority chain:
-  Codex receives at most two attempts, then Gemini and Groq receive at most one
-  attempt each. Retry or fallback is eligible only for HTTP 429, 500, 502, 503,
+- `src/llm/llm-fallback.js` implements a bounded provider chain in which the
+  composing capability declares the provider order and per-provider attempt
+  count. Retry or fallback is eligible only for HTTP 429, 500, 502, 503,
   or 504, or a recognized connection/timeout failure with no HTTP response.
   Authentication, configuration, request-validation, and programming failures
-  are not eligible. This utility is not exported; its only composition is the
-  internal F01 Job extraction stage, so
-  fallback is not automatic for AI Kit calls.
-- `src/document/pdf-text-extractor.js` is the sole direct `scribe.js-ocr`
-  consumer. It extracts PDF text, invokes Scribe OCR when `requiresOCR` is set,
-  closes each document in a `finally` block, and leaves the shared Scribe
-  runtime active until `disposePdfTextExtractor()` is called. Neither operation
-  is exported from the package root or wired into Backend lifecycle.
+  are not eligible. This utility is not exported and no capability currently
+  composes it, so fallback is not automatic for AI Kit calls.
+- `src/document/pdf-text-extractor.js` is the sole direct `pdfjs-dist`
+  consumer, using the legacy ESM Node build. It extracts existing text layers
+  in page order, cleans each page, and destroys its loading task/worker in a
+  `finally` block, including loading failures. PDF.js does not perform OCR;
+  documents without extractable text return an empty string. The extractor
+  is internal, with no shared disposal or Backend lifecycle hook.
 - The package-local verification gate covers the public boundary, provider
   adapters, fallback policy, dependency boundaries, a real text-native PDF
-  fixture, and document/shared-runtime lifecycle behavior. Detailed evidence is
+  fixture, and per-extraction resource lifecycle behavior. Detailed evidence is
   recorded in the [AI Kit foundation status](../project-status/ai-kit/foundation.md).
 
 ## AI Kit — Target Convention
@@ -349,7 +366,7 @@ JOBHUB Backend
     v
 @jobhub/ai-kit
     |
-    +-- document extraction (Scribe)
+    +-- document text extraction (PDF.js)
     +-- LLM adapters (Gemini / Groq)
     +-- LLM fallback policy
     +-- approved future AI capabilities
@@ -363,7 +380,9 @@ is an in-process computation package, not a microservice.
 
 - Backend owns process startup/shutdown, environment loading and normalized
   configuration, the canonical logger, HTTP, authentication, authorization,
-  business permissions, persistence, and canonical JOBHUB domain services.
+  business permissions, canonical source validation, persistence, and canonical
+  JOBHUB domain services. AI Kit projection-shape gates do not replace those
+  domain owners.
 - AI Kit owns provider adapters, document extraction, internal provider
   fallback policy, and approved AI-specific computation and orchestration.
 - Backend passes normalized configuration, the logger, input data, and any
@@ -386,10 +405,10 @@ is an in-process computation package, not a microservice.
   `llm-fallback.js` owns the provider-agnostic fallback decision. Capability
   composition must opt into that policy explicitly; adapters do not retry or
   select one another.
-- The PDF extractor owns Scribe-specific document handling. Every extraction
-  closes its document-scoped resources, while shared-runtime teardown remains
-  an explicit dispose operation. Backend lifecycle wiring is added only with a
-  production document capability that requires it.
+- The PDF extractor owns PDF.js document handling. Every extraction cleans
+  its pages and destroys its own loading task/worker, without affecting
+  concurrent calls. It extracts existing text only; OCR is deferred. There is
+  no shared runtime to dispose from Backend shutdown.
 
 ### Future capability direction
 
@@ -427,7 +446,7 @@ Backend authenticates actor
 - Production consumers use the package-root API. Backend modules do not
   deep-import AI Kit internals, bypass `backend/src/services/ai-kit.service.js`,
   or create parallel shared instances.
-- Provider SDK imports remain confined to their adapters, and Scribe imports
+- Provider SDK imports remain confined to their adapters, and PDF.js imports
   remain confined to the PDF extractor. Provider fallback remains an explicit
   internal policy, not a claim that every AI request falls back automatically.
 - AI capability APIs, persistence shapes, workflows, matching semantics, and
@@ -437,17 +456,17 @@ Backend authenticates actor
 ### Deferred decisions
 
 - Retries, circuit breakers, and a provider registry are deferred to the
-  capability that needs them; the F01 Job extraction stage composes fallback
-  without retrying invalid output.
-- CV upload ingestion, Buffer input, scanned-PDF/OCR fixtures, and Backend
-  startup/shutdown wiring for extractor disposal are deferred to the document
-  capability integration.
-- AI-V01 match-profile construction has not started: F01 consolidation,
-  READY/FAILED results, the package-root capability API with its Backend
-  consumer, and F02 remain deferred. Only the F01 Job extraction stage exists.
-  Embeddings/retrieval, tool schemas and limits, persistence beyond the
-  approved AI-V01 runtime-only boundary, and API workflows remain deferred
-  until their applicable Product/Data contracts are approved.
+  capability that needs them.
+- CV upload ingestion, Buffer input, and OCR are deferred to an approved
+  document capability integration. PDF.js task cleanup is owned by each
+  extraction and does not require Backend shutdown wiring.
+- Public Job access and Recruiter/application access to Generated CV
+  normalization remain deferred; the implemented Backend entries cover only
+  B1 internal Job and B2 own Generated CV. HTTP integration and Job/CV CRUD
+  hooks are absent. AI-specific persistence, profile history/freshness,
+  embeddings/retrieval, and tool schemas/limits remain outside the approved
+  AI-V01 runtime-only boundary. AI #1/#2/#3 require their own approved
+  Product/Data contracts.
 
 ## Frontend current state
 

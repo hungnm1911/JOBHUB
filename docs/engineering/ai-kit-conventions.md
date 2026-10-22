@@ -10,11 +10,11 @@ runtime role, ownership, and architectural constraints. The
 [AI Kit foundation status](../project-status/ai-kit/foundation.md) records
 implementation and verification state; it does not define requirements.
 Approved Product Specifications and Data Contracts remain authoritative for
-business behavior and persistence. AI-V01 Product/Data authority is approved,
-and its R2 runtime shape contract plus R4 contract-test coverage are complete.
-Only the internal F01 Job extraction stage (`JobRawInput` to
-`JobExtractionResult`) exists; F01 consolidation into `JobMatchProfile` and all
-of F02 are not implemented, and no AI-V01 capability is exported. AI-V02 and
+business behavior and persistence. AI-V01 Product/Data authority is approved
+and deterministic. Its F01 (`normalizeJob`) and F02 (`normalizeGeneratedCv`)
+normalization is reachable only through the `createAiKit` instance. The
+superseded LLM-based F01 Job extraction stage, its R2 contract file and
+loader, and its R4 contract tests have been retired. AI-V02 and
 AI-V03 are not approved. AI #1/#2/#3 architecture direction does not
 independently approve another business capability.
 
@@ -24,7 +24,8 @@ independently approve another business capability.
 - **Current foundation** identifies behavior implemented and verified today.
 - **Future capability rule** applies only after the relevant Product and Data
   authority exists; it does not imply that the capability is implemented.
-- **Public API** means an approved production export from the package root.
+- **Public API** means an approved production export from the package root
+  and the approved runtime members of the instance it creates.
   Tooling-only package subpaths are not production APIs.
 
 ## Package and source boundaries
@@ -80,8 +81,9 @@ src/
 │   ├── llm-fallback.js
 │   └── provider-usage.js
 ├── normalization/
-│   ├── v01-contract.js
-│   └── job-extraction.js
+│   ├── normalization-support.js
+│   ├── job-normalization.js
+│   └── cv-normalization.js
 └── document/
     └── pdf-text-extractor.js
 ```
@@ -96,9 +98,40 @@ future capability.
   global state or reverse imports.
 - `createAiKit` is the current package composition boundary. Its public input
   validation must fail before initializing a dependent provider or capability.
+- The `createAiKit` instance exposes the AI-V01 runtime entry `normalizeJob`
+  and `normalizeGeneratedCv` as the F01/F02 owners' functions themselves. The
+  facade must not wrap, translate, or re-validate their results or coded
+  errors, and the package root must not export the owners or their constants
+  separately. Callers distinguish refusal by `error.code`
+  (`INVALID_JOB_INPUT`, `INVALID_GENERATED_CV_INPUT`) and the result by
+  `status` (`READY` with a profile, `FAILED` with `profile: null`).
 - Backend creates the shared package instance only in
   `backend/src/services/ai-kit.service.js`. AI Kit must not create a second
   Backend-owned application instance.
+- Current Backend consumers are B1 `job-ai-normalization.service.js`
+  (`normalizeInternalJob` → `normalizeJob`) and B2
+  `candidate-cv-ai-normalization.service.js`
+  (`normalizeOwnGeneratedCandidateCv` → `normalizeGeneratedCv`). They reuse
+  `loadInternalJob` / `loadOwnActiveCandidateCv` for canonical source access.
+  Backend owns canonical source validation and passes only valid plain,
+  career-relevant projections with resolved taxonomy to AI Kit. Lossless
+  persisted-source projection must not use public DTOs or hydration to repair
+  malformed stored values; schema defaults apply only to absent keys. IDs and
+  dates cross as strings, and Generated CV `personalInfo` carries only `links`.
+  Local Location invariants reuse Backend model validators; AI Kit checks
+  projection shape and resolved-reference consistency without duplicating
+  Backend domain rules or external catalog validation (AI Data §11.2–11.3).
+- B1/B2 return AI Kit results unchanged. Unknown/wrong-level references are
+  Backend refusals; invalid persisted projections, including AI Kit's
+  `INVALID_JOB_INPUT` / `INVALID_GENERATED_CV_INPUT`, are 500 projection errors.
+  Only typed DB availability failures in source/raw/taxonomy reads become
+  `FAILED` with `profile: null`, without calling the normalizer or logging
+  source content/raw driver diagnostics; unexpected errors propagate.
+  Sparse DRAFTs do not acquire submit, completeness, default, or PUBLIC gates.
+- B1/B2 are runtime service entries only. Public Job access, Uploaded CV,
+  Recruiter/application CV access, HTTP integration, Job/CV CRUD hooks, and
+  AI-specific persistence are not implemented by these entries. AI #1/#2/#3
+  remain future direction requiring their own approved Product/Data authority.
 - AI Kit must not access Mongoose models, query or mutate MongoDB, authenticate
   JWTs, inspect Express request/response objects, decide JOBHUB permissions, or
   call Backend-internal services directly.
@@ -132,9 +165,9 @@ future capability.
 
 - `src/llm/llm-fallback.js` is the canonical fallback classifier and
   orchestrator. Consumers must not duplicate or widen its policy.
-- The F01 Job extraction chain is Codex, Gemini, then Groq. Codex receives at
-  most two attempts; Gemini and Groq receive at most one attempt each. A retry
-  or next-provider fallback occurs only after an eligible failure.
+- The composing capability declares the provider order and a bounded
+  per-provider attempt count. A retry or next-provider fallback occurs only
+  after an eligible failure.
 - Eligible HTTP statuses are exactly 429, 500, 502, 503, and 504.
 - A connection/timeout failure is eligible only when the structured error or
   its `cause` chain contains a recognized name, `code`, or `errno` and no HTTP
@@ -142,9 +175,9 @@ future capability.
 - Authentication, configuration, request-validation, and programming failures
   must propagate without retry or fallback. A final provider failure propagates
   unchanged.
-- The fallback utility is internal. Its only capability composition is the
-  internal F01 Job extraction stage. Its existence must not be described
-  as automatic fallback for all AI requests.
+- The fallback utility is internal and currently has no capability
+  composition. Its existence must not be described as automatic fallback for
+  all AI requests.
 - Do not add further retries, a circuit breaker, provider registry, or
   universal LLM abstraction without a concrete capability need and an approved
   architecture change.
@@ -170,69 +203,39 @@ future capability.
 
 ### Structured output
 
-[`ai-kit/v01-contract.json`](../../ai-kit/v01-contract.json) is the canonical
-runtime-only shape contract for AI-V01 raw inputs, extraction results,
-`JobMatchProfile`, `CVMatchProfile`, and normalization results. Its JSON Schema
-rules validate structure; its `x-semantic-constraints` record the approved
-cross-field rules that require deterministic runtime enforcement. The contract
-does not implement F01/F02, perform authorization, or create persistence.
-
-`src/normalization/v01-contract.js` is the only production loader of that
-contract. It compiles definitions with the production `ajv` dependency and
-derives deterministic provider-compatible projections from the canonical
-`JobExtractionResult`. Codex receives Responses API `text.format` JSON Schema,
-Gemini receives JSON MIME type plus its JSON Schema projection, and Groq
-receives `response_format.type = json_schema`; Codex and Groq both use
-`strict: true`. Provider projections may omit unsupported validation
-keywords, but they do not omit canonical fields; Draft 2020-12 Ajv validation
-against the full canonical definition remains mandatory after the response.
-Validation messages carry only instance paths and messages, never validated
-content.
+AI-V01 runtime shapes are owned by the deterministic F01/F02 owners
+(`job-normalization.js`, `cv-normalization.js`): each defines its source
+projection, its profile, and the READY/FAILED result it returns. The former
+`ai-kit/v01-contract.json` and its loader have been retired. AI-V01 uses
+no structured LLM output or JSON Schema validator; Ajv is not a production
+dependency. ESLint's transitive Ajv dependency remains development tooling.
 
 An approved capability that consumes structured LLM output must validate that
-output before treating it as trusted data. The F01 Job extraction stage rejects
-provider refusals/incomplete responses, non-JSON output, canonical-schema
-violations, invalid or unresolved JSON Pointers (including pointers to the
-structured `employmentType`/`workModes` fields, which are withheld from the
-LLM), requirement or experience claims cited only from the title, requirements
-that do not cite `/jobDescription`, requirements that do not carry their cited
-structured skill tag, and duplicate equivalent requirements. It does not
-repair schema-invalid output or retry it.
-`JobExtractionResult` holds only claims stated in the Job's free text (title
-and description). The LLM still decides semantic equivalence: equivalent
-mentions form one requirement citing every pointer (including a matching
-`/requiredSkills/<i>` tag), and a requirement presented as both mandatory and
-preferred is extracted as `REQUIRED`. Structured employment type and work
-modes, their precedence and conflicts with description-stated values, and
-skill tags the description does not mention belong to F01 consolidation, not
-to the extraction stage.
-AI-V01 references are field-level JSON Pointers, which prove provenance but not
-semantic support: whether free text supports a claim's priority, experience
-scope, wording, or a description-stated employment type or work mode (including
-negation and other word senses) is not decided by deterministic keyword, term,
-token, or number matching. That alignment (BR-AI-01/08/09/13) is owned by the
-extraction prompt and measured by reported live evaluation.
-The extraction prompt carries only the semantic decisions the LLM must make;
-output shape is owned by the canonical schema and provider-native structured
-output, not by prompt text. Consumers of AI-V01 must
-reuse its contract rather than define a parallel profile or result shape. AI
+output before treating it as trusted data. Consumers of AI-V01 must
+reuse the F01/F02 owners' result shapes rather than define a parallel profile
+or result shape. AI
 Kit must not invent one shared JSON schema for capabilities that do not yet
 have specifications.
 
 ## Document extraction
 
-- `src/document/pdf-text-extractor.js` is the only direct
-  `scribe.js-ocr` consumer.
-- Every opened document must be closed after both success and failure.
-- Extraction must not terminate the shared Scribe runtime after each document
-  or interfere with concurrent extractions.
-- Shared teardown remains an explicit lifecycle operation through
-  `disposePdfTextExtractor()`.
-- Before a Scribe-backed production capability is accepted into Backend
-  runtime, its integration must decide and verify startup/shutdown ownership,
-  including whether Backend shutdown invokes shared disposal.
-- Buffer input, scanned-PDF/OCR assets, and uploaded-CV ingestion remain
-  deferred. The text-native fixture does not prove those paths.
+- `src/document/pdf-text-extractor.js` is the only direct `pdfjs-dist`
+  consumer and uses the legacy ESM Node build.
+- Standard font data is resolved from the installed PDF.js package by the
+  extractor; no environment setting or remote font service is required.
+- `extractPdfText(pdfPath)` accepts a non-empty path string and extracts the
+  existing text layer in page order, retaining line and page boundaries.
+- PDF.js does not perform OCR; a document without extractable text returns an
+  empty string. OCR and uploaded-CV business workflows remain deferred.
+- Each extraction owns its loading task and worker. Page resources must be
+  cleaned after text extraction; the loading task must be destroyed in a
+  `finally` block on success or failure, including loading failures.
+- No shared worker, global worker override, or shared-runtime disposal owner
+  is required. Finishing one extraction must not affect concurrent calls.
+- `pdfjs-dist` is pinned to `5.6.205` for Node 20.19 compatibility; dependency
+  upgrades must check the Node engine requirement.
+- Buffer input remains deferred; focused fixtures do not prove an uploaded-CV
+  ingestion pipeline or OCR capability.
 
 ## Tests and verification
 
@@ -244,36 +247,29 @@ have specifications.
 - Tests cover public exports, dependency boundaries, input/error propagation,
   fallback eligibility and attempt limits, sensitive logging, and resource
   cleanup when the affected behavior changes.
-- `test/v01-contract.test.js` compiles the canonical AI-V01 contract as Draft
-  2020-12 and validates raw input, extraction, normalized profile, and result
-  positive/negative cases. Its exhaustive coverage ledger distinguishes
-  structural guarantees from semantic behavior deferred to F01/F02 runtime;
-  the suite must not simulate normalization merely to claim that behavior is
-  verified.
-- `test/job-extraction.test.js` covers the F01 extraction stage with mocked
-  provider clients: input refusal, minimized prompt document, provider request
-  shapes (including Gemini schema output and Groq strict JSON Schema), fallback
-  composition, refusal/truncation, canonical-contract rejection,
-  provenance/structured-evidence rejection, acceptance of legitimate claims
-  without lexical re-validation (including description words such as
-  "internal tooling", "contract testing", or "không làm việc từ xa" that do not
-  state an employment type or work mode), the extraction/consolidation
-  boundary (structured metadata and unmentioned skill tags are not required
-  in the extraction), and logging
-  without Job content. Offline tests cannot measure extraction quality; that
-  requires a separately reported live evaluation.
-- `test/support/job-extraction-evaluation.js` holds human-labeled synthetic
-  expected outcomes for representative Jobs and a grader that compares an
-  extraction against those labels without reading the Job description.
-  `test/job-extraction-semantic-evaluation.test.js` uses them to prove that
-  omitted description-only requirements, wrong or strengthened priority,
-  forbidden (environment, negated, or injected) requirements, wrong or missing
-  description-stated employment type/work mode, missing or spurious
-  conflicts, dropped uncertainty/residual claims, and a lost `/jobDescription`
-  reference pass the extraction validator but fail the expected-outcome
-  grading. That suite grades mocked outputs only; it is not a live quality
-  measurement. An opt-in live evaluation may reuse the same cases and grader
-  outside the offline gate.
+- `test/v01-normalization-public-api.test.js` covers the AI-V01 runtime entry
+  through `@jobhub/ai-kit`: the instance exposes exactly `normalizeJob` and
+  `normalizeGeneratedCv`, works without provider configuration and without
+  logging, returns results equal to the F01/F02 owners' (complete and
+  sparse/DRAFT-like READY, FAILED without a profile), and refuses unresolved
+  or wrong-level taxonomy references with the owners' coded errors without
+  echoing source content.
+- `test/job-normalization.test.js` covers revised F01 deterministic Job
+  normalization: complete and sparse READY profiles, empty metadata not filled
+  from free text, metadata/description differences preserved, no priority or
+  free-text requirements, verbatim free text, valid Structured Salary
+  variants, determinism and immutability, input refusal without echoing Job
+  content, FAILED without a profile, and the no-provider/no-contract import
+  boundary.
+- `test/cv-normalization.test.js` covers F02 deterministic Generated CV
+  normalization: complete and near-empty READY profiles, missing sections and
+  draft items left empty, empty metadata not filled from free text, separate
+  `skillTags`/content skills/project technologies with duplicates, conflicting
+  experience claims preserved without derived durations, unmappable language
+  proficiency, `hiddenSections` with hidden content kept, no deduplication of
+  structured/free-text overlap, determinism and immutability, input refusal
+  without echoing CV content, FAILED without a profile, and the import and
+  package-root boundaries.
 - Local deterministic fixtures may exercise a real library, as the current
   text-native PDF fixture does, provided they require no external service.
 - A focused test may import an internal module directly; that import does not

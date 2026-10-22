@@ -1,36 +1,46 @@
-import scribe from "scribe.js-ocr";
+import { fileURLToPath } from "node:url";
+
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+
+const standardFontDataUrl = fileURLToPath(new URL(
+  "../../standard_fonts/",
+  import.meta.resolve("pdfjs-dist/legacy/build/pdf.mjs"),
+));
 
 const extractPdfText = async (pdfPath) => {
   if (typeof pdfPath !== "string" || pdfPath.trim().length === 0) {
     throw new TypeError("pdfPath must be a non-empty string");
   }
 
-  let document;
+  const loadingTask = getDocument({
+    url: pdfPath.trim(),
+    isEvalSupported: false,
+    standardFontDataUrl,
+  });
 
   try {
-    document = await scribe.openDocument([pdfPath.trim()]);
+    const document = await loadingTask.promise;
+    const pages = [];
 
-    if (document.inputData.requiresOCR) {
-      await document.recognize({
-        langs: ["eng"],
-        ocrPages: "autoShallow",
-      });
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+
+      try {
+        const { items } = await page.getTextContent();
+        pages.push(items
+          .filter((item) => typeof item.str === "string")
+          .map((item) => `${item.str}${item.hasEOL ? "\n" : " "}`)
+          .join("")
+          .trim());
+      } finally {
+        page.cleanup();
+      }
     }
 
-    const text = await document.exportData("text");
-
-    if (typeof text !== "string") {
-      throw new TypeError("Scribe must return extracted text as a string");
-    }
-
-    return text;
+    return pages.join("\n\n").trim();
   } finally {
-    await document?.close();
+    await loadingTask.destroy();
   }
 };
 
-const disposePdfTextExtractor = async () => {
-  await scribe.terminate();
-};
-
-export { disposePdfTextExtractor, extractPdfText };
+export { extractPdfText };

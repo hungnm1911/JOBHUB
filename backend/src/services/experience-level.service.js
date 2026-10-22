@@ -30,4 +30,4 @@ const listExperienceLevels = async () => {
     .map(toPublicExperienceLevel);
 };
 
-export { listExperienceLevels };
+export { listExperienceLevels, toPublicExperienceLevel };

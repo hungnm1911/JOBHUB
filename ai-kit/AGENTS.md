@@ -36,7 +36,7 @@ Do not read every long document when a focused lookup is sufficient. If canonica
 - AI Kit is the private same-process ESM package `@jobhub/ai-kit`; Backend owns runtime, config, logger, auth, MongoDB, persistence, and canonical domain services.
 - AI Kit source and tooling must not import Backend. Production source must not read `process.env`; dependencies cross by injection.
 - Backend production code uses the package root through `backend/src/services/ai-kit.service.js`; tooling uses explicit tooling subpaths. No deep imports or reverse dependencies.
-- Provider SDK imports remain in their Gemini/Groq adapters; Scribe imports remain in the PDF extractor.
+- Provider SDK imports remain in their Gemini/Groq adapters; PDF.js imports remain in the PDF extractor.
 - Do not add an HTTP server, DB connection, duplicate owner, speculative layer/framework, or public export without an approved concrete need.
 - Do not infer capabilities, prompts, schemas, scoring, tools, retrieval, or
   persistence from roadmap ideas or task names.

@@ -47,7 +47,7 @@ Repository hiện có độ trưởng thành không đồng đều giữa hai �
 | Backend | REST API, nghiệp vụ, persistence, worker và realtime server | Phần lớn V1–V15 đã triển khai; V8 còn `IN PROGRESS` | [Backend README](backend/README.md) |
 | Frontend | Browser UI, routing, auth client, HTTP/realtime client | Foundation và authentication lifecycle V1 đã xác minh; chưa có UI nghiệp vụ | [Frontend README](frontend/README.md) |
 | Backend Product/Data docs | Yêu cầu nghiệp vụ và hợp đồng persistence | V1–V15 có tài liệu phiên bản; V16–V17 mới ở roadmap | [Docs](docs/product/backend/) |
-| AI Kit | Private local Node.js package `@jobhub/ai-kit`, chạy trong Backend runtime; không có process/server riêng | Technical foundation sẵn sàng: Gemini và Groq provider adapter, fallback policy nội bộ, trích xuất PDF bằng Scribe. Chưa có năng lực AI nghiệp vụ (AI #1/#2/#3); AI #1 chưa có Product/Data specification được phê duyệt | [AI Kit README](ai-kit/README.md) · [Status](docs/project-status/ai-kit/foundation.md) |
+| AI Kit | Private local Node.js package `@jobhub/ai-kit`, chạy trong Backend runtime; không có process/server riêng | Technical foundation sẵn sàng: Gemini và Groq provider adapter, fallback policy nội bộ, trích xuất lớp text PDF bằng PDF.js (không OCR). Chưa có năng lực AI nghiệp vụ (AI #1/#2/#3); AI #1 chưa có Product/Data specification được phê duyệt | [AI Kit README](ai-kit/README.md) · [Status](docs/project-status/ai-kit/foundation.md) |
 
 ### Điểm nổi bật
 
@@ -202,7 +202,7 @@ Nguyên tắc cốt lõi là mỗi trách nhiệm có một canonical owner. Rep
 | Authentication | JWT, session-bound refresh credential, bcryptjs |
 | Email | Nodemailer/SMTP |
 | Backend testing | Vitest, Supertest, MongoDB Memory Server |
-| AI Kit | Node.js ES Modules, Gemini/Groq adapters, Scribe, Vitest |
+| AI Kit | Node.js ES Modules, Gemini/Groq adapters, PDF.js, Vitest |
 
 ## Cấu trúc repository
 
@@ -393,6 +393,23 @@ Chi tiết: [Frontend README — Biến môi trường](frontend/README.md#biế
 - Không ghi credential/token/CV content nhạy cảm vào log hoặc tài liệu.
 
 ## Các lệnh thường dùng
+
+### Từ root repository
+
+Root `package.json` chuyển tiếp lệnh tới script hiện có của từng ứng dụng. Không cần cài dependency tại root; vẫn cài dependency riêng theo hướng dẫn Quick start ở trên.
+
+| Lệnh tại root | Mục đích |
+| --- | --- |
+| `yarn client dev` | Chạy frontend bằng Vite |
+| `yarn server dev` | Chạy backend bằng Nodemon |
+| `yarn server start` | Chạy backend production entry point |
+| `yarn build` | Build frontend |
+| `yarn client preview` | Preview frontend bundle |
+| `yarn lint` | Lint backend, AI Kit và frontend |
+| `yarn test` | Chạy backend tests, AI Kit tests và frontend auth tests |
+| `yarn verify:agent` | Chạy lần lượt cổng verification của cả ba thư mục |
+
+Dùng `yarn client <script>`, `yarn server <script>` hoặc `yarn ai-kit <script>` để chạy riêng từng phần, ví dụ `yarn server test:watch`, `yarn client verify:agent`, `yarn ai-kit test`. Các tham số phía sau được chuyển tiếp, ví dụ `yarn client dev --host 0.0.0.0` hoặc `yarn server test --reporter=verbose`.
 
 ### Backend
 

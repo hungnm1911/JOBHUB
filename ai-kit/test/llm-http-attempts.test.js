@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createGeminiClient } from "../src/llm/gemini-client.js";
 import { createGroqClient } from "../src/llm/groq-client.js";
-import { createJobExtractor } from "../src/normalization/job-extraction.js";
+import { executeWithLlmProviderChain } from "../src/llm/llm-fallback.js";
 
 const GEMINI_API_KEY = "secret-gemini-api-key";
 const GROQ_API_KEY = "secret-groq-api-key";
@@ -15,44 +15,7 @@ const createLogger = () => ({
   warn: vi.fn(),
 });
 
-const makeJobRawInput = () => ({
-  jobId: "job-1",
-  title: "Backend Engineer",
-  jobDescription: "Yêu cầu: Node.js bắt buộc. Ưu tiên Docker. Làm việc từ xa.",
-  requiredSkills: ["Node.js"],
-  fieldCategoryIds: ["field-1"],
-  positionCategoryIds: ["position-1"],
-  experienceLevelId: "level-1",
-  employmentType: "FULL_TIME",
-  workModes: ["REMOTE"],
-  location: { provinceCode: "01", districtCode: null },
-});
-
-const makeExtraction = () => ({
-  requirements: [
-    {
-      name: "Node.js",
-      priority: "REQUIRED",
-      references: ["/requiredSkills/0", "/jobDescription"],
-    },
-    {
-      name: "Docker",
-      priority: "OPTIONAL",
-      references: ["/jobDescription"],
-    },
-  ],
-  minimumExperienceYears: null,
-  employmentType: null,
-  workModes: [
-    {
-      value: "REMOTE",
-      references: ["/jobDescription"],
-    },
-  ],
-  residualClaims: [],
-  uncertainClaims: [],
-  conflictingClaims: [],
-});
+const GROQ_PAYLOAD = { marker: "JOBHUB_GROQ_OK" };
 
 const jsonResponse = (status, body) => {
   return new Response(JSON.stringify(body), {
@@ -111,6 +74,25 @@ const createClients = (logger) => ({
   }),
 });
 
+const callGemini = (client) => client.generateContent({
+  contents: [{ role: "user", parts: [{ text: "ping" }] }],
+});
+
+const callGroq = (client) => client.createChatCompletion({
+  messages: [{ role: "user", content: "ping" }],
+});
+
+const runProviderChain = ({ gemini, groq, logger }) => {
+  const providers = [
+    gemini && { name: "gemini", execute: () => callGemini(gemini), maxAttempts: 1 },
+    groq && { name: "groq", execute: () => callGroq(groq), maxAttempts: 1 },
+  ].filter(Boolean);
+
+  return executeWithLlmProviderChain({ providers, logger });
+};
+
+const groqContent = (response) => JSON.parse(response.choices[0].message.content);
+
 const serializeLogCalls = (logger) => {
   const calls = ["error", "info", "warn"].flatMap((method) => logger[method].mock.calls);
 
@@ -148,19 +130,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Job extraction fail-fast fallback HTTP attempts", () => {
+describe("Gemini-to-Groq provider chain fail-fast HTTP attempts", () => {
   it.each([503, 429])(
     "falls back to Groq immediately after one Gemini HTTP %i attempt",
     async (status) => {
       respondWith({
         gemini: () => geminiError(status),
-        groq: () => groqSuccess(makeExtraction()),
+        groq: () => groqSuccess(GROQ_PAYLOAD),
       });
       const logger = createLogger();
-      const extractor = createJobExtractor({ ...createClients(logger), logger });
+      const response = await runProviderChain({ ...createClients(logger), logger });
 
-      await expect(extractor.extractJob(makeJobRawInput()))
-        .resolves.toEqual(makeExtraction());
+      expect(groqContent(response)).toEqual(GROQ_PAYLOAD);
       expect(countRequests(GEMINI_HOST)).toBe(1);
       expect(countRequests(GROQ_HOST)).toBe(1);
       expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -180,9 +161,7 @@ describe("Job extraction fail-fast fallback HTTP attempts", () => {
         groq: () => groqError(status),
       });
       const logger = createLogger();
-      const extractor = createJobExtractor({ ...createClients(logger), logger });
-
-      const error = await extractor.extractJob(makeJobRawInput())
+      const error = await runProviderChain({ ...createClients(logger), logger })
         .catch((caught) => caught);
 
       expect(error).toBeInstanceOf(Error);
@@ -204,12 +183,10 @@ describe("Job extraction fail-fast fallback HTTP attempts", () => {
     async (status) => {
       respondWith({
         gemini: () => geminiError(status),
-        groq: () => groqSuccess(makeExtraction()),
+        groq: () => groqSuccess(GROQ_PAYLOAD),
       });
       const logger = createLogger();
-      const extractor = createJobExtractor({ ...createClients(logger), logger });
-
-      const error = await extractor.extractJob(makeJobRawInput())
+      const error = await runProviderChain({ ...createClients(logger), logger })
         .catch((caught) => caught);
 
       expect(error.status).toBe(status);
@@ -229,12 +206,10 @@ describe("Provider adapters perform no hidden SDK retries", () => {
     async (status) => {
       respondWith({ gemini: () => geminiError(status) });
       const logger = createLogger();
-      const extractor = createJobExtractor({
+      const error = await runProviderChain({
         gemini: createClients(logger).gemini,
         logger,
-      });
-
-      const error = await extractor.extractJob(makeJobRawInput())
+      })
         .catch((caught) => caught);
 
       expect(error.status).toBe(status);
@@ -247,12 +222,10 @@ describe("Provider adapters perform no hidden SDK retries", () => {
     async (status) => {
       respondWith({ groq: () => groqError(status) });
       const logger = createLogger();
-      const extractor = createJobExtractor({
+      const error = await runProviderChain({
         groq: createClients(logger).groq,
         logger,
-      });
-
-      const error = await extractor.extractJob(makeJobRawInput())
+      })
         .catch((caught) => caught);
 
       expect(error.status).toBe(status);
@@ -266,9 +239,7 @@ describe("Provider adapters perform no hidden SDK retries", () => {
       groq: connectionFailure,
     });
     const logger = createLogger();
-    const extractor = createJobExtractor({ ...createClients(logger), logger });
-
-    const error = await extractor.extractJob(makeJobRawInput())
+    const error = await runProviderChain({ ...createClients(logger), logger })
       .catch((caught) => caught);
 
     expect(error.constructor.name).toBe("APIConnectionError");

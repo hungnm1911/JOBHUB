@@ -1,4 +1,4 @@
-# AI-V01 — Chuẩn hóa Job/CV thành Canonical Match Profiles
+# AI-V01 — Deterministic Input Normalization cho Job/Generated CV
 
 > **File:** `docs/product/ai-kit/versions/v01-job-cv-normalization.md`
 > **Vai trò:** Canonical AI Product Specification
@@ -16,9 +16,11 @@ AI-V01 cung cấp khả năng chuẩn hóa dữ liệu Job và Candidate CV có 
 - `JobMatchProfile`
 - `CVMatchProfile`
 
-Hai profile là đầu vào chuẩn phục vụ các capability AI ở những version tiếp theo, đặc biệt là CV–Job Matching.
+Hai profile là nền tảng dữ liệu đầu vào chung cho các AI capability sau, không giới hạn ở CV–Job Matching. Tên `JobMatchProfile` và `CVMatchProfile` được giữ để bảo toàn định danh hiện có; chúng không mang semantics đánh giá matching.
 
-AI-V01 sử dụng AI để hiểu nội dung ngôn ngữ tự nhiên và hỗ trợ trích xuất thông tin nghề nghiệp. JOBHUB chịu trách nhiệm hợp nhất kết quả với dữ liệu nguồn và bảo toàn ngữ nghĩa theo các Business Rules được phê duyệt.
+AI-V01 thực hiện deterministic input normalization: cùng input và cùng quy tắc chuẩn hóa phải cho cùng kết quả dữ liệu. V01 không sử dụng LLM extraction, không diễn giải ngữ nghĩa free text để tạo claim, phân loại requirement hoặc điền structured field còn thiếu. Structured data, free text và provenance được bảo toàn từ nguồn hợp lệ theo các Business Rules đã phê duyệt.
+
+Định hướng này được Product Owner phê duyệt, thay thế semantics LLM extraction/consolidation trước đây của AI-V01. Nó không phê duyệt thêm capability AI #1/#2/#3 hoặc thay đổi authority của nguồn.
 
 Khi hoàn thành V01, hệ thống phải có khả năng:
 
@@ -27,7 +29,7 @@ Khi hoàn thành V01, hệ thống phải có khả năng:
 - Bảo toàn thông tin nghề nghiệp và evidence có trong nguồn hợp lệ.
 - Xử lý dữ liệu thiếu bằng cách để trống các field tương ứng.
 - Bảo toàn các claim mâu thuẫn mà không từ chối chuẩn hóa chỉ vì mâu thuẫn.
-- Phân biệt các Job requirement bắt buộc và ưu tiên theo quy tắc đã chốt.
+- Bảo toàn requirement và priority đã được nguồn cung cấp tường minh; không suy diễn priority từ free text.
 - Cung cấp kết quả chuẩn hóa có ngữ nghĩa nhất quán cho các version AI tiếp theo.
 
 AI-V01 không thực hiện matching, scoring, ranking hoặc đánh giá chất lượng Candidate.
@@ -36,21 +38,21 @@ AI-V01 không thực hiện matching, scoring, ranking hoặc đánh giá chất
 
 ## 2.1. Trong phạm vi
 
-- Chuẩn hóa Job từ dữ liệu có cấu trúc và nội dung mô tả Job.
-- Chuẩn hóa Generated CV từ dữ liệu có cấu trúc và nội dung nghề nghiệp.
-- Trích xuất thông tin nghề nghiệp được thể hiện trong nội dung tự do.
-- Chuẩn hóa các giá trị có thể ánh xạ về business taxonomy hiện có của JOBHUB.
-- Bổ sung thông tin còn thiếu từ nội dung nguồn khi có căn cứ hợp lệ.
-- Hợp nhất các thông tin tương đương mà không làm mất evidence.
-- Bảo toàn các thông tin có căn cứ nhưng chưa ánh xạ được về taxonomy.
-- Bảo toàn các claim mâu thuẫn cùng thông tin nguồn tương ứng.
-- Phân biệt required và optional Job requirements.
-- Bảo toàn declared claims, unknown và uncertainty.
-- Trả về một canonical profile tương ứng với một đầu vào được xử lý.
-- Phân biệt chuẩn hóa thành công và thất bại xử lý.
+- Chuẩn hóa deterministic dữ liệu một Job hoặc một Generated CV hợp lệ.
+- Bảo toàn structured metadata và structured content theo semantics nguồn JOBHUB.
+- Bảo toàn nguyên nội dung free text trong phạm vi nghề nghiệp được phép, gắn với nguồn tương ứng.
+- Sử dụng taxonomy/controlled metadata hiện có khi nguồn đã cung cấp giá trị hoặc định danh tương ứng; không tự thiết lập taxonomy hay mapping ngữ nghĩa mới.
+- Bảo toàn provenance của structured data, free text và các claim nguồn khai báo.
+- Chỉ hợp nhất khi tính đồng nhất đã được xác định từ dữ liệu có cấu trúc hoặc quy tắc deterministic được phê duyệt; không suy đoán các cách diễn đạt là tương đương.
+- Bảo toàn dữ liệu chưa ánh xạ được, các giá trị khác nhau, mơ hồ hoặc mâu thuẫn; không bắt buộc phát hiện hay phân loại conflict trong free text.
+- Bảo toàn requirement priority tường minh và áp dụng REQUIRED-over-OPTIONAL trong phạm vi `BR-AI-09`.
+- Để rỗng structured field không được nguồn cung cấp; không dùng free text để lấp field trống.
+- Trả về một profile runtime-only tương ứng với một đầu vào khi thành công, phân biệt READY và FAILED.
 
 ## 2.2. Ngoài phạm vi
 
+- LLM extraction, semantic enrichment hoặc suy diễn structured claims từ free text.
+- Tự nhận diện requirement, priority, skill, thời lượng kinh nghiệm hoặc conflict bằng cách diễn giải free text.
 - Toàn bộ quá trình tiếp nhận và xử lý Uploaded CV source.
 - Xử lý PDF, OCR hoặc trích xuất nội dung từ tài liệu upload.
 - Chuyển Uploaded CV thành `CVMatchProfile`.
@@ -103,17 +105,19 @@ Các version tiếp theo có thể sử dụng `JobMatchProfile` và `CVMatchPro
 |---|---|
 | Candidate | Người dùng có Candidate CV trong JOBHUB |
 | Employer | Chủ thể tuyển dụng liên quan đến Job |
-| AI System | Thành phần hỗ trợ hiểu và trích xuất ngữ nghĩa |
+| Deterministic input normalization | Chuẩn hóa đầu vào theo quy tắc xác định, không dùng LLM hoặc suy diễn ngữ nghĩa free text |
 | Generated CV | CV được biểu diễn bằng dữ liệu có cấu trúc trong JOBHUB |
 | JobMatchProfile | Biểu diễn chuẩn của một Job phục vụ các capability AI tiếp theo |
 | CVMatchProfile | Biểu diễn chuẩn của một Candidate CV phục vụ các capability AI tiếp theo |
-| Canonical Data | Dữ liệu đã được chuẩn hóa theo các quy tắc business của V01 |
+| Canonical Data | Biểu diễn đầu vào thống nhất theo quy tắc V01; không thay thế canonical Job/CandidateCV source |
 | Evidence | Thông tin nguồn hỗ trợ một claim |
 | Declared Claim | Thông tin được khai báo trong dữ liệu Job/CV |
 | Unknown | Thông tin chưa xác định được từ nguồn được phép |
 | Uncertainty | Mức thiếu chắc chắn của thông tin được ghi nhận |
 | Conflict | Hai hoặc nhiều claim có ngữ nghĩa mâu thuẫn |
-| Consolidation | Quá trình hợp nhất và chuẩn hóa thông tin từ các nguồn hợp lệ |
+| Consolidation | Hợp nhất deterministic dữ liệu có căn cứ đồng nhất tường minh, bảo toàn các nguồn; không semantic extraction |
+| Free text | Nội dung văn bản nguồn được giữ để capability sau sử dụng, không tự trở thành structured claim |
+| Provenance | Khả năng truy nguyên dữ liệu/claim/nội dung về source và vị trí hoặc thành phần nguồn tương ứng |
 | READY | Kết quả chuẩn hóa thành công và có cấu trúc canonical hợp lệ |
 | FAILED | Quá trình chuẩn hóa không hoàn tất thành công |
 
@@ -122,29 +126,23 @@ Các version tiếp theo có thể sử dụng `JobMatchProfile` và `CVMatchPro
 - **JOBHUB System:** Thực hiện nghiệp vụ chuẩn hóa Job/CV.
 - **Candidate:** Chủ thể sở hữu Candidate CV và hưởng lợi từ các capability sử dụng `CVMatchProfile`.
 - **Employer:** Chủ thể cung cấp thông tin Job trong phạm vi nghiệp vụ JOBHUB.
-- **AI System:** Hỗ trợ phân tích ngữ nghĩa, không phải authority quyết định tính đúng đắn tuyệt đối của dữ liệu.
+- V01 không có actor LLM tham gia normalization; JOBHUB System không xác minh sự thật ngoài đời từ dữ liệu nguồn.
 
 # 5. AI Capability & Human Decision Boundary
 
-| Hành động / quyết định | AI System | Authority |
+| Hành động / quyết định | AI-V01 | Authority |
 |---|---|---|
-| Hiểu nội dung Job Description | Được phép | JOBHUB Consolidation Rules |
-| Hiểu nội dung Generated CV | Được phép | JOBHUB Consolidation Rules |
-| Trích xuất thông tin nghề nghiệp | Được phép | JOBHUB Consolidation Rules |
-| Đề xuất classification/normalization | Được phép | JOBHUB Business Rules |
+| Chuẩn hóa structured data theo semantics nguồn | Deterministic | JOBHUB source contracts và Business Rules V01 |
+| Bảo toàn free text và provenance | Có | Nguồn Job/Generated CV hợp lệ |
+| Dùng LLM hiểu, trích xuất hoặc phân loại nội dung | Không | Ngoài phạm vi V01 |
+| Điền metadata còn thiếu bằng diễn giải free text | Không | Ngoài phạm vi V01 |
 | Tự xác minh Candidate claim ngoài đời thực | Không | Không thuộc V01 |
 | Tự sửa dữ liệu Job/CV gốc | Không | Workflow JOBHUB hiện có |
 | Tự công bố hoặc publish CV | Không | Candidate theo quyền hiện có |
 | Chấm điểm mức độ phù hợp | Không | AI version sau |
 | Quyết định tuyển dụng | Không | Employer |
 
-AI được phép nhận diện, diễn giải và đề xuất thông tin từ nguồn.
-
-AI không được tự tạo thông tin chưa có căn cứ hoặc tự quyết định business behavior ngoài các quy tắc đã được phê duyệt.
-
-Việc một canonical profile chứa claim mâu thuẫn không đồng nghĩa với việc AI được phép xác nhận mọi claim đó là sự thật.
-
-AI-V01 chủ động chấp nhận việc profile còn bất đồng về ngữ nghĩa, miễn các claim được bảo toàn đúng nguồn và kết quả chuẩn hóa hợp lệ.
+Profile chứa dữ liệu nguồn và declared claims, không xác nhận chúng là sự thật độc lập. Dữ liệu thiếu, mơ hồ hoặc mâu thuẫn được bảo toàn mà không tự chặn chuẩn hóa. Việc diễn giải ngữ nghĩa nội dung được để cho capability sau có authority phù hợp; V01 không xác lập behavior của capability đó.
 
 # 6. Input & Trust Boundary
 
@@ -191,18 +189,18 @@ Uploaded CV source và nội dung được trích xuất từ tài liệu upload
 | Job Description | Nguồn evidence cho thông tin và yêu cầu nghề nghiệp |
 | Structured Generated CV | Nguồn claim của Candidate |
 | CV free-text content | Nguồn evidence bổ sung cho claim nghề nghiệp |
-| AI-extracted information | Thông tin trích xuất cần được hợp nhất theo Business Rules |
+| Free text được bảo toàn | Nội dung nguồn, chưa được V01 diễn giải thành structured claim |
 | Canonical profile | Kết quả chuẩn hóa, không phải xác minh sự thật ngoài đời |
 
 Các nguyên tắc:
 
-1. Structured metadata hợp lệ được bảo toàn.
-2. AI-extracted information không tự động ghi đè dữ liệu nguồn.
-3. Thông tin từ free text có thể bổ sung field còn trống nếu có căn cứ và thuộc phạm vi đã được phê duyệt.
-4. Khi nguồn mâu thuẫn, hệ thống bảo toàn các claim tương ứng thay vì tự từ chối chuẩn hóa.
-5. Riêng trường hợp cùng một Job requirement có cả REQUIRED và OPTIONAL, REQUIRED được ưu tiên.
-6. Không có thông tin thì để field tương ứng rỗng.
-7. Không được bịa thông tin để hoàn thiện profile.
+1. Structured metadata và structured content hợp lệ được bảo toàn theo semantics nguồn.
+2. Free text giữ nội dung và provenance; không ghi đè hoặc bổ sung structured field bằng diễn giải văn bản.
+3. Giá trị/taxonomy có cấu trúc chỉ được chuẩn hóa theo quy tắc xác định đã được phê duyệt.
+4. Các giá trị khác nhau hoặc mâu thuẫn được bảo toàn cùng nguồn; không cần semantic conflict detection trên free text.
+5. REQUIRED-over-OPTIONAL chỉ áp dụng trong điều kiện tường minh của `BR-AI-09`.
+6. Không có structured data cho field thì để rỗng, kể cả khi free text có nội dung liên quan.
+7. Không tạo claim mới hoặc bịa thông tin để hoàn thiện profile.
 
 Một Candidate claim xuất hiện trong CV có thể được ghi nhận là claim có nguồn, nhưng không mặc nhiên là fact đã được xác minh độc lập.
 
@@ -221,7 +219,7 @@ AI-V01 tạo một trong hai loại canonical profile tương ứng với đầu
 - `JobMatchProfile`
 - `CVMatchProfile`
 
-Các profile chứa thông tin nghề nghiệp được chuẩn hóa cùng evidence và các claim liên quan khi có.
+Các profile chứa structured data được chuẩn hóa deterministic, free text được bảo toàn và provenance tương ứng. Provenance phải cho phép đối chiếu cả structured data lẫn free text về source và field/section/item tương ứng; không buộc một JSON Shape hoặc cơ chế pointer cụ thể. Một nội dung chỉ có trong free text vẫn tồn tại dưới dạng nội dung nguồn, không bắt buộc và không được tự chuyển thành structured claim. Các nhóm thông tin dưới đây là semantics dữ liệu khi nguồn cung cấp, không phải JSON Shape hoặc yêu cầu extraction.
 
 Không yêu cầu mọi field nghề nghiệp phải có dữ liệu.
 
@@ -235,8 +233,7 @@ Các nhóm thông tin áp dụng khi có dữ liệu:
 
 - Job positioning.
 - Job metadata.
-- Required requirements.
-- Optional requirements.
+- Requirements và priority REQUIRED/OPTIONAL khi nguồn cung cấp tường minh.
 - Skills và qualifications.
 - Experience requirements.
 - Employment type.
@@ -249,14 +246,14 @@ Các nhóm thông tin áp dụng khi có dữ liệu:
 
 - `REQUIRED`: Yêu cầu bắt buộc được Job thể hiện.
 - `OPTIONAL`: Yêu cầu ưu tiên/lợi thế được Job thể hiện.
-- Nếu cùng một requirement được xác định đồng thời là REQUIRED và OPTIONAL, kết quả ưu tiên REQUIRED.
-- Nếu không thể xác định priority từ nguồn, không tự suy diễn priority.
+- Chỉ áp dụng REQUIRED-over-OPTIONAL khi cùng requirement có định danh/quan hệ đồng nhất và priority tường minh trong dữ liệu nguồn theo `BR-AI-09`.
+- Không đọc hiểu free text để xác định requirement hoặc priority; chưa có priority tường minh thì giữ nội dung nguồn, không tự gán priority.
 
 Thông tin Job chỉ mang tính mô tả hoặc bối cảnh không tự động trở thành yêu cầu bắt buộc.
 
 ### CVMatchProfile
 
-`CVMatchProfile` biểu diễn các thông tin Candidate khai báo trong Generated CV và những thông tin nghề nghiệp có thể trích xuất hợp lệ từ nguồn.
+`CVMatchProfile` biểu diễn structured metadata, structured Generated CV content và free text Candidate đã khai báo, bảo toàn ngữ cảnh nguồn. Không trích xuất thêm skills, qualifications, số năm kinh nghiệm hoặc claim khác bằng diễn giải văn bản.
 
 Các nhóm thông tin áp dụng khi có dữ liệu:
 
@@ -284,9 +281,9 @@ Các nhóm thông tin áp dụng khi có dữ liệu:
 
 ### Missing / Conflict Semantics
 
-- Field không có dữ liệu → rỗng.
+- Structured field không được nguồn cung cấp → rỗng; nội dung liên quan chỉ có trong free text vẫn được giữ riêng theo ngữ cảnh nguồn.
 - Field có một claim hợp lệ → ghi nhận claim.
-- Field có nhiều claim mâu thuẫn → bảo toàn các claim cùng evidence.
+- Field có nhiều giá trị/claim mâu thuẫn → bảo toàn cùng evidence; free text được giữ ngay cả khi V01 không nhận diện conflict.
 - Field có thông tin chưa ánh xạ được → bảo toàn thông tin nguồn nếu có căn cứ.
 - Không tạo giá trị mặc định mang ý nghĩa nghề nghiệp khi nguồn không cung cấp.
 
@@ -317,12 +314,13 @@ Một claim được ghi nhận phải có nguồn hợp lệ hỗ trợ.
 
 Ví dụ:
 
-- CV khai báo Node.js → được ghi nhận Candidate khai báo Node.js.
-- CV nêu sử dụng Node.js trong project → được ghi nhận evidence từ project.
-- Job mô tả yêu cầu 3 năm kinh nghiệm → được ghi nhận yêu cầu 3 năm.
+- CV khai báo Node.js trong structured skills → giữ declared skill và provenance; nếu chỉ xuất hiện trong free text thì giữ văn bản, không tự tạo structured skill.
+- CV nêu sử dụng Node.js trong mô tả project → giữ nguyên nội dung trong ngữ cảnh project và provenance, không tự tạo claim thời lượng hoặc qualification.
+- Job mô tả “yêu cầu 3 năm kinh nghiệm” trong free text → giữ nguyên nội dung và nguồn; không tự tạo structured minimum-experience claim.
+- Nguồn đã có dữ liệu kinh nghiệm có cấu trúc → bảo toàn giá trị và provenance theo semantics nguồn.
 - CV chỉ liệt kê Node.js → không được tự khẳng định có 3 năm kinh nghiệm Node.js.
 
-Khi nhiều nguồn hỗ trợ cùng một claim, việc hợp nhất không được làm mất nguồn evidence có giá trị.
+Khi dữ liệu nguồn tường minh xác định cùng một claim, việc hợp nhất deterministic không được làm mất nguồn evidence có giá trị. Không suy ra claim tương đương từ cách diễn đạt free text.
 
 ## 9.2. Unknown khác mismatch
 
@@ -359,14 +357,14 @@ AI-V01 không được tự tạo:
 - Employment metadata không có căn cứ.
 - Candidate hoặc Company facts không thuộc nguồn hợp lệ.
 
-Việc chấp nhận sai lệch ngữ nghĩa có giới hạn không cho phép AI bịa dữ liệu.
+Bảo toàn nội dung nguồn không cho phép normalization diễn giải lại hoặc tạo dữ liệu mới từ free text.
 
 ## 9.5. Consistency
 
 - Canonical information phải truy nguyên được về nguồn hợp lệ.
-- Thông tin tương đương có thể được hợp nhất.
+- Chỉ hợp nhất khi tính đồng nhất tường minh từ structured data hoặc quy tắc deterministic đã phê duyệt; giữ mọi provenance liên quan.
 - Các claim mâu thuẫn không phải được ép thành một fact duy nhất.
-- REQUIRED được ưu tiên OPTIONAL khi cùng áp dụng cho một requirement.
+- REQUIRED được ưu tiên OPTIONAL trong điều kiện tường minh của `BR-AI-09`.
 - Field thiếu phải giữ ngữ nghĩa không có dữ liệu.
 - Profile có dữ liệu thiếu hoặc mâu thuẫn vẫn có thể READY.
 - Evidence và các claim đã bảo toàn không được diễn giải thành kết luận matching trong V01.
@@ -394,19 +392,17 @@ Chuẩn hóa dữ liệu Job thành `JobMatchProfile` phục vụ các AI capabi
 - Job input thuộc phạm vi được phép sử dụng.
 - Dữ liệu đầu vào đáp ứng các điều kiện hợp lệ của nguồn JOBHUB.
 
-Không đặt yêu cầu Job phải có một số lượng tối thiểu các field nghề nghiệp mới được chuẩn hóa.
+Không đặt yêu cầu Job phải có một số lượng tối thiểu các field nghề nghiệp mới được chuẩn hóa. Structured skills/requirements được nguồn cung cấp vẫn phải được giữ ngay cả khi Job Description không nhắc lại; không yêu cầu evidence từ free text để chấp nhận dữ liệu có cấu trúc hợp lệ.
 
 ### Luồng chính
 
-1. Hệ thống tiếp nhận một Job.
-2. Xác định structured metadata và các nội dung nghề nghiệp được cung cấp.
-3. AI hỗ trợ trích xuất thông tin có căn cứ từ free-text content.
-4. Hệ thống hợp nhất thông tin trích xuất với dữ liệu nguồn theo Business Rules.
-5. Các thông tin tương đương được chuẩn hóa và bảo toàn evidence.
-6. Các claim mâu thuẫn được giữ lại khi không có quy tắc ưu tiên cụ thể.
-7. Nếu cùng requirement có REQUIRED và OPTIONAL, hệ thống ưu tiên REQUIRED.
-8. Những field không có thông tin được để rỗng.
-9. Hệ thống tạo `JobMatchProfile` hợp lệ và trả kết quả xử lý.
+1. Hệ thống tiếp nhận một Job hợp lệ trong phạm vi được phép.
+2. Xác định structured metadata, structured requirements khi có và các nội dung free text nguồn.
+3. Chuẩn hóa deterministic structured data theo semantics nguồn và quy tắc đã phê duyệt; không gọi LLM.
+4. Bảo toàn free text cùng provenance; không trích xuất requirement hoặc điền metadata từ văn bản.
+5. Nếu dữ liệu tường minh đủ điều kiện `BR-AI-09`, áp dụng REQUIRED-over-OPTIONAL và giữ evidence; không tự nhận diện requirement tương đương.
+6. Bảo toàn các giá trị khác nhau hoặc mâu thuẫn cùng nguồn; field không có structured data được để rỗng.
+7. Tạo một `JobMatchProfile` runtime-only hợp lệ và trả kết quả xử lý.
 
 ### Kết quả
 
@@ -422,7 +418,7 @@ Không đặt yêu cầu Job phải có một số lượng tối thiểu các f
 - Thiếu field → để rỗng.
 - Priority không xác định → không tự tạo priority.
 - Claim mâu thuẫn → giữ các claim cùng nguồn.
-- REQUIRED và OPTIONAL của cùng requirement → ưu tiên REQUIRED.
+- REQUIRED và OPTIONAL có căn cứ đồng nhất tường minh → ưu tiên REQUIRED theo `BR-AI-09`; free text đơn thuần được bảo toàn mà không tự phân loại.
 - Không có dữ liệu nghề nghiệp đáng kể → vẫn có thể READY nếu canonical output hợp lệ.
 - Không thể hoàn thành chuẩn hóa → FAILED.
 
@@ -471,16 +467,14 @@ Không đặt yêu cầu CV phải có số lượng skills, experience, project
 
 ### Luồng chính
 
-1. Hệ thống tiếp nhận một Generated CV.
-2. Xác định structured metadata và nội dung nghề nghiệp.
-3. AI hỗ trợ trích xuất những thông tin cần hiểu ngữ nghĩa.
-4. Hệ thống hợp nhất thông tin trích xuất với dữ liệu nguồn.
-5. Các thông tin tương đương được chuẩn hóa và bảo toàn evidence.
-6. Các claim kinh nghiệm và qualification được bảo toàn theo mức căn cứ của nguồn.
-7. Các claim mâu thuẫn được giữ lại cùng nguồn tương ứng.
-8. Thông tin có căn cứ nhưng chưa ánh xạ được về taxonomy được bảo toàn.
-9. Những field thiếu được để rỗng.
-10. Hệ thống tạo `CVMatchProfile` hợp lệ và trả kết quả xử lý.
+1. Hệ thống tiếp nhận một Generated CV hợp lệ trong phạm vi được phép.
+2. Xác định structured metadata, structured content và free text theo section/item nguồn.
+3. Chuẩn hóa deterministic dữ liệu có cấu trúc theo semantics nguồn; không gọi LLM.
+4. Giữ nội dung free text, declared claims, thứ tự và ngữ cảnh section/item có ý nghĩa, cùng provenance; bảo toàn presentation metadata như hidden sections.
+5. Không suy diễn skills, qualifications, số năm kinh nghiệm hoặc taxonomy từ free text.
+6. Bảo toàn giá trị/claim khác nhau, thông tin chưa ánh xạ được và nguồn tương ứng, không bắt buộc semantic conflict detection.
+7. Field không có structured data được để rỗng.
+8. Tạo một `CVMatchProfile` runtime-only hợp lệ và trả kết quả xử lý.
 
 ### Kết quả
 
@@ -529,11 +523,9 @@ Một claim được ghi nhận trong canonical profile phải có căn cứ t�
 
 Mức độ khẳng định của claim không được vượt quá evidence.
 
-## BR-AI-02 — AI output không tự trở thành business truth
+## BR-AI-02 — Normalized output không tự trở thành business truth
 
-AI-extracted information không tự động trở thành canonical fact.
-
-Thông tin được sử dụng sau khi áp dụng các quy tắc chuẩn hóa và hợp nhất đã phê duyệt.
+Profile là biểu diễn deterministic của dữ liệu nguồn, không phải kết quả xác minh độc lập. Free text được bảo toàn không tự trở thành structured fact. V01 không có LLM-extracted information hoặc semantic enrichment stage.
 
 ## BR-AI-03 — Missing data không đồng nghĩa với mismatch
 
@@ -567,31 +559,21 @@ Thông tin chưa có mapping phù hợp không được bị ép sang một giá
 
 Thông tin có thể được chuẩn hóa hoặc bảo toàn dưới dạng claim/nội dung bổ sung phù hợp.
 
-## BR-AI-08 — Structured metadata và bổ sung thông tin Job
+## BR-AI-08 — Structured metadata và free text Job
 
-Structured Job metadata hợp lệ được bảo toàn, không bị AI inference âm thầm ghi đè.
+Structured Job metadata hợp lệ được bảo toàn theo semantics nguồn. Field `workModes`, `employmentType` hoặc metadata khác thiếu/trống phải giữ rỗng; không bổ sung từ Job Description bằng LLM hoặc heuristic diễn giải ngữ nghĩa.
 
-Job Description có thể cung cấp thông tin bổ sung cho `workModes` và `employmentType` khi metadata tương ứng thiếu/trống, nội dung thể hiện rõ và có mapping hợp lệ vào miền giá trị của JOBHUB.
+Job Description và nội dung nghề nghiệp liên quan được giữ cùng provenance. Khi văn bản khác với metadata, không ghi đè hoặc bỏ nguồn nào; không yêu cầu V01 phát hiện/phân loại mâu thuẫn ngữ nghĩa để bảo toàn dữ liệu. Conflict không tự động khiến normalization thất bại.
 
-Khi có mâu thuẫn với metadata hiện có, bảo toàn thông tin nguồn thay vì âm thầm thay đổi canonical metadata.
+## BR-AI-09 — REQUIRED được ưu tiên OPTIONAL khi nguồn tường minh
 
-Không coi conflict là lý do tự động từ chối chuẩn hóa.
+Chỉ áp dụng khi dữ liệu nguồn có cấu trúc hoặc quy tắc deterministic đã phê duyệt xác định tường minh cùng một requirement và cung cấp cả REQUIRED lẫn OPTIONAL. Khi đó kết quả ưu tiên REQUIRED nhưng giữ các nguồn/priority ban đầu để truy nguyên.
 
-## BR-AI-09 — REQUIRED được ưu tiên OPTIONAL
-
-Job requirement được phân loại theo nội dung nguồn khi có căn cứ.
-
-Nếu cùng một requirement được xác định đồng thời là REQUIRED và OPTIONAL, kết quả ưu tiên REQUIRED.
-
-Không chuyển nội dung chỉ mang tính bối cảnh thành requirement bắt buộc.
-
-Nếu không xác định được priority, không tự suy diễn. Thông tin nguồn vẫn được bảo toàn khi có giá trị.
-
-Priority ambiguity không tự động khiến profile thất bại.
+V01 không dùng LLM hoặc heuristic diễn giải free text để nhận diện requirement, quyết định hai câu tương đương hay phân loại priority. Không tạo taxonomy/mapping/priority rule mới. Khi nguồn chỉ có văn bản hoặc chưa có priority tường minh, bảo toàn nội dung và provenance; không tự gán priority và không tự động FAILED.
 
 ## BR-AI-10 — Consolidation phải bảo toàn evidence
 
-Thông tin tương đương có thể được hợp nhất hoặc chuẩn hóa tên gọi.
+Chỉ hợp nhất dữ liệu có tính đồng nhất tường minh hoặc chuẩn hóa theo quy tắc deterministic đã phê duyệt. Không tự thiết lập quan hệ tương đương, alias hoặc mapping ngữ nghĩa từ free text.
 
 Quá trình hợp nhất phải giữ các nguồn evidence có giá trị.
 
@@ -624,7 +606,7 @@ Hidden sections không được mặc định diễn giải là Candidate không
 
 Khi nhiều nguồn cung cấp thông tin mâu thuẫn, V01 không tự chọn một claim làm sự thật duy nhất nếu không có quy tắc ưu tiên đã được phê duyệt.
 
-Các claim được bảo toàn cùng nguồn tương ứng để capability sau có thể sử dụng.
+Các giá trị/claim và free text được bảo toàn cùng nguồn tương ứng để capability sau có thể sử dụng. V01 không bắt buộc nhận diện hoặc gắn nhãn conflict ngữ nghĩa trong free text.
 
 Conflict không tự động khiến canonical profile thất bại.
 
@@ -722,19 +704,13 @@ Bao gồm:
 
 **Expected behavior:** Từ chối xử lý input không hợp lệ, không tạo canonical profile giả.
 
-## Extraction failure
+## Normalization failure
 
-Không thể hoàn thành việc trích xuất thông tin cần thiết do sự cố xử lý.
+Không thể hoàn thành deterministic normalization, bảo toàn dữ liệu/provenance bắt buộc hoặc tạo output hợp lệ.
 
-**Expected behavior:** FAILED nếu không thể tạo canonical output hợp lệ.
+**Expected behavior:** FAILED, không trả profile giả hoặc âm thầm bỏ dữ liệu để đạt READY.
 
-Thiếu một field nghề nghiệp trong nguồn không phải extraction failure.
-
-## AI processing failure
-
-Không thể hoàn tất quá trình xử lý AI hoặc không thể tạo thông tin cần thiết dưới dạng hợp lệ.
-
-**Expected behavior:** FAILED nếu toàn bộ quá trình chuẩn hóa không thể hoàn thành hợp lệ.
+Structured field thiếu, free text chưa được diễn giải hoặc conflict chưa được phân loại không phải processing failure. Không có LLM extraction/AI processing failure hoặc provider fallback trong luồng V01.
 
 ## Dependency failure
 
@@ -764,7 +740,7 @@ Conflicting claims không đồng nghĩa với processing failure.
 
 Technical failure không được chuyển thành negative business assessment.
 
-V01 không định nghĩa provider-specific fallback policy tại Product Spec.
+V01 không gọi LLM nên không phụ thuộc provider availability hoặc provider fallback để chuẩn hóa. Nền tảng provider/document extraction hiện có của AI Kit không bị thay đổi bởi specification này.
 
 # 16. AI Quality & Evaluation
 
@@ -772,12 +748,14 @@ AI-V01 được đánh giá theo khả năng chuẩn hóa dữ liệu và bảo 
 
 Các quality dimension áp dụng:
 
-- Extraction correctness.
+- Deterministic normalization correctness và tính lặp lại của kết quả với cùng input/quy tắc.
+- Bảo toàn structured data, nguyên nội dung free text và provenance.
+- Không gọi LLM hoặc suy diễn structured claims từ free text.
 - Evidence alignment.
 - Factuality.
 - Canonical normalization consistency.
 - Source information preservation.
-- Required/optional classification.
+- Bảo toàn priority tường minh và áp dụng `BR-AI-09` đúng phạm vi.
 - Missing-information handling.
 - Conflict preservation.
 - Hallucination prevention.
@@ -791,10 +769,10 @@ Các nhóm case cần được kiểm chứng:
 
 1. Job có đầy đủ structured metadata.
 2. Job thiếu một hoặc nhiều metadata.
-3. Job Description có thông tin bổ sung cho metadata trống.
-4. Job Description mâu thuẫn với structured metadata.
-5. Cùng Job requirement xuất hiện ở REQUIRED và OPTIONAL.
-6. Requirement không thể xác định priority.
+3. Job Description có nội dung liên quan metadata trống: metadata vẫn rỗng, free text/provenance được giữ.
+4. Job Description khác/mâu thuẫn structured metadata: giữ cả hai nguồn, không ghi đè, không bắt buộc semantic conflict detection.
+5. Cùng requirement có định danh/quan hệ đồng nhất và REQUIRED/OPTIONAL tường minh: ưu tiên REQUIRED, giữ provenance cả hai.
+6. Requirement/priority chỉ thể hiện trong free text: giữ nội dung, không tự phân loại hoặc suy ra requirement tương đương.
 7. Job không có đủ thông tin nghề nghiệp chi tiết.
 8. Generated CV có đầy đủ thông tin.
 9. Generated CV thiếu skills, experience hoặc education.
@@ -805,17 +783,21 @@ Các nhóm case cần được kiểm chứng:
 14. CV có hidden sections.
 15. CV có thông tin nghề nghiệp có căn cứ nhưng không có mapping canonical.
 16. Input không hợp lệ hoặc không được phép truy cập.
-17. AI processing hoặc dependency failure.
+17. Normalization hoặc dependency cần thiết thất bại; provider LLM không tham gia luồng.
+18. Cùng input/quy tắc cho cùng kết quả dữ liệu; không có claim hoặc mapping mới từ diễn giải văn bản.
+19. Structured data và free text có thông tin trùng nhau: không tự semantic deduplication, không mất provenance.
 
 ## 16.2. Acceptance
 
 AI-V01 đáp ứng yêu cầu business quality khi:
 
-- F01/F02 tạo canonical profile hợp lệ với input được hỗ trợ.
+- F01/F02 tạo profile runtime-only hợp lệ bằng deterministic normalization với input được hỗ trợ; cùng input/quy tắc cho cùng kết quả dữ liệu.
+- Structured data, nguyên nội dung free text và provenance được bảo toàn; không LLM extraction hoặc semantic enrichment.
+- Nội dung chỉ có trong free text không tự điền structured field hoặc tạo structured claim.
 - Field thiếu được để rỗng mà không tạo dữ liệu giả.
 - Không có minimum information threshold được áp đặt ngoài điều kiện hợp lệ của nguồn và output.
 - Các claim mâu thuẫn được bảo toàn đúng evidence.
-- REQUIRED được ưu tiên OPTIONAL cho cùng requirement.
+- REQUIRED được ưu tiên OPTIONAL chỉ trong điều kiện tường minh của `BR-AI-09`.
 - Structured metadata không bị ghi đè trái quy tắc.
 - Dữ liệu có căn cứ không bị âm thầm làm mất.
 - Không có fabricated Candidate/Job facts.
@@ -835,7 +817,7 @@ Nếu một Evaluation Contract riêng xác định phép đo và threshold đ�
 6. Không yêu cầu minimum completeness threshold đối với dữ liệu nghề nghiệp.
 7. Các claim có căn cứ nhưng mâu thuẫn được phép cùng tồn tại.
 8. Conflict không tự động chặn chuẩn hóa.
-9. REQUIRED được ưu tiên OPTIONAL khi cùng áp dụng cho một Job requirement.
+9. REQUIRED được ưu tiên OPTIONAL chỉ trong điều kiện tường minh của `BR-AI-09`.
 10. Structured metadata hợp lệ không bị âm thầm ghi đè.
 11. Evidence có giá trị không bị mất ngoài ý muốn.
 12. Thông tin không ánh xạ được không bị ép sang giá trị sai.
@@ -847,6 +829,8 @@ Nếu một Evaluation Contract riêng xác định phép đo và threshold đ�
 18. Không thực hiện matching, scoring hoặc ranking trong V01.
 19. Không xử lý Uploaded CV source trong V01.
 20. Không quản lý profile versioning, freshness hoặc invalidation trong V01.
+21. Normalization deterministic, không gọi LLM hoặc suy diễn structured claims từ free text.
+22. Structured data, free text và provenance được bảo toàn trong runtime để làm nền tảng chung cho capability sau.
 
 # 18. Các quyết định chủ động defer
 
@@ -880,8 +864,11 @@ Các nguyên tắc đã được quyết định:
 - Chỉ có READY và FAILED.
 - Không có BLOCKED.
 - Claim mâu thuẫn được bảo toàn thay vì chặn profile.
-- REQUIRED được ưu tiên OPTIONAL cho cùng requirement.
+- REQUIRED được ưu tiên OPTIONAL chỉ trong điều kiện tường minh của `BR-AI-09`.
 - Không thay đổi các requirement ID đã tồn tại.
+- Deterministic input normalization, không LLM extraction hoặc semantic enrichment.
+- Bảo toàn structured data, free text và provenance trong runtime.
+- Không điền structured metadata từ free text; không tự nhận diện requirement/priority/conflict bằng diễn giải văn bản.
 
 Việc đối chiếu và bảo toàn ID với repository là công việc quản lý tài liệu, không phải một business decision mới.
 
@@ -895,12 +882,14 @@ AI-V01 được coi là hoàn thành về mặt business khi:
 - Các Business Rules `BR-AI-01` đến `BR-AI-14` được đáp ứng.
 - Job và Generated CV có thể tạo canonical profile hợp lệ theo scope.
 - Input/trust boundary được giữ.
-- AI/human authority boundary được giữ.
+- JOBHUB/human authority boundary được giữ.
 - Canonical output semantics đúng với Product Spec.
 - Field thiếu, conflict và uncertainty được xử lý đúng.
 - Evidence được bảo toàn.
 - Không có hallucinated Candidate/Job facts được chấp nhận.
-- REQUIRED/OPTIONAL priority tuân thủ business rule.
+- REQUIRED/OPTIONAL priority tuân thủ `BR-AI-09`, không suy diễn priority từ free text.
+- Cùng input/quy tắc cho cùng kết quả dữ liệu; không có LLM extraction stage.
+- Structured data, nguyên nội dung free text và provenance được bảo toàn cho các capability sau.
 - READY/FAILED tuân thủ semantics đã chốt.
 - Không phát sinh BLOCKED hoặc completeness gate ngoài phạm vi.
 - Không có side effect trái phép.
@@ -911,7 +900,7 @@ AI-V01 được coi là hoàn thành về mặt business khi:
 Các điều sau không tự chứng minh Business Completion:
 
 - Có thể tạo một object đúng cấu trúc.
-- AI trả về kết quả.
+- Một LLM trả về kết quả extraction của thiết kế cũ.
 - Một vài dữ liệu mẫu chạy thành công.
 - Một số kiểm thử kỹ thuật thành công.
 - Có thể biểu diễn Job/CV nhưng làm mất evidence hoặc diễn giải sai business semantics.
@@ -977,7 +966,9 @@ Không phải AI version nào cũng cần toàn bộ Engineering Contracts.
 - Approved AI Engineering Contracts là authority đối với architecture/algorithm.
 - Source code, tests và evaluations là implementation evidence.
 
-Nếu implementation, AI extraction behavior hoặc consolidation behavior mâu thuẫn với Product Specification:
+`ai-kit/v01-contract.json`, contract loader và LLM extraction stage của thiết kế trước đã được retire; chúng không phải Product/Data authority và không tạo yêu cầu tương thích ngược. Specification này không định nghĩa JSON Shape hoặc public API kỹ thuật. [AI Kit Engineering Contracts](../../../engineering/ai-kit-conventions.md#composition-and-backend-integration) xác định factory `createAiKit` expose F01/F02 qua `normalizeJob` và `normalizeGeneratedCv`; runtime shapes do các normalizer owners sở hữu. Bằng chứng kiểm thử extraction cũ không chứng minh hoàn thành deterministic normalization; trạng thái triển khai và acceptance được ghi tại [AI Kit project status](../../../project-status/ai-kit/foundation.md).
+
+Nếu implementation, extraction behavior cũ hoặc consolidation behavior mâu thuẫn với Product Specification:
 
 - Implementation phải được điều chỉnh để tuân thủ Product Specification; hoặc
 - Product Specification phải được con người chủ động cập nhật và phê duyệt lại.

@@ -1475,7 +1475,7 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     );
 };
 
-const getOwnActiveCandidateCv = async ({
+const loadOwnActiveCandidateCv = async ({
   candidateUserId,
   actorUser,
   candidateCvId,
@@ -1500,7 +1500,11 @@ const getOwnActiveCandidateCv = async ({
     throw new AppError(404, "Candidate CV not found");
   }
 
-  return toPublicCandidateCvDetail(candidateCv);
+  return candidateCv;
+};
+
+const getOwnActiveCandidateCv = async (input) => {
+  return toPublicCandidateCvDetail(await loadOwnActiveCandidateCv(input));
 };
 
 const sanitizeDownloadFileName = (name, fallback = "candidate-cv.pdf") => {
@@ -2205,6 +2209,7 @@ export {
   listCandidateSearchEligibleCandidateCvs,
   listOwnActiveCandidateCvs,
   loadCurrentSearchEligibleCandidateCvById,
+  loadOwnActiveCandidateCv,
   previewOwnCandidateCv,
   previewSearchEligibleCandidateCv,
   previewSearchEligibleGeneratedCandidateCv,

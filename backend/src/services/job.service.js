@@ -3228,11 +3228,13 @@ const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
   return jobs.map((job) => toPublicJob(job));
 };
 
-const getInternalJob = async ({
-  actorUser,
-  jobId,
-  clientCompanyId,
-} = {}) => {
+// Returns the authorized Job document used by `getInternalJob`. Lossless
+// consumers can also request the persisted source, scoped at its own read
+// boundary to this same business context and internal visibility policy.
+const loadInternalJob = async (
+  { actorUser, jobId, clientCompanyId } = {},
+  { includePersistedSource = false } = {},
+) => {
   if (!mongoose.Types.ObjectId.isValid(jobId)) {
     throw new AppError(400, "Invalid Job id", {
       field: "jobId",
@@ -3264,7 +3266,34 @@ const getInternalJob = async ({
     membershipId: context.membership._id,
   });
 
-  return toPublicJob(job);
+  if (includePersistedSource) {
+    const persistedJob = await Job.findOne({
+      _id: job._id,
+      ...buildInternalJobVisibilityFilter({
+        companyId: context.companyId,
+        companyRole: context.companyRole,
+        membershipId: context.membership._id,
+      }),
+    }).lean();
+
+    if (!persistedJob) {
+      // Reuse domain errors (404 deleted, 403 tenant/visibility loss). This
+      // diagnostic read must never become a replacement normalization source.
+      await loadInternalJob({ actorUser, jobId, clientCompanyId });
+      // Fail closed even if visibility was restored after the raw query missed.
+      throw new AppError(403, "Job is not visible to the current actor", {
+        field: "jobId",
+      });
+    }
+
+    return { job, persistedJob };
+  }
+
+  return job;
+};
+
+const getInternalJob = async (input) => {
+  return toPublicJob(await loadInternalJob(input));
 };
 
 const buildUnfinishedJobFilter = (extraFilter, now = new Date()) => {
@@ -3645,6 +3674,7 @@ export {
   isJobPubliclyEligible,
   isOwningCompanyActiveForPublicEligibility,
   listInternalJobs,
+  loadInternalJob,
   reassignPrimaryRecruiter,
   rejectPendingJob,
   removeSupportingRecruiter,

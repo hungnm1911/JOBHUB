@@ -1,4 +1,4 @@
-# AI-V01 — Chuẩn hóa Job/CV thành Canonical Match Profiles Data Model
+# AI-V01 — Deterministic Input Normalization cho Job/Generated CV Data Contract
 
 > **File:** `docs/data/ai-kit/versions/ai-v01-job-cv-normalization-data-model.md`
 > **Vai trò:** Canonical AI Data Contract
@@ -18,7 +18,9 @@ AI-V01 tạo hai biểu diễn chuẩn:
 - `JobMatchProfile`
 - `CVMatchProfile`
 
-Hai profile được tạo từ dữ liệu Job và Generated CV hiện có của JOBHUB.
+Hai profile được tạo deterministic từ dữ liệu Job và Generated CV hiện có của JOBHUB, bảo toàn structured data, nguyên nội dung free text và provenance. Chúng là nền tảng dữ liệu đầu vào chung cho các AI capability sau; tên profile không giới hạn chúng vào matching và không xác lập behavior AI #1/#2/#3.
+
+Theo định hướng Product Owner đã phê duyệt, V01 không có LLM extraction, semantic enrichment hoặc suy diễn structured claims từ free text. Cùng input và cùng quy tắc chuẩn hóa phải cho cùng kết quả dữ liệu.
 
 **Persistence decision của V01:**
 
@@ -43,13 +45,15 @@ AI-V01 là AI business version đầu tiên.
 | JOBHUB taxonomy/metadata | `CANONICAL` | `UNCHANGED` | Theo thiết kế hiện có |
 | `JobMatchProfile` | `NORMALIZED_AI` | `NEW` | `RUNTIME_ONLY` |
 | `CVMatchProfile` | `NORMALIZED_AI` | `NEW` | `RUNTIME_ONLY` |
-| Semantic extraction result | `DERIVED` | `NEW` | `RUNTIME_ONLY` |
+| Preserved free text và source associations | `DERIVED` | `NEW` | `RUNTIME_ONLY` |
 | Consolidated evidence/claims | `DERIVED` | `NEW` | `RUNTIME_ONLY` |
 | Normalization result status | `RUNTIME_ONLY` | `NEW` | `RUNTIME_ONLY` |
 
 Không có entity/artifact thuộc trạng thái `UPDATED`, `DEPRECATED` hoặc `REMOVED`.
 
 Không có migration hoặc thay đổi collection hiện có.
+
+So với định hướng trước của chính AI-V01, bỏ semantic extraction result khỏi phạm vi dữ liệu V01; thay bằng bảo toàn nội dung nguồn và provenance trong deterministic normalization. Đây là cập nhật semantics, không phải migration/rollback source code hoặc JSON Shape.
 
 # 3. Data Classification và Entity tổng thể
 
@@ -67,7 +71,7 @@ V01 chỉ chuẩn hóa Generated CV; phần Uploaded CV source không thuộc ph
 
 **JOBHUB taxonomies**
 
-Các giá trị chuẩn về skills, category, experience level, employment type, work mode và các taxonomy liên quan tiếp tục sử dụng định nghĩa hiện có.
+Các category, experience level, employment type, work mode và controlled metadata tiếp tục sử dụng định nghĩa JOBHUB hiện có. Skills/skill tags giữ đúng semantics nguồn, không tự biến string thành taxonomy ID/reference hoặc tạo catalog mới. AI-V01 không tự thiết lập alias/mapping từ free text.
 
 AI-V01 không sở hữu và không thay thế canonical business data.
 
@@ -92,11 +96,12 @@ Cả hai:
 
 Các thông tin trung gian phục vụ chuẩn hóa:
 
-- Semantic extraction result.
-- Normalized qualifications/requirements.
+- Structured data được chuẩn hóa deterministic.
+- Free text được giữ nguyên cùng ngữ cảnh nguồn.
+- Qualifications/requirements/priority được nguồn cung cấp tường minh; không trích xuất hoặc suy diễn từ văn bản.
 - Consolidated claims.
 - Evidence associations.
-- Uncertainty/conflict information.
+- Các giá trị/claim khác nhau, mơ hồ hoặc mâu thuẫn được bảo toàn từ nguồn; không yêu cầu semantic conflict detection.
 
 Tất cả chỉ tồn tại runtime trong V01.
 
@@ -111,8 +116,8 @@ V01 không tạo Match Result, Recommendation Result, Agent Proposal hoặc arti
 Các dữ liệu runtime bao gồm:
 
 - Normalization input context.
-- Extraction result.
-- Consolidation result.
+- Preserved structured data, free text và provenance.
+- Deterministic normalization/consolidation result.
 - `JobMatchProfile`.
 - `CVMatchProfile`.
 - Normalization result status (`READY` hoặc `FAILED`).
@@ -206,7 +211,7 @@ Các business enum hiện có tiếp tục giữ nguyên semantics.
 
 `READY` và `FAILED` là runtime result semantics, không phải trạng thái mới của Job hoặc CandidateCV.
 
-`REQUIRED` và `OPTIONAL` thuộc normalized requirement semantics; không thêm persisted enum vào Job.
+`REQUIRED` và `OPTIONAL` chỉ thuộc runtime requirement semantics khi nguồn cung cấp tường minh theo `BR-AI-09`; không thêm persisted enum/priority field vào Job, không phân loại priority từ free text.
 
 ## 5.4. Indexes
 
@@ -224,7 +229,7 @@ Runtime profile phải được tạo từ đúng source Job hoặc Generated CV
 
 Các relationship và ownership hiện có của nguồn không thay đổi.
 
-# 6. AI-derived Data Contract
+# 6. Normalized Input Data Contract
 
 ## 6.1. CVMatchProfile
 
@@ -236,7 +241,7 @@ Các relationship và ownership hiện có của nguồn không thay đổi.
 
 **Responsibility:**
 
-Biểu diễn dữ liệu nghề nghiệp từ Generated CV theo canonical semantics của AI-V01.
+Biểu diễn deterministic structured metadata, structured Generated CV content và free text theo canonical semantics của AI-V01. Không suy diễn skills, qualifications, language proficiency hoặc số năm kinh nghiệm từ văn bản.
 
 Các nhóm thông tin được biểu diễn khi có dữ liệu:
 
@@ -257,13 +262,15 @@ Các nhóm thông tin được biểu diễn khi có dữ liệu:
 **Data constraints:**
 
 1. Không có field nghề nghiệp nào bắt buộc phải có giá trị chỉ để đạt READY.
-2. Field thiếu được biểu diễn rỗng theo loại dữ liệu tương ứng.
+2. Structured field thiếu được biểu diễn rỗng theo loại dữ liệu tương ứng; free text có nội dung liên quan không được dùng để điền field đó.
 3. Không tự tạo Candidate fact không có căn cứ.
 4. Claim mâu thuẫn không được ép thành một fact duy nhất.
 5. Các claim được bảo toàn cùng evidence tương ứng.
 6. Thông tin không ánh xạ được không bị ép sang taxonomy sai.
 7. `hiddenSections` không đồng nghĩa với absence of qualification.
 8. Profile hợp lệ không đồng nghĩa với Candidate có chất lượng hoặc mức độ phù hợp cao.
+9. Bảo toàn nguyên nội dung free text, cấu trúc/ngữ cảnh section/item, thứ tự có ý nghĩa và presentation metadata như `hiddenSections` theo semantics nguồn; không tự semantic deduplication hoặc gộp các cách diễn đạt.
+10. Structured data và free text đều phải có provenance; không cần trích xuất hoặc phân loại claim/conflict từ văn bản để giữ nội dung nguồn.
 
 **Không chịu trách nhiệm:**
 
@@ -291,14 +298,13 @@ Lần xử lý khác, nếu có, là một lần tạo kết quả mới từ in
 
 **Responsibility:**
 
-Biểu diễn Job metadata và requirements theo canonical semantics của AI-V01.
+Biểu diễn deterministic Job structured metadata, requirements được nguồn cung cấp và free text theo canonical semantics của AI-V01. Không dùng LLM hoặc heuristic diễn giải văn bản để tạo structured claims.
 
 Các nhóm thông tin được biểu diễn khi có dữ liệu:
 
 - Job positioning.
 - Job metadata.
-- Required requirements.
-- Optional requirements.
+- Requirements và priority REQUIRED/OPTIONAL khi nguồn cung cấp tường minh.
 - Skills và qualifications.
 - Experience requirements.
 - Education/language requirements.
@@ -310,14 +316,17 @@ Các nhóm thông tin được biểu diễn khi có dữ liệu:
 
 **Data constraints:**
 
-1. Structured metadata hợp lệ không bị ghi đè âm thầm.
-2. Job Description có thể bổ sung `workModes` và `employmentType` còn thiếu/trống khi có evidence và mapping hợp lệ.
-3. REQUIRED được ưu tiên OPTIONAL nếu cùng requirement xuất hiện với cả hai priority.
-4. Priority chưa xác định không được tự suy diễn.
-5. Requirement không được tự tạo từ context không đủ căn cứ.
+1. Structured metadata hợp lệ được bảo toàn theo semantics nguồn.
+2. `workModes`, `employmentType` và structured field khác thiếu/trống giữ rỗng; Job Description không bổ sung hoặc ghi đè metadata.
+3. REQUIRED chỉ ưu tiên OPTIONAL khi nguồn tường minh xác định cùng requirement và cả hai priority theo `BR-AI-09`; giữ nguồn và priority ban đầu để truy nguyên.
+4. Không tự xác định priority hoặc requirement tương đương bằng diễn giải free text.
+5. Free text được bảo toàn nguyên nội dung và provenance, không tự trở thành structured requirement/claim.
 6. Field thiếu được biểu diễn rỗng.
 7. Conflict ngoài các quy tắc ưu tiên đã phê duyệt được bảo toàn cùng nguồn.
 8. Profile không chứa match score hoặc Candidate assessment.
+9. Các nội dung khác/mâu thuẫn với structured metadata vẫn được giữ đúng nguồn; không yêu cầu V01 phát hiện/phân loại conflict ngữ nghĩa.
+10. Chỉ chuẩn hóa giá trị/định danh theo semantics và quy tắc deterministic hiện có được phê duyệt, không tạo taxonomy hoặc mapping mới.
+11. Structured skills/requirements hợp lệ phải được giữ dù không xuất hiện trong Job Description; provenance từ structured source không phụ thuộc citation trong free text.
 
 **Không chịu trách nhiệm:**
 
@@ -456,10 +465,11 @@ Chịu trách nhiệm:
 
 - Kiểm tra cấu trúc normalized profile.
 - Bảo toàn source evidence.
-- Áp dụng normalization/consolidation rules.
+- Áp dụng deterministic normalization/consolidation rules, không gọi LLM hoặc semantic extraction.
+- Bảo toàn structured data và nguyên nội dung free text, không dùng văn bản để điền structured field trống.
 - Không tự tạo fact không có căn cứ.
 - Bảo toàn các claim mâu thuẫn.
-- Áp dụng REQUIRED-over-OPTIONAL.
+- Áp dụng REQUIRED-over-OPTIONAL chỉ trong điều kiện tường minh của `BR-AI-09`.
 - Không biến missing data thành processing failure.
 - Không công bố READY khi không thể tạo output hợp lệ.
 
@@ -493,15 +503,15 @@ Không có dữ liệu AI persisted cần invalidation khi nguồn thay đổi.
 
 **Áp dụng ở runtime.**
 
-Những claim được bảo toàn trong normalized profile phải giữ khả năng đối chiếu với thông tin nguồn tương ứng.
+Structured data, free text và những claim được bảo toàn trong normalized profile đều phải giữ khả năng đối chiếu với source Job/Generated CV và thành phần nguồn tương ứng. Provenance không chỉ dành cho claim đã cấu trúc hóa; nội dung chưa diễn giải vẫn phải truy nguyên được. Không yêu cầu một JSON Shape, cơ chế pointer hoặc source snapshot persistence cụ thể tại đây.
 
 Provenance cần đủ để:
 
-- Xác định một claim bắt nguồn từ nội dung Job/CV nào.
-- Phân biệt structured metadata và extracted claim khi sự khác biệt có ý nghĩa.
-- Bảo toàn các nguồn hỗ trợ một claim đã hợp nhất.
-- Phân biệt các claim mâu thuẫn.
-- Tránh diễn giải inferred information như independently verified fact.
+- Xác định dữ liệu/nội dung bắt nguồn từ Job/CV nào và field, section hoặc item nguồn tương ứng.
+- Phân biệt structured metadata/content, free text và declared claims khi sự khác biệt có ý nghĩa.
+- Bảo toàn mọi nguồn hỗ trợ khi hợp nhất dữ liệu có tính đồng nhất tường minh theo quy tắc deterministic đã phê duyệt.
+- Giữ riêng các giá trị/claim khác nhau hoặc mâu thuẫn và nguồn tương ứng, không suy diễn chúng thành một fact duy nhất.
+- Tránh diễn giải free text thành structured claim hoặc declared claim thành independently verified fact.
 
 Không bổ sung persisted provenance collection hoặc historical source tracking.
 
@@ -556,7 +566,7 @@ AI-V01 không bổ sung retention/TTL requirement mới.
 | CandidateCV canonical data | Theo contract JOBHUB hiện có |
 | JobMatchProfile | Runtime-only |
 | CVMatchProfile | Runtime-only |
-| Extraction/consolidation data | Runtime-only |
+| Preserved source data/provenance và deterministic consolidation data | Runtime-only |
 | Normalization result | Runtime-only |
 
 Không tạo TTL index hoặc cleanup job mới.
@@ -626,7 +636,8 @@ Không có AI business version trước đó để yêu cầu backward compatibi
 
 - Tạo runtime normalized AI representations từ canonical source.
 - Sử dụng các biểu diễn này trong phạm vi AI capability đã phê duyệt.
-- Chuẩn hóa và hợp nhất thông tin mà không làm thay đổi nguồn persisted.
+- Chuẩn hóa và hợp nhất deterministic dữ liệu có tính đồng nhất tường minh mà không làm thay đổi nguồn persisted.
+- Giữ structured data, nguyên nội dung free text và provenance cho các capability sau, không tự thêm semantics của capability đó.
 
 ## 17.5. Thay đổi không được phép
 
@@ -648,7 +659,10 @@ Không có AI business version trước đó để yêu cầu backward compatibi
 | Không tạo fact không có evidence | AI processing |
 | Field thiếu không bị tự bổ sung | AI processing |
 | Claim mâu thuẫn được bảo toàn | AI processing |
-| REQUIRED được ưu tiên OPTIONAL cho cùng requirement | AI processing |
+| REQUIRED ưu tiên OPTIONAL chỉ khi nguồn tường minh theo BR-AI-09 | AI processing |
+| Không LLM extraction hoặc suy diễn structured claims từ free text | AI processing |
+| Structured data, free text và provenance được bảo toàn | AI processing |
+| Cùng input/quy tắc cho cùng kết quả dữ liệu | AI processing |
 | Structured metadata không bị ghi đè trái rule | AI processing |
 | Không có BLOCKED | AI processing |
 | FAILED không biến thành negative business result | AI processing |
@@ -664,7 +678,9 @@ AI-V01 Data Contract được xem là hoàn thành về mặt dữ liệu khi:
 
 - Canonical source của Job và Generated CV được giữ nguyên.
 - `JobMatchProfile` và `CVMatchProfile` được xác định là `NORMALIZED_AI`, `RUNTIME_ONLY`.
-- Derived extraction/consolidation data được giới hạn trong runtime.
+- Structured data, nguyên nội dung free text, provenance và deterministic consolidation data được giới hạn trong runtime.
+- Không có semantic extraction result hoặc suy diễn structured claims từ free text trong luồng V01.
+- Field thiếu vẫn rỗng; priority chỉ áp dụng theo điều kiện tường minh của `BR-AI-09`.
 - Không có persisted AI entity/artifact mới.
 - Existing Job/CandidateCV schemas không bị thay đổi.
 - Relationship và source dependency đã rõ.
@@ -681,7 +697,7 @@ AI-V01 Data Contract được xem là hoàn thành về mặt dữ liệu khi:
 
 Không cần tạo mới collection hoặc migration để chứng minh AI-V01 Data Completion.
 
-Việc AI có thể trả kết quả đúng cấu trúc không tự chứng minh đã tuân thủ đầy đủ Data Contract nếu source evidence, trust semantics hoặc ownership bị vi phạm.
+Một kết quả đúng cấu trúc không tự chứng minh đã tuân thủ đầy đủ Data Contract nếu structured data, free text, provenance, trust semantics hoặc ownership bị vi phạm.
 
 # 20. Implementation Boundary
 
@@ -700,6 +716,7 @@ Nó xác định:
 
 Tài liệu không định nghĩa:
 
+- Runtime JSON Shape hoặc schema/provider projection.
 - LLM provider hoặc model.
 - Prompt hoặc structured extraction instructions.
 - Scoring/matching logic.
@@ -741,5 +758,7 @@ Tests / Evaluation
 - Implementation và tests cung cấp bằng chứng thực thi.
 
 Nếu một yêu cầu persistence làm thay đổi business behavior đã phê duyệt, phải đưa vấn đề trở lại Product Specification để được quyết định trước khi cập nhật Data Contract.
+
+`ai-kit/v01-contract.json`, contract loader và LLM extraction stage của thiết kế trước đã được retire; chúng không phải data authority và không tạo yêu cầu tương thích ngược. Data Contract này tiếp tục định nghĩa data semantics và runtime-only boundary. Theo [AI Kit Engineering Contracts](../../../engineering/ai-kit-conventions.md#structured-output), runtime source projections, profile shapes và READY/FAILED results do các F01/F02 normalizer owners sở hữu; factory `createAiKit` expose `normalizeJob` và `normalizeGeneratedCv` mà không chuyển đổi kết quả. Không bổ sung JSON Schema hoặc persistence contract mới.
 
 Data Contract không được tự bổ sung capability hoặc requirement mới ngoài AI-V01.

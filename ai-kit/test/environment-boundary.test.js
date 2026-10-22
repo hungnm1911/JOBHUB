@@ -81,14 +81,15 @@ describe("AI Kit environment boundary", () => {
     expect(sdkConsumers).toEqual([path.join("llm", "codex-client.js")]);
   });
 
-  it("keeps the direct Scribe import inside the PDF text extractor", async () => {
+  it("keeps the direct PDF.js import inside the PDF text extractor", async () => {
     const sources = await readJavaScriptSources([sourceRoot, scriptsRoot]);
-    const scribeConsumers = sources
-      .filter(({ source }) => source.includes("scribe.js-ocr"))
+    const pdfConsumers = sources
+      .filter(({ source }) => source.includes("pdfjs-dist"))
       .map(({ filePath }) => path.relative(sourceRoot, filePath));
 
-    expect(scribeConsumers).toEqual([
+    expect(pdfConsumers).toEqual([
       path.join("document", "pdf-text-extractor.js"),
     ]);
+    expect(joinPackageSources(sources)).not.toContain("scribe.js-ocr");
   });
 });

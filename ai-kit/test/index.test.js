@@ -42,7 +42,7 @@ describe("AI Kit public entrypoint", () => {
   ])("accepts injected config with %s", (_caseName, llm) => {
     const instance = aiKit.createAiKit({ llm, logger });
 
-    expect(instance).toEqual({});
+    expect(Object.keys(instance)).toEqual(["normalizeJob", "normalizeGeneratedCv"]);
     expect(Object.isFrozen(instance)).toBe(true);
   });
 
