@@ -13,8 +13,9 @@ evidence only.
 ## Reading a status leaf
 
 Open only the one leaf for the affected application/version; open
-[Platform and operations](backend/platform-and-operations.md) only for
-cross-version gates or operational state. A leaf is orientation, not authority.
+[Platform and operations](backend/platform-and-operations.md) for Backend
+cross-version gates or operational state, and [AI Kit foundation](ai-kit/foundation.md)
+for shared AI Kit package/integration state. A leaf is orientation, not authority.
 
 Standard leaf layout, in order:
 
@@ -64,3 +65,10 @@ Reading rules:
 ## AI Kit
 
 - [Package foundation](ai-kit/foundation.md)
+- [AI-V01 — Job/CV normalization](ai-kit/v01-job-cv-normalization.md)
+
+Record each approved AI Kit business version in its own status leaf. Update
+`foundation.md` only for shared package, provider, document extraction, and
+integration state; version implementation and acceptance evidence belongs in
+the matching version leaf. Add a leaf and index entry when a new approved
+version has implementation state to record.

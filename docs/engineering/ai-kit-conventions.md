@@ -8,7 +8,9 @@ for the current package foundation and for future AI Kit changes.
 [`architecture.md`](architecture.md#ai-kit--current-state) defines AI Kit's
 runtime role, ownership, and architectural constraints. The
 [AI Kit foundation status](../project-status/ai-kit/foundation.md) records
-implementation and verification state; it does not define requirements.
+shared package evidence, while the
+[AI-V01 status](../project-status/ai-kit/v01-job-cv-normalization.md) records
+version implementation and acceptance evidence; neither defines requirements.
 Approved Product Specifications and Data Contracts remain authoritative for
 business behavior and persistence. AI-V01 Product/Data authority is approved
 and deterministic. Its F01 (`normalizeJob`) and F02 (`normalizeGeneratedCv`)

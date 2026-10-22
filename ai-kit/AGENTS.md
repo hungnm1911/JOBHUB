@@ -11,8 +11,13 @@ Use these Engineering documents as the AI Kit architecture contract:
 - [`ai-kit-conventions.md`](../docs/engineering/ai-kit-conventions.md): code, integration, security, and verification conventions; and
 - [`ai-kit-source-of-truth.md`](../docs/engineering/ai-kit-source-of-truth.md): canonical owners, allowed consumers, and forbidden duplication.
 
-[`docs/project-status/index.md`](../docs/project-status/index.md) and the
-[AI Kit foundation leaf](../docs/project-status/ai-kit/foundation.md) record implementation evidence only; they do not replace authority.
+[`docs/project-status/index.md`](../docs/project-status/index.md) maps the
+[AI Kit foundation leaf](../docs/project-status/ai-kit/foundation.md) and each
+business version's status leaf, starting with
+[AI-V01](../docs/project-status/ai-kit/v01-job-cv-normalization.md). These
+record implementation evidence only; they do not replace authority. Record
+shared package/integration state in the foundation leaf and version-specific
+implementation or acceptance state in the matching version leaf.
 
 For AI business behavior, locate the AI Kit [roadmap](../docs/product/ai-kit/roadmap.md) entry and matching approved [Product Specification](../docs/product/ai-kit/versions/) and [Data Contract](../docs/data/ai-kit/versions/). If authority is absent or unapproved, stop before inventing behavior. The AI Kit roadmap has its own version and scope authority; the Backend roadmap does not approve or gate it.
 

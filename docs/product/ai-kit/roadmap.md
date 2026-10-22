@@ -32,7 +32,7 @@ AI-V01 is the only approved AI Kit business version. Approval establishes
 Product/Data authority; it does not itself establish implementation or Final
 Acceptance. Implementation and verification evidence, including resolved
 Final Acceptance H1/H2/H3 findings, is recorded in the
-[AI Kit status leaf](../../project-status/ai-kit/foundation.md).
+[AI-V01 status leaf](../../project-status/ai-kit/v01-job-cv-normalization.md).
 Public Job access, Uploaded CV processing, HTTP integration, Job/CV CRUD hooks,
 and AI-specific persistence remain deferred/outside this runtime scope.
 

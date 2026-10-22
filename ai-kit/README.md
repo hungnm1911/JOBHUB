@@ -132,7 +132,9 @@ npm run verify:agent
 - Each extraction destroys its own loading task/worker; no shared disposal or Backend shutdown hook is required.
 - The tracked Node 20 compatibility warning remains unresolved: `file-type@22.0.1` requires Node `>=22`, while the verified environment uses Node 20.19.1.
 
-See the [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) for current evidence and deferred work.
+See the [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md)
+for shared package evidence and the [AI-V01 status](../docs/project-status/ai-kit/v01-job-cv-normalization.md)
+for normalization and acceptance evidence.
 
 ## Documentation references
 
@@ -142,7 +144,8 @@ See the [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) 
 | [Application architecture](../docs/engineering/architecture.md) | Current state, target convention, and architectural constraints |
 | [AI Kit conventions](../docs/engineering/ai-kit-conventions.md) | Enforceable coding, integration, security, and verification rules |
 | [AI Kit sources of truth](../docs/engineering/ai-kit-source-of-truth.md) | Canonical owners, consumers, and forbidden duplication |
-| [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) | Implementation and verification evidence |
+| [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) | Shared package, provider, extraction, and integration evidence |
+| [AI-V01 status](../docs/project-status/ai-kit/v01-job-cv-normalization.md) | F01/F02, Backend B1/B2, and Final Acceptance evidence |
 | [AI Kit Product roadmap](../docs/product/ai-kit/roadmap.md) | AI Kit version and scope authority; F01/F02 and Backend B1/B2 are implemented and verified offline; Final Acceptance remains PENDING |
 | [AI Kit Product Specifications](../docs/product/ai-kit/versions/) | Approved detailed AI Kit business requirements, including AI-V01 |
 | [AI Kit Data Contracts](../docs/data/ai-kit/versions/) | Approved AI Kit persistence and data-defined contracts, including AI-V01 |
