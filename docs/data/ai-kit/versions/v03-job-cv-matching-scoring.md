@@ -275,6 +275,8 @@ Không bổ sung field vào `CVMatchProfile` chỉ để phục vụ tính đi�
 
 Skills Assessment chứa thông tin cần thiết để xác định và tổng hợp mức độ phù hợp về kỹ năng.
 
+Semantic Skills Assessment do LLM tạo là đầu vào cần thiết để tổng hợp Skills Score và Match Score trong Matching thực tế. Có thể unit test phép tính với mock assessment, nhưng Matching thực tế vẫn cần LLM inference.
+
 ### Logical data
 
 | Field / Group | Ý nghĩa |
@@ -628,6 +630,8 @@ Không thay đổi schema của:
 `JobMatchProfile` và `CVMatchProfile` tiếp tục là runtime-only normalized representations.
 
 AI-V03 chỉ tiêu thụ các profile này.
+
+Scoring logic tiêu thụ Semantic Skills Assessment theo logical contract, không gắn chặt với toàn bộ provider-specific output của AI-V03. Version sau có thể cung cấp assessment tương thích để sử dụng lại scoring logic mà không cần dùng lại nguyên prompt hoặc JSON output của AI-V03.
 
 ## 17.4. Thay đổi được phép
 

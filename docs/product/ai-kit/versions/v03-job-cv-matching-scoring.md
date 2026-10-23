@@ -49,12 +49,14 @@ AI-V03 hỗ trợ các `CVMatchProfile` được tạo từ:
 
 ## 2.2. Ngoài phạm vi
 
+AI-V03 là matching capability đánh giá một cặp Job–CV và có thể được tái sử dụng bởi các use case khác.
+
 AI-V03 không thực hiện:
 
 - Tự động sửa hoặc tạo CV.
-- Gợi ý chi tiết cách chỉnh sửa CV.
+- CV Improvement (AI-V04), bao gồm gợi ý chi tiết cách chỉnh sửa CV.
 - Chatbot tư vấn Candidate.
-- Job Recommendation hoặc xếp hạng nhiều Job.
+- Job Recommendation (AI-V05) hoặc ranking nhiều Job.
 - Employer-side Candidate Ranking.
 - Tự động ứng tuyển.
 - Quyết định tuyển dụng hoặc loại Candidate.
@@ -142,6 +144,8 @@ AI-V03 không thay đổi dữ liệu hoặc semantics của hai version này.
 | Quyết định tuyển dụng | Employer |
 
 LLM được phép đánh giá ngữ nghĩa nhưng không được tự thay đổi trọng số, công thức hoặc các quy tắc chấm điểm đã được phê duyệt.
+
+Match Result hoàn chỉnh cần cả Semantic Skills Assessment do LLM tạo và phần deterministic scoring do JOBHUB System thực hiện. Phần deterministic không tự thay thế đánh giá ngữ nghĩa của LLM.
 
 Match Score không tạo ra quyết định tuyển dụng tự động.
 
@@ -879,10 +883,10 @@ Không áp đặt threshold độ chính xác hoặc cơ chế đánh giá produ
 
 Các nội dung sau không thuộc AI-V03:
 
-- Gợi ý chỉnh sửa CV dựa trên Match Score.
+- CV Improvement (AI-V04), bao gồm gợi ý chỉnh sửa CV dựa trên Match Score.
 - Chatbot tư vấn cải thiện CV.
 - Tự tạo hoặc chỉnh sửa CV Draft.
-- Job Recommendation và retrieval/ranking nhiều Job.
+- Job Recommendation (AI-V05) và retrieval/ranking nhiều Job.
 - Employer-side Candidate Ranking.
 - Lưu lịch sử hoặc versioning Match Score.
 - Cá nhân hóa trọng số theo Candidate hoặc Employer.
