@@ -50,6 +50,7 @@ implementation evidence only; it does not replace engineering authority.
 | AI-V02 F01 — one-pass Uploaded CV semantic extraction: source precheck, PDF Buffer text extraction, short evidence-bound prompt, provider-native strict schema request through Codex by default or explicitly selected Gemini/Groq, response-completion checks, and delegation to the output-contract composition owner | `ai-kit/src/normalization/uploaded-cv-semantic-extraction.js` (`createUploadedCvNormalizer`) | `createAiKit` instance (`normalizeUploadedCv`); focused offline semantic-extraction and Codex HTTP tests | A copied schema or validator, Backend metadata in the prompt, second semantic pass, automatic retry/fallback or JSON Object Mode downgrade, persistence/cache, direct SDK imports, Backend authorization |
 | AI-V01 F01 — deterministic Job normalization: career-relevant Job source projection gate (structured metadata, V4.2 Structured Salary matrix, SalaryType/SalaryPeriod code sets mirrored from Backend constants, shared EmploymentType/WorkMode/CategoryLevel/ExperienceLevel sets from the normalization support owner, category/experience-level IDs plus Backend-resolved `taxonomy` metadata validated for exact consistency with those IDs, opaque location codes), verbatim free text, per-value JSON Pointer `sourcePath` provenance, preservation self-check, and READY/FAILED `JobMatchProfile` result shape (revised F01; BR-AI-01/02/03/04/07/08/09/10/13/14) | `ai-kit/src/normalization/job-normalization.js` (`normalizeJob`) | The `createAiKit` instance (public runtime entry); `ai-kit/test/job-normalization.test.js`; Backend `backend/src/services/job-ai-normalization.service.js` through `backend/src/services/ai-kit.service.js` | LLM calls, free-text interpretation, priority/alias/taxonomy mapping, or semantic deduplication; a parallel JSON Schema contract file or contract loader; a second F01 profile shape; catalog lookups, persistence, or authorization in AI Kit; a separate package-root export of the owner or its constants |
 | AI-V03 F03 — deterministic Career Category, Experience Level, Employment Type, and Work Mode scores from READY Job/CV profile metadata (BR-AI-29/30/31) | `ai-kit/src/matching/deterministic-field-scoring.js` (`scoreDeterministicFields`) | Focused AI Kit tests; future approved AI-V03 orchestration through the internal owner | Duplicate scoring rules, LLM-derived taxonomy or metadata, weighted Match Score, persistence, or a package-root export without a production consumer |
+| AI-V03 F04 — Skills group aggregation and fixed-weight Match Score from one score per grouped requirement and the F03 field scores (BR-AI-28/32) | `ai-kit/src/matching/weighted-match-scoring.js` (`calculateWeightedMatchScore`) | Focused AI Kit tests; future approved AI-V03 orchestration through the internal owner | Semantic equivalence inference, provider output schema, duplicate weighted scoring, persistence, or a package-root export without a production consumer |
 | Cross-boundary — Backend runtime integration, dependency injection, and shared AI Kit instance | `backend/src/services/ai-kit.service.js` | B1 `backend/src/services/job-ai-normalization.service.js`; B2 and AI-V02 Slice 4c `backend/src/services/candidate-cv-ai-normalization.service.js`; focused integration tests; future approved Backend services | Other Backend source imports of `@jobhub/ai-kit`; parallel AI Kit instances; deep imports; reverse AI Kit-to-Backend dependencies |
 | Cross-boundary — environment loading and normalized Codex/Gemini/Groq configuration | `backend/src/config/index.js` (`config.aiKit`) | Backend AI Kit integration service; Backend smoke launchers | `process.env` reads or configuration defaults in AI Kit; secondary Backend AI Kit config owners; smoke harness environment loading |
 | Cross-boundary — canonical application logger injected into runtime AI Kit composition | `backend/src/utils/logger.js` | `backend/src/services/ai-kit.service.js` and other approved Backend runtime owners | A second runtime logger in AI Kit; AI Kit logger configuration; logging secrets, private document/prompt content, or raw sensitive provider responses |
@@ -95,7 +96,7 @@ implementation evidence only; it does not replace engineering authority.
 
 No canonical implementation owner currently exists for:
 
-- AI #1 semantic matching, score aggregation, explanation, or improvement behavior beyond AI-V03 F03;
+- AI #1 semantic matching, explanation, or improvement behavior beyond AI-V03 F03/F04;
 - business prompts and structured-output schemas for capabilities other than
   AI-V02 F01 Uploaded CV normalization;
 - an agent/tool registry, capability-specific callback contract, or CV Agent
@@ -110,11 +111,12 @@ stage and its `ai-kit/v01-contract.json` contract have been retired. They are
 reachable only through the `createAiKit`
 instance, consumed by B1 internal Job and B2 own Generated CV through the
 Backend integration service. Public Job access, Recruiter/application CV access,
-HTTP integration, and Job/CV CRUD hooks remain deferred. AI #1/#2/#3, including
-semantic matching and score aggregation, agents, retrieval, embeddings, vector
-search, and any AI-specific persistence beyond AI-V01's approved runtime-only
-boundary remain without implementation owners. AI-V03 Product/Data authority
-is approved; only its F03 deterministic field scoring slice is implemented.
+HTTP integration, and Job/CV CRUD hooks remain deferred. AI #1/#2/#3,
+including semantic matching beyond the internal F04 score calculator, agents,
+retrieval, embeddings, vector search, and any AI-specific persistence beyond
+AI-V01's approved runtime-only boundary remain without implementation owners.
+AI-V03 Product/Data authority is approved; its F03 deterministic field scoring
+and F04 aggregation slices are implemented.
 OCR is out of scope; Buffer-based extraction,
 Uploaded CV output composition, and one-pass LLM orchestration exist for AI-V02;
 The internal Backend Uploaded CV invocation is implemented; no downstream

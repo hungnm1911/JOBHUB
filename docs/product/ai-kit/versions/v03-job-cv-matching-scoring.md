@@ -674,6 +674,8 @@ Không cộng điểm theo số lần một kỹ năng được nhắc lại.
 
 ## BR-AI-28 — Skills Group Weighting
 
+Điểm của mỗi nhóm là trung bình cộng các requirement scores trong nhóm. Mỗi requirement đã hợp nhất ngữ nghĩa chỉ được tính một lần; các requirement trong cùng nhóm có trọng số ngang nhau.
+
 Required chiếm 80%, nhóm thấp chiếm 20% khi cả hai nhóm có dữ liệu.
 
 Khi chỉ một nhóm có dữ liệu, nhóm đó chiếm toàn bộ Skills Score.
