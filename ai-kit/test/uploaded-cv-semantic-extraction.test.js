@@ -128,6 +128,9 @@ describe("AI-V02 one-pass PDF semantic extraction", () => {
         schema: UPLOADED_CV_PDF_EXTRACTION_SCHEMA,
       } },
     });
+    expect(request.instructions).toContain("name, value, and stated unit or scale together");
+    expect(request.instructions).toContain("use otherCareerClaims when no specific group fits");
+    expect(request.instructions).toContain("does not establish an awarded certification or a stated proficiency");
     expect(JSON.stringify(request)).not.toContain("cv-1");
     expect(JSON.stringify(request)).not.toContain("Java");
     expect(result.status).toBe("READY");
@@ -233,6 +236,8 @@ describe("AI-V02 one-pass PDF semantic extraction", () => {
     expect(request.config.systemInstruction).toMatch(/verbatim PDF excerpts/);
     expect(request.config.systemInstruction).toMatch(/conflicting claims separate/);
     expect(request.config.systemInstruction).toMatch(/Do not infer qualifications/);
+    expect(request.config.systemInstruction).toContain("name, value, and stated unit or scale together");
+    expect(request.config.systemInstruction).toContain("does not establish an awarded certification or a stated proficiency");
     expect(JSON.stringify(request)).not.toContain("cv-1");
     expect(JSON.stringify(request)).not.toContain("Java");
     expect(result.status).toBe("READY");
@@ -266,6 +271,8 @@ describe("AI-V02 one-pass PDF semantic extraction", () => {
         },
       },
     });
+    expect(request.messages[0].content).toContain("name, value, and stated unit or scale together");
+    expect(request.messages[0].content).toContain("does not establish an awarded certification or a stated proficiency");
     expect(result.status).toBe("READY");
     expect(result.profile.pdfContent).toEqual(EMPTY_EXTRACTION);
   });

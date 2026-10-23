@@ -2,7 +2,8 @@
 
 ## Current project state
 
-AI-V02 is **in progress**: Slice 1 (uploaded PDF Buffer → free text),
+AI-V02 Final Acceptance is **`ACCEPTED`** (2026-10-23). Slice 1
+(uploaded PDF Buffer → free text),
 Slice 2 (Uploaded CV output contract and composition), Slice 3 (one-pass
 LLM semantic extraction), Slice 3.1 (Codex primary provider integration),
 and Slice 3.2 (remaining Gemini/Groq offline provider verification and
@@ -16,7 +17,31 @@ The F01 Codex live smoke harness is prepared and focused-tested
 offline. The F01 Codex debug smoke path is instrumented and verified offline.
 The E1 evidence gate change passed one Codex/CCPro live retest with full local
 output inspection; 21 lexical excerpt mismatches remained diagnostic only.
-F01 as a whole is not implemented and Final Acceptance has not started. The approved
+The internal F01 runtime path is implemented; a downstream consumer remains
+deferred to a future approved consuming capability. The
+approved §16.2 three-PDF BR-AI-22 [manual Evaluation Contract](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-contract.md)
+has a completed baseline: [Smoke #3](../../evaluation/ai-kit/ai-v02-br-ai-22-smoke-3.md)
+plus two synthetic text-native PDFs with an [independent expected ledger](../../evaluation/ai-kit/ai-v02-br-ai-22-expected-ledger.md)
+and one live call each. The [evaluation report](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-report.md)
+records baseline review `FAIL` for Smoke #3's test-score detail, `PASS` for
+the standard CV, and `LIMITATION` for the sparse two-column CV; all three had
+runtime `READY`. A targeted general prompt improvement then passed offline
+verification and **one** Smoke #3 live retest: the score is now in
+`otherCareerClaims.value` with evidence, without an inferred certification or
+proficiency; runtime remained `READY`. The authorized final new-prompt live
+regression then used exactly one request per synthetic PDF: standard remained
+`READY`/quality `PASS` with all 15 ledger units and no extraction change;
+sparse remained `READY` but quality regressed to `FAIL` because an unnamed
+practice became a work role and content from two columns was incorrectly
+associated. The evaluation report records full local evidence references and
+the Smoke #3 artifact gaps. The Product Owner reviewed the impact and accepted
+the recorded known semantic and evidence limitations under the aligned
+BR-AI-17/§16.2/§20 contract. Sparse evaluation remains quality `FAIL` despite
+runtime `READY`; the unsupported work role is a documented LLM semantic
+finding, not a deterministic-composition defect or an automatic runtime gate.
+System-owned correctness gates and the BR-AI-22 benchmark have evidence in the
+[Final Acceptance checklist](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-report.md).
+A typed test-score field is only an optional future decision. The approved
 [Product Specification](../../product/ai-kit/versions/v02-uploaded-cv-normalization.md)
 and [Data Contract](../../data/ai-kit/versions/ai-v02-uploaded-cv-normalization-data-model.md)
 define its requirements. Shared package and document-extraction state is
@@ -131,12 +156,99 @@ tracked in the [AI Kit foundation](foundation.md).
 - A downstream AI capability consumer remains deferred. Slice 4c supplies an
   internal own-Candidate runtime entry without approving another actor, HTTP
   endpoint, or background trigger.
-- BR-AI-22 quality evaluation on representative Uploaded CV groups; Slice 1
-  fixtures prove extraction mechanics only and Slice 2 tests prove contract
-  mechanics only, not interpretation quality.
+- Known limitations after the completed BR-AI-22 three-PDF baseline, one
+  targeted Smoke #3 retest, and two authorized synthetic new-prompt regression
+  calls: Smoke #3's score omission and test-result classification were
+  corrected in its one retest, but its exact historical request/raw response
+  artifacts were not saved and repeatability is
+  unverified. The standard synthetic case remains quality `PASS`; the sparse
+  case has a verified unsupported work-role classification and wrong
+  cross-column association, so final quality review is `FAIL` despite runtime
+  `READY`. The Smoke #3 ambiguous quantity merge, standard project-type-in-role
+  labels, sparse team metric placement, and PDF.js two-column reading order
+  remain. Smoke-only sources do not verify Backend ownership/authorization or
+  an actual downstream consumer. Image-only, invalid-output and
+  invalid/unauthorized-resource branches rely on offline evidence rather than
+  these successful PDF cases. No runtime quality gate was added.
 - OCR is out of scope for AI-V02.
 
 ## Verification status
+
+- **2026-10-23 — Final Acceptance closure:** Product Owner accepted the known
+  semantic/evidence limitations in the [three-PDF report](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-report.md),
+  without changing the sparse quality `FAIL`. The aligned Product/Data
+  Contracts distinguish mandatory system-owned correctness from LLM semantic
+  quality review. Existing Slice 1–4c offline verification and live PDF
+  evaluation were reviewed; no new runtime run was made. Final Acceptance is
+  `ACCEPTED`. Live Backend E2E and downstream consumer behavior remain
+  unverified; the Product Spec does not make a separate live Backend E2E run a
+  §16.2 acceptance gate, and Slice 4d remains deferred pending an approved
+  consuming capability. A `python3` check passed 65 local Markdown link
+  targets and trailing whitespace across eight relevant documents; authority
+  and status assertions passed, and `git diff --check` passed. No code gate was
+  rerun for this documentation-only alignment.
+
+- **2026-10-23 — BR-AI-22 final new-prompt live regression:** two provider-free
+  preflights passed (1,226/933 PDF.js characters). Exactly two live
+  Codex/CCPro requests were made, one per existing synthetic PDF, with no
+  retry. Both returned HTTP 200, Responses `completed`, JSON/schema/evidence
+  structure/composition PASS, runtime `READY`; captured fetch counts are one
+  each. Local ignored manifests and artifacts preserve fixture hashes,
+  `cvSource`, exact PDF.js input/request body, raw HTTP response, extraction,
+  profile and diagnostics. Integrity checks confirmed request input equals
+  saved PDF.js text, raw assistant output parses to saved extraction, profile
+  PDF content equals extraction, and the career read view preserves all items
+  and evidence. Manual ledger review: standard 15/15 factual units, quality
+  `PASS`, old/new extraction deep-equal; sparse 12/12 units present but an
+  unsupported role and wrong cross-column association, quality `FAIL`. Ten
+  sparse lexical warnings are diagnostic. Smoke #3 historical exact request,
+  original PDF.js input and raw response are missing; no provider replay.
+  [Final report](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-report.md).
+  Documentation/artifact checks only; no source change in this evaluation,
+  no repeat of the offline code gate, and no Backend/Frontend gate.
+
+- **2026-10-23 — BR-AI-22 targeted prompt and Smoke #3 retest:** focused
+  `npx vitest run test/uploaded-cv-semantic-extraction.test.js test/uploaded-cv-normalization.test.js test/uploaded-cv-codex-http.test.js`
+  passed (3 files, 91 tests); `cd ai-kit && npm run verify:agent`
+  passed (lint; 21 files, 369 tests). Smoke #3 provider-free preflight
+  passed (same PDF hash and 2,513 text characters). Exactly one live
+  Codex/CCPro SDK request returned HTTP 200, completed structured output,
+  schema/evidence/composition PASS and runtime `READY` (1,832 input,
+  1,638 output tokens). `otherCareerClaims.value` and the career read view
+  now carry `TOEIC: 600`; no certification or proficiency was inferred.
+  The 21 lexical warnings remain diagnostic; two ambiguous quantity
+  occurrences were merged in `unresolvedContent`. Full ignored local
+  artifacts: `ai-kit/.smoke-output/run-5OpAD7/`. [Report](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-report.md)
+  separates this retest from the old-prompt two-synthetic baseline. No
+  Backend/Frontend change or gate, and no other live provider call.
+
+- **2026-10-23 — BR-AI-22 approved three-PDF baseline:** Product Spec §16.2
+  aligned; two synthetic PDFs rendered and read through PDF.js (1,226/933
+  characters), hashes and independent ledger checked before LLM output. Two
+  Codex/CCPro live calls, one per new PDF, each made one SDK request and
+  returned HTTP 200, completed structured output and runtime `READY` with
+  unchanged prompt/configuration. Full artifacts remain ignored local.
+  `cd ai-kit && npm run verify:agent` passed (lint; 21 files, 369 tests);
+  fixture hashes, Python syntax, relative Markdown links, and whitespace
+  checks passed. No Backend or Frontend change/gate, no extra provider call.
+  Review findings and Final Acceptance decisions are in the
+  [report](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-report.md).
+
+- **2026-10-23 — BR-AI-22 Evaluation Contract alignment:** separated system
+  correctness, prompt/extraction quality and downstream UX tolerance; prepared
+  an independent ordinary CV case and a sparse/layout/atypical case alongside
+  Smoke #3. Documented the current-schema TOEIC option, a proposed prompt
+  change awaiting live evidence, the §16.2 Product Spec change proposal and a
+  two-call minimum for the next live evaluation. Documentation references and
+  whitespace checks were run; no provider call or code gate was run. Final
+  Acceptance remains open.
+
+- **2026-10-23 — BR-AI-22 evaluation, step 1:** inspected the original two-page
+  PDF visually, reproduced the 2,513-character PDF.js text extraction without
+  a provider call, and compared the saved full LLM extraction, profile and
+  diagnostics. The [redacted report](../../evaluation/ai-kit/ai-v02-br-ai-22-smoke-3.md)
+  records findings and remaining acceptance coverage. Documentation reference
+  and whitespace checks passed; no code gate or live provider call was run.
 
 - **2026-10-23 — F01 Slice 4c:** focused Backend 4a/4b/4c and B2 regression
   tests passed (4 files, 71 tests). Two further 4c cases were covered by the

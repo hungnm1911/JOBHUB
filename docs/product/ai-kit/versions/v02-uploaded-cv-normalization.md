@@ -321,6 +321,10 @@ Tuy nhiên:
 
 AI-V02 phải giữ khả năng nhận biết nguồn của các claim theo canonical semantics. Mức độ chi tiết của biểu diễn provenance được xác định ở Data Contract.
 
+Các nguyên tắc diễn giải ở §9.1–9.5 là mục tiêu chất lượng LLM theo BR-AI-17
+và BR-AI-22; chúng không thay thế các system-owned validation gates và không
+cam kết mọi output hợp lệ về cấu trúc đều chính xác về ngữ nghĩa.
+
 ## 9.2. Unknown khác mismatch
 
 Không tìm thấy một thông tin trong extracted text không đồng nghĩa Candidate không sở hữu thông tin đó.
@@ -484,9 +488,22 @@ Cơ chế thực hiện và giới hạn gọi provider thuộc Engineering Cont
 
 AI được phép hiểu ngôn ngữ tự nhiên và tổ chức thông tin vào các trường phù hợp.
 
-AI không được tự tạo qualification, experience hoặc Candidate facts không có căn cứ tường minh từ nguồn.
+Prompt phải hướng dẫn LLM chỉ trích xuất qualification, experience và các
+career claim có căn cứ tường minh từ PDF; nội dung thiếu hoặc mơ hồ phải được
+biểu diễn theo evidence, missing và uncertainty contract hiện hành. Việc hiểu
+ngữ nghĩa không cấp quyền suy đoán để hoàn thiện hồ sơ.
 
-Việc hiểu ngữ nghĩa không đồng nghĩa với quyền suy đoán để hoàn thiện hồ sơ.
+Hệ thống phải kiểm tra nguồn, authorization, schema và cấu trúc evidence; giữ
+canonical metadata, taxonomy identity và provenance theo đúng nguồn. Bước kết
+hợp deterministic không được tự tạo hoặc biến đổi career claim không có trong
+kết quả diễn giải hợp lệ. Các technical error và output không hợp lệ tiếp tục
+được xử lý theo contract hiện hành.
+
+LLM vẫn có thể diễn giải sai dù output hợp lệ về schema và evidence structure.
+Semantic inaccuracy, kể cả unsupported claim, phải được ghi nhận trung thực
+trong BR-AI-22 quality evaluation. BR-AI-17 không bảo đảm tuyệt đối mọi output
+LLM đều không có unsupported claim và không tự tạo runtime rejection gate cho
+output hợp lệ chỉ vì một semantic finding.
 
 ## BR-AI-18 — Missing và uncertainty không phải negative assessment
 
@@ -742,17 +759,34 @@ Các case có nhiều cách trình bày khác nhau cần được xem xét trong
 AI-V02 chỉ đạt AI quality khi:
 
 - Functional Requirement thuộc phạm vi được đáp ứng.
-- Các Business Rules được tuân thủ.
+- Các Business Rules về system-owned correctness, gồm source validation,
+  authorization, schema/evidence-structure validation, canonical metadata,
+  provenance, deterministic integrity và technical failures, được tuân thủ.
 - Output giữ đúng canonical semantics.
 - Những trường hợp failure quan trọng được xử lý đúng.
-- Evaluation bao phủ các nhóm PDF đại diện.
-- Chất lượng semantic extraction đạt tiêu chí được phê duyệt.
-- Không có known violation nghiêm trọng đối với trust, ownership hoặc lifecycle boundary.
+- BR-AI-22 benchmark được thực hiện với evidence và expected ledger độc lập
+  cho hai PDF mới; coverage và semantic findings được ghi nhận trung thực.
+- Product Owner đã xem xét tác động và chấp nhận rõ các semantic limitations
+  còn lại nếu có.
+- Không có known violation nghiêm trọng đối với system-owned trust,
+  ownership hoặc lifecycle boundary.
 - Capability ngoài phạm vi không bị triển khai ngầm.
 
-Ngưỡng chất lượng định lượng và bộ benchmark chính thức chưa được xác lập tại baseline này.
+Benchmark AI-V02 gồm ba PDF: Live Smoke #3 và hai CV tổng hợp hoàn toàn giả lập
+(một CV Software Developer bố cục thông thường, một CV sparse/bố cục phức tạp).
+Với hai PDF mới, expected claim ledger phải được lập độc lập từ PDF trước khi
+xem output LLM. Evaluation Contract đánh giá thủ công, có evidence, theo ba
+nhóm: System Correctness, Prompt & Extraction Quality, và Downstream Usability /
+UX Tolerance. Ghi số claim đúng, thiếu, sai hoặc không có căn cứ để phân tích;
+không đặt ngưỡng accuracy phần trăm bắt buộc.
 
-Chúng phải được phê duyệt trong Evaluation Contract trước khi đưa ra kết luận Final Acceptance.
+Kết luận `PASS`/`LIMITATION`/`FAIL` là kết luận evaluation, không trực tiếp thay
+đổi runtime `READY`/`FAILED`. Final Acceptance cần Product Owner xem xét findings
+và chấp nhận rõ các semantic limitations còn lại sau khi xem xét tác động;
+hoàn thành benchmark không tự động là Final Acceptance. Không bắt buộc mọi LLM
+evaluation case đều semantic `PASS`, không đặt ngưỡng accuracy tùy ý và không
+bổ sung semantic validator, completeness threshold hoặc runtime rejection gate
+từ kết quả đánh giá này.
 
 ---
 
@@ -808,7 +842,7 @@ Extracted text, kết quả diễn giải và `CVMatchProfile` chỉ dùng trong
 
 ### D2 — Sparse profile hợp lệ có thể READY
 
-PDF có text trích xuất được nhưng ít, thiếu hoặc khó diễn giải vẫn có thể tạo `READY` nếu output hợp lệ và chỉ chứa thông tin có căn cứ. Nhóm dữ liệu không xác định được giữ missing/unknown, kể cả khi không có claim nghề nghiệp nào được nhận diện. Không đặt completeness threshold hoặc số claim tối thiểu. PDF không có text trích xuất được, lỗi xử lý, hoặc output không hợp lệ không được báo `READY`. Đánh giá chất lượng diễn giải để Final Acceptance là vấn đề riêng ở §16, không phải threshold đầy đủ cho từng profile.
+PDF có text trích xuất được nhưng ít, thiếu hoặc khó diễn giải vẫn có thể tạo `READY` nếu output đáp ứng processing contract. LLM được hướng dẫn chỉ ghi thông tin có căn cứ; nhóm dữ liệu không xác định được giữ missing/unknown, kể cả khi không có claim nghề nghiệp nào được nhận diện. Không đặt completeness threshold hoặc số claim tối thiểu. PDF không có text trích xuất được, lỗi xử lý, hoặc output không hợp lệ không được báo `READY`. Semantic finding trên output hợp lệ được đánh giá theo BR-AI-17/§16, không tự đổi runtime status.
 
 ### D3 — Một canonical profile, hai biến thể theo nguồn
 
@@ -825,15 +859,19 @@ Backend cung cấp canonical metadata hiện có của chính CandidateCV đư�
 AI-V02 được coi là hoàn thành về mặt business khi:
 
 - `F01` được đáp ứng.
-- Các Business Rules áp dụng được đáp ứng.
+- Các Business Rules áp dụng về system-owned correctness được đáp ứng; các
+  semantic quality findings của LLM được đánh giá và quyết định theo §16.2.
 - Uploaded CV hợp lệ có thể trở thành nguồn tạo canonical `CVMatchProfile`.
 - Output giữ đúng semantics cốt lõi của AI-V01.
 - Generated CV normalization của V01 không bị phá vỡ.
-- Không xuất hiện claim nghề nghiệp được chủ động tạo khi không có căn cứ.
+- Prompt hướng dẫn LLM chỉ trích xuất claim có căn cứ; deterministic processing
+  không tự tạo hoặc biến đổi claim không có nguồn.
 - Missing và uncertainty được xử lý đúng.
 - Authorization và ownership luôn được bảo toàn.
 - Failure behavior không biến lỗi xử lý thành đánh giá Candidate.
-- Evaluation có coverage và đạt chất lượng theo tiêu chí được phê duyệt.
+- BR-AI-22 benchmark có evidence, expected ledger và coverage theo §16.2;
+  findings được ghi trung thực và Product Owner đã chấp nhận rõ các semantic
+  limitations còn lại sau khi xem xét tác động.
 - Không có behavior ngoài scope được tự động bổ sung.
 - Các quyết định chặn implementation và acceptance đã được giải quyết.
 
@@ -859,7 +897,11 @@ Unit test pass
 Một vài CV demo cho kết quả tốt
 ```
 
-AI-V02 chỉ được kết luận hoàn thành khi cả behavioral correctness và AI quality đều đáp ứng yêu cầu được phê duyệt.
+AI-V02 chỉ được kết luận hoàn thành khi các system-owned correctness gates đều
+PASS, benchmark và quality review đáp ứng §16.2, và Product Owner đã quyết định
+về các documented semantic limitations. Một LLM case semantic `FAIL` không tự
+chặn Final Acceptance nếu các điều kiện đó được đáp ứng; output hợp lệ vẫn giữ
+runtime status theo processing contract.
 
 ---
 

@@ -40,8 +40,9 @@ and AI-specific persistence remain deferred/outside this runtime scope.
 
 - **Product/Data approval status:** `APPROVED` (F01, BR-AI-15–BR-AI-22,
   baseline decisions D1–D4)
-- **Implementation status:** `NOT IMPLEMENTED — NOT VERIFIED`
-- **Final Acceptance status:** `NOT COMPLETE`
+- **Implementation status:** See the [AI-V02 project-status leaf](../../project-status/ai-kit/v02-uploaded-cv-normalization.md)
+- **Final Acceptance status:** `ACCEPTED` (2026-10-23; documented semantic
+  limitations retained in the [AI-V02 project-status leaf](../../project-status/ai-kit/v02-uploaded-cv-normalization.md))
 - **Functional requirements:** `F01`
 - **Business rules:** `BR-AI-15` through `BR-AI-22`
 - **Canonical Product Specification:**
@@ -49,8 +50,9 @@ and AI-specific persistence remain deferred/outside this runtime scope.
 - **Canonical Data Contract:**
   [`../../data/ai-kit/versions/ai-v02-uploaded-cv-normalization-data-model.md`](../../data/ai-kit/versions/ai-v02-uploaded-cv-normalization-data-model.md)
 
-Product/Data approval establishes authority for AI-V02; it does not establish
-implementation verification or Final Acceptance.
+The approved Product/Data Contract governs AI-V02; implementation verification
+and Final Acceptance evidence are recorded in the linked status leaf and
+[BR-AI-22 evaluation report](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-report.md).
 
 AI-V03 is not approved by this roadmap. AI #1, AI #2, and AI #3 in
 Engineering architecture remain direction only and do not independently

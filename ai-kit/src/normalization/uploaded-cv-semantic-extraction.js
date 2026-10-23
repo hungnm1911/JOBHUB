@@ -10,6 +10,8 @@ import {
 
 const EXTRACTION_INSTRUCTION = [
   "Extract only career claims explicitly stated in the PDF text.",
+  "For explicitly stated career-relevant quantitative results, keep the name, value, and stated unit or scale together in a suitable structured claim value; use otherCareerClaims when no specific group fits.",
+  "A test result alone does not establish an awarded certification or a stated proficiency.",
   "Use null or [] for missing information; keep conflicting claims separate.",
   "Keep ambiguous career content in unresolvedContent.",
   "Give verbatim PDF excerpts as evidence for every claim or item.",

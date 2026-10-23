@@ -272,6 +272,19 @@ Biến thể Uploaded CV gồm hai phần có provenance riêng:
 
 Hệ thống kết hợp hai phần một cách deterministic. Nếu metadata và PDF khác nhau, giữ cả hai cùng nguồn; không ghi đè, giả lập provenance, tự gộp thành một fact hoặc tự xác minh bên nào đúng.
 
+Structural/evidence correctness do hệ thống kiểm soát: nguồn và quyền sử dụng
+phải hợp lệ, output phải đúng schema và cấu trúc evidence, metadata/taxonomy
+phải giữ canonical identity, provenance phải phân biệt Backend với PDF, và bước
+kết hợp deterministic không được tạo hoặc biến đổi career claim ngoài kết quả
+diễn giải hợp lệ. Evidence structure hợp lệ không tự xác minh claim thực sự
+đúng nghĩa với PDF.
+
+Semantic interpretation do LLM thực hiện theo hướng best-effort và phải được
+hướng dẫn chỉ ghi claim có căn cứ, giữ thông tin thiếu/mơ hồ theo contract.
+Output có thể hợp lệ về cấu trúc nhưng sai nghĩa hoặc chứa unsupported claim;
+finding đó thuộc BR-AI-22 quality evaluation và quyết định Final Acceptance
+theo Product Spec §16.2, không tự đổi runtime `READY` thành `FAILED`.
+
 Các thuộc tính chỉ có ý nghĩa với Generated CV không được tự giả lập thành dữ liệu có nguồn của Uploaded CV.
 
 Source và provenance phải phản ánh đúng loại nguồn.
@@ -281,8 +294,8 @@ Không yêu cầu cả hai loại CV có cách tham chiếu nguồn giống hệ
 ### Data constraints
 
 1. Profile phải thuộc đúng CandidateCV nguồn.
-2. Structured claims phải phản ánh thông tin được nguồn thể hiện tường minh.
-3. Không tự tạo qualification không có căn cứ.
+2. LLM phải được hướng dẫn để structured claims phản ánh thông tin được nguồn thể hiện tường minh; semantic accuracy được đánh giá theo Product Spec §16.2.
+3. Bước kết hợp deterministic không tự tạo qualification hoặc career claim không có trong kết quả diễn giải hợp lệ.
 4. Missing information không đồng nghĩa với mismatch.
 5. Không biến conflicting claims thành một fact duy nhất không có căn cứ.
 6. Không tự tạo canonical taxonomy identity.
