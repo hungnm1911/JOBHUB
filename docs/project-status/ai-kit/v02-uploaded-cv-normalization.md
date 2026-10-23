@@ -7,11 +7,11 @@ Slice 2 (Uploaded CV output contract and composition), Slice 3 (one-pass
 LLM semantic extraction), Slice 3.1 (Codex primary provider integration),
 and Slice 3.2 (remaining Gemini/Groq offline provider verification and
 Engineering Contract cleanup), plus Slice 4a (Backend Uploaded CandidateCV
-`cvSource` projection) and Slice 4b (current Uploaded PDF Buffer supply), all
-part of F01, are **implemented and verified offline**. Slice 4a reuses B2
-persisted metadata and taxonomy logic; Slice 4b reads the authorized current
-PDF through CandidateCV and restricted storage. Neither adds an Uploaded
-normalization consumer.
+`cvSource` projection), Slice 4b (current Uploaded PDF Buffer supply), and
+Slice 4c (internal Backend runtime invocation), all part of F01, are
+**implemented and verified offline**. Slice 4c binds the existing projection
+and current PDF read to one file identity and calls the shared AI Kit instance.
+No HTTP or downstream AI capability consumer is wired.
 The F01 Codex live smoke harness is prepared and focused-tested
 offline. The F01 Codex debug smoke path is instrumented and verified offline.
 The E1 evidence gate change passed one Codex/CCPro live retest with full local
@@ -128,15 +128,22 @@ tracked in the [AI Kit foundation](foundation.md).
   behavior, strict-schema acceptance, and long-PDF semantic completeness
   remain unverified against live providers. Offline fixtures verify only the
   installed SDK's serialization and handling of reported completion states.
-- Backend Uploaded CV normalization consumer and end-to-end invocation remain
-  deferred. Slices 4a/4b supply the source projection and owner-scoped PDF
-  Buffer read without approving another actor or access path.
+- A downstream AI capability consumer remains deferred. Slice 4c supplies an
+  internal own-Candidate runtime entry without approving another actor, HTTP
+  endpoint, or background trigger.
 - BR-AI-22 quality evaluation on representative Uploaded CV groups; Slice 1
   fixtures prove extraction mechanics only and Slice 2 tests prove contract
   mechanics only, not interpretation quality.
 - OCR is out of scope for AI-V02.
 
 ## Verification status
+
+- **2026-10-23 — F01 Slice 4c:** focused Backend 4a/4b/4c and B2 regression
+  tests passed (4 files, 71 tests). Two further 4c cases were covered by the
+  complete `cd backend && npm run verify:agent` gate, which passed (lint with two existing
+  warnings; architecture ARCH-001–019; 185 files, 1,972 tests). The 4c offline
+  tests mock storage and AI Kit's provider entry; no live provider or Cloudinary
+  request was made. No AI Kit source changed, so its gate was not rerun.
 
 - **2026-10-23 — F01 Slice 4b:** focused Backend Buffer read, Slice 4a, and
   V7 restricted-storage regression tests passed (3 files, 29 tests).

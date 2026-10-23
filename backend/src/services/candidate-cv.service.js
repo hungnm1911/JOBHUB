@@ -1520,6 +1520,18 @@ const readOwnCurrentUploadedCandidateCvPdfBuffer = async (input) => {
   }
 
   const file = candidateCv.uploadedFile;
+  const expectedFile = input.expectedUploadedFile;
+  const matchesExpectedFile = (currentFile) =>
+    currentFile?.storageKey === expectedFile?.storageKey &&
+    currentFile?.uploadedAt instanceof Date &&
+    expectedFile?.uploadedAt instanceof Date &&
+    currentFile.uploadedAt.getTime() === expectedFile.uploadedAt.getTime();
+
+  if (expectedFile && !matchesExpectedFile(file)) {
+    throw new AppError(409, "Uploaded Candidate CV changed during normalization", {
+      field: "uploadedFile",
+    });
+  }
 
   if (
     candidateCv.status !== CANDIDATE_CV_STATUS.ACTIVE ||
@@ -1544,8 +1556,9 @@ const readOwnCurrentUploadedCandidateCvPdfBuffer = async (input) => {
     });
   }
 
+  let pdfBuffer;
   try {
-    const pdfBuffer = await downloadOwnUploadedCandidateCvFile(file.storageKey);
+    pdfBuffer = await downloadOwnUploadedCandidateCvFile(file.storageKey);
     const inspected = await inspectUploadedCandidateCvPdf(pdfBuffer);
 
     if (
@@ -1555,12 +1568,22 @@ const readOwnCurrentUploadedCandidateCvPdfBuffer = async (input) => {
       throw new Error("Stored Uploaded PDF does not match current file metadata");
     }
 
-    return pdfBuffer;
   } catch (error) {
     throw new AppError(502, "Failed to read current Uploaded CV PDF", {
       field: "uploadedFile",
     }, { cause: error });
   }
+
+  if (expectedFile) {
+    const currentCv = await loadOwnActiveCandidateCv({ ...input, lean: true });
+    if (!matchesExpectedFile(currentCv.uploadedFile)) {
+      throw new AppError(409, "Uploaded Candidate CV changed during normalization", {
+        field: "uploadedFile",
+      });
+    }
+  }
+
+  return pdfBuffer;
 };
 
 const getOwnActiveCandidateCv = async (input) => {

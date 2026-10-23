@@ -20,13 +20,17 @@ import {
   toPersistedIsoDate,
 } from "../utils/persisted-source.js";
 import { aiKit } from "./ai-kit.service.js";
-import { loadOwnActiveCandidateCv } from "./candidate-cv.service.js";
+import {
+  loadOwnActiveCandidateCv,
+  readOwnCurrentUploadedCandidateCvPdfBuffer,
+} from "./candidate-cv.service.js";
 import { toPublicCategory } from "./category.service.js";
 import { toPublicExperienceLevel } from "./experience-level.service.js";
 
-// AI Kit's F02 refusal code and READY/FAILED result contract
+// AI Kit's CV source refusal codes and READY/FAILED result contract
 // (docs/engineering/ai-kit-conventions.md, Composition and Backend integration).
 const INVALID_GENERATED_CV_INPUT = "INVALID_GENERATED_CV_INPUT";
+const INVALID_UPLOADED_CV_INPUT = "INVALID_UPLOADED_CV_INPUT";
 const FAILED_RESULT = Object.freeze({ status: "FAILED", profile: null });
 const CATEGORY_LEVEL_VALUES = new Set(Object.values(CATEGORY_LEVEL));
 
@@ -342,7 +346,7 @@ const findUploadedSourceIssues = (source, metadata, persistedCandidateCv) => {
 };
 
 // Projection only: callers must first authorize access with the canonical
-// CandidateCV service. No Uploaded normalization consumer is approved here.
+// CandidateCV service. The internal F01 entry below is its approved consumer.
 const projectAuthorizedUploadedCandidateCvSource = async (candidateCv) => {
   if (candidateCv?.sourceType !== CANDIDATE_CV_SOURCE_TYPE.UPLOADED) {
     throw new AppError(409, "Only Uploaded Candidate CVs support this projection", {
@@ -366,6 +370,14 @@ const projectAuthorizedUploadedCandidateCvSource = async (candidateCv) => {
   if (issues.length > 0) {
     throw toProjectionError(issues, undefined, UPLOADED_PROJECTION_ERROR_MESSAGE);
   }
+  if (
+    persistedCandidateCv.uploadedFile.storageKey !== candidateCv.uploadedFile?.storageKey ||
+    persistedCandidateCv.uploadedFile.uploadedAt.getTime() !== candidateCv.uploadedFile?.uploadedAt?.getTime()
+  ) {
+    throw new AppError(409, "Uploaded Candidate CV changed during normalization", {
+      field: "uploadedFile",
+    });
+  }
 
   const taxonomy = await resolveCandidateCvTaxonomy(metadata);
   if (
@@ -379,6 +391,48 @@ const projectAuthorizedUploadedCandidateCvSource = async (candidateCv) => {
   }
 
   return { ...metadata, taxonomy };
+};
+
+// Internal AI-V02 F01 entry. The projection and PDF read both bind to the
+// authorized current file; neither the input nor a prior read supplies bytes.
+const normalizeOwnUploadedCandidateCv = async ({
+  candidateUserId,
+  actorUser,
+  candidateCvId,
+} = {}) => {
+  const input = { candidateUserId, actorUser, candidateCvId };
+  let candidateCv;
+  let cvSource;
+
+  try {
+    candidateCv = await loadOwnActiveCandidateCv(input);
+    cvSource = await projectAuthorizedUploadedCandidateCvSource(candidateCv);
+  } catch (error) {
+    if (!isMongoDbAvailabilityError(error)) {
+      throw error;
+    }
+
+    logger.warn("AI-V02 Uploaded CV source lookup failed; normalization FAILED", {
+      candidateCvId,
+      errorType: error.name,
+    });
+    return FAILED_RESULT;
+  }
+
+  const pdfBuffer = await readOwnCurrentUploadedCandidateCvPdfBuffer({
+    ...input,
+    expectedUploadedFile: candidateCv.uploadedFile,
+  });
+
+  try {
+    return await aiKit.normalizeUploadedCv({ cvSource, pdfBuffer });
+  } catch (error) {
+    if (error?.code === INVALID_UPLOADED_CV_INPUT) {
+      throw toProjectionError(error.details, error, UPLOADED_PROJECTION_ERROR_MESSAGE);
+    }
+
+    throw error;
+  }
 };
 
 // AI-V01 F02 Backend entry: authorize an own active CV read, refuse non-Generated
@@ -462,4 +516,8 @@ const normalizeOwnGeneratedCandidateCv = async ({
   }
 };
 
-export { normalizeOwnGeneratedCandidateCv, projectAuthorizedUploadedCandidateCvSource };
+export {
+  normalizeOwnGeneratedCandidateCv,
+  normalizeOwnUploadedCandidateCv,
+  projectAuthorizedUploadedCandidateCvSource,
+};

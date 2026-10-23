@@ -326,7 +326,10 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   projection in the same CandidateCV AI service. It requires a previously
   authorized own active CV, rechecks the persisted source and taxonomy, and
   returns plain metadata without reading the PDF or invoking AI Kit. No
-  Uploaded normalization consumer or new authorization scope is wired.
+  public Uploaded normalization consumer or new authorization scope is wired.
+  Slice 4c adds the internal own-Candidate runtime invocation in that service,
+  binding the projection and current PDF read to one file identity before
+  calling the shared AI Kit instance. It adds no HTTP or background trigger.
 - Explicit `tooling/smoke-codex`, `tooling/smoke-gemini`, and
   `tooling/smoke-groq` package subpaths are
   manual provider-smoke tooling only. They are not production capability APIs.
@@ -471,10 +474,11 @@ Backend authenticates actor
 - OCR is out of scope. Buffer text extraction, Uploaded CV output
   composition, and one-pass LLM orchestration exist for AI-V02. The source-aware
   `readCvCareerContent` reader gives both CVMatchProfile variants one career
-  consumption contract without changing their source representations. Backend
-  uploaded-CV integration and the rest of AI-V02 F01 remain to be implemented.
-  PDF.js task cleanup is owned by each extraction
-  and does not require Backend shutdown wiring.
+  consumption contract without changing their source representations. The
+  internal Backend Uploaded CV invocation is implemented; a consuming AI
+  capability and the rest of F01 acceptance remain deferred. PDF.js task
+  cleanup is owned by each extraction and does not require Backend shutdown
+  wiring.
 - Public Job access and Recruiter/application access to Generated CV
   normalization remain deferred; the implemented Backend entries cover only
   B1 internal Job and B2 own Generated CV. HTTP integration and Job/CV CRUD

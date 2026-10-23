@@ -145,9 +145,11 @@ future capability.
   in the Backend CandidateCV AI service into the eight-field `cvSource`, using
   persisted metadata and B2 taxonomy resolution. The projection is not an
   authorization entry or an Uploaded normalization consumer; no PDF, AI Kit,
-  provider, persistence, or cache operation occurs in that slice. A caller for
-  end-to-end Uploaded normalization still needs an approved actor and access
-  scope.
+  provider, persistence, or cache operation occurs in that slice. Slice 4c adds
+  an internal own-Candidate runtime entry in the same service. It binds the
+  projected metadata and current PDF to one Uploaded file identity, then calls
+  the shared `normalizeUploadedCv` entry once and returns its READY/FAILED
+  result unchanged. No HTTP consumer or additional actor scope is approved.
 - AI Kit must not access Mongoose models, query or mutate MongoDB, authenticate
   JWTs, inspect Express request/response objects, decide JOBHUB permissions, or
   call Backend-internal services directly.
