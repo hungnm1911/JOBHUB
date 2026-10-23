@@ -127,7 +127,35 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
       .toEqual([["Python 3 years"], ["Python 5 years"]]);
     expect(result.requirementGroups[0].cvSources.map((source) => source.provenance.evidence))
       .toEqual([["Python 3 years"], ["Python 5 years"]]);
+    expect(result.requirementGroups[0].evidenceState).toBe("CONFLICT");
     expect(result.requirementGroups[0].semanticScore).toBe(0);
+  });
+
+  it.each(["MISMATCH", "CONFLICT"])(
+    "classifies a zero-score %s without CV evidence as NO_EVIDENCE", async (evidenceState) => {
+      codexCall.mockResolvedValue(codexResponse({ requirementGroups: [
+        group("Node.js", "REQUIRED", 0, evidenceState, ["J0"], []), groups[1],
+      ] }));
+
+      const result = await assess({ jobMatchProfile: job, cvMatchProfile: generatedCv });
+
+      expect(codexCall).toHaveBeenCalledOnce();
+      expect(result.requirementGroups[0]).toMatchObject({
+        semanticScore: 0, evidenceState: "NO_EVIDENCE", cvSources: [],
+      });
+      expect(calculateWeightedMatchScore(result, fields).skillsScore).toBe(40);
+    },
+  );
+
+  it("keeps a zero-score mismatch when CV evidence is associated", async () => {
+    codexCall.mockResolvedValue(codexResponse({ requirementGroups: [
+      group("Node.js", "REQUIRED", 0, "MISMATCH", ["J0"], ["C0"]), groups[1],
+    ] }));
+
+    const result = await assess({ jobMatchProfile: job, cvMatchProfile: generatedCv });
+
+    expect(result.requirementGroups[0].evidenceState).toBe("MISMATCH");
+    expect(result.requirementGroups[0].cvSources).toHaveLength(1);
   });
 
   it.each([
@@ -139,6 +167,8 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
     ["fabricated source", [{ ...groups[0], cvSourceIds: ["C99"] }, groups[1]]],
     ["conflict with positive score", [{ ...groups[0], evidenceState: "CONFLICT" }, groups[1]]],
     ["missing evidence with positive score", [{ ...groups[0], cvSourceIds: [] }, groups[1]]],
+    ["no-evidence state with CV source", [{ ...groups[0], semanticScore: 0,
+      evidenceState: "NO_EVIDENCE" }, groups[1]]],
   ])("rejects invalid output: %s", async (_label, requirementGroups) => {
     codexCall.mockResolvedValue(codexResponse({ requirementGroups }));
     await expect(assess({ jobMatchProfile: job, cvMatchProfile: generatedCv }))

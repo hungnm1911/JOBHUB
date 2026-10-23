@@ -243,7 +243,7 @@ const resolveOutput = (text, jobSources, cvSources) => {
       requirement: group.requirement,
       priority: group.priority,
       semanticScore: group.semanticScore,
-      evidenceState: group.evidenceState,
+      evidenceState: group.cvSourceIds.length ? group.evidenceState : "NO_EVIDENCE",
       jobSources: jobAssociations,
       cvSources: cvAssociations,
     };
