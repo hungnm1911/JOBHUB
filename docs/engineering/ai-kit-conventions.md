@@ -21,9 +21,9 @@ superseded LLM-based F01 Job extraction stage, its R2 contract file and
 loader, and its R4 contract tests have been retired. AI-V02 Product/Data
 authority is approved and Final Acceptance is `ACCEPTED`; its F01
 (`normalizeUploadedCv`) is implemented offline through the same instance.
-AI-V03 Product/Data authority is approved; F03 deterministic field scoring and
-F04 score aggregation are implemented offline, while Final Acceptance has not
-started. AI #1/#2/#3
+AI-V03 Product/Data authority is approved; F01 Match Result orchestration and
+F02–F04 assessment/scoring are implemented offline, while Final Acceptance has
+not started. AI #1/#2/#3
 architecture direction does not independently approve another business capability.
 
 ## Terminology
@@ -100,6 +100,7 @@ src/
 └── matching/
     ├── deterministic-field-scoring.js
     ├── semantic-skills-assessment.js
+    ├── match-result-orchestration.js
     └── weighted-match-scoring.js
 ```
 

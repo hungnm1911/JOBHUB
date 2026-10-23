@@ -2,22 +2,30 @@
 
 ## Current project state
 
-AI-V03 Slices 1–3 (F02 Semantic Skills Assessment, F03 Deterministic Field
-Assessment, and F04 Skills Aggregation & Weighted Score; BR-AI-25–32/33) are
-**implemented and verified offline** as internal AI Kit owners. F02 produces
-grouped requirement scores with source associations from one provider-native
-strict structured-output inference; F04 consumes those scores and the four F03
-field scores. There is no persisted data or Backend consumer yet. AI-V03 Final
-Acceptance is **not started**.
+AI-V03 Slices 1–4 (F01 Match Result orchestration, F02 Semantic Skills
+Assessment, F03 Deterministic Field Assessment, and F04 Skills Aggregation &
+Weighted Score; BR-AI-23–34) are **implemented and verified offline** in AI Kit.
+The `createAiKit` instance exposes `matchJobCv` for one pair of READY Job/CV
+normalization results. It returns both source identities, the overall score,
+five field scores, weights, and contributions after one semantic inference.
+There is no persisted data or Backend consumer yet. AI-V03 Final Acceptance is
+**not started**.
 
 ## Deferred / not started
 
-Complete Match Result orchestration, Backend integration, live-provider
-acceptance, and AI-V03 semantic-quality evaluation remain deferred. The
-F02/F03/F04 owners are internal until approved orchestration consumes them.
+Backend integration, live-provider acceptance, and AI-V03 semantic-quality
+evaluation remain deferred. F02/F03/F04 remain internal owners consumed by
+the F01 orchestration.
 
 ## Implementation record (slice detail)
 
+- **2026-10-24 — Slice 4:** `ai-kit/src/matching/match-result-orchestration.js`
+  composes the existing F02/F03/F04 owners into a runtime Match Result exposed
+  as `createAiKit(...).matchJobCv`. It requires both normalization results to
+  be READY, accepts sparse READY profiles, retains fixed weights, and
+  propagates provider or invalid-assessment failures instead of returning a
+  business score. Backend authorization and integration are not
+  part of this slice.
 - **2026-10-24 — Slice 3:** `ai-kit/src/matching/semantic-skills-assessment.js`
   sends relevant Job and CV career sources (including existing PDF excerpts)
   to one explicitly selected provider, validates completion and rubric output, prevents
@@ -39,6 +47,23 @@ F02/F03/F04 owners are internal until approved orchestration consumes them.
 
 ## Verification status
 
+- **2026-10-24 — S4-F01 acceptance fix:** `cd ai-kit && npx vitest run
+  test/match-result-orchestration.test.js test/index.test.js
+  test/v01-normalization-public-api.test.js` passed (3 files, 43 tests).
+  `cd ai-kit && npm run verify:agent` passed (ESLint; 25 files, 431 tests).
+  Regression coverage rejects non-READY and profile-only inputs before provider
+  inference; sparse READY inputs still produce a Match Result. Provider calls
+  were mocked; no live smoke was run.
+- **2026-10-24 — Slice 4:** `cd ai-kit && npx vitest run
+  test/match-result-orchestration.test.js test/index.test.js
+  test/v01-normalization-public-api.test.js` passed (3 files, 36 tests) before
+  the final invalid-completion case; `cd ai-kit && npm run verify:agent`
+  passed after it (ESLint; 25 files, 425 tests). All provider responses were
+  mocked; no live provider smoke was run. Backend lint and architecture checks
+  passed; the full Backend test run was interrupted after widespread
+  `mongodb-memory-server` startup failures. The focused Backend AI Kit
+  integration test and ESLint check passed after its public-instance assertion
+  was updated. `git diff --check` passed after the status edit.
 - **2026-10-24 — Slice 3:** `cd ai-kit && npx vitest run
   test/semantic-skills-assessment.test.js` passed (1 file, 14 tests) before
   the final duplicate-source guard; `cd ai-kit && npm run verify:agent` passed

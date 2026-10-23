@@ -282,7 +282,8 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   entrypoint and exports only `createAiKit`. The factory validates
   optional Codex/Gemini/Groq configuration and the injected logger contract, then
   returns a frozen instance with AI-V01 entries `normalizeJob` (F01) and
-  `normalizeGeneratedCv` (F02), plus AI-V02 `normalizeUploadedCv` (F01). The
+  `normalizeGeneratedCv` (F02), AI-V02 `normalizeUploadedCv` (F01), and
+  AI-V03 `matchJobCv` (F01 orchestration). The
   AI-V01 entries remain synchronous, deterministic, and provider-free; they
   need no LLM configuration and do not log. The AI-V02 entry is asynchronous
   and calls one explicitly selected provider after PDF text extraction.
@@ -333,12 +334,12 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
 - Explicit `tooling/smoke-codex`, `tooling/smoke-gemini`, and
   `tooling/smoke-groq` package subpaths are
   manual provider-smoke tooling only. They are not production capability APIs.
-- AI-V03 F02 Semantic Skills Assessment, F03 deterministic field scoring, and
-  F04 Skills/weighted aggregation are internal AI Kit owners. F02 makes one
-  provider-native strict structured-output call, validates the assessment, and
-  restores Job/CV source provenance. F04 consumes F02's grouped requirement
-  scores and F03 field scores. They have no package-root entry, Backend caller,
-  or persistence. The complete AI-V03 Match Result remains deferred.
+- AI-V03 `matchJobCv` composes the internal F02 Semantic Skills Assessment, F03
+  deterministic field scoring, and F04 Skills/weighted aggregation owners into
+  one runtime Match Result. F02 makes one provider-native strict structured-output
+  call and restores Job/CV source provenance. The public instance entry returns
+  Job/CV identities, all five field scores, weights, contributions, and the
+  overall score. Backend calling integration, persistence, and HTTP are absent.
 
 ### Implemented foundations
 
