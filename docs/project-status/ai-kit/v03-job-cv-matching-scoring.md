@@ -2,21 +2,28 @@
 
 ## Current project state
 
-AI-V03 Slices 1 and 2 (F03 Deterministic Field Assessment and F04 Skills
-Aggregation & Weighted Score; BR-AI-28/29/30/31/32) are **implemented and
-verified offline** as internal AI Kit scorers. F04 consumes grouped Skills
-Assessment scores and the four F03 field scores to calculate Skills Score,
-Match Score, weights, and contributions. There is no persisted data or Backend
-consumer yet. AI-V03 Final Acceptance is **not started**.
+AI-V03 Slices 1–3 (F02 Semantic Skills Assessment, F03 Deterministic Field
+Assessment, and F04 Skills Aggregation & Weighted Score; BR-AI-25–32/33) are
+**implemented and verified offline** as internal AI Kit owners. F02 produces
+grouped requirement scores with source associations from one provider-native
+strict structured-output inference; F04 consumes those scores and the four F03
+field scores. There is no persisted data or Backend consumer yet. AI-V03 Final
+Acceptance is **not started**.
 
 ## Deferred / not started
 
-Semantic Skills Assessment, complete Match Result orchestration, Backend
-integration, and AI-V03 evaluation remain deferred. The F03/F04 scorers are
-internal until approved orchestration consumes them.
+Complete Match Result orchestration, Backend integration, live-provider
+acceptance, and AI-V03 semantic-quality evaluation remain deferred. The
+F02/F03/F04 owners are internal until approved orchestration consumes them.
 
 ## Implementation record (slice detail)
 
+- **2026-10-24 — Slice 3:** `ai-kit/src/matching/semantic-skills-assessment.js`
+  sends relevant Job and CV career sources (including existing PDF excerpts)
+  to one explicitly selected provider, validates completion and rubric output, prevents
+  duplicate structured-skill counting, and restores source provenance. It
+  returns `requirementGroups` for the existing F04 calculator. No package-root
+  entry, persistence, or Backend integration was added.
 - **2026-10-24 — Slice 1:** `ai-kit/src/matching/deterministic-field-scoring.js`
   uses canonical category identity and FIELD–POSITION ancestry, the shared
   Experience Level order, and exact canonical Employment Type and Work Mode
@@ -32,6 +39,11 @@ internal until approved orchestration consumes them.
 
 ## Verification status
 
+- **2026-10-24 — Slice 3:** `cd ai-kit && npx vitest run
+  test/semantic-skills-assessment.test.js` passed (1 file, 14 tests) before
+  the final duplicate-source guard; `cd ai-kit && npm run verify:agent` passed
+  after that guard (ESLint; 24 files, 414 tests). All provider responses were
+  mocked; no live provider smoke or Backend verification was run.
 - **2026-10-24 — Slice 2:** `cd ai-kit && npx vitest run
   test/weighted-match-scoring.test.js` passed (1 file, 10 tests); the final
   suite, including the added group-size case, passed under

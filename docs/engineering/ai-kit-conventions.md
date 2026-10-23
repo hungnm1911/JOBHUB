@@ -99,6 +99,7 @@ src/
 │   └── pdf-text-extractor.js
 └── matching/
     ├── deterministic-field-scoring.js
+    ├── semantic-skills-assessment.js
     └── weighted-match-scoring.js
 ```
 
@@ -315,6 +316,25 @@ AI-V02 F01 runtime orchestration (`src/normalization/uploaded-cv-semantic-extrac
   FAILED. Neither silently switches to JSON Object Mode. Adapter request and
   schema acceptance are covered offline; live acceptance and semantic quality
   require separate evaluation.
+
+AI-V03 F02 Semantic Skills Assessment (`src/matching/semantic-skills-assessment.js`):
+
+- Consumes READY `JobMatchProfile` and `CVMatchProfile` internally. The prompt
+  contains structured required skills, Job Description, and nonempty CV career
+  claims with short source IDs and existing PDF evidence excerpts when present;
+  it excludes source identities and unrelated metadata. The shared career
+  reader supplies Generated/Uploaded CV content.
+- Uses one explicitly selected adapter call (Codex by default, or Gemini/Groq)
+  with a strict provider-native JSON schema. No retry or automatic fallback is
+  composed. Invalid completion or output raises a coded AI-processing error;
+  a missing skill or missing evidence remains a valid assessment outcome.
+- Validates rubric scores, priority, source references, structured-skill
+  coverage, and duplicate structured-skill use before returning
+  `requirementGroups`. Restores source paths and PDF excerpts from the input
+  profiles after validation. The provider never authors provenance paths.
+- The returned assessment is the logical input to F04. F02 does not calculate
+  weights or Match Score. Semantic grounding and equivalence quality require
+  evaluation; strict output validation does not establish their accuracy.
 
 ## Document extraction
 

@@ -333,11 +333,12 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
 - Explicit `tooling/smoke-codex`, `tooling/smoke-gemini`, and
   `tooling/smoke-groq` package subpaths are
   manual provider-smoke tooling only. They are not production capability APIs.
-- AI-V03 F03 deterministic field scoring and F04 Skills/weighted aggregation
-  are internal AI Kit computations. F04 consumes already-grouped semantic
-  requirement scores and F03 field scores. They have no package-root entry,
-  Backend caller, provider call, or persistence. The complete AI-V03 Match
-  Result remains deferred.
+- AI-V03 F02 Semantic Skills Assessment, F03 deterministic field scoring, and
+  F04 Skills/weighted aggregation are internal AI Kit owners. F02 makes one
+  provider-native strict structured-output call, validates the assessment, and
+  restores Job/CV source provenance. F04 consumes F02's grouped requirement
+  scores and F03 field scores. They have no package-root entry, Backend caller,
+  or persistence. The complete AI-V03 Match Result remains deferred.
 
 ### Implemented foundations
 
