@@ -320,17 +320,18 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   Malformed persisted sources become projection errors rather than being
   repaired by hydration or public serializers. Typed MongoDB availability
   failures in source or taxonomy reads return FAILED with no profile;
-  domain refusals and unexpected errors propagate. These service entries have
-  no HTTP/CRUD callers, source writes, or profile persistence; Backend startup
-  does not yet import the integration service or wire an AI Kit lifecycle.
+  domain refusals and unexpected errors propagate. AI-V03's Candidate matching
+  HTTP entry now consumes the same lossless projection path through a V8-visible
+  Job loader and the own-CandidateCV normalization entries. There are no source
+  writes, profile persistence, or separate AI Kit lifecycle.
 - AI-V02 Slice 4a adds a Backend-only Uploaded CandidateCV `cvSource`
   projection in the same CandidateCV AI service. It requires a previously
   authorized own active CV, rechecks the persisted source and taxonomy, and
-  returns plain metadata without reading the PDF or invoking AI Kit. No
-  public Uploaded normalization consumer or new authorization scope is wired.
+  returns plain metadata without reading the PDF or invoking AI Kit.
   Slice 4c adds the internal own-Candidate runtime invocation in that service,
   binding the projection and current PDF read to one file identity before
-  calling the shared AI Kit instance. It adds no HTTP or background trigger.
+  calling the shared AI Kit instance. AI-V03 Candidate matching consumes this
+  entry after the existing own-CandidateCV and V8 Job access checks.
 - Explicit `tooling/smoke-codex`, `tooling/smoke-gemini`, and
   `tooling/smoke-groq` package subpaths are
   manual provider-smoke tooling only. They are not production capability APIs.
@@ -339,7 +340,8 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   one runtime Match Result. F02 makes one provider-native strict structured-output
   call and restores Job/CV source provenance. The public instance entry returns
   Job/CV identities, all five field scores, weights, contributions, and the
-  overall score. Backend calling integration, persistence, and HTTP are absent.
+  overall score. Backend now calls it from the authenticated Candidate matching
+  HTTP entry after V01/V02 normalization. Persistence remains absent.
 
 ### Implemented foundations
 
@@ -482,14 +484,15 @@ Backend authenticates actor
   composition, and one-pass LLM orchestration exist for AI-V02. The source-aware
   `readCvCareerContent` reader gives both CVMatchProfile variants one career
   consumption contract without changing their source representations. The
-  internal Backend Uploaded CV invocation is implemented; a consuming AI
-  capability and the rest of F01 acceptance remain deferred. PDF.js task
+  internal Backend Uploaded CV invocation is implemented and consumed by
+  AI-V03 Candidate matching; the rest of AI-V02 F01 acceptance remains
+  deferred. PDF.js task
   cleanup is owned by each extraction and does not require Backend shutdown
   wiring.
-- Public Job access and Recruiter/application access to Generated CV
-  normalization remain deferred; the implemented Backend entries cover only
-  B1 internal Job and B2 own Generated CV. HTTP integration and Job/CV CRUD
-  hooks are absent. AI-specific persistence, profile history/freshness,
+- Recruiter/application access to Generated CV normalization remains deferred.
+  AI-V03 Candidate HTTP matching uses V8 public Job visibility and own
+  CandidateCV normalization; Job/CV CRUD hooks are absent. AI-specific
+  persistence, profile history/freshness,
   embeddings/retrieval, and tool schemas/limits remain outside the approved
   AI-V01 runtime-only boundary. AI #1/#2/#3 require their own approved
   Product/Data contracts.

@@ -144,10 +144,12 @@ future capability.
   `FAILED` with `profile: null`, without calling the normalizer or logging
   source content/raw driver diagnostics; unexpected errors propagate.
   Sparse DRAFTs do not acquire submit, completeness, default, or PUBLIC gates.
-- B1/B2 are runtime service entries only. Public Job access, Uploaded CV,
-  Recruiter/application CV access, HTTP integration, Job/CV CRUD hooks, and
-  AI-specific persistence are not implemented by these entries. AI #1/#2/#3
-  remain future direction requiring their own approved Product/Data authority.
+- B1/B2 are runtime service entries. AI-V03 F01 adds a Candidate HTTP consumer
+  through Backend's own CV and V8 Job visibility gates, reusing their lossless
+  source projections and the AI-V02 Uploaded CV runtime entry. Recruiter/
+  application CV access, Job/CV CRUD hooks, and AI-specific persistence are
+  not implemented by these entries. AI #1/#2/#3 remain future direction
+  requiring their own approved Product/Data authority.
 - AI-V02 Slice 4a projects an already authorized own active Uploaded CandidateCV
   in the Backend CandidateCV AI service into the eight-field `cvSource`, using
   persisted metadata and B2 taxonomy resolution. The projection is not an

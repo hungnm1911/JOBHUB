@@ -770,7 +770,9 @@ const listJobDiscoveryJobs = async ({
   };
 };
 
-const getPublicJobDiscoveryDetail = async ({
+// Shared V8 source gate for public detail and authorized AI consumers. Keep the
+// persisted Job here; the public detail DTO omits normalization inputs.
+const loadPublicJobDiscoverySource = async ({
   actorUser,
   jobId,
   now = new Date(),
@@ -797,6 +799,13 @@ const getPublicJobDiscoveryDetail = async ({
   if (visibility === JOB_DISCOVERY_VISIBILITY.INACCESSIBLE) {
     throw new AppError(404, "Job not found");
   }
+
+  return { job, company, visibility };
+};
+
+const getPublicJobDiscoveryDetail = async (input) => {
+  const { actorUser } = input ?? {};
+  const { job, company, visibility } = await loadPublicJobDiscoverySource(input);
 
   const catalogData = await getDiscoveryCatalogData([job]);
   const isSaved =
@@ -848,4 +857,5 @@ export {
   getPublicCompanyInformation,
   getPublicJobDiscoveryDetail,
   listJobDiscoveryJobs,
+  loadPublicJobDiscoverySource,
 };

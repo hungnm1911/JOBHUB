@@ -8,17 +8,27 @@ Weighted Score; BR-AI-23–34) are **implemented and verified offline** in AI Ki
 The `createAiKit` instance exposes `matchJobCv` for one pair of READY Job/CV
 normalization results. It returns both source identities, the overall score,
 five field scores, weights, and contributions after one semantic inference.
-There is no persisted data or Backend consumer yet. AI-V03 Final Acceptance is
+Slice 5 adds the Candidate Backend HTTP entry for F01, with V8 Job visibility,
+own active CandidateCV access, and V01/V02 normalization reuse. Focused Backend
+tests now cover real Uploaded CV normalization through the HTTP Match Result,
+sparse READY input, and provider failure. The common Backend gate was not
+completed. There is no persisted Match Result. AI-V03 Final Acceptance is
 **not started**.
 
 ## Deferred / not started
 
-Backend integration, live-provider acceptance, and AI-V03 semantic-quality
+The common Backend gate, live-provider acceptance, and AI-V03 semantic-quality
 evaluation remain deferred. F02/F03/F04 remain internal owners consumed by
 the F01 orchestration.
 
 ## Implementation record (slice detail)
 
+- **2026-10-24 — Slice 5:** `POST /api/candidate/jobs/:jobId/match` accepts one
+  own CandidateCV ID, checks Candidate ownership and V8 Job visibility,
+  normalizes the persisted Job and Generated or Uploaded CV through existing
+  owners, and passes only READY profiles to `aiKit.matchJobCv`. Historical
+  read-only Jobs and own private Generated Drafts remain eligible under their
+  existing access rules. No scoring or persistence was added to Backend.
 - **2026-10-24 — Slice 4:** `ai-kit/src/matching/match-result-orchestration.js`
   composes the existing F02/F03/F04 owners into a runtime Match Result exposed
   as `createAiKit(...).matchJobCv`. It requires both normalization results to
@@ -47,6 +57,24 @@ the F01 orchestration.
 
 ## Verification status
 
+- **2026-10-24 — S5-T01 acceptance coverage:** With `TMPDIR` on the workspace
+  disk, `npx vitest run test/candidate/ai-v03-slice-5-candidate-match.test.js
+  test/candidate/ai-v02-slice-4c-uploaded-cv-runtime.test.js --maxWorkers=1
+  --silent` passed (2 files, 17 tests). The V03 HTTP suite uses the real V02
+  Uploaded CV normalizer, real PDF text extraction, and real Matching with
+  mocked storage download and provider responses. It also covers sparse READY
+  and provider failure without a Match Result. Targeted ESLint passed. The
+  initial test attempt without alternate `TMPDIR` failed at MongoDB startup
+  because `/tmp` was full. No live provider or full Backend gate was run.
+- **2026-10-24 — Slice 5:** Focused Backend command `npx vitest run
+  test/candidate/ai-v03-slice-5-candidate-match.test.js
+  test/job/v8-job-discovery.test.js test/job/ai-v01-b1-job-normalization.test.js`
+  passed (3 files, 69 tests) with offline AI Kit mocks. The AI Kit official
+  `npm run verify:agent` gate passed (25 files, 431 tests). Backend lint passed
+  with two existing warnings and architecture verification passed ARCH-001–019.
+  The default Backend full gate failed when `/tmp` filled during parallel
+  MongoDB test startup; its retry with an alternate `TMPDIR` was stopped at the
+  user's request before completion. No live provider smoke was run.
 - **2026-10-24 — S4-F01 acceptance fix:** `cd ai-kit && npx vitest run
   test/match-result-orchestration.test.js test/index.test.js
   test/v01-normalization-public-api.test.js` passed (3 files, 43 tests).
