@@ -281,10 +281,11 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
 - [`ai-kit/src/index.js`](../../ai-kit/src/index.js) is the production package
   entrypoint and exports only `createAiKit`. The factory validates
   optional Codex/Gemini/Groq configuration and the injected logger contract, then
-  returns a frozen instance whose only AI-V01 runtime entry is
-  `normalizeJob` (F01) and `normalizeGeneratedCv` (F02). Both are synchronous,
-  deterministic, and provider-free; they need no LLM configuration and do not
-  log.
+  returns a frozen instance with AI-V01 entries `normalizeJob` (F01) and
+  `normalizeGeneratedCv` (F02), plus AI-V02 `normalizeUploadedCv` (F01). The
+  AI-V01 entries remain synchronous, deterministic, and provider-free; they
+  need no LLM configuration and do not log. The AI-V02 entry is asynchronous
+  and calls one explicitly selected provider after PDF text extraction.
 - AI-V01 Product/Data authority is approved and deterministic. The F01 owner,
   `src/normalization/job-normalization.js` (`normalizeJob`), turns a
   career-relevant Job source projection plus Backend-resolved taxonomy into a
@@ -321,6 +322,14 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   domain refusals and unexpected errors propagate. These service entries have
   no HTTP/CRUD callers, source writes, or profile persistence; Backend startup
   does not yet import the integration service or wire an AI Kit lifecycle.
+- AI-V02 Slice 4a adds a Backend-only Uploaded CandidateCV `cvSource`
+  projection in the same CandidateCV AI service. It requires a previously
+  authorized own active CV, rechecks the persisted source and taxonomy, and
+  returns plain metadata without reading the PDF or invoking AI Kit. No
+  public Uploaded normalization consumer or new authorization scope is wired.
+  Slice 4c adds the internal own-Candidate runtime invocation in that service,
+  binding the projection and current PDF read to one file identity before
+  calling the shared AI Kit instance. It adds no HTTP or background trigger.
 - Explicit `tooling/smoke-codex`, `tooling/smoke-gemini`, and
   `tooling/smoke-groq` package subpaths are
   manual provider-smoke tooling only. They are not production capability APIs.
@@ -344,8 +353,11 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   consumer, using the legacy ESM Node build. It extracts existing text layers
   in page order, cleans each page, and destroys its loading task/worker in a
   `finally` block, including loading failures. PDF.js does not perform OCR;
-  documents without extractable text return an empty string. The extractor
-  is internal, with no shared disposal or Backend lifecycle hook.
+  path extraction returns an empty string for documents without extractable
+  text, while the AI-V02 Buffer boundary (`extractPdfTextFromBuffer`) reports
+  invalid input, unreadable PDFs, and empty text layers as coded extraction
+  failures. The extractor is internal, with no shared disposal or Backend
+  lifecycle hook.
 - The package-local verification gate covers the public boundary, provider
   adapters, fallback policy, dependency boundaries, a real text-native PDF
   fixture, and per-extraction resource lifecycle behavior. Detailed evidence is
@@ -367,7 +379,7 @@ JOBHUB Backend
 @jobhub/ai-kit
     |
     +-- document text extraction (PDF.js)
-    +-- LLM adapters (Gemini / Groq)
+    +-- LLM adapters (Codex / Gemini / Groq)
     +-- LLM fallback policy
     +-- approved future AI capabilities
 ```
@@ -398,9 +410,11 @@ is an in-process computation package, not a microservice.
 
 ### Provider and document conventions
 
-- Gemini is the intended primary LLM provider using `gemini-3.8-flash` through
-  `@google/genai`; Groq is the intended fallback using
-  `openai/gpt-oss-120b` through `groq-sdk`.
+- AI-V02 Uploaded CV normalization selects Codex through the compatible
+  Responses API endpoint by default; Gemini (`gemini-3.8-flash` through
+  `@google/genai`) and Groq (`openai/gpt-oss-120b` through `groq-sdk`) are
+  explicit alternatives. The separate provider-chain utility does not run for
+  this capability.
 - Each provider adapter owns only its provider SDK construction and delegation.
   `llm-fallback.js` owns the provider-agnostic fallback decision. Capability
   composition must opt into that policy explicitly; adapters do not retry or
@@ -457,9 +471,14 @@ Backend authenticates actor
 
 - Retries, circuit breakers, and a provider registry are deferred to the
   capability that needs them.
-- CV upload ingestion, Buffer input, and OCR are deferred to an approved
-  document capability integration. PDF.js task cleanup is owned by each
-  extraction and does not require Backend shutdown wiring.
+- OCR is out of scope. Buffer text extraction, Uploaded CV output
+  composition, and one-pass LLM orchestration exist for AI-V02. The source-aware
+  `readCvCareerContent` reader gives both CVMatchProfile variants one career
+  consumption contract without changing their source representations. The
+  internal Backend Uploaded CV invocation is implemented; a consuming AI
+  capability and the rest of F01 acceptance remain deferred. PDF.js task
+  cleanup is owned by each extraction and does not require Backend shutdown
+  wiring.
 - Public Job access and Recruiter/application access to Generated CV
   normalization remain deferred; the implemented Backend entries cover only
   B1 internal Job and B2 own Generated CV. HTTP integration and Job/CV CRUD

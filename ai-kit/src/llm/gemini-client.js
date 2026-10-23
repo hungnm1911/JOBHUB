@@ -34,7 +34,7 @@ function createGeminiClient({ apiKey, model, logger }) {
       const response = await sdkClient.models.generateContent({
         model: configuredModel,
         contents,
-        config,
+        config: { ...config, automaticContinuation: false },
       });
 
       logProviderUsage({

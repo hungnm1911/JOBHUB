@@ -1,5 +1,6 @@
 import { normalizeGeneratedCv } from "./normalization/cv-normalization.js";
 import { normalizeJob } from "./normalization/job-normalization.js";
+import { createUploadedCvNormalizer } from "./normalization/uploaded-cv-semantic-extraction.js";
 
 const LOGGER_METHODS = Object.freeze(["error", "warn", "info", "debug"]);
 
@@ -54,7 +55,11 @@ function createAiKit({ llm = {}, logger } = {}) {
   assertOptionalProviderConfig(llm.gemini, "llm.gemini");
   assertOptionalProviderConfig(llm.groq, "llm.groq");
 
-  return Object.freeze({ normalizeJob, normalizeGeneratedCv });
+  return Object.freeze({
+    normalizeJob,
+    normalizeGeneratedCv,
+    normalizeUploadedCv: createUploadedCvNormalizer({ llm, logger }),
+  });
 }
 
 export { createAiKit };

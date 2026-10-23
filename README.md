@@ -47,7 +47,7 @@ Repository hiện có độ trưởng thành không đồng đều giữa hai �
 | Backend | REST API, nghiệp vụ, persistence, worker và realtime server | Phần lớn V1–V15 đã triển khai; V8 còn `IN PROGRESS` | [Backend README](backend/README.md) |
 | Frontend | Browser UI, routing, auth client, HTTP/realtime client | Foundation và authentication lifecycle V1 đã xác minh; chưa có UI nghiệp vụ | [Frontend README](frontend/README.md) |
 | Backend Product/Data docs | Yêu cầu nghiệp vụ và hợp đồng persistence | V1–V15 có tài liệu phiên bản; V16–V17 mới ở roadmap | [Docs](docs/product/backend/) |
-| AI Kit | Private local Node.js package `@jobhub/ai-kit`, chạy trong Backend runtime; không có process/server riêng | Technical foundation sẵn sàng: Gemini và Groq provider adapter, fallback policy nội bộ, trích xuất lớp text PDF bằng PDF.js (không OCR). Chưa có năng lực AI nghiệp vụ (AI #1/#2/#3); AI #1 chưa có Product/Data specification được phê duyệt | [AI Kit README](ai-kit/README.md) · [Status](docs/project-status/ai-kit/foundation.md) |
+| AI Kit | Private local Node.js package `@jobhub/ai-kit`, chạy trong Backend runtime; không có process/server riêng | Technical foundation sẵn sàng. AI-V01 F01/F02 và Backend B1/B2 đã triển khai, xác minh offline; Final Acceptance còn chờ recheck. AI-V02/V03 chưa được phê duyệt | [AI Kit README](ai-kit/README.md) · [Foundation](docs/project-status/ai-kit/foundation.md) · [AI-V01 status](docs/project-status/ai-kit/v01-job-cv-normalization.md) |
 
 ### Điểm nổi bật
 

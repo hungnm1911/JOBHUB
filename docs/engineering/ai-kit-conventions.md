@@ -8,15 +8,21 @@ for the current package foundation and for future AI Kit changes.
 [`architecture.md`](architecture.md#ai-kit--current-state) defines AI Kit's
 runtime role, ownership, and architectural constraints. The
 [AI Kit foundation status](../project-status/ai-kit/foundation.md) records
-implementation and verification state; it does not define requirements.
+shared package evidence, while the
+[AI-V01 status](../project-status/ai-kit/v01-job-cv-normalization.md) records
+V01 implementation and acceptance evidence, and the
+[AI-V02 status](../project-status/ai-kit/v02-uploaded-cv-normalization.md)
+records V02 implementation and verification evidence; none defines requirements.
 Approved Product Specifications and Data Contracts remain authoritative for
 business behavior and persistence. AI-V01 Product/Data authority is approved
 and deterministic. Its F01 (`normalizeJob`) and F02 (`normalizeGeneratedCv`)
 normalization is reachable only through the `createAiKit` instance. The
 superseded LLM-based F01 Job extraction stage, its R2 contract file and
-loader, and its R4 contract tests have been retired. AI-V02 and
-AI-V03 are not approved. AI #1/#2/#3 architecture direction does not
-independently approve another business capability.
+loader, and its R4 contract tests have been retired. AI-V02 Product/Data
+authority is approved; its F01 (`normalizeUploadedCv`) is implemented offline
+through the same instance, with live provider acceptance and AI quality
+evaluation still pending. AI-V03 is not approved. AI #1/#2/#3 architecture
+direction does not independently approve another business capability.
 
 ## Terminology
 
@@ -83,7 +89,10 @@ src/
 ├── normalization/
 │   ├── normalization-support.js
 │   ├── job-normalization.js
-│   └── cv-normalization.js
+│   ├── cv-normalization.js
+│   ├── cv-match-profile-career.js
+│   ├── uploaded-cv-normalization.js
+│   └── uploaded-cv-semantic-extraction.js
 └── document/
     └── pdf-text-extractor.js
 ```
@@ -132,6 +141,15 @@ future capability.
   Recruiter/application CV access, HTTP integration, Job/CV CRUD hooks, and
   AI-specific persistence are not implemented by these entries. AI #1/#2/#3
   remain future direction requiring their own approved Product/Data authority.
+- AI-V02 Slice 4a projects an already authorized own active Uploaded CandidateCV
+  in the Backend CandidateCV AI service into the eight-field `cvSource`, using
+  persisted metadata and B2 taxonomy resolution. The projection is not an
+  authorization entry or an Uploaded normalization consumer; no PDF, AI Kit,
+  provider, persistence, or cache operation occurs in that slice. Slice 4c adds
+  an internal own-Candidate runtime entry in the same service. It binds the
+  projected metadata and current PDF to one Uploaded file identity, then calls
+  the shared `normalizeUploadedCv` entry once and returns its READY/FAILED
+  result unchanged. No HTTP consumer or additional actor scope is approved.
 - AI Kit must not access Mongoose models, query or mutate MongoDB, authenticate
   JWTs, inspect Express request/response objects, decide JOBHUB permissions, or
   call Backend-internal services directly.
@@ -156,7 +174,8 @@ future capability.
   persistence.
 - Each adapter call sends at most one HTTP attempt. Adapters disable SDK-level
   automatic retries explicitly (Codex and Groq `maxRetries: 0`; Gemini
-  `httpOptions.retryOptions.attempts: 1`) so provider recovery stays owned by
+  `httpOptions.retryOptions.attempts: 1`) and Gemini SDK automatic continuation
+  (`config.automaticContinuation: false`) so provider recovery stays owned by
   the fallback policy.
 - Provider-specific request and response shapes must not be declared a
   universal LLM contract merely to hide differences between SDKs.
@@ -208,14 +227,89 @@ AI-V01 runtime shapes are owned by the deterministic F01/F02 owners
 projection, its profile, and the READY/FAILED result it returns. The former
 `ai-kit/v01-contract.json` and its loader have been retired. AI-V01 uses
 no structured LLM output or JSON Schema validator; Ajv is not a production
-dependency. ESLint's transitive Ajv dependency remains development tooling.
+dependency, and the AI-V02 validator below interprets its own schema. ESLint's transitive Ajv dependency remains development tooling.
 
 An approved capability that consumes structured LLM output must validate that
-output before treating it as trusted data. Consumers of AI-V01 must
-reuse the F01/F02 owners' result shapes rather than define a parallel profile
-or result shape. AI
-Kit must not invent one shared JSON schema for capabilities that do not yet
-have specifications.
+output before treating it as trusted data.
+
+AI-V02 F01 output contract (`src/normalization/uploaded-cv-normalization.js`):
+
+- `UPLOADED_CV_PDF_EXTRACTION_SCHEMA` is the single strict schema for the LLM
+  interpretation of extracted PDF text. It uses only `type`, `properties`,
+  `required`, `additionalProperties: false`, and `items`, with
+  `["string", "null"]` for absent scalars; every property is required. Groups:
+  `careerPositioning`, `professionalSummary`, `skills`, `workExperiences`,
+  `projects`, `educations`, `certifications`, `languages`,
+  `otherCareerClaims`, `unresolvedContent`. Each claim or item carries
+  `evidence`, requested as verbatim excerpts of the extracted text. Values stay
+  as stated: periods, dates, and proficiency are text, not ISO dates or
+  canonical enums.
+  Backend metadata is not part of the schema.
+- `composeUploadedCvProfile({ cvSource, extractedText, pdfExtractionOutput, diagnostic })`
+  refuses an invalid Backend metadata source or empty text with
+  `UploadedCvNormalizationError` `INVALID_UPLOADED_CV_INPUT`. It returns FAILED
+  with no profile when the provider output text is not JSON, violates the
+  schema (including blank strings), has a claim without evidence, or has an
+  item that states no value. A non-empty excerpt absent from the
+  whitespace-collapsed PDF.js text is reported only through the optional
+  diagnostic callback used by `--debug` (`EXCERPT_NOT_FOUND` with paths and
+  count); it does not make the result FAILED. Lexical matching neither verifies
+  grounding nor substitutes for the separate BR-AI-22 interpretation-quality
+  assessment. Otherwise it returns READY with
+  `{ source: { type: "UPLOADED_CV", candidateCvId }, metadata, pdfContent }`:
+  `metadata` is the shared CandidateCV metadata group with JSON Pointer
+  `sourcePath` provenance, identical to the Generated variant; `pdfContent` is
+  the validated interpretation copied as-is. Sparse output is READY. Neither
+  side overrides, merges, or deduplicates the other.
+- `readCvCareerContent(profile)` in `src/normalization/cv-match-profile-career.js`
+  is the shared consumer read contract for either `CVMatchProfile` variant.
+  It returns a frozen object with the same ten career groups listed above;
+  every group is an array of `{ value, provenance }`. Claim `value` is a
+  string. Item `value` has stable fields for its group, including the union of
+  source-specific fields: `startDate`/`endDate` and `period`, `issueDate` and
+  `date`, `proficiency` and `statedProficiency`. An absent scalar is `null`; an
+  absent list is `[]`. No field is inferred from another. `provenance` always
+  has `{ sourcePath, fieldSourcePaths, evidence }`: Generated content uses its
+  existing JSON Pointer paths and no PDF evidence; Uploaded content has no
+  Generated path and retains the PDF evidence excerpts. Item field paths are
+  retained individually, including list element paths. Order, duplicates,
+  conflicting `otherCareerClaims`, and `unresolvedContent` are preserved.
+  Shared Backend metadata remains at `profile.metadata`; Generated CV links
+  and `hiddenSections` remain in its source-specific `content`. This reader
+  does not change either profile or introduce semantic extraction.
+- The owner does not call providers, build prompts, fall back to JSON Mode, or
+  log. Provider-specific strict-mode wiring belongs to the F01 orchestration.
+  Consumers use the shared career reader instead of defining a parallel
+  interpretation of the two source shapes. AI Kit must not invent one shared
+  JSON schema for capabilities that do not yet have specifications.
+
+AI-V02 F01 runtime orchestration (`src/normalization/uploaded-cv-semantic-extraction.js`):
+
+- `createAiKit` exposes `normalizeUploadedCv({ cvSource, pdfBuffer, provider })`;
+  `provider` defaults to `codex` and may explicitly select `gemini` or `groq`. Backend
+  must supply the authorized source and current PDF bytes; AI Kit checks the
+  source projection before extraction, but does not authorize or persist it.
+- The owner extracts the PDF text once, sends only that text and a short
+  evidence-bound instruction to exactly one adapter call, then passes the
+  provider's output text to `composeUploadedCvProfile`. No Backend metadata
+  enters the prompt, no second semantic pass, retry, or automatic provider
+  fallback occurs. Provider failures propagate; invalid output returns FAILED.
+- Codex uses Responses API `text.format.type: "json_schema"` with `strict: true`
+  and the same schema. Only a `completed` response with null
+  `incomplete_details`/`error` and one completed assistant text message without
+  refusal or tool output can reach output validation. A refused, incomplete,
+  failed, or malformed response returns FAILED even if it contains valid JSON.
+- Gemini uses `responseMimeType: "application/json"` with
+  `responseJsonSchema: UPLOADED_CV_PDF_EXTRACTION_SCHEMA` in its native SDK.
+  Only a first candidate with `finishReason: "STOP"` and no continuation token
+  can reach output validation; missing, unfinished, truncated, or blocked
+  candidate states return FAILED even when text is structurally valid.
+  Groq uses `response_format.type: "json_schema"` with `strict: true` and the
+  same schema. Only a first choice with `finish_reason: "stop"` and no message
+  refusal can reach output validation; other or missing finish reasons return
+  FAILED. Neither silently switches to JSON Object Mode. Adapter request and
+  schema acceptance are covered offline; live acceptance and semantic quality
+  require separate evaluation.
 
 ## Document extraction
 
@@ -225,8 +319,17 @@ have specifications.
   extractor; no environment setting or remote font service is required.
 - `extractPdfText(pdfPath)` accepts a non-empty path string and extracts the
   existing text layer in page order, retaining line and page boundaries.
-- PDF.js does not perform OCR; a document without extractable text returns an
-  empty string. OCR and uploaded-CV business workflows remain deferred.
+- PDF.js does not perform OCR; for `extractPdfText`, a document without
+  extractable text returns an empty string. OCR remains out of scope.
+- `extractPdfTextFromBuffer(pdfBuffer)` is the AI-V02 F01 extraction boundary
+  for an uploaded PDF Buffer supplied by Backend. It accepts a non-empty
+  `Buffer`/`Uint8Array`, passes PDF.js a copy so the caller's bytes are never
+  detached or altered, and returns the same text-layer format. Failures throw
+  `PdfTextExtractionError` with `code` `INVALID_PDF_INPUT` (refused before PDF.js
+  resources are created), `PDF_UNREADABLE` (PDF.js failure, original error as
+  `cause`, no content in the message), or `PDF_TEXT_NOT_EXTRACTABLE` (empty text
+  layer). Empty text is never a successful result on this boundary. It is not
+  exported from the package root and does not call providers, persist, or cache.
 - Each extraction owns its loading task and worker. Page resources must be
   cleaned after text extraction; the loading task must be destroyed in a
   `finally` block on success or failure, including loading failures.
@@ -234,8 +337,9 @@ have specifications.
   is required. Finishing one extraction must not affect concurrent calls.
 - `pdfjs-dist` is pinned to `5.6.205` for Node 20.19 compatibility; dependency
   upgrades must check the Node engine requirement.
-- Buffer input remains deferred; focused fixtures do not prove an uploaded-CV
-  ingestion pipeline or OCR capability.
+- Focused fixtures prove the extraction boundary only; they do not prove the
+  AI-V02 semantic extraction, `CVMatchProfile` composition, Backend
+  integration, or an OCR capability.
 
 ## Tests and verification
 
@@ -247,13 +351,18 @@ have specifications.
 - Tests cover public exports, dependency boundaries, input/error propagation,
   fallback eligibility and attempt limits, sensitive logging, and resource
   cleanup when the affected behavior changes.
-- `test/v01-normalization-public-api.test.js` covers the AI-V01 runtime entry
-  through `@jobhub/ai-kit`: the instance exposes exactly `normalizeJob` and
-  `normalizeGeneratedCv`, works without provider configuration and without
-  logging, returns results equal to the F01/F02 owners' (complete and
-  sparse/DRAFT-like READY, FAILED without a profile), and refuses unresolved
+- `test/v01-normalization-public-api.test.js` covers the AI-V01 runtime entries
+  through `@jobhub/ai-kit`: `normalizeJob` and `normalizeGeneratedCv` work
+  without provider configuration or logging, return results equal to the
+  F01/F02 owners' (complete and sparse/DRAFT-like READY, FAILED without a
+  profile), and refuse unresolved
   or wrong-level taxonomy references with the owners' coded errors without
   echoing source content.
+- `test/uploaded-cv-semantic-extraction.test.js`,
+  `test/uploaded-cv-provider-http.test.js`, and
+  `test/uploaded-cv-codex-http.test.js` cover the AI-V02 `normalizeUploadedCv`
+  entry through the package root, including one-pass provider requests,
+  structured output, completion checks, and offline SDK HTTP boundaries.
 - `test/job-normalization.test.js` covers revised F01 deterministic Job
   normalization: complete and sparse READY profiles, empty metadata not filled
   from free text, metadata/description differences preserved, no priority or
@@ -285,6 +394,20 @@ npm run smoke:codex
 npm run smoke:gemini
 npm run smoke:groq
 ```
+
+For AI-V02 F01, `npm run smoke:uploaded-cv:codex -- --pdf <path>` runs a
+provider-free preflight by default; `--live` explicitly enables one Codex
+normalization call. The PDF path is relative to `ai-kit/`. The CLI uses a
+synthetic, source-contract-valid `cvSource`, so its result does not establish
+Backend ownership or authorization. It reports request configuration,
+completion, result status, token usage, duration, and aggregate claim/evidence
+counts without printing PDF content, raw responses, or personal data.
+`--live --debug --full-output` additionally writes the complete LLM extraction
+JSON, complete `CVMatchProfile` JSON (or `null` when absent), and a safe gate
+summary under ignored local `ai-kit/.smoke-output/`. This is an explicit manual
+inspection artifact, outside AI Kit runtime persistence or cache. The files do
+not contain credentials, request headers, the request prompt, or PDF input text
+as a separate artifact. Console diagnostics remain redacted.
 
 - Live smoke may consume quota and requires provider credentials supplied by
   Backend-owned configuration.

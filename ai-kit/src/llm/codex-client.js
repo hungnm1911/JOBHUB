@@ -27,7 +27,7 @@ function createCodexClient({ apiKey, baseURL, model, logger }) {
   });
 
   // Retries and provider recovery belong to llm-fallback.js.
-  const createResponse = async ({ input, ...options } = {}) => {
+  const createResponse = async ({ input, diagnostic, ...options } = {}) => {
     try {
       logger.info("AI provider API request started", {
         provider: "codex",
@@ -35,11 +35,17 @@ function createCodexClient({ apiKey, baseURL, model, logger }) {
         operation: "responses.create",
       });
 
-      const response = await sdkClient.responses.create({
+      const request = sdkClient.responses.create({
         ...options,
         model: configuredModel,
         input,
       });
+      // withResponse resolves the same SDK promise and exposes its HTTP response.
+      const { data: response, response: httpResponse } = diagnostic
+        ? await request.withResponse()
+        : { data: await request };
+      diagnostic?.({ gate: "http_sdk", status: "PASS", code: "HTTP_RESPONSE",
+        httpStatus: httpResponse.status, sdkRequestCount: 1 });
 
       logProviderUsage({
         logger,
@@ -55,6 +61,9 @@ function createCodexClient({ apiKey, baseURL, model, logger }) {
 
       return response;
     } catch (error) {
+      diagnostic?.({ gate: "http_sdk", status: "FAIL", code: "SDK_REQUEST_FAILED",
+        httpStatus: Number.isInteger(error?.status) ? error.status : null,
+        sdkRequestCount: 1 });
       logger.error("Codex createResponse failed", {
         error,
         model: configuredModel,

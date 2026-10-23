@@ -966,7 +966,7 @@ Không phải AI version nào cũng cần toàn bộ Engineering Contracts.
 - Approved AI Engineering Contracts là authority đối với architecture/algorithm.
 - Source code, tests và evaluations là implementation evidence.
 
-`ai-kit/v01-contract.json`, contract loader và LLM extraction stage của thiết kế trước đã được retire; chúng không phải Product/Data authority và không tạo yêu cầu tương thích ngược. Specification này không định nghĩa JSON Shape hoặc public API kỹ thuật. [AI Kit Engineering Contracts](../../../engineering/ai-kit-conventions.md#composition-and-backend-integration) xác định factory `createAiKit` expose F01/F02 qua `normalizeJob` và `normalizeGeneratedCv`; runtime shapes do các normalizer owners sở hữu. Bằng chứng kiểm thử extraction cũ không chứng minh hoàn thành deterministic normalization; trạng thái triển khai và acceptance được ghi tại [AI Kit project status](../../../project-status/ai-kit/foundation.md).
+`ai-kit/v01-contract.json`, contract loader và LLM extraction stage của thiết kế trước đã được retire; chúng không phải Product/Data authority và không tạo yêu cầu tương thích ngược. Specification này không định nghĩa JSON Shape hoặc public API kỹ thuật. [AI Kit Engineering Contracts](../../../engineering/ai-kit-conventions.md#composition-and-backend-integration) xác định factory `createAiKit` expose F01/F02 qua `normalizeJob` và `normalizeGeneratedCv`; runtime shapes do các normalizer owners sở hữu. Bằng chứng kiểm thử extraction cũ không chứng minh hoàn thành deterministic normalization; trạng thái triển khai và acceptance được ghi tại [AI-V01 project status](../../../project-status/ai-kit/v01-job-cv-normalization.md).
 
 Nếu implementation, extraction behavior cũ hoặc consolidation behavior mâu thuẫn với Product Specification:
 
