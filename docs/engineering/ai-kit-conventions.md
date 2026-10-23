@@ -19,10 +19,11 @@ and deterministic. Its F01 (`normalizeJob`) and F02 (`normalizeGeneratedCv`)
 normalization is reachable only through the `createAiKit` instance. The
 superseded LLM-based F01 Job extraction stage, its R2 contract file and
 loader, and its R4 contract tests have been retired. AI-V02 Product/Data
-authority is approved; its F01 (`normalizeUploadedCv`) is implemented offline
-through the same instance, with live provider acceptance and AI quality
-evaluation still pending. AI-V03 is not approved. AI #1/#2/#3 architecture
-direction does not independently approve another business capability.
+authority is approved and Final Acceptance is `ACCEPTED`; its F01
+(`normalizeUploadedCv`) is implemented offline through the same instance.
+AI-V03 Product/Data authority is approved; F03 deterministic field scoring is
+implemented offline, while Final Acceptance has not started. AI #1/#2/#3
+architecture direction does not independently approve another business capability.
 
 ## Terminology
 
@@ -93,8 +94,10 @@ src/
 │   ├── cv-match-profile-career.js
 │   ├── uploaded-cv-normalization.js
 │   └── uploaded-cv-semantic-extraction.js
-└── document/
-    └── pdf-text-extractor.js
+├── document/
+│   └── pdf-text-extractor.js
+└── matching/
+    └── deterministic-field-scoring.js
 ```
 
 This tree records current owners; it is not a required scaffold for every

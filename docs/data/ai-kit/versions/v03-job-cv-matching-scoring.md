@@ -1,11 +1,11 @@
 # AI-V03 — Job–CV Matching & Scoring Data Model
 
-> **File dự kiến:** `docs/data/ai-kit/versions/ai-v03-job-cv-matching-scoring-data-model.md`  
+> **Đường dẫn:** `docs/data/ai-kit/versions/v03-job-cv-matching-scoring.md`\
 > **Vai trò:** AI Data Contract  
 > **Phase:** JOBHUB AI Phase  
 > **Ngôn ngữ:** Tiếng Việt  
 > **Product authority:** `docs/product/ai-kit/versions/v03-job-cv-matching-scoring.md`  
-> **Trạng thái:** `DRAFT — PENDING APPROVAL`
+> **Trạng thái:** `APPROVED`
 
 ---
 
@@ -733,5 +733,5 @@ Nếu Engineering phát hiện cần lưu dữ liệu mới hoặc bổ sung m�
 
 ---
 
-**Trạng thái tài liệu: `DRAFT — PENDING DATA CONTRACT APPROVAL`**
+**Trạng thái tài liệu: `APPROVED`**
 

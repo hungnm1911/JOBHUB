@@ -1,10 +1,10 @@
 
 # AI-V03 — Job–CV Matching & Weighted Scoring
 
-> **Đường dẫn dự kiến:** `docs/product/ai-kit/versions/v03-job-cv-matching-scoring.md`  
+> **Đường dẫn:** `docs/product/ai-kit/versions/v03-job-cv-matching-scoring.md`\
 > **Vai trò:** Canonical AI Product Specification  
 > **Phase:** JOBHUB AI Phase  
-> **Trạng thái:** DRAFT — Pending Product Approval  
+> **Trạng thái:** `APPROVED`\
 > **Ngôn ngữ:** Tiếng Việt
 
 ---
@@ -209,7 +209,7 @@ Năm nhóm tiêu chí:
 
 AI-V03 không bắt buộc trả về gợi ý chỉnh sửa CV hoặc báo cáo tư vấn chi tiết.
 
-Cấu trúc dữ liệu chính xác được định nghĩa tại Data Contract sau khi Product Specification được phê duyệt.
+Data Contract xác định logical semantics và minimum output của dữ liệu AI-V03; JSON Schema cụ thể cho structured output của LLM thuộc Engineering Contract.
 
 ## 7.1. Semantics
 
@@ -912,7 +912,7 @@ Không còn Product Decision cốt lõi nào chưa chốt về:
 - Bộ trọng số tổng.
 - Ranh giới LLM và deterministic scoring.
 
-Các nội dung thuộc giai đoạn tiếp theo:
+Các nội dung nằm ngoài Product Specification:
 
 - Data Contract và structured-output schema cụ thể.
 - Thiết kế engineering cho Matching/Scoring.
@@ -972,6 +972,6 @@ Tài liệu không xác định:
 - Test framework.
 - Deployment hoặc infrastructure.
 
-Các quyết định kỹ thuật được triển khai trong Data Contract và Engineering Contracts tương ứng, sau khi Product Specification được phê duyệt.
+Các quyết định kỹ thuật được triển khai trong Data Contract và Engineering Contracts tương ứng, theo Product Specification đã được phê duyệt.
 
 **AI-V03 không được tự mở rộng scope chỉ để cải thiện chất lượng Matching hoặc chuẩn bị cho các use case tương lai.**

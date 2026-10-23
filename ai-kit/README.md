@@ -2,7 +2,7 @@
 
 `@jobhub/ai-kit` is JOBHUB's private local Node.js package for AI-specific adapters and computation. It uses JavaScript ES modules, lives beside `backend/` and `frontend/`, and is consumed by Backend through `file:../ai-kit`.
 
-AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready, and AI-V01 Product/Data authority is approved. Deterministic AI-V01 F01 Job normalization and F02 Generated CV normalization are implemented through the `createAiKit` instance (`normalizeJob`, `normalizeGeneratedCv`). Backend Slice B1 consumes F01 for internal Jobs, and Slice B2 consumes F02 for a Candidate's own Generated CVs. AI-V01 Final Acceptance remains PENDING; AI-V02 and AI-V03 are not approved.
+AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready, and AI-V01 Product/Data authority is approved. Deterministic AI-V01 F01 Job normalization and F02 Generated CV normalization are implemented through the `createAiKit` instance (`normalizeJob`, `normalizeGeneratedCv`). Backend Slice B1 consumes F01 for internal Jobs, and Slice B2 consumes F02 for a Candidate's own Generated CVs. AI-V01 Final Acceptance remains PENDING RECHECK; AI-V02 Product/Data authority is APPROVED and Final Acceptance is ACCEPTED; AI-V03 Product/Data authority is APPROVED; F03 deterministic field scoring is implemented offline, and Final Acceptance is NOT STARTED.
 
 ## Installation
 
