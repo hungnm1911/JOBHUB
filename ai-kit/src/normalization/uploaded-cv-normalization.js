@@ -46,8 +46,8 @@ const strictObject = (properties) => {
   };
 };
 
-// Every claim and item carries verbatim excerpts of the extracted PDF text as
-// its evidence; values stay as stated, without dates, enums, or taxonomy.
+// Every claim and item carries evidence text requested as verbatim PDF excerpts;
+// values stay as stated, without dates, enums, or taxonomy.
 const claimList = {
   type: "array",
   items: strictObject({ value: { type: "string" }, evidence: textList }),
@@ -115,13 +115,17 @@ class UploadedCvNormalizationError extends Error {
 
 const findSchemaIssues = (value, schema, path) => {
   const types = [schema.type].flat();
+  const issue = (keyword, code, issuePath = path) => {
+    const match = issuePath?.match(/\/(\d+)(?:\/|$)/);
+    return { path: issuePath || "/", keyword, code, index: match ? Number(match[1]) : null };
+  };
 
   if (value === null) {
-    return types.includes("null") ? [] : [`${path} must not be null`];
+    return types.includes("null") ? [] : [issue("type", "NULL_NOT_ALLOWED")];
   }
 
   if (types.includes("string")) {
-    return isNonEmptyTrimmedString(value) ? [] : [`${path} must be a non-empty string`];
+    return isNonEmptyTrimmedString(value) ? [] : [issue("type", "NON_EMPTY_STRING_REQUIRED")];
   }
 
   if (types.includes("array")) {
@@ -129,14 +133,19 @@ const findSchemaIssues = (value, schema, path) => {
       ? value.flatMap((item, index) => {
           return findSchemaIssues(item, schema.items, `${path}/${index}`);
         })
-      : [`${path} must be an array`];
+      : [issue("type", "ARRAY_REQUIRED")];
   }
 
   if (!isPlainObject(value)) {
-    return [`${path} must be an object`];
+    return [issue("type", "OBJECT_REQUIRED")];
   }
 
-  const keyIssues = findExactKeyIssues(value, schema.required, path);
+  const keyIssues = [
+    ...schema.required.filter((key) => !Object.hasOwn(value, key))
+      .map((key) => issue("required", "MISSING_FIELD", `${path}/${key}`)),
+    ...Object.keys(value).filter((key) => !Object.hasOwn(schema.properties, key))
+      .map(() => issue("additionalProperties", "UNEXPECTED_FIELD")),
+  ];
 
   return keyIssues.length > 0
     ? keyIssues
@@ -147,24 +156,16 @@ const findSchemaIssues = (value, schema, path) => {
 
 const collapseWhitespace = (text) => text.replace(/\s+/g, " ").trim();
 
-// Rejects claims without evidence, evidence that is not an excerpt of the
-// extracted text, and items that state nothing (BR-AI-17, BR-AI-18).
-const findEvidenceIssues = (extraction, extractedText) => {
-  const source = collapseWhitespace(extractedText);
-
+// Evidence presence and item content are structural output requirements.
+const findEvidenceIssues = (extraction) => {
   return Object.entries(extraction).flatMap(([group, entries]) => {
     return entries.flatMap((entry, index) => {
       const path = `/${group}/${index}`;
       const { evidence, ...fields } = entry;
-      const issues = evidence
-        .map((excerpt, excerptIndex) => [excerpt, excerptIndex])
-        .filter(([excerpt]) => !source.includes(collapseWhitespace(excerpt)))
-        .map(([, excerptIndex]) => {
-          return `${path}/evidence/${excerptIndex} is not an excerpt of the extracted text`;
-        });
+      const issues = [];
 
       if (evidence.length === 0) {
-        issues.push(`${path}/evidence must contain at least one excerpt`);
+        issues.push({ path: `${path}/evidence`, keyword: "minItems", index, code: "EVIDENCE_REQUIRED" });
       }
 
       const statesValue = Object.values(fields).some((value) => {
@@ -172,7 +173,7 @@ const findEvidenceIssues = (extraction, extractedText) => {
       });
 
       if (!statesValue) {
-        issues.push(`${path} must state at least one value`);
+        issues.push({ path, keyword: "nonEmptyItem", index, code: "ITEM_VALUE_REQUIRED" });
       }
 
       return issues;
@@ -180,16 +181,19 @@ const findEvidenceIssues = (extraction, extractedText) => {
   });
 };
 
-const findPdfExtractionIssues = (extraction, extractedText) => {
-  const schemaIssues = findSchemaIssues(
-    extraction,
-    UPLOADED_CV_PDF_EXTRACTION_SCHEMA,
-    "",
-  );
-
-  return schemaIssues.length > 0
-    ? schemaIssues
-    : findEvidenceIssues(extraction, extractedText);
+// E1: lexical differences are diagnostic only; they cannot establish whether
+// a claim is grounded, and must not change the normalization result.
+const findEvidenceExcerptMismatches = (extraction, extractedText) => {
+  const source = collapseWhitespace(extractedText);
+  return Object.entries(extraction).flatMap(([group, entries]) => {
+    return entries.flatMap(({ evidence }, index) => {
+      return evidence.flatMap((excerpt, evidenceIndex) => {
+        return source.includes(collapseWhitespace(excerpt)) ? [] : [
+          { path: `/${group}/${index}/evidence/${evidenceIndex}`, index, evidenceIndex },
+        ];
+      });
+    });
+  });
 };
 
 const findUploadedCvSourceIssues = (cvSource) => {
@@ -262,6 +266,7 @@ const composeUploadedCvProfile = ({
   cvSource,
   extractedText,
   pdfExtractionOutput,
+  diagnostic,
 } = {}) => {
   const inputIssues = [
     ...findUploadedCvSourceIssues(cvSource),
@@ -271,6 +276,7 @@ const composeUploadedCvProfile = ({
   ];
 
   if (inputIssues.length > 0) {
+    diagnostic?.({ gate: "composition", status: "FAIL", code: "INVALID_SOURCE_INPUT" });
     throw new UploadedCvNormalizationError(
       UPLOADED_CV_NORMALIZATION_ERROR_CODES.INVALID_UPLOADED_CV_INPUT,
       "Uploaded CV input does not satisfy the AI-V02 Uploaded CV source contract",
@@ -279,26 +285,48 @@ const composeUploadedCvProfile = ({
   }
 
   const extraction = parsePdfExtractionOutput(pdfExtractionOutput);
-
-  try {
-    if (
-      extraction === undefined ||
-      findPdfExtractionIssues(extraction, extractedText).length > 0
-    ) {
-      return FAILED_RESULT;
-    }
-
-    return deepFreeze({
-      status: NORMALIZATION_STATUS.READY,
-      profile: {
-        source: { type: "UPLOADED_CV", candidateCvId: cvSource.candidateCvId },
-        metadata: buildCvMetadata(cvSource),
-        pdfContent: structuredClone(extraction),
-      },
-    });
-  } catch {
+  if (extraction === undefined) {
+    diagnostic?.({ gate: "json_parse", status: "FAIL", code: "JSON_PARSE_FAILED" });
+    diagnostic?.({ gate: "schema_validation", status: "SKIPPED", code: "JSON_PARSE_FAILED" });
+    diagnostic?.({ gate: "evidence_validation", status: "SKIPPED", code: "JSON_PARSE_FAILED" });
+    diagnostic?.({ gate: "composition", status: "FAIL", code: "INVALID_OUTPUT" });
     return FAILED_RESULT;
   }
+  diagnostic?.({ gate: "json_parse", status: "PASS", code: "JSON_PARSED" });
+  const schemaIssues = findSchemaIssues(extraction, UPLOADED_CV_PDF_EXTRACTION_SCHEMA, "");
+  if (schemaIssues.length > 0) {
+    diagnostic?.({ gate: "schema_validation", status: "FAIL", code: "SCHEMA_INVALID", issues: schemaIssues });
+    diagnostic?.({ gate: "evidence_validation", status: "SKIPPED", code: "SCHEMA_INVALID" });
+    diagnostic?.({ gate: "composition", status: "FAIL", code: "INVALID_OUTPUT" });
+    return FAILED_RESULT;
+  }
+  diagnostic?.({ gate: "schema_validation", status: "PASS", code: "SCHEMA_VALID" });
+  const evidenceIssues = findEvidenceIssues(extraction);
+  if (evidenceIssues.length > 0) {
+    diagnostic?.({ gate: "evidence_validation", status: "FAIL", code: "EVIDENCE_STRUCTURE_INVALID", issues: evidenceIssues });
+    diagnostic?.({ gate: "composition", status: "FAIL", code: "INVALID_OUTPUT" });
+    return FAILED_RESULT;
+  }
+  diagnostic?.({ gate: "evidence_validation", status: "PASS", code: "EVIDENCE_STRUCTURE_VALID" });
+  if (diagnostic) {
+    const mismatches = findEvidenceExcerptMismatches(extraction, extractedText);
+    if (mismatches.length > 0) {
+      diagnostic({ gate: "evidence_excerpt", status: "WARN", code: "EXCERPT_NOT_FOUND",
+        mismatchCount: mismatches.length, issues: mismatches });
+    }
+  }
+
+  // Unexpected composition exceptions propagate; only expected output failures map to FAILED.
+  const result = deepFreeze({
+    status: NORMALIZATION_STATUS.READY,
+    profile: {
+      source: { type: "UPLOADED_CV", candidateCvId: cvSource.candidateCvId },
+      metadata: buildCvMetadata(cvSource),
+      pdfContent: structuredClone(extraction),
+    },
+  });
+  diagnostic?.({ gate: "composition", status: "PASS", code: "PROFILE_COMPOSED" });
+  return result;
 };
 
 export {

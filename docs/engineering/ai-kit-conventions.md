@@ -141,6 +141,13 @@ future capability.
   Recruiter/application CV access, HTTP integration, Job/CV CRUD hooks, and
   AI-specific persistence are not implemented by these entries. AI #1/#2/#3
   remain future direction requiring their own approved Product/Data authority.
+- AI-V02 Slice 4a projects an already authorized own active Uploaded CandidateCV
+  in the Backend CandidateCV AI service into the eight-field `cvSource`, using
+  persisted metadata and B2 taxonomy resolution. The projection is not an
+  authorization entry or an Uploaded normalization consumer; no PDF, AI Kit,
+  provider, persistence, or cache operation occurs in that slice. A caller for
+  end-to-end Uploaded normalization still needs an approved actor and access
+  scope.
 - AI Kit must not access Mongoose models, query or mutate MongoDB, authenticate
   JWTs, inspect Express request/response objects, decide JOBHUB permissions, or
   call Backend-internal services directly.
@@ -232,16 +239,21 @@ AI-V02 F01 output contract (`src/normalization/uploaded-cv-normalization.js`):
   `careerPositioning`, `professionalSummary`, `skills`, `workExperiences`,
   `projects`, `educations`, `certifications`, `languages`,
   `otherCareerClaims`, `unresolvedContent`. Each claim or item carries
-  `evidence`, verbatim excerpts of the extracted text. Values stay as stated:
-  periods, dates, and proficiency are text, not ISO dates or canonical enums.
+  `evidence`, requested as verbatim excerpts of the extracted text. Values stay
+  as stated: periods, dates, and proficiency are text, not ISO dates or
+  canonical enums.
   Backend metadata is not part of the schema.
-- `composeUploadedCvProfile({ cvSource, extractedText, pdfExtractionOutput })`
+- `composeUploadedCvProfile({ cvSource, extractedText, pdfExtractionOutput, diagnostic })`
   refuses an invalid Backend metadata source or empty text with
   `UploadedCvNormalizationError` `INVALID_UPLOADED_CV_INPUT`. It returns FAILED
   with no profile when the provider output text is not JSON, violates the
-  schema (including blank strings), has a claim without evidence or with an
-  excerpt not found in the whitespace-collapsed text, or has an item that
-  states no value. Otherwise it returns READY with
+  schema (including blank strings), has a claim without evidence, or has an
+  item that states no value. A non-empty excerpt absent from the
+  whitespace-collapsed PDF.js text is reported only through the optional
+  diagnostic callback used by `--debug` (`EXCERPT_NOT_FOUND` with paths and
+  count); it does not make the result FAILED. Lexical matching neither verifies
+  grounding nor substitutes for the separate BR-AI-22 interpretation-quality
+  assessment. Otherwise it returns READY with
   `{ source: { type: "UPLOADED_CV", candidateCvId }, metadata, pdfContent }`:
   `metadata` is the shared CandidateCV metadata group with JSON Pointer
   `sourcePath` provenance, identical to the Generated variant; `pdfContent` is
@@ -388,6 +400,12 @@ synthetic, source-contract-valid `cvSource`, so its result does not establish
 Backend ownership or authorization. It reports request configuration,
 completion, result status, token usage, duration, and aggregate claim/evidence
 counts without printing PDF content, raw responses, or personal data.
+`--live --debug --full-output` additionally writes the complete LLM extraction
+JSON, complete `CVMatchProfile` JSON (or `null` when absent), and a safe gate
+summary under ignored local `ai-kit/.smoke-output/`. This is an explicit manual
+inspection artifact, outside AI Kit runtime persistence or cache. The files do
+not contain credentials, request headers, the request prompt, or PDF input text
+as a separate artifact. Console diagnostics remain redacted.
 
 - Live smoke may consume quota and requires provider credentials supplied by
   Backend-owned configuration.

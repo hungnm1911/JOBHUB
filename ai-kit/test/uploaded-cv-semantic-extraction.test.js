@@ -273,7 +273,7 @@ describe("AI-V02 one-pass PDF semantic extraction", () => {
   it.each(["gemini", "groq"])("returns FAILED for invalid %s output", async (provider) => {
     const invalid = JSON.stringify({
       ...EMPTY_EXTRACTION,
-      skills: [{ value: "Kubernetes", evidence: ["not in PDF"] }],
+      skills: [{ value: "Kubernetes", evidence: [] }],
     });
     geminiRequestMock.mockResolvedValue(geminiResponse(invalid));
     groqRequestMock.mockResolvedValue(groqResponse(invalid));
@@ -281,6 +281,18 @@ describe("AI-V02 one-pass PDF semantic extraction", () => {
     await expect(aiKit.normalizeUploadedCv({
       cvSource: CV_SOURCE, pdfBuffer: PDF, provider,
     })).resolves.toEqual({ status: "FAILED", profile: null });
+    expect(geminiRequestMock.mock.calls.length + groqRequestMock.mock.calls.length).toBe(1);
+  });
+
+  it.each(["gemini", "groq"])("keeps schema-valid %s evidence despite a lexical mismatch (E1)", async (provider) => {
+    const extraction = { ...EMPTY_EXTRACTION,
+      skills: [{ value: "Kubernetes", evidence: ["not in PDF"] }] };
+    geminiRequestMock.mockResolvedValue(geminiResponse(JSON.stringify(extraction)));
+    groqRequestMock.mockResolvedValue(groqResponse(JSON.stringify(extraction)));
+
+    const result = await aiKit.normalizeUploadedCv({ cvSource: CV_SOURCE, pdfBuffer: PDF, provider });
+    expect(result.status).toBe("READY");
+    expect(result.profile.pdfContent.skills).toEqual(extraction.skills);
     expect(geminiRequestMock.mock.calls.length + groqRequestMock.mock.calls.length).toBe(1);
   });
 

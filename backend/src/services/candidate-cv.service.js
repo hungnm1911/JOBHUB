@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
+import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
 import CANDIDATE_CV_UPLOADED_STORAGE from "../constants/candidate-cv-uploaded-storage.js";
 import CANDIDATE_CV_VISIBILITY from "../constants/candidate-cv-visibility.js";
 import CATEGORY_LEVEL from "../constants/category-level.js";
@@ -1479,6 +1480,7 @@ const loadOwnActiveCandidateCv = async ({
   candidateUserId,
   actorUser,
   candidateCvId,
+  lean = false,
 }) => {
   assertCandidateCvActor(actorUser);
 
@@ -1490,17 +1492,75 @@ const loadOwnActiveCandidateCv = async ({
     throw new AppError(404, "Candidate CV not found");
   }
 
-  const candidateCv = await CandidateCV.findOne({
+  const query = CandidateCV.findOne({
     _id: candidateCvId,
     candidateUserId,
     archivedAt: null,
   });
+  const candidateCv = await (lean ? query.lean() : query);
 
   if (!candidateCv) {
     throw new AppError(404, "Candidate CV not found");
   }
 
   return candidateCv;
+};
+
+/**
+ * AI-V02 F01: read only the current, authorized Uploaded PDF bytes. The raw
+ * source prevents Mongoose casting/defaults from repairing invalid file data.
+ */
+const readOwnCurrentUploadedCandidateCvPdfBuffer = async (input) => {
+  const candidateCv = await loadOwnActiveCandidateCv({ ...input, lean: true });
+
+  if (candidateCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.UPLOADED) {
+    throw new AppError(409, "Only Uploaded Candidate CVs have an uploaded PDF", {
+      field: "sourceType",
+    });
+  }
+
+  const file = candidateCv.uploadedFile;
+
+  if (
+    candidateCv.status !== CANDIDATE_CV_STATUS.ACTIVE ||
+    candidateCv.generatedContent != null ||
+    file == null ||
+    typeof file !== "object" ||
+    Array.isArray(file) ||
+    !hasPresentString(file.storageKey) ||
+    !hasPresentString(file.originalFileName) ||
+    file.mimeType !== CANDIDATE_CV_UPLOADED_PDF.MIME_TYPE ||
+    !Number.isInteger(file.sizeBytes) ||
+    file.sizeBytes < 1 ||
+    file.sizeBytes > CANDIDATE_CV_UPLOADED_PDF.MAX_SIZE_BYTES ||
+    !Number.isInteger(file.pageCount) ||
+    file.pageCount < 1 ||
+    file.pageCount > CANDIDATE_CV_UPLOADED_PDF.MAX_PAGE_COUNT ||
+    !(file.uploadedAt instanceof Date) ||
+    Number.isNaN(file.uploadedAt.getTime())
+  ) {
+    throw new AppError(409, "Uploaded Candidate CV has no valid current PDF", {
+      field: "uploadedFile",
+    });
+  }
+
+  try {
+    const pdfBuffer = await downloadOwnUploadedCandidateCvFile(file.storageKey);
+    const inspected = await inspectUploadedCandidateCvPdf(pdfBuffer);
+
+    if (
+      inspected.sizeBytes !== file.sizeBytes ||
+      inspected.pageCount !== file.pageCount
+    ) {
+      throw new Error("Stored Uploaded PDF does not match current file metadata");
+    }
+
+    return pdfBuffer;
+  } catch (error) {
+    throw new AppError(502, "Failed to read current Uploaded CV PDF", {
+      field: "uploadedFile",
+    }, { cause: error });
+  }
 };
 
 const getOwnActiveCandidateCv = async (input) => {
@@ -2214,6 +2274,7 @@ export {
   previewSearchEligibleCandidateCv,
   previewSearchEligibleGeneratedCandidateCv,
   previewSearchEligibleUploadedCandidateCv,
+  readOwnCurrentUploadedCandidateCvPdfBuffer,
   replaceOwnUploadedCandidateCvPdf,
   saveOwnGeneratedContent,
   saveOwnGeneratedDraftContent,

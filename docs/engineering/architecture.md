@@ -322,6 +322,11 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   domain refusals and unexpected errors propagate. These service entries have
   no HTTP/CRUD callers, source writes, or profile persistence; Backend startup
   does not yet import the integration service or wire an AI Kit lifecycle.
+- AI-V02 Slice 4a adds a Backend-only Uploaded CandidateCV `cvSource`
+  projection in the same CandidateCV AI service. It requires a previously
+  authorized own active CV, rechecks the persisted source and taxonomy, and
+  returns plain metadata without reading the PDF or invoking AI Kit. No
+  Uploaded normalization consumer or new authorization scope is wired.
 - Explicit `tooling/smoke-codex`, `tooling/smoke-gemini`, and
   `tooling/smoke-groq` package subpaths are
   manual provider-smoke tooling only. They are not production capability APIs.

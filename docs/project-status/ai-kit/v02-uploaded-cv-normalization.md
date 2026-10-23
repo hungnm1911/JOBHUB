@@ -6,10 +6,17 @@ AI-V02 is **in progress**: Slice 1 (uploaded PDF Buffer → free text),
 Slice 2 (Uploaded CV output contract and composition), Slice 3 (one-pass
 LLM semantic extraction), Slice 3.1 (Codex primary provider integration),
 and Slice 3.2 (remaining Gemini/Groq offline provider verification and
-Engineering Contract cleanup), all part of F01, are **implemented and verified
-offline**. The F01 Codex live smoke harness is prepared and focused-tested
-offline; the Backend full gate is pending. F01 as a whole is not
-implemented and Final Acceptance has not started. The approved
+Engineering Contract cleanup), plus Slice 4a (Backend Uploaded CandidateCV
+`cvSource` projection) and Slice 4b (current Uploaded PDF Buffer supply), all
+part of F01, are **implemented and verified offline**. Slice 4a reuses B2
+persisted metadata and taxonomy logic; Slice 4b reads the authorized current
+PDF through CandidateCV and restricted storage. Neither adds an Uploaded
+normalization consumer.
+The F01 Codex live smoke harness is prepared and focused-tested
+offline. The F01 Codex debug smoke path is instrumented and verified offline.
+The E1 evidence gate change passed one Codex/CCPro live retest with full local
+output inspection; 21 lexical excerpt mismatches remained diagnostic only.
+F01 as a whole is not implemented and Final Acceptance has not started. The approved
 [Product Specification](../../product/ai-kit/versions/v02-uploaded-cv-normalization.md)
 and [Data Contract](../../data/ai-kit/versions/ai-v02-uploaded-cv-normalization-data-model.md)
 define its requirements. Shared package and document-extraction state is
@@ -28,7 +35,7 @@ tracked in the [AI Kit foundation](foundation.md).
 - **Slice 2 — Uploaded CV output contract (2026-10-22):**
   `ai-kit/src/normalization/uploaded-cv-normalization.js` defines the strict
   PDF-interpretation schema (`UPLOADED_CV_PDF_EXTRACTION_SCHEMA`), validates
-  provider output text against it with verbatim-evidence checks, and
+  provider output text against it with evidence-structure checks, and
   `composeUploadedCvProfile` combines it deterministically with Backend
   CandidateCV metadata into an `UPLOADED_CV` `CVMatchProfile` (separate
   `metadata`/`pdfContent` provenance, sparse READY, invalid output FAILED;
@@ -40,6 +47,12 @@ tracked in the [AI Kit foundation](foundation.md).
   No provider call, prompt, persistence, cache, package-root export, or
   Backend integration. Contract:
   [AI Kit conventions — Structured output](../../engineering/ai-kit-conventions.md#structured-output).
+- **F01 E1 — evidence validation (2026-10-22):** a nonmatching excerpt no
+  longer fails a schema-valid PDF interpretation. The owner still rejects
+  missing evidence and empty items, and `--debug` reports lexical mismatches
+  by path and count without claiming the evidence was verified. Offline
+  regression tests cover the original failure and sparse READY. No live
+  provider call was made for this change.
 - **Slice 3 — LLM semantic extraction (2026-10-22):**
   `normalizeUploadedCv` extracts text from an uploaded PDF Buffer, invokes
   exactly one selected Gemini or Groq adapter with the Slice 2 schema in its
@@ -81,25 +94,91 @@ tracked in the [AI Kit foundation](foundation.md).
   Backend-owned Codex configuration. Output is limited to request metadata,
   completion/result status, normalized usage, duration, and redacted aggregate
   claim/evidence counts. No live provider call was made.
+- **F01 D1 live-smoke diagnostics (2026-10-22):** explicit `--debug` on the
+  same CLI emits a correlation ID and safe PASS/FAIL/SKIPPED records for PDF
+  read/extraction, request and HTTP SDK, Responses completion, JSON/schema/
+  evidence validation, and composition. Offline HTTP mocks verify the SDK
+  obtains HTTP status without a second request. No live provider call was
+  made for this change.
+- **F01 final live smoke #3 (2026-10-22):** explicit `--live --debug
+  --full-output` wrote complete extraction/profile JSON and safe diagnostics
+  under ignored local `ai-kit/.smoke-output/`. One call with the previous PDF
+  and synthetic smoke metadata returned HTTP 200, completed Responses output,
+  and READY after JSON, schema, evidence-structure, and composition gates.
+  The profile retained separate PDF and synthetic-metadata provenance. This
+  accepts the Codex provider/output path for this smoke, not Backend ownership
+  or BR-AI-22 representative-case quality.
+- **F01 Slice 4b — current Uploaded PDF Buffer (2026-10-23):**
+  `readOwnCurrentUploadedCandidateCvPdfBuffer` in the CandidateCV service
+  checks Candidate ownership, active-library membership, Uploaded/ACTIVE
+  source and current file metadata before authenticated storage access. It
+  validates downloaded PDF bytes against the stored file metadata and returns
+  only a Buffer. Invalid source and storage/PDF read failures remain distinct.
+  No persistence, cache, AI Kit call, HTTP endpoint, or new consumer authority.
 
 ## Deferred / not started
 
-- Live Codex/CCPro gateway and configured model acceptance of Responses API
-  Strict Structured Output is unverified; offline SDK/HTTP mocks prove request
-  serialization and local response handling only. Gemini's
+- The reported Codex/CCPro live smoke #2 returned `completed` with JSON and
+  schema checks passing, then failed on 24 excerpt mismatches. Smoke #3 passed
+  after E1; 21 lexical mismatches remain review diagnostics. One PDF does not
+  establish semantic quality across representative cases. Gemini's
   provider-native JSON Schema mode has no separate `strict: true` parameter;
   offline tests verify the SDK request configuration, not server enforcement.
 - Gemini/Groq actual context and output limits, provider-side truncation
   behavior, strict-schema acceptance, and long-PDF semantic completeness
   remain unverified against live providers. Offline fixtures verify only the
   installed SDK's serialization and handling of reported completion states.
-- Backend Uploaded CV resolution, authorization, and Buffer supply.
+- Backend Uploaded CV normalization consumer and end-to-end invocation remain
+  deferred. Slices 4a/4b supply the source projection and owner-scoped PDF
+  Buffer read without approving another actor or access path.
 - BR-AI-22 quality evaluation on representative Uploaded CV groups; Slice 1
   fixtures prove extraction mechanics only and Slice 2 tests prove contract
   mechanics only, not interpretation quality.
 - OCR is out of scope for AI-V02.
 
 ## Verification status
+
+- **2026-10-23 — F01 Slice 4b:** focused Backend Buffer read, Slice 4a, and
+  V7 restricted-storage regression tests passed (3 files, 29 tests).
+  `cd backend && npm run verify:agent` passed (lint with two existing warnings;
+  architecture ARCH-001–019; 184 files, 1,964 tests). No live Cloudinary,
+  provider, or AI Kit integration was exercised.
+
+- **2026-10-23 — F01 Slice 4a:** focused Backend Uploaded projection and B2
+  regression tests passed (2 files, 54 tests). `cd backend && npm run
+  verify:agent` passed (lint with two existing warnings; architecture
+  ARCH-001–019; 183 files, 1,953 tests). No PDF, AI Kit/provider call,
+  persistence/cache, endpoint, or consumer authorization was added.
+
+- **2026-10-22 — F01 final live smoke #3:** focused AI Kit full-output and
+  diagnostics tests passed (3 files, 20 tests); focused Backend launcher tests
+  passed (6 tests). `cd ai-kit && npm run verify:agent` passed (lint; 21 files,
+  369 tests); `git diff --check` passed. Provider-free preflight with the same
+  PDF passed. Exactly one live `normalizeUploadedCv` request returned HTTP 200,
+  Responses `completed`, READY in 41,898 ms, with 1,779 input and 1,779 output
+  tokens. Full extraction/profile and diagnostic summary were inspected in
+  ignored local files; all acceptance gates passed, with 21 nonblocking E1
+  lexical mismatch warnings. Backend full gate was not run by request; no
+  Backend runtime integration changed.
+
+- **2026-10-22 — F01 E1:** focused AI Kit tests passed (5 files, 108 tests);
+  focused Backend smoke launcher tests passed (6 tests). `cd ai-kit && npm run
+  verify:agent` passed (lint; 20 files, 366 tests). `cd backend && npm run
+  verify:agent` passed (lint with two existing warnings; architecture
+  ARCH-001–019; 182 files, 1,939 tests). No live provider call was made.
+
+- **2026-10-22 — F01 D1 diagnostics:** focused AI Kit debug/normalization tests
+  passed (4 files, 100 tests), followed by the 12-case debug regression file;
+  focused Backend launcher tests passed (6 tests).
+  `cd ai-kit && npm run verify:agent` passed (lint; 20 files, 363 tests).
+  `cd backend && npm run verify:agent` passed on one full rerun (lint with two
+  existing warnings; architecture ARCH-001–019; 182 files, 1,938 tests).
+  The first full run failed during MongoDB memory-server shutdown; a later
+  full run after adding the CLI HTTP regression failed on a port collision
+  and MongoDB cleanup in unrelated V11/V15 tests. Those two files then passed
+  in isolation (31 tests); the final focused launcher file passed (6 tests).
+  The one-request SDK HTTP mock and redaction regressions passed; no live
+  provider call was made.
 
 - **2026-10-22 — F01 Codex smoke harness preparation:** dry-run with the
   existing `ai-kit/fixture/` PDF passed without a provider call. Focused

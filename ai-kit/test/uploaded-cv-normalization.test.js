@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { normalizeGeneratedCv } from "../src/normalization/cv-normalization.js";
 import {
@@ -247,6 +247,20 @@ describe("composeUploadedCvProfile — READY", () => {
     expect(result.profile.pdfContent).toEqual(emptyExtraction());
   });
 
+  it("retains structurally valid evidence when its excerpt is absent from PDF.js text (E1)", () => {
+    const extraction = makeExtraction({ skills: [{ value: "AWS", evidence: ["Kỹ năng: AWS"] }] });
+    const diagnostic = vi.fn();
+    const result = composeUploadedCvProfile({ cvSource: makeCvSource(), extractedText: EXTRACTED_TEXT,
+      pdfExtractionOutput: JSON.stringify(extraction), diagnostic });
+
+    expect(result.status).toBe("READY");
+    expect(result.profile.pdfContent.skills).toEqual(extraction.skills);
+    expect(diagnostic).toHaveBeenCalledWith(expect.objectContaining({ gate: "evidence_validation", status: "PASS" }));
+    expect(diagnostic).toHaveBeenCalledWith(expect.objectContaining({
+      gate: "evidence_excerpt", status: "WARN", code: "EXCERPT_NOT_FOUND", mismatchCount: 1,
+    }));
+  });
+
   it("does not mutate the caller's source", () => {
     const cvSource = makeCvSource();
     const snapshot = structuredClone(cvSource);
@@ -276,10 +290,6 @@ describe("composeUploadedCvProfile — FAILED on invalid PDF interpretation outp
     ["a null claim value", { extraction: withSkill({ value: null, evidence: ["Node.js"] }) }],
     ["a claim without evidence", { extraction: withSkill({ value: "Node.js", evidence: [] }) }],
     ["a blank evidence excerpt", { extraction: withSkill({ value: "Node.js", evidence: [" "] }) }],
-    [
-      "evidence that is not in the extracted text",
-      { extraction: withSkill({ value: "AWS", evidence: ["Kỹ năng: AWS"] }) },
-    ],
     [
       "an item that states no value",
       {
