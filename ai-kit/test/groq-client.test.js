@@ -80,7 +80,12 @@ describe("Groq client adapter", () => {
 
   it("logs minimal metadata and propagates provider failures", async () => {
     const apiKey = "secret-groq-api-key";
-    const providerError = new Error("provider unavailable");
+    const marker = "PRIVATE_JOB_CV_RESPONSE_MARKER";
+    const providerError = Object.assign(new Error(`provider unavailable ${marker}`), {
+      status: 503,
+      code: "server_error",
+      response: { body: marker },
+    });
     createCompletionMock.mockRejectedValue(providerError);
 
     const client = createGroqClient({
@@ -95,10 +100,13 @@ describe("Groq client adapter", () => {
     expect(logger.error).toHaveBeenCalledWith(
       "Groq createChatCompletion failed",
       {
-        error: providerError,
+        provider: "groq",
         model: "openai/gpt-oss-120b",
+        httpStatus: 503,
+        errorCode: "server_error",
       },
     );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(marker);
     expect(logger.error.mock.calls.flat().join(" ")).not.toContain(apiKey);
     expect(logger.error.mock.calls.flat().join(" ")).not.toContain(
       "private prompt",

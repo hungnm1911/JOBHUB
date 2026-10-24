@@ -1,7 +1,7 @@
 import CATEGORY_LEVEL from "../constants/category-level.js";
 import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
-import { isNotForbiddenLocationProvinceCode } from "../models/job.model.js";
+import Job, { isNotForbiddenLocationProvinceCode } from "../models/job.model.js";
 import AppError from "../utils/app-error.js";
 import logger from "../utils/logger.js";
 import { isMongoDbAvailabilityError } from "../utils/mongodb-availability-error.js";
@@ -13,6 +13,7 @@ import {
 import { aiKit } from "./ai-kit.service.js";
 import { toPublicCategory } from "./category.service.js";
 import { toPublicExperienceLevel } from "./experience-level.service.js";
+import { loadPublicJobDiscoverySource } from "./job-discovery.service.js";
 import { loadInternalJob } from "./job.service.js";
 
 // AI Kit's F01 refusal code and READY/FAILED result contract
@@ -141,37 +142,9 @@ const resolveJobTaxonomy = async (jobSource) => {
   };
 };
 
-// AI-V01 F01 Backend entry: authorize an internal Job read, project the raw
-// Job losslessly, resolve its taxonomy, and return AI Kit's runtime result.
-// Sparse DRAFTs are accepted; no submit/completeness validation applies.
-const normalizeInternalJob = async ({
-  actorUser,
-  jobId,
-  clientCompanyId,
-} = {}) => {
-  let loadedSource;
-
-  try {
-    loadedSource = await loadInternalJob(
-      { actorUser, jobId, clientCompanyId },
-      { includePersistedSource: true },
-    );
-  } catch (error) {
-    if (!isMongoDbAvailabilityError(error)) {
-      throw error;
-    }
-
-    // Authorization may be incomplete: stop without projecting or using a source.
-    // Driver diagnostics can contain source data; log only safe classification.
-    logger.warn("AI-V01 Job source lookup failed; normalization FAILED", {
-      jobId,
-      errorType: error.name,
-    });
-
-    return FAILED_RESULT;
-  }
-
-  const { job, persistedJob } = loadedSource;
+// Both internal and Candidate-visible Job reads use one lossless source
+// projection and taxonomy path after their own canonical access checks.
+const normalizeLoadedJob = async ({ job, persistedJob }) => {
   const jobSource = toJobNormalizationSource(job, persistedJob);
   let taxonomy;
 
@@ -202,4 +175,53 @@ const normalizeInternalJob = async ({
   }
 };
 
-export { normalizeInternalJob };
+// AI-V01 F01 Backend entry for Company Staff. Sparse DRAFTs remain eligible.
+const normalizeInternalJob = async ({
+  actorUser,
+  jobId,
+  clientCompanyId,
+} = {}) => {
+  let loadedSource;
+  try {
+    loadedSource = await loadInternalJob(
+      { actorUser, jobId, clientCompanyId },
+      { includePersistedSource: true },
+    );
+  } catch (error) {
+    if (!isMongoDbAvailabilityError(error)) {
+      throw error;
+    }
+
+    logger.warn("AI-V01 Job source lookup failed; normalization FAILED", {
+      jobId,
+      errorType: error.name,
+    });
+    return FAILED_RESULT;
+  }
+
+  return normalizeLoadedJob(loadedSource);
+};
+
+// AI-V03 Candidate entry: V8 public visibility authorizes the raw Job source.
+// Hydration supplies defaults only for absent persisted keys; the projection
+// overlays raw values so malformed stored values cannot be repaired silently.
+const normalizeCandidateVisibleJob = async ({ actorUser, jobId } = {}) => {
+  let persistedJob;
+  try {
+    ({ job: persistedJob } = await loadPublicJobDiscoverySource({ actorUser, jobId }));
+  } catch (error) {
+    if (!isMongoDbAvailabilityError(error)) {
+      throw error;
+    }
+
+    logger.warn("AI-V03 Candidate Job source lookup failed; normalization FAILED", {
+      jobId,
+      errorType: error.name,
+    });
+    return FAILED_RESULT;
+  }
+
+  return normalizeLoadedJob({ job: Job.hydrate(persistedJob), persistedJob });
+};
+
+export { normalizeCandidateVisibleJob, normalizeInternalJob };

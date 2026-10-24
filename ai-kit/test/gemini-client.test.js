@@ -75,7 +75,12 @@ describe("Gemini client adapter", () => {
   });
 
   it("logs provider failures without swallowing or replacing them", async () => {
-    const providerError = new Error("provider unavailable");
+    const marker = "PRIVATE_JOB_CV_RESPONSE_MARKER";
+    const providerError = Object.assign(new Error(`provider unavailable ${marker}`), {
+      status: 503,
+      code: "server_error",
+      response: { body: marker },
+    });
     generateContentMock.mockRejectedValue(providerError);
 
     const client = createGeminiClient({
@@ -90,10 +95,13 @@ describe("Gemini client adapter", () => {
     expect(logger.error).toHaveBeenCalledWith(
       "Gemini generateContent failed",
       {
-        error: providerError,
+        provider: "gemini",
         model: "test-model",
+        httpStatus: 503,
+        errorCode: "server_error",
       },
     );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(marker);
   });
 
   it("rejects incomplete provider configuration before SDK initialization", () => {

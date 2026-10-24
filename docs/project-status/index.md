@@ -67,6 +67,7 @@ Reading rules:
 - [Package foundation](ai-kit/foundation.md)
 - [AI-V01 — Job/CV normalization](ai-kit/v01-job-cv-normalization.md)
 - [AI-V02 — Uploaded CV normalization](ai-kit/v02-uploaded-cv-normalization.md)
+- [AI-V03 — Job–CV matching and scoring](ai-kit/v03-job-cv-matching-scoring.md)
 
 Record each approved AI Kit business version in its own status leaf. Update
 `foundation.md` only for shared package, provider, document extraction, and

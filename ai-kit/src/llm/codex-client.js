@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 
 import { logProviderUsage } from "./provider-usage.js";
+import { getProviderErrorMetadata } from "./provider-error-metadata.js";
 
 const assertNonEmptyString = (value, fieldName) => {
   if (typeof value !== "string" || !value.trim()) {
@@ -65,8 +66,9 @@ function createCodexClient({ apiKey, baseURL, model, logger }) {
         httpStatus: Number.isInteger(error?.status) ? error.status : null,
         sdkRequestCount: 1 });
       logger.error("Codex createResponse failed", {
-        error,
+        provider: "codex",
         model: configuredModel,
+        ...getProviderErrorMetadata(error),
       });
 
       throw error;

@@ -161,7 +161,7 @@ describe("AI-V01 public runtime entry", () => {
     const aiKit = createAiKit({ logger: makeLogger() });
 
     expect(Object.keys(aiKit)).toEqual([
-      "normalizeJob", "normalizeGeneratedCv", "normalizeUploadedCv",
+      "normalizeJob", "normalizeGeneratedCv", "normalizeUploadedCv", "matchJobCv",
     ]);
     expect(Object.isFrozen(aiKit)).toBe(true);
     expect(aiKit.normalizeJob).toBeTypeOf("function");

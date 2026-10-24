@@ -54,6 +54,23 @@ The approved Product/Data Contract governs AI-V02; implementation verification
 and Final Acceptance evidence are recorded in the linked status leaf and
 [BR-AI-22 evaluation report](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-report.md).
 
-AI-V03 is not approved by this roadmap. AI #1, AI #2, and AI #3 in
-Engineering architecture remain direction only and do not independently
-approve another version, scope, Product Specification, or Data Contract.
+### AI-V03 — Job–CV Matching & Weighted Scoring
+
+- **Product/Data approval status:** `APPROVED`
+- **Implementation status:** `IMPLEMENTED — VERIFIED OFFLINE` (F01–F04 and
+  Candidate Backend HTTP entry)
+- **Final Acceptance status:** `ACCEPTED` (2026-10-24; representative live
+  semantic evaluation and accepted deviations recorded in the linked status leaf)
+- **Functional requirements:** `F01` through `F04`
+- **Business rules:** `BR-AI-23` through `BR-AI-34`
+- **Canonical Product Specification:**
+  [`versions/v03-job-cv-matching-scoring.md`](versions/v03-job-cv-matching-scoring.md)
+- **Canonical Data Contract:**
+  [`../../data/ai-kit/versions/v03-job-cv-matching-scoring.md`](../../data/ai-kit/versions/v03-job-cv-matching-scoring.md)
+
+AI-V03 implementation, offline verification, representative live evaluation,
+and the Product Owner's Final Acceptance decision are recorded in the
+[AI-V03 status leaf](../../project-status/ai-kit/v03-job-cv-matching-scoring.md).
+AI #1, AI #2, and AI #3 in Engineering architecture remain direction only and
+do not independently approve another version, scope, Product Specification, or
+Data Contract.

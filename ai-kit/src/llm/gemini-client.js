@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 import { logProviderUsage } from "./provider-usage.js";
+import { getProviderErrorMetadata } from "./provider-error-metadata.js";
 
 const assertNonEmptyString = (value, fieldName) => {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -52,8 +53,9 @@ function createGeminiClient({ apiKey, model, logger }) {
       return response;
     } catch (error) {
       logger.error("Gemini generateContent failed", {
-        error,
+        provider: "gemini",
         model: configuredModel,
+        ...getProviderErrorMetadata(error),
       });
 
       throw error;

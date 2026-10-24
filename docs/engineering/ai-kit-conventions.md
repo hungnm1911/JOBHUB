@@ -19,10 +19,12 @@ and deterministic. Its F01 (`normalizeJob`) and F02 (`normalizeGeneratedCv`)
 normalization is reachable only through the `createAiKit` instance. The
 superseded LLM-based F01 Job extraction stage, its R2 contract file and
 loader, and its R4 contract tests have been retired. AI-V02 Product/Data
-authority is approved; its F01 (`normalizeUploadedCv`) is implemented offline
-through the same instance, with live provider acceptance and AI quality
-evaluation still pending. AI-V03 is not approved. AI #1/#2/#3 architecture
-direction does not independently approve another business capability.
+authority is approved and Final Acceptance is `ACCEPTED`; its F01
+(`normalizeUploadedCv`) is implemented offline through the same instance.
+AI-V03 Product/Data authority is approved; F01 Match Result orchestration and
+F02–F04 assessment/scoring are implemented offline, while Final Acceptance has
+not started. AI #1/#2/#3
+architecture direction does not independently approve another business capability.
 
 ## Terminology
 
@@ -93,8 +95,13 @@ src/
 │   ├── cv-match-profile-career.js
 │   ├── uploaded-cv-normalization.js
 │   └── uploaded-cv-semantic-extraction.js
-└── document/
-    └── pdf-text-extractor.js
+├── document/
+│   └── pdf-text-extractor.js
+└── matching/
+    ├── deterministic-field-scoring.js
+    ├── semantic-skills-assessment.js
+    ├── match-result-orchestration.js
+    └── weighted-match-scoring.js
 ```
 
 This tree records current owners; it is not a required scaffold for every
@@ -137,10 +144,12 @@ future capability.
   `FAILED` with `profile: null`, without calling the normalizer or logging
   source content/raw driver diagnostics; unexpected errors propagate.
   Sparse DRAFTs do not acquire submit, completeness, default, or PUBLIC gates.
-- B1/B2 are runtime service entries only. Public Job access, Uploaded CV,
-  Recruiter/application CV access, HTTP integration, Job/CV CRUD hooks, and
-  AI-specific persistence are not implemented by these entries. AI #1/#2/#3
-  remain future direction requiring their own approved Product/Data authority.
+- B1/B2 are runtime service entries. AI-V03 F01 adds a Candidate HTTP consumer
+  through Backend's own CV and V8 Job visibility gates, reusing their lossless
+  source projections and the AI-V02 Uploaded CV runtime entry. Recruiter/
+  application CV access, Job/CV CRUD hooks, and AI-specific persistence are
+  not implemented by these entries. AI #1/#2/#3 remain future direction
+  requiring their own approved Product/Data authority.
 - AI-V02 Slice 4a projects an already authorized own active Uploaded CandidateCV
   in the Backend CandidateCV AI service into the eight-field `cvSource`, using
   persisted metadata and B2 taxonomy resolution. The projection is not an
@@ -209,6 +218,9 @@ future capability.
   content, business prompts, tool arguments containing private data, or raw
   provider responses. Prefer minimal metadata such as provider/model and
   normalized status.
+- Provider adapter failure logs include only provider, configured model, HTTP
+  status, and a bounded error code. Do not pass an SDK error object, its message,
+  stack, cause, or response body to the logger.
 - Each successful provider API call logs `input_tokens`, `output_tokens`,
   `total_tokens`, and `cached_tokens` through the injected logger. An
   unavailable provider usage field is logged as `null`, not guessed.
@@ -310,6 +322,25 @@ AI-V02 F01 runtime orchestration (`src/normalization/uploaded-cv-semantic-extrac
   FAILED. Neither silently switches to JSON Object Mode. Adapter request and
   schema acceptance are covered offline; live acceptance and semantic quality
   require separate evaluation.
+
+AI-V03 F02 Semantic Skills Assessment (`src/matching/semantic-skills-assessment.js`):
+
+- Consumes READY `JobMatchProfile` and `CVMatchProfile` internally. The prompt
+  contains structured required skills, Job Description, and nonempty CV career
+  claims with short source IDs and existing PDF evidence excerpts when present;
+  it excludes source identities and unrelated metadata. The shared career
+  reader supplies Generated/Uploaded CV content.
+- Uses one explicitly selected adapter call (Codex by default, or Gemini/Groq)
+  with a strict provider-native JSON schema. No retry or automatic fallback is
+  composed. Invalid completion or output raises a coded AI-processing error;
+  a missing skill or missing evidence remains a valid assessment outcome.
+- Validates rubric scores, priority, source references, structured-skill
+  coverage, and duplicate structured-skill use before returning
+  `requirementGroups`. Restores source paths and PDF excerpts from the input
+  profiles after validation. The provider never authors provenance paths.
+- The returned assessment is the logical input to F04. F02 does not calculate
+  weights or Match Score. Semantic grounding and equivalence quality require
+  evaluation; strict output validation does not establish their accuracy.
 
 ## Document extraction
 

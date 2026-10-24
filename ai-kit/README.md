@@ -2,7 +2,7 @@
 
 `@jobhub/ai-kit` is JOBHUB's private local Node.js package for AI-specific adapters and computation. It uses JavaScript ES modules, lives beside `backend/` and `frontend/`, and is consumed by Backend through `file:../ai-kit`.
 
-AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready, and AI-V01 Product/Data authority is approved. Deterministic AI-V01 F01 Job normalization and F02 Generated CV normalization are implemented through the `createAiKit` instance (`normalizeJob`, `normalizeGeneratedCv`). Backend Slice B1 consumes F01 for internal Jobs, and Slice B2 consumes F02 for a Candidate's own Generated CVs. AI-V01 Final Acceptance remains PENDING; AI-V02 and AI-V03 are not approved.
+AI Kit runs in the Backend process and has no HTTP server, port, startup command, or deployment service of its own. The technical foundation is ready. AI-V01 Final Acceptance remains PENDING RECHECK; AI-V02 and AI-V03 Product/Data authority is APPROVED and Final Acceptance is ACCEPTED. AI-V03 F01–F04 and its Candidate Backend HTTP entry are implemented and verified offline; representative live semantic evaluation and accepted deviations are recorded in the [AI-V03 status](../docs/project-status/ai-kit/v03-job-cv-matching-scoring.md).
 
 ## Installation
 
@@ -146,6 +146,7 @@ for normalization and acceptance evidence.
 | [AI Kit sources of truth](../docs/engineering/ai-kit-source-of-truth.md) | Canonical owners, consumers, and forbidden duplication |
 | [AI Kit foundation status](../docs/project-status/ai-kit/foundation.md) | Shared package, provider, extraction, and integration evidence |
 | [AI-V01 status](../docs/project-status/ai-kit/v01-job-cv-normalization.md) | F01/F02, Backend B1/B2, and Final Acceptance evidence |
-| [AI Kit Product roadmap](../docs/product/ai-kit/roadmap.md) | AI Kit version and scope authority; F01/F02 and Backend B1/B2 are implemented and verified offline; Final Acceptance remains PENDING |
+| [AI-V03 status](../docs/project-status/ai-kit/v03-job-cv-matching-scoring.md) | Matching implementation, verification, and Final Acceptance evidence |
+| [AI Kit Product roadmap](../docs/product/ai-kit/roadmap.md) | AI Kit version, scope, and acceptance status authority |
 | [AI Kit Product Specifications](../docs/product/ai-kit/versions/) | Approved detailed AI Kit business requirements, including AI-V01 |
 | [AI Kit Data Contracts](../docs/data/ai-kit/versions/) | Approved AI Kit persistence and data-defined contracts, including AI-V01 |

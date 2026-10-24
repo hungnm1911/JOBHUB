@@ -67,14 +67,17 @@ describe("centralized error handling", () => {
     expect(response.body.error.message).not.toBe("Internal server error");
   });
 
-  it("logs unexpected errors with the request id and cause chain", async () => {
+  it("logs safe metadata for unexpected provider errors and preserves HTTP failure", async () => {
     const stderrWrite = vi
       .spyOn(process.stderr, "write")
       .mockImplementation(() => true);
-    const rootCause = new Error("socket hang up");
-    const failingApp = createFailingApp(
-      new Error("Upstream call failed", { cause: rootCause }),
+    const marker = "PRIVATE_JOB_CV_RESPONSE_MARKER";
+    const rootCause = new Error(`provider response ${marker}`);
+    const providerError = Object.assign(
+      new Error(`Upstream call failed ${marker}`, { cause: rootCause }),
+      { status: 503, code: "server_error", response: { body: marker } },
     );
+    const failingApp = createFailingApp(providerError);
 
     const response = await request(failingApp).get("/fail?token=secret");
 
@@ -88,8 +91,9 @@ describe("centralized error handling", () => {
     expect(output).toContain("Unhandled server error");
     expect(output).toContain("GET /fail");
     expect(output).not.toContain("token=secret");
-    expect(output).toContain("Upstream call failed");
-    expect(output).toContain("socket hang up");
+    expect(output).toContain("503");
+    expect(output).toContain("server_error");
+    expect(output).not.toContain(marker);
   });
 
   it("keeps operational errors out of the error log at the test level", async () => {
