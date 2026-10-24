@@ -22,8 +22,9 @@ loader, and its R4 contract tests have been retired. AI-V02 Product/Data
 authority is approved and Final Acceptance is `ACCEPTED`; its F01
 (`normalizeUploadedCv`) is implemented offline through the same instance.
 AI-V03 Product/Data authority is approved; F01 Match Result orchestration and
-F02–F04 assessment/scoring are implemented offline, while Final Acceptance has
-not started. AI #1/#2/#3
+F02–F04 assessment/scoring are implemented offline. AI-V04 Product/Data
+authority is approved; F01 Slice 1 implements the internal evaluation entry,
+and Slice 2 adds the Candidate Backend HTTP entry. AI #1/#2/#3
 architecture direction does not independently approve another business capability.
 
 ## Terminology
@@ -97,11 +98,13 @@ src/
 │   └── uploaded-cv-semantic-extraction.js
 ├── document/
 │   └── pdf-text-extractor.js
-└── matching/
-    ├── deterministic-field-scoring.js
-    ├── semantic-skills-assessment.js
-    ├── match-result-orchestration.js
-    └── weighted-match-scoring.js
+├── matching/
+│   ├── deterministic-field-scoring.js
+│   ├── semantic-skills-assessment.js
+│   ├── match-result-orchestration.js
+│   └── weighted-match-scoring.js
+└── evaluation/
+    └── cv-evaluation.js
 ```
 
 This tree records current owners; it is not a required scaffold for every
@@ -146,7 +149,9 @@ future capability.
   Sparse DRAFTs do not acquire submit, completeness, default, or PUBLIC gates.
 - B1/B2 are runtime service entries. AI-V03 F01 adds a Candidate HTTP consumer
   through Backend's own CV and V8 Job visibility gates, reusing their lossless
-  source projections and the AI-V02 Uploaded CV runtime entry. Recruiter/
+  source projections and the AI-V02 Uploaded CV runtime entry. AI-V04 F01 adds
+  a distinct Candidate HTTP consumer of the same authorized profile preparation
+  and the `evaluateCv` entry. Recruiter/
   application CV access, Job/CV CRUD hooks, and AI-specific persistence are
   not implemented by these entries. AI #1/#2/#3 remain future direction
   requiring their own approved Product/Data authority.
@@ -341,6 +346,22 @@ AI-V03 F02 Semantic Skills Assessment (`src/matching/semantic-skills-assessment.
 - The returned assessment is the logical input to F04. F02 does not calculate
   weights or Match Score. Semantic grounding and equivalence quality require
   evaluation; strict output validation does not establish their accuracy.
+
+AI-V04 F01 Slice 1 CV Evaluation (`src/evaluation/cv-evaluation.js`):
+
+- Consumes one authorized READY Job/CV normalization pair through the
+  `createAiKit` instance `evaluateCv` entry. Backend Slice 2 owns access checks
+  and HTTP response mapping.
+- Uses one provider-native strict structured-output inference for V03-compatible
+  semantic requirement groups and V04 feedback. Reuses the V03 source/rubric
+  validation and deterministic/weighted score calculators; feedback never
+  supplies or changes scores.
+- Accepts empty review text and an empty improvement list. Specific CV item
+  references are resolved from the existing source-aware career view; null
+  references retain section-level feedback. Invalid structured output fails
+  the request, while sparse evidence and low scores remain business results.
+- Does not persist, edit CV content, apply to Jobs, or call another provider
+  automatically.
 
 ## Document extraction
 

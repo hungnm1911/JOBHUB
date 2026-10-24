@@ -283,7 +283,7 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   optional Codex/Gemini/Groq configuration and the injected logger contract, then
   returns a frozen instance with AI-V01 entries `normalizeJob` (F01) and
   `normalizeGeneratedCv` (F02), AI-V02 `normalizeUploadedCv` (F01), and
-  AI-V03 `matchJobCv` (F01 orchestration). The
+  AI-V03 `matchJobCv` (F01 orchestration), and AI-V04 `evaluateCv` (F01 Slice 1). The
   AI-V01 entries remain synchronous, deterministic, and provider-free; they
   need no LLM configuration and do not log. The AI-V02 entry is asynchronous
   and calls one explicitly selected provider after PDF text extraction.
@@ -323,7 +323,9 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   domain refusals and unexpected errors propagate. AI-V03's Candidate matching
   HTTP entry now consumes the same lossless projection path through a V8-visible
   Job loader and the own-CandidateCV normalization entries. There are no source
-  writes, profile persistence, or separate AI Kit lifecycle.
+  writes, profile persistence, or separate AI Kit lifecycle. AI-V04's Candidate
+  evaluation HTTP entry reuses the same authorized READY profile preparation
+  and calls `evaluateCv` through the shared AI Kit instance.
 - AI-V02 Slice 4a adds a Backend-only Uploaded CandidateCV `cvSource`
   projection in the same CandidateCV AI service. It requires a previously
   authorized own active CV, rechecks the persisted source and taxonomy, and
@@ -342,6 +344,13 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   Job/CV identities, all five field scores, weights, contributions, and the
   overall score. Backend now calls it from the authenticated Candidate matching
   HTTP entry after V01/V02 normalization. Persistence remains absent.
+- AI-V04 `evaluateCv` accepts one READY Job/CV normalization pair and makes one
+  strict structured-output inference for semantic skills assessment and CV
+  feedback. It reuses V03 semantic source/rubric validation and scoring
+  calculators, returns the total score, summary, five field reviews, and CV
+  improvements, and uses the existing CV career read view for source-aware
+  feedback. The Backend Candidate HTTP entry consumes it after own-CV and V8
+  Job access checks, returning the evaluation without persistence.
 
 ### Implemented foundations
 

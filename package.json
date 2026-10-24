@@ -5,9 +5,6 @@
     "client": "yarn --cwd frontend",
     "server": "yarn --cwd backend",
     "ai-kit": "yarn --cwd ai-kit",
-    "build": "yarn client build",
-    "lint": "yarn server lint && yarn ai-kit lint && yarn client lint",
-    "test": "yarn server test && yarn ai-kit test && yarn client test:auth",
-    "verify:agent": "yarn server verify:agent && yarn ai-kit verify:agent && yarn client verify:agent"
+    "build": "yarn client build"
   }
 }

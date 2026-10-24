@@ -43,7 +43,7 @@ describe("AI Kit public entrypoint", () => {
     const instance = aiKit.createAiKit({ llm, logger });
 
     expect(Object.keys(instance)).toEqual([
-      "normalizeJob", "normalizeGeneratedCv", "normalizeUploadedCv", "matchJobCv",
+      "normalizeJob", "normalizeGeneratedCv", "normalizeUploadedCv", "matchJobCv", "evaluateCv",
     ]);
     expect(Object.isFrozen(instance)).toBe(true);
   });
