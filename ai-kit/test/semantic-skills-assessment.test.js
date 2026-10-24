@@ -254,6 +254,12 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
       expect(instruction).toContain("SUPPORTED when CV evidence supports the requirement");
       expect(instruction).toContain("PARTIAL when it supports only part");
       expect(instruction).toContain("not mention count");
+      expect(instruction).toMatch(/NO_EVIDENCE[^.]*cvSourceIds: \[\]/);
+      expect(instruction).toMatch(/MISMATCH[^.]*relevant CV source IDs/);
+      expect(instruction).toMatch(/CONFLICT[^.]*relevant CV source IDs/);
+      expect(instruction).toContain("explicit first-use date that makes the claimed duration impossible is an unresolved CONFLICT with score 0, not PARTIAL");
+      expect(instruction).toContain("shorter dated period alone does not rule out earlier experience");
+      expect(instruction).toContain("do not infer CONFLICT from missing history");
     },
   );
 

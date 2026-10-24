@@ -148,6 +148,57 @@ describe("AI-V04 F01 CV Evaluation", () => {
     expect(evaluation.cvImprovements).toEqual([]);
   });
 
+  it("omits Generated CV feedback aimed at Uploaded-only sections without changing scoring", async () => {
+    const improvement = (section, comment, cvSourceId = null) => ({
+      section, cvSourceId, comment, suggestion: null, rewrite: null,
+    });
+    codexCall.mockResolvedValue(response(feedback({ cvImprovements: [
+      improvement("otherCareerClaims", "Unsupported target", "C1"),
+      improvement("careerPositioning", "Unsupported target"),
+      improvement("unresolvedContent", "Unsupported target"),
+      improvement("workExperiences", "Describe the outcome", "C1"),
+    ] })));
+
+    const result = await aiKit.evaluateCv({ jobNormalizationResult: ready(job),
+      cvNormalizationResult: ready(generatedCv) });
+
+    expect(codexCall).toHaveBeenCalledOnce();
+    const request = codexCall.mock.calls[0][0];
+    expect(JSON.parse(request.input).careerSections).not.toContain("otherCareerClaims");
+    expect(request.text.format.schema.properties.cvImprovements.items.properties.section.enum)
+      .not.toContain("otherCareerClaims");
+    expect(request.instructions).toContain("only the careerSections supplied");
+    expect(result.matchScore).toBe(92);
+    expect(result.cvImprovements).toEqual([{ section: "workExperiences",
+      sourceReference: { sourcePath: "/generatedContent/workExperiences/0",
+        fieldSourcePaths: { description: "/generatedContent/workExperiences/0/description" },
+        evidence: [] },
+      comment: "Describe the outcome", suggestion: null, rewrite: null }]);
+  });
+
+  it("keeps Uploaded CV other career claims as an eligible feedback section", async () => {
+    const cv = { ...uploadedCv, pdfContent: { ...uploadedCv.pdfContent,
+      otherCareerClaims: [{ value: "Led a migration", evidence: ["Led a migration"] }],
+    } };
+    codexCall.mockResolvedValue(response(feedback({ cvImprovements: [{
+      section: "otherCareerClaims", cvSourceId: "C2", comment: "Quantify the result",
+      suggestion: null, rewrite: null,
+    }] })));
+
+    const result = await aiKit.evaluateCv({ jobNormalizationResult: ready(job),
+      cvNormalizationResult: ready(cv) });
+
+    expect(codexCall).toHaveBeenCalledOnce();
+    expect(JSON.parse(codexCall.mock.calls[0][0].input).careerSections)
+      .toContain("otherCareerClaims");
+    expect(codexCall.mock.calls[0][0].text.format.schema.properties
+      .cvImprovements.items.properties.section.enum).toContain("otherCareerClaims");
+    expect(result.matchScore).toBe(92);
+    expect(result.cvImprovements).toEqual([{ section: "otherCareerClaims",
+      sourceReference: { sourcePath: null, fieldSourcePaths: {}, evidence: ["Led a migration"] },
+      comment: "Quantify the result", suggestion: null, rewrite: null }]);
+  });
+
   it("returns a valid low-evidence result for a sparse READY pair", async () => {
     codexCall.mockResolvedValue(response(feedback({ requirementGroups: [],
       overallSummary: "The CV does not provide enough evidence for a firm conclusion.",
@@ -167,6 +218,104 @@ describe("AI-V04 F01 CV Evaluation", () => {
     expect(result.matchScore).toBe(0);
     expect(result.fieldReviews).toHaveLength(5);
     expect(result.cvImprovements).toEqual([]);
+  });
+
+  it("supplies the normalized Job title as V04 context when JD and categories are sparse", async () => {
+    codexCall.mockResolvedValue(response(feedback({ requirementGroups: [] })));
+    const sparseJob = { ...job,
+      freeText: { title: sourced("Backend Engineer", "/title"), jobDescription: null },
+      metadata: { ...job.metadata, requiredSkills: [], fieldCategories: [], positionCategories: [] },
+    };
+
+    const result = await aiKit.evaluateCv({ jobNormalizationResult: ready(sparseJob),
+      cvNormalizationResult: ready(generatedCv) });
+
+    expect(codexCall).toHaveBeenCalledOnce();
+    const request = codexCall.mock.calls[0][0];
+    expect(JSON.parse(request.input)).toMatchObject({ jobTitle: "Backend Engineer", job: [],
+      jobMetadata: { fieldCategories: [], positionCategories: [] } });
+    expect(request.instructions).toContain("Job title");
+    expect(result.matchScore).toBe(35);
+  });
+
+  it.each([null, sourced("   ", "/title")])(
+    "keeps an absent or blank Job title optional in V04 context (%j)", async (title) => {
+      codexCall.mockResolvedValue(response(feedback({ requirementGroups: [] })));
+      const result = await aiKit.evaluateCv({ jobNormalizationResult: ready({ ...job,
+        freeText: { ...job.freeText, title }, metadata: { ...job.metadata, requiredSkills: [] },
+      }), cvNormalizationResult: ready(generatedCv) });
+
+      expect(codexCall).toHaveBeenCalledOnce();
+      expect(JSON.parse(codexCall.mock.calls[0][0].input).jobTitle).toBeNull();
+      expect(result.fieldReviews).toHaveLength(5);
+    },
+  );
+
+  it("grounds ongoing tenure feedback in the evaluation time", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T10:00:00.000Z"));
+    try {
+      codexCall.mockResolvedValue(response(feedback()));
+      const cv = { ...generatedCv, content: { ...generatedCv.content,
+        workExperiences: [{ sourcePath: "/generatedContent/workExperiences/0",
+          startDate: sourced("2022-10-01T00:00:00.000Z", "/generatedContent/workExperiences/0/startDate"),
+          endDate: null,
+          freeText: { description: sourced("Four years of production Node.js work",
+            "/generatedContent/workExperiences/0/description") } }],
+      } };
+
+      const result = await aiKit.evaluateCv({ jobNormalizationResult: ready(job),
+        cvNormalizationResult: ready(cv) });
+
+      expect(codexCall).toHaveBeenCalledOnce();
+      const request = codexCall.mock.calls[0][0];
+      const input = JSON.parse(request.input);
+      expect(input.evaluationTimestamp).toBe("2026-10-24T10:00:00.000Z");
+      expect(input.cv).toEqual(expect.arrayContaining([expect.objectContaining({
+        group: "workExperiences", value: expect.objectContaining({
+          startDate: "2022-10-01T00:00:00.000Z",
+          description: "Four years of production Node.js work",
+        }),
+      })]));
+      expect(request.instructions).toContain("Do not flag a tenure discrepancy when the supplied dates are consistent with the claim");
+      expect(result.matchScore).toBe(92);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps feedback about multiple CV projects at section level", async () => {
+    const cv = { ...generatedCv, content: { ...generatedCv.content,
+      projects: [
+        { sourcePath: "/generatedContent/projects/0",
+          name: sourced("Redis proof of concept", "/generatedContent/projects/0/name") },
+        { sourcePath: "/generatedContent/projects/1",
+          name: sourced("Local Docker setup", "/generatedContent/projects/1/name") },
+      ],
+    } };
+    codexCall.mockResolvedValue(response(feedback({ cvImprovements: [
+      { section: "projects", cvSourceId: null,
+        comment: "Redis was only a proof of concept and Docker was only used locally.",
+        suggestion: "Clarify each project's production scope.", rewrite: null },
+      { section: "projects", cvSourceId: "C2", comment: "Redis was only a proof of concept.",
+        suggestion: null, rewrite: null },
+      { section: "projects", cvSourceId: "C3", comment: "Docker was only used locally.",
+        suggestion: null, rewrite: null },
+    ] })));
+
+    const result = await aiKit.evaluateCv({ jobNormalizationResult: ready(job),
+      cvNormalizationResult: ready(cv) });
+
+    expect(codexCall).toHaveBeenCalledOnce();
+    const request = codexCall.mock.calls[0][0];
+    expect(JSON.parse(request.input).cv).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "C2", group: "projects" }),
+      expect.objectContaining({ id: "C3", group: "projects" }),
+    ]));
+    expect(request.instructions).toContain("When one improvement refers to more than one CV item, set cvSourceId to null");
+    expect(result.cvImprovements.map((item) => item.sourceReference?.sourcePath ?? null))
+      .toEqual([null, "/generatedContent/projects/0", "/generatedContent/projects/1"]);
+    expect(result.matchScore).toBe(92);
   });
 
   it("rejects invalid READY input before inference", async () => {
@@ -217,6 +366,8 @@ describe("AI-V04 F01 CV Evaluation", () => {
   it.each([
     ["invalid skills rubric", { requirementGroups: [{ ...groups[0], semanticScore: 77 }] }],
     ["invalid scoring source", { requirementGroups: [{ ...groups[0], cvSourceIds: ["C99"] }] }],
+    ["NO_EVIDENCE with a CV source", { requirementGroups: [{ ...groups[0],
+      semanticScore: 0, evidenceState: "NO_EVIDENCE" }] }],
     ["invalid improvement source type", { cvImprovements: [{ section: "workExperiences",
       cvSourceId: 99, comment: "Invalid", suggestion: null, rewrite: null }] }],
     ["missing improvement field", { cvImprovements: [{ section: "workExperiences",
@@ -225,6 +376,88 @@ describe("AI-V04 F01 CV Evaluation", () => {
     codexCall.mockResolvedValue(response(feedback(invalid)));
     await expect(aiKit.evaluateCv({ jobNormalizationResult: ready(job),
       cvNormalizationResult: ready(generatedCv) })).rejects.toMatchObject({ code: "INVALID_CV_EVALUATION" });
+  });
+
+  it("instructs V04 inference to leave absent skill evidence unassociated", async () => {
+    const h3Job = { ...job,
+      metadata: { ...job.metadata, requiredSkills: [sourced("Terraform", "/requiredSkills/0"),
+        sourced("RabbitMQ", "/requiredSkills/1")] },
+      freeText: { jobDescription: sourced("Terraform and RabbitMQ required", "/jobDescription") },
+    };
+    codexCall.mockResolvedValue(response(feedback({ requirementGroups: [
+      { requirement: "Terraform", priority: "REQUIRED", semanticScore: 0,
+        evidenceState: "NO_EVIDENCE", jobSourceIds: ["J0", "JD"], cvSourceIds: [] },
+      { requirement: "RabbitMQ", priority: "REQUIRED", semanticScore: 0,
+        evidenceState: "NO_EVIDENCE", jobSourceIds: ["J1", "JD"], cvSourceIds: [] },
+    ] })));
+
+    const result = await aiKit.evaluateCv({ jobNormalizationResult: ready(h3Job),
+      cvNormalizationResult: ready(generatedCv) });
+
+    const instruction = codexCall.mock.calls[0][0].instructions;
+    expect(JSON.parse(codexCall.mock.calls[0][0].input).cv.length).toBeGreaterThan(0);
+    expect(instruction).toMatch(/NO_EVIDENCE[^.]*cvSourceIds: \[\]/);
+    expect(instruction).toMatch(/MISMATCH[^.]*relevant CV source IDs/);
+    expect(instruction).toMatch(/CONFLICT[^.]*relevant CV source IDs/);
+    expect(instruction).toContain("do not attach unrelated CV source IDs");
+    expect(result.fieldReviews.find((review) => review.criterion === "skills").score).toBe(0);
+  });
+
+  it.each([
+    ["explicit first exposure contradicts three years", "First used Kubernetes in March 2025; production rotation ended in September 2025.", "CONFLICT", 0],
+    ["a dated rotation leaves earlier experience unknown", "Kubernetes production rotation ran from March to September 2025.", "PARTIAL", 50],
+  ])("keeps Kubernetes tenure evidence distinct when %s", async (
+    _case, history, evidenceState, semanticScore,
+  ) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-25T00:00:00.000Z"));
+    try {
+      const kubernetesJob = { ...job,
+        metadata: { ...job.metadata, requiredSkills: [sourced("Three years of Kubernetes production experience", "/requiredSkills/0")] },
+        freeText: { jobDescription: sourced("Requires three years of Kubernetes production experience", "/jobDescription") },
+      };
+      const kubernetesCv = { ...generatedCv,
+        metadata: { ...generatedCv.metadata, skillTags: [] },
+        freeText: { professionalSummary: sourced("Three years of Kubernetes production experience", "/professionalSummary") },
+        content: { ...generatedCv.content, workExperiences: [{
+          sourcePath: "/generatedContent/workExperiences/0",
+          startDate: sourced("2025-03-01T00:00:00.000Z", "/generatedContent/workExperiences/0/startDate"),
+          endDate: sourced("2025-09-30T00:00:00.000Z", "/generatedContent/workExperiences/0/endDate"),
+          freeText: { description: sourced(history, "/generatedContent/workExperiences/0/description") },
+        }] },
+      };
+      codexCall.mockResolvedValue(response(feedback({ requirementGroups: [{
+        requirement: "Three years of Kubernetes production experience", priority: "REQUIRED",
+        semanticScore, evidenceState, jobSourceIds: ["J0", "JD"], cvSourceIds: ["C0", "C1"],
+      }] })));
+
+      const result = await aiKit.evaluateCv({ jobNormalizationResult: ready(kubernetesJob),
+        cvNormalizationResult: ready(kubernetesCv) });
+
+      expect(codexCall).toHaveBeenCalledOnce();
+      const request = codexCall.mock.calls[0][0];
+      const input = JSON.parse(request.input);
+      expect(input.evaluationTimestamp).toBe("2026-10-25T00:00:00.000Z");
+      expect(input.job).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "J0", value: "Three years of Kubernetes production experience" }),
+      ]));
+      expect(input.cv).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "C0", group: "professionalSummary",
+          value: "Three years of Kubernetes production experience" }),
+        expect.objectContaining({ id: "C1", group: "workExperiences", value: expect.objectContaining({
+          startDate: "2025-03-01T00:00:00.000Z", endDate: "2025-09-30T00:00:00.000Z",
+          description: history,
+        }) }),
+      ]));
+      expect(request.instructions).toContain("explicit first-use date that makes the claimed duration impossible is an unresolved CONFLICT with score 0, not PARTIAL");
+      expect(request.instructions).toContain("shorter dated period alone does not rule out earlier experience");
+      expect(request.instructions).toContain("do not infer CONFLICT from missing history");
+      expect(result.fieldReviews.find((review) => review.criterion === "skills").score)
+        .toBe(semanticScore);
+      expect(result.matchScore).toBe(60 + semanticScore * 0.4);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("propagates provider failure without fabricating feedback or a score", async () => {
