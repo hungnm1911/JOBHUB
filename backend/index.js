@@ -191,7 +191,7 @@ const startServer = async () => {
     });
   });
 
-  logger.info(`Server is running at http://localhost:${config.port}`);
+  logger.info(`Server is running at http://localhost:${config.port}/api`);
 };
 
 process.once("SIGINT", () => {

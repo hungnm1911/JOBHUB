@@ -341,12 +341,12 @@ Current mismatch: several currently required variables also have defaults that c
 - Unexpected errors must reach the final error handler and must not leak production stack traces.
 - Routes, middleware, controllers, and services must not introduce competing global error formats.
 - The final error handler maps `AppError`, Multer errors, and Express/body-parser http-errors marked `expose` with a 4xx status (for example malformed JSON or an oversized body) to their client status. Any other error is a `500`.
-- When an error is translated into an `AppError`, the original error must be passed as `cause` (`new AppError(status, message, details, { cause: error })`) so the logged trace keeps the root cause.
+- When an error is translated into an `AppError`, the original error must be passed as `cause` (`new AppError(status, message, details, { cause: error })`) so callers retain the root cause. The final HTTP error handler must not serialize that cause into logs.
 
 ## Logging and request tracing
 
 - `backend/src/utils/logger.js` is the canonical application logger. Application runtime code under `backend/index.js` and `backend/src/` must log through it instead of calling `console.*` directly. CLI scripts under `backend/scripts/` may keep plain console output for operator-facing results.
-- The logger API is `logger.error | warn | info | debug(message, meta)`. `meta` is a plain object; pass errors as `{ error }` so the stack, own properties, and the `cause` chain are printed. `meta.requestId` is rendered as the line scope.
+- The logger API is `logger.error | warn | info | debug(message, meta)`. `meta` is a plain object; `meta.requestId` is rendered as the line scope. The final HTTP error handler logs only request and normalized error metadata because provider errors may contain private Job/CV data in their message, stack, response, or cause. Other owners may pass errors as `{ error }` only when the error and its cause chain are known to contain no sensitive payload.
 - `LOG_LEVEL` (`silent`, `error`, `warn`, `info`, `debug`) is normalized by `backend/src/config/index.js` as `config.logging.level`. The default is `debug` in development and `info` in every other environment. Output is human-readable (colorized on a TTY) outside production and one JSON line per entry in production.
 - Level semantics:
   - `error` is for failures that need attention: 5xx responses, worker pass failures, startup/shutdown failures, and process-level faults.

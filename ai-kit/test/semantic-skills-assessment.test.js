@@ -131,6 +131,46 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
     expect(result.requirementGroups[0].semanticScore).toBe(0);
   });
 
+  it("associates the structured Python source when S4S5 merges it with JD in a conflict", async () => {
+    // Projection of S4S5.capture.json: J1 was omitted from the Python group.
+    const s4s5Job = { ...job, metadata: { requiredSkills: [
+      { value: "React", sourcePath: "/requiredSkills/0" },
+      { value: "Python", sourcePath: "/requiredSkills/1" },
+    ] }, freeText: { jobDescription: { value:
+      "Required: production React application development. Required: at least five years of Python experience.",
+    sourcePath: "/jobDescription" } } };
+    const s4s5Cv = { ...generatedCv,
+      metadata: { skillTags: [{ value: "Python", sourcePath: "/skillTags/0" }] },
+      freeText: { professionalSummary: { value:
+        "I have never developed or shipped a React application in production. I have 3 years of Python experience.",
+      sourcePath: "/professionalSummary" } },
+      content: { ...generatedCv.content, skills: [{ value: "Python: 5 years of experience",
+        sourcePath: "/generatedContent/skills/0" }], projects: [] },
+    };
+    const react = group("Production React application development", "REQUIRED", 0,
+      "MISMATCH", ["J0", "JD"], ["C1"]);
+    const python = group("At least five years of Python experience", "REQUIRED", 0,
+      "CONFLICT", ["JD"], ["C0", "C1", "C2"]);
+    codexCall.mockResolvedValueOnce(codexResponse({ requirementGroups: [react, python] }))
+      .mockResolvedValueOnce(codexResponse({ requirementGroups: [
+        react, { ...python, jobSourceIds: ["J1", "JD"] },
+      ] }));
+
+    await expect(assess({ jobMatchProfile: s4s5Job, cvMatchProfile: s4s5Cv }))
+      .rejects.toBeInstanceOf(SemanticSkillsAssessmentError);
+    const result = await assess({ jobMatchProfile: s4s5Job, cvMatchProfile: s4s5Cv });
+
+    expect(result.requirementGroups[1]).toMatchObject({
+      priority: "REQUIRED", semanticScore: 0, evidenceState: "CONFLICT",
+    });
+    expect(result.requirementGroups[1].jobSources.map((source) => source.id))
+      .toEqual(["J1", "JD"]);
+    const instruction = codexCall.mock.calls[0][0].instructions;
+    expect(instruction).toMatch(/every structured requiredSkill.*exactly one.*requirement group/i);
+    expect(instruction).toMatch(/MISMATCH.*CONFLICT.*NO_EVIDENCE/);
+    expect(instruction).toContain("both the structured ID and JD");
+  });
+
   it.each(["MISMATCH", "CONFLICT"])(
     "classifies a zero-score %s without CV evidence as NO_EVIDENCE", async (evidenceState) => {
       codexCall.mockResolvedValue(codexResponse({ requirementGroups: [
@@ -164,6 +204,7 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
     ["duplicate requirement", [groups[0], { ...groups[0], requirement: " node.JS " }, groups[1]]],
     ["same structured skill counted twice", [groups[0], { ...groups[1], jobSourceIds: ["J0", "J1"] }]],
     ["unapproved score", [{ ...groups[0], semanticScore: 95 }, groups[1]]],
+    ["unknown evidence state", [{ ...groups[0], evidenceState: "MATCH" }, groups[1]]],
     ["fabricated source", [{ ...groups[0], cvSourceIds: ["C99"] }, groups[1]]],
     ["conflict with positive score", [{ ...groups[0], evidenceState: "CONFLICT" }, groups[1]]],
     ["missing evidence with positive score", [{ ...groups[0], cvSourceIds: [] }, groups[1]]],
@@ -188,6 +229,33 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
         .rejects.toBeInstanceOf(SemanticSkillsAssessmentError);
     }
   });
+
+  it.each(["codex", "gemini", "groq"])(
+    "constrains %s evidenceState to the validator's five states in the provider request", async (provider) => {
+      const output = JSON.stringify({ requirementGroups: groups });
+      codexCall.mockResolvedValue(codexResponse({ requirementGroups: groups }));
+      geminiCall.mockResolvedValue({ candidates: [{ finishReason: "STOP",
+        content: { role: "model", parts: [{ text: output }] } }] });
+      groqCall.mockResolvedValue({ choices: [{ finish_reason: "stop",
+        message: { role: "assistant", content: output } }] });
+
+      await assess({ jobMatchProfile: job, cvMatchProfile: generatedCv, provider });
+
+      const request = provider === "codex" ? codexCall.mock.calls[0][0]
+        : provider === "gemini" ? geminiCall.mock.calls[0][0] : groqCall.mock.calls[0][0];
+      const schema = provider === "codex" ? request.text.format.schema
+        : provider === "gemini" ? request.config.responseJsonSchema
+          : request.response_format.json_schema.schema;
+      expect(schema.properties.requirementGroups.items.properties.evidenceState).toEqual({
+        type: "string", enum: ["SUPPORTED", "PARTIAL", "MISMATCH", "NO_EVIDENCE", "CONFLICT"],
+      });
+      const instruction = provider === "codex" ? request.instructions
+        : provider === "gemini" ? request.config.systemInstruction : request.messages[0].content;
+      expect(instruction).toContain("SUPPORTED when CV evidence supports the requirement");
+      expect(instruction).toContain("PARTIAL when it supports only part");
+      expect(instruction).toContain("not mention count");
+    },
+  );
 
   it.each(["gemini", "groq"])("uses %s provider-native strict schema on explicit selection", async (provider) => {
     const output = JSON.stringify({ requirementGroups: groups });

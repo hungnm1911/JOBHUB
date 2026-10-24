@@ -74,7 +74,12 @@ describe("Codex client adapter", () => {
   });
 
   it("logs failures without swallowing or replacing them", async () => {
-    const providerError = new Error("provider unavailable");
+    const marker = "PRIVATE_JOB_CV_RESPONSE_MARKER";
+    const providerError = Object.assign(new Error(`provider unavailable ${marker}`), {
+      status: 503,
+      code: "server_error",
+      error: { responseBody: marker },
+    });
     createResponseMock.mockRejectedValue(providerError);
     const client = createCodexClient({
       apiKey: "test-codex-api-key",
@@ -86,9 +91,12 @@ describe("Codex client adapter", () => {
     await expect(client.createResponse({ input: "private prompt" }))
       .rejects.toBe(providerError);
     expect(logger.error).toHaveBeenCalledWith("Codex createResponse failed", {
-      error: providerError,
+      provider: "codex",
       model: "test-codex-model",
+      httpStatus: 503,
+      errorCode: "server_error",
     });
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(marker);
   });
 
   it("rejects incomplete config before SDK initialization", () => {

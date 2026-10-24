@@ -1,6 +1,7 @@
 import Groq from "groq-sdk";
 
 import { logProviderUsage } from "./provider-usage.js";
+import { getProviderErrorMetadata } from "./provider-error-metadata.js";
 
 const assertNonEmptyString = (value, fieldName) => {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -49,8 +50,9 @@ function createGroqClient({ apiKey, model, logger }) {
       return response;
     } catch (error) {
       logger.error("Groq createChatCompletion failed", {
-        error,
+        provider: "groq",
         model: configuredModel,
+        ...getProviderErrorMetadata(error),
       });
 
       throw error;

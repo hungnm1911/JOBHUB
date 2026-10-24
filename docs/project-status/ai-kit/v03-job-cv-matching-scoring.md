@@ -11,14 +11,17 @@ five field scores, weights, and contributions after one semantic inference.
 Slice 5 adds the Candidate Backend HTTP entry for F01, with V8 Job visibility,
 own active CandidateCV access, and V01/V02 normalization reuse. Focused Backend
 tests now cover real Uploaded CV normalization through the HTTP Match Result,
-sparse READY input, and provider failure. The common Backend gate was not
-completed. There is no persisted Match Result. AI-V03 Final Acceptance is
+sparse READY input, and provider failure. The common Backend gate has passed.
+G2B-D02 full-payload runtime debug logging is removed and verified offline.
+FA-L01 raw provider error logging is fixed and verified offline at the three
+provider adapters and the Backend final HTTP error handler.
+There is no persisted Match Result. AI-V03 Final Acceptance is
 **not started**.
 
 ## Deferred / not started
 
-The common Backend gate, live-provider acceptance, and AI-V03 semantic-quality
-evaluation remain deferred. F02/F03/F04 remain internal owners consumed by
+Live-provider acceptance and AI-V03 semantic-quality evaluation remain deferred.
+F02/F03/F04 remain internal owners consumed by
 the F01 orchestration.
 
 ## Implementation record (slice detail)
@@ -57,6 +60,21 @@ the F01 orchestration.
 
 ## Verification status
 
+- **2026-10-24 — FA-L01:** Synthetic provider errors carrying private markers
+  failed the adapter and HTTP log regression checks before the fix, then passed
+  after metadata-only logging. Focused tests passed (AI Kit: 3 files, 9 tests;
+  Backend: 2 files, 16 tests), including HTTP provider failure without a Match
+  Result. `cd ai-kit && npm run verify:agent` passed (ESLint; 26 files, 438
+  tests). `cd backend && npm run verify:agent` passed (ESLint with two existing
+  warnings; ARCH-001–019; 187 files, 1982 tests). No live provider was called.
+- **2026-10-24 — G2B-D02:** Removed the development semantic-assessment
+  diagnostic callback and Backend application-logger sink. A focused Backend
+  composition regression failed before the fix because the sink was injected,
+  then passed after removal. Focused AI Kit semantic/schema/orchestration tests
+  passed (4 files, 47 tests). `cd ai-kit && npm run verify:agent` passed
+  (ESLint; 26 files, 438 tests). `cd backend && npm run verify:agent` passed
+  (ESLint with two existing warnings; ARCH-001–019; 187 files, 1982 tests).
+  Provider responses were mocked in focused tests; no live provider was called.
 - **2026-10-24 — S5-T01 acceptance coverage:** With `TMPDIR` on the workspace
   disk, `npx vitest run test/candidate/ai-v03-slice-5-candidate-match.test.js
   test/candidate/ai-v02-slice-4c-uploaded-cv-runtime.test.js --maxWorkers=1

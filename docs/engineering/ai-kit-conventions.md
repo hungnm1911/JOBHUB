@@ -218,6 +218,9 @@ future capability.
   content, business prompts, tool arguments containing private data, or raw
   provider responses. Prefer minimal metadata such as provider/model and
   normalized status.
+- Provider adapter failure logs include only provider, configured model, HTTP
+  status, and a bounded error code. Do not pass an SDK error object, its message,
+  stack, cause, or response body to the logger.
 - Each successful provider API call logs `input_tokens`, `output_tokens`,
   `total_tokens`, and `cached_tokens` through the injected logger. An
   unavailable provider usage field is logged as `null`, not guessed.
