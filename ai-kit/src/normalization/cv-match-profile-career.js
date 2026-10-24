@@ -22,6 +22,10 @@ const ITEM_FIELDS = Object.freeze({
   languages: Object.freeze(["name", "proficiency", "statedProficiency"]),
 });
 const LIST_FIELDS = Object.freeze(["achievements", "technologies"]);
+const CV_CAREER_GROUPS = Object.freeze([
+  "careerPositioning", "professionalSummary", "skills", ...Object.keys(ITEM_FIELDS),
+  "otherCareerClaims", "unresolvedContent",
+]);
 
 const generatedProvenance = (sourcePath, fieldSourcePaths = {}) => ({
   sourcePath,
@@ -117,4 +121,4 @@ const readCvCareerContent = (profile) => {
   }
 };
 
-export { readCvCareerContent };
+export { readCvCareerContent, CV_CAREER_GROUPS };

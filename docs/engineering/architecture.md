@@ -283,7 +283,7 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   optional Codex/Gemini/Groq configuration and the injected logger contract, then
   returns a frozen instance with AI-V01 entries `normalizeJob` (F01) and
   `normalizeGeneratedCv` (F02), AI-V02 `normalizeUploadedCv` (F01), and
-  AI-V03 `matchJobCv` (F01 orchestration). The
+  AI-V03 `matchJobCv` (F01 orchestration), and AI-V04 `evaluateCv` (F01 Slice 1). The
   AI-V01 entries remain synchronous, deterministic, and provider-free; they
   need no LLM configuration and do not log. The AI-V02 entry is asynchronous
   and calls one explicitly selected provider after PDF text extraction.
@@ -342,6 +342,12 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   Job/CV identities, all five field scores, weights, contributions, and the
   overall score. Backend now calls it from the authenticated Candidate matching
   HTTP entry after V01/V02 normalization. Persistence remains absent.
+- AI-V04 `evaluateCv` accepts one READY Job/CV normalization pair and makes one
+  strict structured-output inference for semantic skills assessment and CV
+  feedback. It reuses V03 semantic source/rubric validation and scoring
+  calculators, returns the total score, summary, five field reviews, and CV
+  improvements, and uses the existing CV career read view for source-aware
+  feedback. It has no Backend HTTP consumer or persistence in Slice 1.
 
 ### Implemented foundations
 

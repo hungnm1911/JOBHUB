@@ -74,3 +74,22 @@ and the Product Owner's Final Acceptance decision are recorded in the
 AI #1, AI #2, and AI #3 in Engineering architecture remain direction only and
 do not independently approve another version, scope, Product Specification, or
 Data Contract.
+
+### AI-V04 — CV Evaluation & Improvement
+
+- **Product/Data approval status:** `APPROVED`
+- **Implementation status:** `SLICE 1 IMPLEMENTED — VERIFIED OFFLINE` (AI Kit
+  evaluation entry; Backend HTTP deferred)
+- **Final Acceptance status:** `NOT STARTED`
+- **Functional requirements:** `F01`
+- **Business rules:** `BR-AI-01` through `BR-AI-07`
+- **Canonical Product Specification:**
+  [`versions/v04-cv-evaluation-improvement.md`](versions/v04-cv-evaluation-improvement.md)
+- **Canonical Data Contract:**
+  [`../../data/ai-kit/versions/v04-cv-evaluation-improvement.md`](../../data/ai-kit/versions/v04-cv-evaluation-improvement.md)
+
+AI-V04 uses V01/V02 Match Profiles and V03 scoring for a CV evaluation with
+feedback. The approved specification includes a later Candidate HTTP entry;
+Slice 1 implements the AI Kit evaluation capability only. Implementation and
+verification evidence is recorded in the
+[AI-V04 project-status leaf](../../project-status/ai-kit/v04-cv-evaluation-improvement.md).

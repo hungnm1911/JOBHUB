@@ -1,4 +1,5 @@
 import { createMatchResultOrchestrator } from "./matching/match-result-orchestration.js";
+import { createCvEvaluator } from "./evaluation/cv-evaluation.js";
 import { normalizeGeneratedCv } from "./normalization/cv-normalization.js";
 import { normalizeJob } from "./normalization/job-normalization.js";
 import { createUploadedCvNormalizer } from "./normalization/uploaded-cv-semantic-extraction.js";
@@ -61,6 +62,7 @@ function createAiKit({ llm = {}, logger } = {}) {
     normalizeGeneratedCv,
     normalizeUploadedCv: createUploadedCvNormalizer({ llm, logger }),
     matchJobCv: createMatchResultOrchestrator({ llm, logger }),
+    evaluateCv: createCvEvaluator({ llm, logger }),
   });
 }
 

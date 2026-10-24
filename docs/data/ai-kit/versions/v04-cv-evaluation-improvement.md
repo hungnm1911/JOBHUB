@@ -1,6 +1,6 @@
 # AI-V04 — CV Evaluation & Improvement Data Model
 
-> **File:** `docs/data/ai-kit/versions/v04-cv-evaluation-improvement-data-model.md`  
+> **File:** `docs/data/ai-kit/versions/v04-cv-evaluation-improvement.md`
 > **Vai trò:** Canonical AI Persistence / Data Contract  
 > **Phase:** JOBHUB AI Phase  
 > **Ngôn ngữ:** Tiếng Việt  
