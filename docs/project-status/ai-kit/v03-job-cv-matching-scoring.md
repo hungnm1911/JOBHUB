@@ -13,16 +13,49 @@ own active CandidateCV access, and V01/V02 normalization reuse. Focused Backend
 tests now cover real Uploaded CV normalization through the HTTP Match Result,
 sparse READY input, and provider failure. The common Backend gate has passed.
 G2B-D02 full-payload runtime debug logging is removed and verified offline.
-FA-L01 raw provider error logging is fixed and verified offline at the three
-provider adapters and the Backend final HTTP error handler.
-There is no persisted Match Result. AI-V03 Final Acceptance is
-**not started**.
+FA-L01 raw provider error logging remediation is verified offline at the three
+provider adapters and the Backend final HTTP error handler; two residual
+logging deviations were accepted by the Product Owner for this version.
+There is no persisted Match Result. The Product Owner approved AI-V03 Final
+Acceptance as **`ACCEPTED`** on 2026-10-24 after reviewing the offline gates,
+Gate 2B and representative live semantic evaluation (S1, S4/S5, S6), with the
+two FA-L01 deviations recorded below and in the
+[evaluation report](../../evaluation/ai-kit/ai-v03-final-acceptance-evaluation.md).
 
 ## Deferred / not started
 
-Live-provider acceptance and AI-V03 semantic-quality evaluation remain deferred.
-F02/F03/F04 remain internal owners consumed by
-the F01 orchestration.
+No approved AI-V03 slice remains deferred. F02/F03/F04 remain internal owners
+consumed by the F01 orchestration. The
+representative evaluation is scoped to the recorded cases; it does not establish
+provider-wide or production-scale semantic accuracy.
+
+## Accepted deviations
+
+The Product Owner confirmed both decisions in discussion on 2026-10-24; no
+separate decision document exists in the repository. Each is **`ACCEPTED —
+NON-BLOCKING` for AI-V03 Final Acceptance only**:
+
+- **FA-L01, original High — unrecognized provider error code in logs.** The
+  bounded metadata filter can still admit an unrecognized `error.code` string,
+  such as `PRIVATE_JOB_CV_RESPONSE_MARKER`, into application logs. This is a
+  potential logging/privacy risk against the
+  [AI Kit logging convention](../../engineering/ai-kit-conventions.md#logging-and-sensitive-data),
+  with no observed impact on Matching behavior, score, provider inference, or
+  demo performance. The Product Owner did not require an additional whitelist
+  or further AI-V03 hardening.
+- **FA-L01, original Medium — missing throw-site stack in HTTP 4xx logs.** The
+  Backend final error handler logs normalized metadata without the full
+  throw-site stack expected by the
+  [Backend error-handling/logging convention](../../engineering/backend-conventions.md#error-handling).
+  This reduces debugging detail without changing HTTP handling, business
+  behavior, Matching Score, or demo performance. The Product Owner did not
+  require further AI-V03 remediation.
+
+These decisions do not amend Engineering Conventions or set a precedent for
+later versions. G2B-S01, G2B-D01/D02, FA-S01, and the related semantic HTTP
+500 findings were corrected and checked before acceptance; they are not
+accepted deviations. Representative coverage and the lack of equivalent live
+Gemini/Groq semantic evaluation are verification limits, not deviations.
 
 ## Implementation record (slice detail)
 
@@ -60,6 +93,14 @@ the F01 orchestration.
 
 ## Verification status
 
+- **2026-10-24 — Final Acceptance closure:** Product Owner verdict `ACCEPTED`.
+  The [evaluation report](../../evaluation/ai-kit/ai-v03-final-acceptance-evaluation.md)
+  consolidates the existing AI Kit and Backend offline gates, Gate 2B findings,
+  `FA-L01`, and representative live S1, S4/S5 (including the `FA-S01` recheck),
+  and S6 evidence. The initial S4/S5 source-association failure was corrected
+  and rechecked. The Product Owner accepted exactly two residual FA-L01
+  logging deviations as non-blocking on 2026-10-24. No test or provider call
+  was rerun for this documentation-only status update.
 - **2026-10-24 — FA-L01:** Synthetic provider errors carrying private markers
   failed the adapter and HTTP log regression checks before the fix, then passed
   after metadata-only logging. Focused tests passed (AI Kit: 3 files, 9 tests;

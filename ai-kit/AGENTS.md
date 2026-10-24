@@ -84,3 +84,29 @@ One provider's smoke result proves nothing about the other provider or fallback
 composition. For documentation-only changes, check links and consistency, run
 `git diff --check`, and check untracked-file whitespace separately; full code
 gates are not required by default. Report every run, skip, and failure honestly.
+
+## Lessons learned / reference (nonbinding)
+
+These AI-V03 observations are reference material for later AI Kit work. They do
+not add Product Rules, acceptance gates, or required process steps.
+
+- Provider-native strict output constrains only what its schema actually
+  declares. Schema acceptance alone does not establish semantic correctness.
+- Keep the prompt, JSON Schema, and runtime validator consistent about the
+  requested output and its constraints.
+- Explain source association explicitly, especially when an LLM merges a
+  structured skill with a related Job Description requirement.
+- Distinguish `NO_EVIDENCE`, `MISMATCH`, `CONFLICT`, and `PARTIAL` using source
+  evidence; do not infer Candidate facts absent from the CV.
+- Semantic assessment and deterministic scoring have separate owners. A later
+  version may reuse a calculator without adopting the entire AI-V03 prompt or
+  output contract.
+- Offline tests cover contracts and formulas; representative live evaluation
+  examines semantic quality.
+- When investigating an LLM failure, capture the output before validation to
+  identify the cause. Keep sensitive payloads in approved local diagnostic
+  artifacts, not tracked files or logs.
+- In reviews, distinguish changes made for the current finding from changes
+  already approved earlier.
+- Avoid repeating provider calls or full verification without a concrete
+  technical reason.
