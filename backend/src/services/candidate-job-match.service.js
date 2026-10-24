@@ -15,7 +15,7 @@ const requireReady = (result) => {
   return result;
 };
 
-const matchOwnCandidateCvToJob = async ({ actorUser, jobId, candidateCvId } = {}) => {
+const prepareOwnCandidateCvJobProfiles = async ({ actorUser, jobId, candidateCvId } = {}) => {
   const candidateUserId = actorUser?._id;
   const candidateCv = await loadOwnActiveCandidateCv({
     candidateUserId,
@@ -42,7 +42,12 @@ const matchOwnCandidateCvToJob = async ({ actorUser, jobId, candidateCvId } = {}
     candidateCvId,
   }));
 
-  return aiKit.matchJobCv({ jobNormalizationResult, cvNormalizationResult });
+  return { jobNormalizationResult, cvNormalizationResult };
 };
 
-export { matchOwnCandidateCvToJob };
+const matchOwnCandidateCvToJob = async (input) => {
+  const profiles = await prepareOwnCandidateCvJobProfiles(input);
+  return aiKit.matchJobCv(profiles);
+};
+
+export { matchOwnCandidateCvToJob, prepareOwnCandidateCvJobProfiles };

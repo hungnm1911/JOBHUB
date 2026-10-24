@@ -23,8 +23,8 @@ authority is approved and Final Acceptance is `ACCEPTED`; its F01
 (`normalizeUploadedCv`) is implemented offline through the same instance.
 AI-V03 Product/Data authority is approved; F01 Match Result orchestration and
 F02–F04 assessment/scoring are implemented offline. AI-V04 Product/Data
-authority is approved; F01 Slice 1 implements the internal evaluation entry
-without Backend HTTP. AI #1/#2/#3
+authority is approved; F01 Slice 1 implements the internal evaluation entry,
+and Slice 2 adds the Candidate Backend HTTP entry. AI #1/#2/#3
 architecture direction does not independently approve another business capability.
 
 ## Terminology
@@ -149,7 +149,9 @@ future capability.
   Sparse DRAFTs do not acquire submit, completeness, default, or PUBLIC gates.
 - B1/B2 are runtime service entries. AI-V03 F01 adds a Candidate HTTP consumer
   through Backend's own CV and V8 Job visibility gates, reusing their lossless
-  source projections and the AI-V02 Uploaded CV runtime entry. Recruiter/
+  source projections and the AI-V02 Uploaded CV runtime entry. AI-V04 F01 adds
+  a distinct Candidate HTTP consumer of the same authorized profile preparation
+  and the `evaluateCv` entry. Recruiter/
   application CV access, Job/CV CRUD hooks, and AI-specific persistence are
   not implemented by these entries. AI #1/#2/#3 remain future direction
   requiring their own approved Product/Data authority.
@@ -348,8 +350,8 @@ AI-V03 F02 Semantic Skills Assessment (`src/matching/semantic-skills-assessment.
 AI-V04 F01 Slice 1 CV Evaluation (`src/evaluation/cv-evaluation.js`):
 
 - Consumes one authorized READY Job/CV normalization pair through the
-  `createAiKit` instance `evaluateCv` entry. Backend access checks and HTTP
-  response mapping belong to a later slice.
+  `createAiKit` instance `evaluateCv` entry. Backend Slice 2 owns access checks
+  and HTTP response mapping.
 - Uses one provider-native strict structured-output inference for V03-compatible
   semantic requirement groups and V04 feedback. Reuses the V03 source/rubric
   validation and deterministic/weighted score calculators; feedback never

@@ -323,7 +323,9 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   domain refusals and unexpected errors propagate. AI-V03's Candidate matching
   HTTP entry now consumes the same lossless projection path through a V8-visible
   Job loader and the own-CandidateCV normalization entries. There are no source
-  writes, profile persistence, or separate AI Kit lifecycle.
+  writes, profile persistence, or separate AI Kit lifecycle. AI-V04's Candidate
+  evaluation HTTP entry reuses the same authorized READY profile preparation
+  and calls `evaluateCv` through the shared AI Kit instance.
 - AI-V02 Slice 4a adds a Backend-only Uploaded CandidateCV `cvSource`
   projection in the same CandidateCV AI service. It requires a previously
   authorized own active CV, rechecks the persisted source and taxonomy, and
@@ -347,7 +349,8 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   feedback. It reuses V03 semantic source/rubric validation and scoring
   calculators, returns the total score, summary, five field reviews, and CV
   improvements, and uses the existing CV career read view for source-aware
-  feedback. It has no Backend HTTP consumer or persistence in Slice 1.
+  feedback. The Backend Candidate HTTP entry consumes it after own-CV and V8
+  Job access checks, returning the evaluation without persistence.
 
 ### Implemented foundations
 
