@@ -141,7 +141,12 @@ Nhận xét tổng thể về mức độ phù hợp, điểm mạnh và hạn c
 
 Các nhận xét và gợi ý cải thiện nội dung CV.
 
-Một mục feedback có thể chỉ gắn với section hoặc với phần tử cụ thể trong section nếu xác định được.
+Mỗi CV Improvement nhắm đến một section có trong loại CV đang được đánh giá.
+Nếu xác định được một phần tử CV đích duy nhất trong section đó, feedback có
+thể gắn với phần tử ấy; nếu không, feedback ở cấp section. Evidence dùng để
+hỗ trợ nhận xét có thể nằm ở phần tử hoặc section khác với phần tử đích. Khi
+một nhận xét cần cải thiện nhiều phần tử đích, AI có thể giữ ở cấp section
+hoặc tách thành các improvements riêng cho từng phần tử.
 
 Feedback có thể là:
 
@@ -295,6 +300,8 @@ Kết quả matching thấp không đồng nghĩa với lỗi xử lý; lỗi x�
 ## BR-AI-06 — Improvement Scope
 
 AI có thể nhận xét và góp ý các section không trực tiếp tham gia scoring.
+Section đích của góp ý phải thuộc nội dung nghề nghiệp áp dụng cho loại CV
+được chọn; không tạo feedback nhắm vào section chỉ có ở loại CV khác.
 
 ## BR-AI-07 — Candidate Control
 

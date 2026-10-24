@@ -152,6 +152,12 @@ V04 sử dụng:
 
 Các identifier này không tự tạo quyền truy cập.
 
+`sourceReference` trong một CV Improvement định vị phần tử CV **cần cải thiện**
+trong section đích, không phải danh sách đầy đủ evidence hỗ trợ nhận xét.
+Evidence có thể đến từ phần tử hoặc section khác. Nếu không có đúng một phần
+tử đích, `sourceReference` là `null` ở cấp section hoặc nhận xét được tách
+thành các improvements riêng với tham chiếu đích tương ứng.
+
 Không yêu cầu persisted foreign key mới.
 
 # 6. AI-derived Data Contract
@@ -219,8 +225,9 @@ Gắn nhận xét với năm tiêu chí scoring hiện hành.
 
 Mỗi mục có thể chứa:
 
-- CV section được đề cập.
-- Tham chiếu phần tử cụ thể, nếu xác định được.
+- CV section đích thuộc loại CV đang được đánh giá.
+- `sourceReference` tới một phần tử đích trong section đó, hoặc `null` cho
+  feedback cấp section.
 - Nội dung nhận xét.
 - Gợi ý cải thiện, nếu có.
 - Nội dung viết lại tham khảo, nếu có.
@@ -230,7 +237,14 @@ Không yêu cầu mỗi section đều xuất hiện trong kết quả.
 
 Một số nội dung nhận xét có thể rỗng, và danh sách cải thiện có thể rỗng.
 
-Nếu không thể liên kết đến phần tử cụ thể, feedback vẫn có thể được giữ ở cấp section.
+Với Generated CV, các section đích áp dụng là `professionalSummary` và các
+nhóm nội dung nghề nghiệp có trong `content`. Với Uploaded PDF CV, các section
+đích áp dụng là các nhóm nội dung nghề nghiệp có trong `pdfContent`, bao gồm
+`otherCareerClaims` hoặc `unresolvedContent` khi có. Không trả improvement
+nhắm vào section chỉ thuộc loại CV khác. Phần tử đích và evidence hỗ trợ nhận
+xét không bắt buộc trùng nhau; `sourceReference` chỉ biểu diễn vị trí đích.
+Nếu không có phần tử đích duy nhất, giữ `sourceReference: null` ở cấp section
+hoặc tách thành nhiều improvements riêng.
 
 Cấu trúc JSON, tên field và nullable representation cụ thể thuộc runtime/API contract trong giai đoạn Engineering.
 

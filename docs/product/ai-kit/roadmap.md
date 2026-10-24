@@ -78,9 +78,11 @@ Data Contract.
 ### AI-V04 — CV Evaluation & Improvement
 
 - **Product/Data approval status:** `APPROVED`
-- **Implementation status:** `SLICE 1 IMPLEMENTED — VERIFIED OFFLINE` (AI Kit
-  evaluation entry; Backend HTTP deferred)
-- **Final Acceptance status:** `NOT STARTED`
+- **Implementation status:** `IMPLEMENTED` (AI Kit evaluation and Candidate
+  Backend HTTP entry; focused tests passed per recorded evidence)
+- **Final Acceptance status:** `ACCEPTED` for Product/Functional behavior
+  (2026-10-25; H1/H2/H3)
+- **Official Engineering Verification:** `INCOMPLETE` (Backend full gate not completed)
 - **Functional requirements:** `F01`
 - **Business rules:** `BR-AI-01` through `BR-AI-07`
 - **Canonical Product Specification:**
@@ -89,7 +91,6 @@ Data Contract.
   [`../../data/ai-kit/versions/v04-cv-evaluation-improvement.md`](../../data/ai-kit/versions/v04-cv-evaluation-improvement.md)
 
 AI-V04 uses V01/V02 Match Profiles and V03 scoring for a CV evaluation with
-feedback. The approved specification includes a later Candidate HTTP entry;
-Slice 1 implements the AI Kit evaluation capability only. Implementation and
-verification evidence is recorded in the
+feedback through the Candidate HTTP entry. Acceptance evidence and the
+remaining verification limit are recorded in the
 [AI-V04 project-status leaf](../../project-status/ai-kit/v04-cv-evaluation-improvement.md).
