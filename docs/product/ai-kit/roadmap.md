@@ -81,8 +81,10 @@ Data Contract.
 - **Implementation status:** `IMPLEMENTED` (AI Kit evaluation and Candidate
   Backend HTTP entry; focused tests passed per recorded evidence)
 - **Final Acceptance status:** `ACCEPTED` for Product/Functional behavior
-  (2026-10-25; H1/H2/H3)
-- **Official Engineering Verification:** `INCOMPLETE` (Backend full gate not completed)
+  (2026-10-25; focused regression, HTTP acceptance, H1/H2/H3). Product/Functional
+  phase closed by the Product decision with the remaining verification risk accepted.
+- **Official Engineering Verification:** `INCOMPLETE / NOT RUN` (V04 Backend full
+  gate); no official Backend `PASS` or verified version `COMPLETE` claim.
 - **Functional requirements:** `F01`
 - **Business rules:** `BR-AI-01` through `BR-AI-07`
 - **Canonical Product Specification:**
@@ -91,6 +93,7 @@ Data Contract.
   [`../../data/ai-kit/versions/v04-cv-evaluation-improvement.md`](../../data/ai-kit/versions/v04-cv-evaluation-improvement.md)
 
 AI-V04 uses V01/V02 Match Profiles and V03 scoring for a CV evaluation with
-feedback through the Candidate HTTP entry. Acceptance evidence and the
-remaining verification limit are recorded in the
+feedback through the Candidate HTTP entry. The Product/Functional phase is
+closed; official engineering closure remains unverified. Acceptance evidence
+and the verification limit are recorded in the
 [AI-V04 project-status leaf](../../project-status/ai-kit/v04-cv-evaluation-improvement.md).

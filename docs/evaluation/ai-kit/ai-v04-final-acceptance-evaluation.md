@@ -1,9 +1,10 @@
 # AI-V04 Final Acceptance Evaluation
 
-**Review date:** 2026-10-25. **Product decision:** `ACCEPTED` for
-Product/Functional behavior, supplied in the Final Acceptance documentation
-closure request. **Official Engineering Verification:** `INCOMPLETE` because the
-Backend full gate has not completed.
+**Review date:** 2026-10-25. **Product/Functional Acceptance:** `ACCEPTED`;
+phase closed by the Product decision supplied in the Final Acceptance request.
+The user accepts the remaining verification risk under the machine resource
+limit and does not require the Backend full gate. **Official Engineering
+Verification:** `INCOMPLETE / NOT RUN` for the V04 Backend full gate.
 
 This report records the supplied acceptance outcomes against
 [AI-V04 Product Specification §16–§20](../../product/ai-kit/versions/v04-cv-evaluation-improvement.md)
@@ -53,11 +54,13 @@ or provider-wide stability.
 The earlier AI Kit Slice 1 official gate passed (ESLint; 27 files, 451 tests),
 as recorded in the [status leaf](../../project-status/ai-kit/v04-cv-evaluation-improvement.md).
 Focused AI Kit and Backend tests are reported PASS in the supplied evidence,
-without command transcripts in this report. The **Backend official full gate
-remains INCOMPLETE**. No provider, focused suite or full verification gate was
-run for this documentation closure.
+without command transcripts in this report. The **V04 Backend official full
+gate remains `INCOMPLETE / NOT RUN`**. No provider, focused suite or full
+verification gate was run for this documentation closure.
 
-AI-V04 Product/Functional behavior is **ACCEPTED** by the supplied Product decision.
-Official Engineering Verification remains **INCOMPLETE** pending the Backend
-full gate; this report does not claim official verification PASS or version
-completion under that gate.
+AI-V04 Product/Functional Acceptance is **`ACCEPTED`** and that phase is closed
+by the supplied Product decision. This acceptance includes the stated residual
+verification risk. Official Engineering Verification remains **`INCOMPLETE /
+NOT RUN`**; the repository's required official verification evidence is absent,
+so this report does not claim official Backend `PASS` or verified version
+`COMPLETE`.

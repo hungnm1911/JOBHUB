@@ -284,6 +284,43 @@ describe("AI-V04 F01 CV Evaluation", () => {
     }
   });
 
+  it("references a Summary target when Work Experience supplies supporting evidence", async () => {
+    const cv = { ...generatedCv,
+      metadata: { ...cvMetadata, skillTags: ["Node.js", "React", "SQL", "Git", "AWS", "Jest"]
+        .map((value, index) => sourced(value, `/skillTags/${index}`)) },
+      freeText: { professionalSummary: sourced("Experienced production Redis engineer",
+        "/generatedContent/professionalSummary") },
+      content: { ...generatedCv.content,
+        skills: ["TypeScript", "Docker", "Redis", "Linux"]
+          .map((value, index) => sourced(value, `/generatedContent/skills/${index}`)),
+        workExperiences: [{ sourcePath: "/generatedContent/workExperiences/0",
+          freeText: { description: sourced("Redis proof of concept only",
+            "/generatedContent/workExperiences/0/description") } }],
+      },
+    };
+    codexCall.mockResolvedValue(response(feedback({ cvImprovements: [{
+      section: "professionalSummary", cvSourceId: "C6",
+      comment: "The Summary claims production Redis work, while Work Experience C11 describes only a proof of concept.",
+      suggestion: "Qualify the Summary claim.", rewrite: null,
+    }] })));
+
+    const result = await aiKit.evaluateCv({ jobNormalizationResult: ready(job),
+      cvNormalizationResult: ready(cv) });
+
+    expect(codexCall).toHaveBeenCalledOnce();
+    const request = codexCall.mock.calls[0][0];
+    expect(JSON.parse(request.input).cv).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "C6", group: "professionalSummary" }),
+      expect.objectContaining({ id: "C11", group: "workExperiences" }),
+    ]));
+    expect(request.instructions).toContain("cvSourceId identifies the single CV item to improve");
+    expect(request.instructions).toContain("Supporting evidence may come from another CV item or section");
+    expect(result.cvImprovements[0].sourceReference).toEqual({
+      sourcePath: "/generatedContent/professionalSummary", fieldSourcePaths: {}, evidence: [],
+    });
+    expect(result.matchScore).toBe(92);
+  });
+
   it("keeps feedback about multiple CV projects at section level", async () => {
     const cv = { ...generatedCv, content: { ...generatedCv.content,
       projects: [
@@ -312,7 +349,7 @@ describe("AI-V04 F01 CV Evaluation", () => {
       expect.objectContaining({ id: "C2", group: "projects" }),
       expect.objectContaining({ id: "C3", group: "projects" }),
     ]));
-    expect(request.instructions).toContain("When one improvement refers to more than one CV item, set cvSourceId to null");
+    expect(request.instructions).toContain("When one improvement targets more than one CV item, set cvSourceId to null");
     expect(result.cvImprovements.map((item) => item.sourceReference?.sourcePath ?? null))
       .toEqual([null, "/generatedContent/projects/0", "/generatedContent/projects/1"]);
     expect(result.matchScore).toBe(92);
