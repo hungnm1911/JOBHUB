@@ -233,6 +233,11 @@ Mỗi mục có thể chứa:
 - Nội dung viết lại tham khảo, nếu có.
 - Thông tin mức độ ưu tiên, nếu được sử dụng.
 
+Nội dung viết lại vẫn tùy chọn và chỉ để Candidate tham khảo; không được tự
+áp dụng vào Candidate CV. Khi evidence CV đủ để cải thiện diễn đạt, AI được
+khuyến khích đưa ra câu viết lại ngắn; nếu cần bịa dữ kiện để viết lại hữu ích
+thì không cung cấp nội dung viết lại.
+
 Không yêu cầu mỗi section đều xuất hiện trong kết quả.
 
 Một số nội dung nhận xét có thể rỗng, và danh sách cải thiện có thể rỗng.

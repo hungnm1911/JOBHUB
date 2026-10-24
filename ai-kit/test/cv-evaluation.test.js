@@ -82,6 +82,28 @@ const aiKit = createAiKit({
 describe("AI-V04 F01 CV Evaluation", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("requests evidence-bound advisory rewrites while preserving string and null results", async () => {
+    const rewrite = "Built backend APIs with Node.js.";
+    codexCall.mockResolvedValue(response(feedback({ cvImprovements: [
+      { section: "workExperiences", cvSourceId: "C1", comment: "Clarify the wording",
+        suggestion: "Use the verified work", rewrite },
+      { section: "workExperiences", cvSourceId: "C1", comment: "Outcome is unknown",
+        suggestion: "Add an outcome if verified", rewrite: null },
+    ] })));
+
+    const result = await aiKit.evaluateCv({ jobNormalizationResult: ready(job),
+      cvNormalizationResult: ready(generatedCv) });
+
+    expect(codexCall).toHaveBeenCalledOnce();
+    const instruction = codexCall.mock.calls[0][0].instructions;
+    expect(instruction).toContain("Prefer a concise, CV-ready rewrite when the target item's wording can be improved using verified CV evidence.");
+    expect(instruction).toContain("It may clarify or remove unsupported claims.");
+    expect(instruction).toContain("Return null when a useful rewrite requires inventing duties, dates, durations, outcomes, or credentials.");
+    expect(instruction).toContain("Rewrite is advisory, never applied automatically.");
+    expect(result.cvImprovements.map((item) => item.rewrite)).toEqual([rewrite, null]);
+    expect(result.matchScore).toBe(92);
+  });
+
   it.each([
     ["Generated", generatedCv, "workExperiences", "/generatedContent/workExperiences/0"],
     ["Uploaded", uploadedCv, "projects", null],
@@ -123,7 +145,7 @@ describe("AI-V04 F01 CV Evaluation", () => {
     const request = codexCall.mock.calls[0][0];
     expect(request.text.format).toMatchObject({ type: "json_schema", name: "cv_evaluation", strict: true });
     expect(request.instructions).toContain("0,10,...,100");
-    expect(request.instructions).toContain("Candidate control");
+    expect(request.instructions).toContain("Rewrite is advisory, never applied automatically.");
     expect(request.input).not.toContain("private");
     expect(JSON.parse(request.input).cv).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "C1", group: section }),

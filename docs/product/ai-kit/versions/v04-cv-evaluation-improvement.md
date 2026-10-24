@@ -154,7 +154,11 @@ Feedback có thể là:
 - Gợi ý cải thiện.
 - Đề xuất cách viết lại nội dung.
 
-Không bắt buộc mọi feedback đều có nội dung viết lại.
+Khi evidence CV đã xác minh đủ để cải thiện diễn đạt, AI nên ưu tiên đề xuất
+cách viết lại ngắn, có thể tham khảo trực tiếp trong CV, kể cả việc làm rõ hoặc
+loại bỏ tuyên bố thiếu căn cứ. Nội dung viết lại vẫn tùy chọn: không tạo khi
+phải bịa nhiệm vụ, ngày tháng, thời lượng, kết quả hoặc chứng chỉ. Candidate
+tự quyết định việc chỉnh sửa và sử dụng CV.
 
 ## 7.1. Semantics
 
