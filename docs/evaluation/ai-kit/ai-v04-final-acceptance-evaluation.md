@@ -49,6 +49,13 @@ accepted assessment; the observed score variation does not by itself show a
 calculator defect. The recorded cases do not measure broader semantic accuracy
 or provider-wide stability.
 
+The reported H3 response contained four CV improvements with no rewrite text.
+V04 now prompts for a concise, evidence-bound rewrite when useful, while allowing
+`null` when a safe rewrite would require invented facts. A rewrite remains
+advisory and the Candidate decides whether to use it. This prompt adjustment
+has focused offline regression coverage; no live provider result after the
+adjustment is recorded here.
+
 ## Verification limits and decision
 
 The earlier AI Kit Slice 1 official gate passed (ESLint; 27 files, 451 tests),
