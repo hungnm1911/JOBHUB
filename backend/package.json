@@ -12,7 +12,8 @@
     "verify:architecture": "node scripts/verify-architecture.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify:agent": "npm run lint && npm run verify:architecture && npm run test"
+    "verify:agent": "npm run lint && npm run verify:architecture && npm run test",
+    "seed:ai-v05-p2": "node scripts/seed-ai-v05-p2.js"
   },
   "dependencies": {
     "@jobhub/ai-kit": "file:../ai-kit",
