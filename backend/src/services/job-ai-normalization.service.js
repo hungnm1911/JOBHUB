@@ -35,7 +35,7 @@ const normalizeInternalJob = async ({
 // AI-V03 Candidate entry: V8 public visibility authorizes the raw Job source.
 // Hydration supplies defaults only for absent persisted keys; the projection
 // overlays raw values so malformed stored values cannot be repaired silently.
-const normalizeCandidateVisibleJob = async ({ actorUser, jobId } = {}) => {
+const normalizeCandidateVisibleJob = async ({ actorUser, jobId, strictFailures = false } = {}) => {
   let persistedJob;
   try {
     ({ job: persistedJob } = await loadPublicJobDiscoverySource({ actorUser, jobId }));
@@ -44,6 +44,8 @@ const normalizeCandidateVisibleJob = async ({ actorUser, jobId } = {}) => {
       throw error;
     }
 
+    if (strictFailures) throw error;
+
     logger.warn("AI-V03 Candidate Job source lookup failed; normalization FAILED", {
       jobId,
       errorType: error.name,
@@ -51,7 +53,7 @@ const normalizeCandidateVisibleJob = async ({ actorUser, jobId } = {}) => {
     return FAILED_RESULT;
   }
 
-  return normalizeLoadedJob({ job: Job.hydrate(persistedJob), persistedJob });
+  return normalizeLoadedJob({ job: Job.hydrate(persistedJob), persistedJob }, { strictFailures });
 };
 
 export { normalizeCandidateVisibleJob, normalizeInternalJob };

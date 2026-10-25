@@ -22,8 +22,10 @@ const FAILED_RESULT = Object.freeze({ status: "FAILED", profile: null });
 const PROJECTION_ERROR_MESSAGE =
   "Job cannot be projected to the AI-V01 Job source";
 
+class InvalidJobNormalizationSourceError extends AppError {}
+
 const toProjectionError = (issues, cause) => {
-  return new AppError(500, PROJECTION_ERROR_MESSAGE, { issues }, { cause });
+  return new InvalidJobNormalizationSourceError(500, PROJECTION_ERROR_MESSAGE, { issues }, { cause });
 };
 
 // Lossless career-relevant projection of the persisted Job (Product AI-V01
@@ -109,13 +111,13 @@ const resolveJobTaxonomy = async (jobSource) => {
     const category = categoriesById.get(id);
 
     if (!category) {
-      throw new AppError(400, `Job ${field} references unknown Category`, {
+      throw new InvalidJobNormalizationSourceError(400, `Job ${field} references unknown Category`, {
         field,
       });
     }
 
     if (category.level !== level) {
-      throw new AppError(400, `Job ${field} must reference ${level} categories`, {
+      throw new InvalidJobNormalizationSourceError(400, `Job ${field} must reference ${level} categories`, {
         field,
       });
     }
@@ -124,7 +126,7 @@ const resolveJobTaxonomy = async (jobSource) => {
   }
 
   if (jobSource.experienceLevelId != null && !experienceLevel) {
-    throw new AppError(
+    throw new InvalidJobNormalizationSourceError(
       400,
       "Job experienceLevelId must reference a canonical ExperienceLevel",
       {
@@ -142,7 +144,7 @@ const resolveJobTaxonomy = async (jobSource) => {
 
 // Both internal and Candidate-visible Job reads use one lossless source
 // projection and taxonomy path after their own canonical access checks.
-const normalizeLoadedJob = async ({ job, persistedJob }) => {
+const normalizeLoadedJob = async ({ job, persistedJob }, { strictFailures = false } = {}) => {
   const jobSource = toJobNormalizationSource(job, persistedJob);
   let taxonomy;
 
@@ -152,6 +154,8 @@ const normalizeLoadedJob = async ({ job, persistedJob }) => {
     if (!isMongoDbAvailabilityError(error)) {
       throw error;
     }
+
+    if (strictFailures) throw error;
 
     // Product AI-V01 §15 Dependency failure: FAILED, never a fabricated result.
     logger.warn("AI-V01 Job taxonomy lookup failed; normalization FAILED", {
@@ -163,7 +167,10 @@ const normalizeLoadedJob = async ({ job, persistedJob }) => {
   }
 
   try {
-    return aiKit.normalizeJob({ ...jobSource, taxonomy });
+    const source = { ...jobSource, taxonomy };
+    return strictFailures
+      ? aiKit.normalizeJob(source, { strictFailures: true })
+      : aiKit.normalizeJob(source);
   } catch (error) {
     if (error?.code === INVALID_JOB_INPUT) {
       throw toProjectionError(error.details, error);
@@ -174,4 +181,4 @@ const normalizeLoadedJob = async ({ job, persistedJob }) => {
 };
 
 
-export { FAILED_RESULT, normalizeLoadedJob };
+export { FAILED_RESULT, InvalidJobNormalizationSourceError, normalizeLoadedJob };

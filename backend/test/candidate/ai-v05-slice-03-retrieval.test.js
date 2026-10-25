@@ -53,7 +53,8 @@ describe("AI-V05 Slice 03 retrieval", () => {
       filter: { status: "PUBLISHED", publishedAt: { $ne: null },
         applicationDeadline: { $gt: now }, companyId: { $in: [company._id] } },
     });
-    expect(result).toEqual([{ job, vectorScore: 0.83, retrievalRank: 1 }]);
+    expect(result).toEqual({ cvNormalizationResult: { status: "READY", profile: { source: {} } },
+      candidates: [{ job, vectorScore: 0.83, retrievalRank: 1 }] });
     expect(mocks.cvFindOne).toHaveBeenCalledWith({
       candidateUserId: actorUser._id, isDefault: true, archivedAt: null,
     });
@@ -67,7 +68,7 @@ describe("AI-V05 Slice 03 retrieval", () => {
     mocks.jobFind.mockReturnValue({ lean: async () => [{
       ...job, applicationDeadline: new Date("2020-01-01T00:00:00.000Z"),
     }] });
-    expect(await retrieveOwnDefaultCvJobCandidates({ actorUser })).toEqual([]);
+    expect((await retrieveOwnDefaultCvJobCandidates({ actorUser })).candidates).toEqual([]);
   });
 
   it.each([
@@ -75,7 +76,7 @@ describe("AI-V05 Slice 03 retrieval", () => {
     ["unpublished", { publishedAt: null }],
   ])("drops a %s Job through the real visibility owner", async (_label, changes) => {
     mocks.jobFind.mockReturnValue({ lean: async () => [{ ...job, ...changes }] });
-    expect(await retrieveOwnDefaultCvJobCandidates({ actorUser })).toEqual([]);
+    expect((await retrieveOwnDefaultCvJobCandidates({ actorUser })).candidates).toEqual([]);
   });
 
   it("drops a Job when its Company becomes inactive before revalidation", async () => {
@@ -83,7 +84,7 @@ describe("AI-V05 Slice 03 retrieval", () => {
     mocks.companyFind.mockReturnValueOnce({ select: () => ({ lean: async () => [
       { ...company, operationalStatus: "INACTIVE" },
     ] }) });
-    expect(await retrieveOwnDefaultCvJobCandidates({ actorUser })).toEqual([]);
+    expect((await retrieveOwnDefaultCvJobCandidates({ actorUser })).candidates).toEqual([]);
   });
 
   it("skips a Job without companyId while preserving hit order and revalidating valid Jobs", async () => {
@@ -98,7 +99,7 @@ describe("AI-V05 Slice 03 retrieval", () => {
 
     const result = await retrieveOwnDefaultCvJobCandidates({ actorUser });
 
-    expect(result).toEqual([
+    expect(result.candidates).toEqual([
       { job, vectorScore: 0.9, retrievalRank: 1 },
       { job: laterJob, vectorScore: 0.7, retrievalRank: 3 },
     ]);
@@ -123,7 +124,7 @@ describe("AI-V05 Slice 03 retrieval", () => {
 
   it("does not query the provider when no Company is eligible", async () => {
     mocks.companyFind.mockReturnValue({ select: () => ({ lean: async () => [] }) });
-    expect(await retrieveOwnDefaultCvJobCandidates({ actorUser })).toEqual([]);
+    expect((await retrieveOwnDefaultCvJobCandidates({ actorUser })).candidates).toEqual([]);
     expect(mocks.aggregate).not.toHaveBeenCalled();
   });
 

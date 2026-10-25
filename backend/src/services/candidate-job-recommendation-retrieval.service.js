@@ -48,7 +48,7 @@ const retrieveOwnDefaultCvJobCandidates = async ({ actorUser, now = new Date() }
     approvalStatus: COMPANY_APPROVAL_STATUS.APPROVED,
     operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
   }).select("_id").lean();
-  if (eligibleCompanies.length === 0) return [];
+  if (eligibleCompanies.length === 0) return { cvNormalizationResult: normalizationResult, candidates: [] };
 
   const hits = await Job.aggregate([
     { $vectorSearch: {
@@ -68,7 +68,7 @@ const retrieveOwnDefaultCvJobCandidates = async ({ actorUser, now = new Date() }
     { $project: { _id: 1, vectorScore: { $meta: "vectorSearchScore" } } },
   ]);
 
-  if (hits.length === 0) return [];
+  if (hits.length === 0) return { cvNormalizationResult: normalizationResult, candidates: [] };
 
   const jobs = await Job.find({ _id: { $in: hits.map(({ _id }) => _id) } }).lean();
   const jobsWithCompany = jobs.filter((job) => job?.companyId != null);
@@ -78,7 +78,7 @@ const retrieveOwnDefaultCvJobCandidates = async ({ actorUser, now = new Date() }
   }).select("_id approvalStatus operationalStatus").lean();
   const companyById = new Map(companies.map((company) => [company._id.toString(), company]));
 
-  return hits.flatMap((hit, index) => {
+  const candidates = hits.flatMap((hit, index) => {
     const job = jobById.get(hit._id.toString());
     if (!job) return [];
     const company = companyById.get(job.companyId.toString());
@@ -86,6 +86,7 @@ const retrieveOwnDefaultCvJobCandidates = async ({ actorUser, now = new Date() }
       !== JOB_DISCOVERY_VISIBILITY.DISCOVERABLE) return [];
     return [{ job, vectorScore: hit.vectorScore, retrievalRank: index + 1 }];
   });
+  return { cvNormalizationResult: normalizationResult, candidates };
 };
 
 export { retrieveOwnDefaultCvJobCandidates };

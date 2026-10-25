@@ -282,9 +282,10 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   entrypoint and exports only `createAiKit`. The factory validates
   optional Codex/Gemini/Groq configuration and the injected logger contract, then
   returns a frozen instance with AI-V01 entries `normalizeJob` (F01) and
-  `normalizeGeneratedCv` (F02), AI-V02 `normalizeUploadedCv` (F01), and
-  AI-V03 `matchJobCv` (F01 orchestration), and AI-V04 `evaluateCv` (F01 Slice 1). The
-  AI-V01 entries remain synchronous, deterministic, and provider-free; they
+  `normalizeGeneratedCv` (F02), AI-V02 `normalizeUploadedCv` (F01),
+  AI-V03 `matchJobCv` (F01 orchestration), AI-V04 `evaluateCv` (F01 Slice 1),
+  and AI-V05 `assessRecommendationBatch` (Slice 04 F03). The AI-V01 entries
+  remain synchronous, deterministic, and provider-free; they
   need no LLM configuration and do not log. The AI-V02 entry is asynchronous
   and calls one explicitly selected provider after PDF text extraction.
 - AI-V01 Product/Data authority is approved and deterministic. The F01 owner,

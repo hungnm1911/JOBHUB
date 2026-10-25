@@ -9,16 +9,19 @@ best-effort sync after publish, and explicit reconciliation. Slice 02's
 `jobhub-dev` Atlas Vector Search Index is `READY` and queryable on all three
 nodes. Slice 03 — Default CV query and eligible Job retrieval — is implemented
 as an internal runtime service and passed focused offline and one live
-development checkpoint. Actual Atlas Automated Embedding token usage has not
-been captured. Candidate HTTP delivery, semantic assessment, and Final
-Acceptance are not started.
+development checkpoint. Slice 04 — Batch Semantic Assessment & Reason (F03)
+is implemented and focused offline verified; the H1 Job normalization failure
+classification finding is fixed with focused regression coverage. Actual Atlas Automated Embedding
+token usage has not been captured. Final Scoring, Candidate HTTP delivery, and
+Final Acceptance are not started.
 
 ## Deferred / not started
 
-- Recommendation orchestration, semantic assessment, V03 scoring, and Candidate
-  HTTP delivery remain deferred.
+- Final Scoring, Candidate HTTP delivery, and Final Acceptance remain deferred.
 - Atlas Automated Embedding token usage and retrieval quality remain unverified;
   one live query embedding checkpoint was run, without a generative call.
+- CCPro batch input/output limits and representative semantic quality remain
+  unverified; Slice 04 made no live generative call.
 
 ## Implementation record (slice detail)
 
@@ -53,6 +56,18 @@ Acceptance are not started.
   and checked through `resolveJobDiscoveryVisibility`; only `DISCOVERABLE` hits
   retain their Vector Score and retrieval order. No CV query text, vector, or
   candidate list is persisted.
+- Slice 04 carries the READY CV profile from retrieval without normalizing it
+  again, selects the first 12 Vector-ranked Job hits by default (batch size is
+  adjustable), and normalizes each Job through the existing Candidate-visible
+  owner. One strict batch inference returns jobKey, V03 requirement groups, and
+  a reason per Job. Exact jobKey coverage and per-Job V03 source resolution are
+  required; invalid or incomplete output fails the request. This internal
+  runtime path neither calculates final scores nor persists results.
+- Slice 04 now opts into strict Job normalization failures: identified invalid
+  Job source or taxonomy is skipped before batch, while dependency errors,
+  unexpected AI Kit exceptions, and unclassified FAILED results fail the
+  request. Remaining Jobs retain retrieval order and receive contiguous
+  batch jobKeys; an empty prepared batch returns without inference.
 
 ## Verification status
 
@@ -87,3 +102,14 @@ Acceptance are not started.
   candidates with 50 numeric Vector Scores after canonical visibility
   revalidation. No generative provider was called. Atlas token usage remains
   unavailable from the MongoDB credentials.
+- Slice 04 focused AI Kit Vitest passed (3 files, 57 tests); focused Backend
+  Vitest passed (2 files, 21 tests). Focused ESLint and Backend
+  `npm run verify:architecture` passed. The full `verify:agent` gates were not
+  run per the slice limit. No live provider call was made; CCPro batch limits
+  and semantic quality still need integration verification.
+- H1 fix focused Backend Vitest passed (4 files, 64 tests), including V01/V03
+  compatibility and V05 invalid Job, MongoDB failure, empty batch, and batch
+  failure cases. Focused AI Kit Vitest passed (3 files, 101 tests), including
+  strict unexpected-exception and default FAILED behavior. Focused ESLint and
+  Backend `npm run verify:architecture` passed. Full `verify:agent` gates,
+  provider calls, and Atlas calls were not run per this focused task.

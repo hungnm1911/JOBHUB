@@ -558,6 +558,20 @@ describe("normalizeJob — FAILED result", () => {
     });
   });
 
+  it("propagates unexpected exceptions in V05 strict mode", () => {
+    const failure = new Error("unexpected normalization exception");
+    const jobSource = withDescriptionReads((reads) => {
+      if (reads > 1) throw failure;
+      return JOB_DESCRIPTION;
+    });
+    expect(() => normalizeJob(jobSource, { strictFailures: true })).toThrow(failure);
+  });
+
+  it("does not classify an uncertain profile self-check failure as invalid Job data", () => {
+    const jobSource = withDescriptionReads((reads) => `Mô tả phiên bản ${reads}`);
+    expect(() => normalizeJob(jobSource, { strictFailures: true })).toThrow();
+  });
+
   it("returns FAILED rather than READY when the profile no longer matches its source", () => {
     const jobSource = withDescriptionReads((reads) => `Mô tả phiên bản ${reads}`);
 
