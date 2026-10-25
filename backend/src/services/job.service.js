@@ -32,7 +32,9 @@ import {
   resolveRecruiterBusinessContext,
 } from "./company.service.js";
 import { validateLocation } from "./location.service.js";
+import { synchronizeJobEmbeddingText } from "./job-embedding.service.js";
 import AppError from "../utils/app-error.js";
+import logger from "../utils/logger.js";
 
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
@@ -2047,6 +2049,23 @@ const approveAndPublishJob = async ({
         field: "status",
       },
     );
+  }
+
+  // AI-V05 derived representation follows the committed publish. A failed
+  // normalization/write is reconciled later and cannot roll back publication.
+  try {
+    const outcome = await synchronizeJobEmbeddingText(updatedJob._id);
+
+    if (outcome === "FAILED") {
+      logger.warn("AI-V05 Job embedding text synchronization not READY", {
+        jobId: updatedJob._id.toString(),
+      });
+    }
+  } catch (error) {
+    logger.warn("AI-V05 Job embedding text synchronization failed", {
+      jobId: updatedJob._id.toString(),
+      errorType: error.name,
+    });
   }
 
   return toPublicJob(updatedJob);

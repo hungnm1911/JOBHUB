@@ -282,9 +282,11 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   entrypoint and exports only `createAiKit`. The factory validates
   optional Codex/Gemini/Groq configuration and the injected logger contract, then
   returns a frozen instance with AI-V01 entries `normalizeJob` (F01) and
-  `normalizeGeneratedCv` (F02), AI-V02 `normalizeUploadedCv` (F01), and
-  AI-V03 `matchJobCv` (F01 orchestration), and AI-V04 `evaluateCv` (F01 Slice 1). The
-  AI-V01 entries remain synchronous, deterministic, and provider-free; they
+  `normalizeGeneratedCv` (F02), AI-V02 `normalizeUploadedCv` (F01),
+  AI-V03 `matchJobCv` (F01 orchestration), AI-V04 `evaluateCv` (F01 Slice 1),
+  and AI-V05 `assessRecommendationBatch` (Slice 04 F03) and
+  `scoreRecommendationAssessment` (Slice 05 F04). The AI-V01 entries
+  remain synchronous, deterministic, and provider-free; they
   need no LLM configuration and do not log. The AI-V02 entry is asynchronous
   and calls one explicitly selected provider after PDF text extraction.
 - AI-V01 Product/Data authority is approved and deterministic. The F01 owner,
@@ -448,8 +450,9 @@ Subject to approved Product and Data contracts, the intended capability groups
 are AI #1 (CV–Job evaluation, explanation, and improvement), AI #2
 (retrieval/embedding-based Job recommendation), and AI #3 (a bounded-tool CV
 draft agent). They are expected to reuse canonical CV/Job match profiles and
-the deterministic Matching Engine; this is architectural direction, not an
-implemented or approved capability contract.
+the deterministic Matching Engine. AI-V04 and AI-V05 Product/Data contracts
+govern the approved scopes for AI #1 and AI #2; this architectural direction
+does not approve AI #3 or imply AI-V05 implementation.
 
 A future tool-calling capability preserves Backend ownership of authorization
 and domain writes:
@@ -500,10 +503,11 @@ Backend authenticates actor
   wiring.
 - Recruiter/application access to Generated CV normalization remains deferred.
   AI-V03 Candidate HTTP matching uses V8 public Job visibility and own
-  CandidateCV normalization; Job/CV CRUD hooks are absent. AI-specific
-  persistence, profile history/freshness,
-  embeddings/retrieval, and tool schemas/limits remain outside the approved
-  AI-V01 runtime-only boundary. AI #1/#2/#3 require their own approved
+  CandidateCV normalization. AI-V05 Slice 01 adds Job `embeddingText`
+  persistence and post-publish synchronization; Slice 03 adds runtime Default CV
+  query text and Atlas retrieval with Backend visibility revalidation. Persisted
+  CV embedding, profile history/freshness, and tool schemas/limits remain deferred.
+  AI #1/#2/#3 require their own approved
   Product/Data contracts.
 
 ## Frontend current state

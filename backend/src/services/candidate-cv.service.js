@@ -1506,6 +1506,21 @@ const loadOwnActiveCandidateCv = async ({
   return candidateCv;
 };
 
+const loadOwnDefaultCandidateCv = async ({ actorUser } = {}) => {
+  assertCandidateCvActor(actorUser);
+  const candidateCv = await CandidateCV.findOne({
+    candidateUserId: actorUser._id,
+    isDefault: true,
+    archivedAt: null,
+  });
+
+  if (!candidateCv || candidateCv.status !== CANDIDATE_CV_STATUS.ACTIVE) {
+    throw new AppError(409, "An active Default CV is required");
+  }
+
+  return candidateCv;
+};
+
 /**
  * AI-V02 F01: read only the current, authorized Uploaded PDF bytes. The raw
  * source prevents Mongoose casting/defaults from repairing invalid file data.
@@ -2293,6 +2308,7 @@ export {
   listOwnActiveCandidateCvs,
   loadCurrentSearchEligibleCandidateCvById,
   loadOwnActiveCandidateCv,
+  loadOwnDefaultCandidateCv,
   previewOwnCandidateCv,
   previewSearchEligibleCandidateCv,
   previewSearchEligibleGeneratedCandidateCv,

@@ -442,7 +442,7 @@ const findProfileIssues = (profile, jobSource) => {
 
 // F01: deterministic Job → JobMatchProfile normalization. No LLM, no
 // free-text interpretation, no persistence; the result is runtime-only.
-const normalizeJob = (jobSource) => {
+const normalizeJob = (jobSource, { strictFailures = false } = {}) => {
   const inputIssues = findJobSourceIssues(jobSource);
 
   if (inputIssues.length > 0) {
@@ -457,11 +457,13 @@ const normalizeJob = (jobSource) => {
     const profile = buildJobMatchProfile(jobSource);
 
     if (findProfileIssues(profile, jobSource).length > 0) {
+      if (strictFailures) throw new Error("Job profile preservation check failed");
       return FAILED_RESULT;
     }
 
     return deepFreeze({ status: JOB_NORMALIZATION_STATUS.READY, profile });
-  } catch {
+  } catch (error) {
+    if (strictFailures) throw error;
     return FAILED_RESULT;
   }
 };

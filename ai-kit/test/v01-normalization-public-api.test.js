@@ -157,11 +157,13 @@ const captureError = (action) => {
 };
 
 describe("AI-V01 public runtime entry", () => {
-  it("exposes normalizeJob and normalizeGeneratedCv on the createAiKit instance only", () => {
+  it("exposes approved runtime entries on the createAiKit instance only", () => {
     const aiKit = createAiKit({ logger: makeLogger() });
 
     expect(Object.keys(aiKit)).toEqual([
-      "normalizeJob", "normalizeGeneratedCv", "normalizeUploadedCv", "matchJobCv", "evaluateCv",
+      "normalizeJob", "buildJobEmbeddingText", "buildCvQueryText",
+      "normalizeGeneratedCv", "normalizeUploadedCv", "matchJobCv",
+      "assessRecommendationBatch", "evaluateCv",
     ]);
     expect(Object.isFrozen(aiKit)).toBe(true);
     expect(aiKit.normalizeJob).toBeTypeOf("function");
