@@ -11,13 +11,14 @@ nodes. Slice 03 — Default CV query and eligible Job retrieval — is implement
 as an internal runtime service and passed focused offline and one live
 development checkpoint. Slice 04 — Batch Semantic Assessment & Reason (F03)
 is implemented and focused offline verified; the H1 Job normalization failure
-classification finding is fixed with focused regression coverage. Actual Atlas Automated Embedding
-token usage has not been captured. Final Scoring, Candidate HTTP delivery, and
-Final Acceptance are not started.
+classification finding is fixed with focused regression coverage. Slice 05 —
+Final Scoring, Ranking & Candidate HTTP delivery (F04) is implemented and
+focused offline verified. Actual Atlas Automated Embedding token usage has not
+been captured. Final Acceptance has not started.
 
 ## Deferred / not started
 
-- Final Scoring, Candidate HTTP delivery, and Final Acceptance remain deferred.
+- Final Acceptance remains deferred.
 - Atlas Automated Embedding token usage and retrieval quality remain unverified;
   one live query embedding checkpoint was run, without a generative call.
 - CCPro batch input/output limits and representative semantic quality remain
@@ -68,6 +69,13 @@ Final Acceptance are not started.
   unexpected AI Kit exceptions, and unclassified FAILED results fail the
   request. Remaining Jobs retain retrieval order and receive contiguous
   batch jobKeys; an empty prepared batch returns without inference.
+- Slice 05 carries the READY CV profile and per-Job F03 assessment into a
+  deterministic AI Kit scorer that calls the unchanged V03 field and weighted
+  calculators. Backend sorts by Match Score, rechecks each selected Job through
+  the canonical Job Discovery public detail owner, excludes non-DISCOVERABLE
+  Jobs, and returns up to 10 public Job DTOs with their mapped reasons via
+  authenticated Candidate `POST /api/candidate/job-recommendations`. Results
+  are runtime only; Vector Score is not returned or used for final ranking.
 
 ## Verification status
 
@@ -113,3 +121,10 @@ Final Acceptance are not started.
   strict unexpected-exception and default FAILED behavior. Focused ESLint and
   Backend `npm run verify:architecture` passed. Full `verify:agent` gates,
   provider calls, and Atlas calls were not run per this focused task.
+- Slice 05 focused AI Kit Vitest passed (3 files, 26 tests); focused Backend
+  Vitest passed (4 files, 31 tests), including Candidate HTTP authentication,
+  authorization, shared error handling, ranking, cap, reason mapping, and final
+  visibility recheck. Targeted ESLint in both areas and Backend
+  `npm run verify:architecture` passed. Full `verify:agent` gates, live provider
+  calls, and Atlas calls were not run per this slice's focused verification
+  limit. Final Acceptance and representative live quality remain unverified.

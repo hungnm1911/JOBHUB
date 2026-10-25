@@ -5,6 +5,7 @@ import { normalizeJob } from "./normalization/job-normalization.js";
 import { buildJobEmbeddingText } from "./recommendation/job-embedding-text.js";
 import { buildCvQueryText } from "./recommendation/cv-query-text.js";
 import { createBatchSemanticAssessor } from "./recommendation/batch-semantic-assessment.js";
+import { scoreRecommendationAssessment } from "./recommendation/recommendation-scoring.js";
 import { createUploadedCvNormalizer } from "./normalization/uploaded-cv-semantic-extraction.js";
 
 const LOGGER_METHODS = Object.freeze(["error", "warn", "info", "debug"]);
@@ -68,6 +69,7 @@ function createAiKit({ llm = {}, logger } = {}) {
     normalizeUploadedCv: createUploadedCvNormalizer({ llm, logger }),
     matchJobCv: createMatchResultOrchestrator({ llm, logger }),
     assessRecommendationBatch: createBatchSemanticAssessor({ llm, logger }),
+    scoreRecommendationAssessment,
     evaluateCv: createCvEvaluator({ llm, logger }),
   });
 }

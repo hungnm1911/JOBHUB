@@ -42,6 +42,7 @@ import {
 } from "../controllers/candidate-profile.controller.js";
 import { matchOwnCandidateCvToJobHandler } from "../controllers/candidate-job-match.controller.js";
 import { evaluateOwnCandidateCvForJobHandler } from "../controllers/candidate-cv-evaluation.controller.js";
+import { recommendOwnDefaultCvJobsHandler } from "../controllers/candidate-job-recommendation.controller.js";
 import {
   listSavedJobsHandler,
   saveJobHandler,
@@ -91,6 +92,13 @@ router.post(
   authenticateAccess,
   authorizeCandidate,
   evaluateOwnCandidateCvForJobHandler,
+);
+
+router.post(
+  "/job-recommendations",
+  authenticateAccess,
+  authorizeCandidate,
+  recommendOwnDefaultCvJobsHandler,
 );
 
 router.put("/saved-jobs/:jobId", authenticateAccess, authorizeCandidate, saveJobHandler);

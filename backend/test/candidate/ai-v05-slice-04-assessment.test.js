@@ -46,6 +46,7 @@ describe("AI-V05 Slice 04 Backend handoff", () => {
     expect(mocks.assess.mock.calls[0][0].jobs.map(({ jobKey }) => jobKey))
       .toEqual(Array.from({ length: 12 }, (_, index) => `J${index + 1}`));
     expect(result).toHaveLength(12);
+    expect(result[0].cvNormalizationResult).toBe(cvNormalizationResult);
     expect(result[11]).toMatchObject({ jobId: "job-12", vectorScore: 0.89,
       assessment: { reason: "Reason J12" } });
   });

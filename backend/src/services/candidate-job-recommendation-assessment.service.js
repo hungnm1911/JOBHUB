@@ -38,7 +38,8 @@ const assessOwnDefaultCvJobCandidates = async ({ actorUser, batchSize = DEFAULT_
     cvNormalizationResult,
     jobs: jobs.map(({ jobKey, jobNormalizationResult }) => ({ jobKey, jobNormalizationResult })),
   });
-  return jobs.map((candidate, index) => ({ ...candidate, assessment: assessments[index] }));
+  return jobs.map((candidate, index) => ({ ...candidate, cvNormalizationResult,
+    assessment: assessments[index] }));
 };
 
 export { assessOwnDefaultCvJobCandidates };
