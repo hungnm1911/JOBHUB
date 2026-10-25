@@ -24,8 +24,9 @@ authority is approved and Final Acceptance is `ACCEPTED`; its F01
 AI-V03 Product/Data authority is approved; F01 Match Result orchestration and
 F02–F04 assessment/scoring are implemented offline. AI-V04 Product/Data
 authority is approved; F01 Slice 1 implements the internal evaluation entry,
-and Slice 2 adds the Candidate Backend HTTP entry. AI #1/#2/#3
-architecture direction does not independently approve another business capability.
+and Slice 2 adds the Candidate Backend HTTP entry. AI-V05 Product/Data authority
+is approved; implementation has not started. AI #1/#2/#3 architecture direction
+does not independently approve another business capability.
 
 ## Terminology
 

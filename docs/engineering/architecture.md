@@ -448,8 +448,9 @@ Subject to approved Product and Data contracts, the intended capability groups
 are AI #1 (CV–Job evaluation, explanation, and improvement), AI #2
 (retrieval/embedding-based Job recommendation), and AI #3 (a bounded-tool CV
 draft agent). They are expected to reuse canonical CV/Job match profiles and
-the deterministic Matching Engine; this is architectural direction, not an
-implemented or approved capability contract.
+the deterministic Matching Engine. AI-V04 and AI-V05 Product/Data contracts
+govern the approved scopes for AI #1 and AI #2; this architectural direction
+does not approve AI #3 or imply AI-V05 implementation.
 
 A future tool-calling capability preserves Backend ownership of authorization
 and domain writes:

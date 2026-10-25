@@ -97,3 +97,19 @@ feedback through the Candidate HTTP entry. The Product/Functional phase is
 closed; official engineering closure remains unverified. Acceptance evidence
 and the verification limit are recorded in the
 [AI-V04 project-status leaf](../../project-status/ai-kit/v04-cv-evaluation-improvement.md).
+
+### AI-V05 — Candidate Job Recommendation
+
+- **Product/Data approval status:** `APPROVED` (Product/Data Decisions supplied for AI-V05)
+- **Implementation status:** `NOT STARTED`
+- **Final Acceptance status:** `NOT STARTED`
+- **Functional requirements:** `F01` through `F04`
+- **Business rules:** `BR-AI-01` through `BR-AI-19`
+- **Canonical Product Specification:**
+  [`versions/v05-candidate-job-recommendation.md`](versions/v05-candidate-job-recommendation.md)
+- **Canonical Data Contract:**
+  [`../../data/ai-kit/versions/v05-candidate-job-recommendation.md`](../../data/ai-kit/versions/v05-candidate-job-recommendation.md)
+
+Approval establishes Product/Data authority, not implementation or Final
+Acceptance. Current state and documentation alignment are recorded in the
+[AI-V05 project-status leaf](../../project-status/ai-kit/v05-candidate-job-recommendation.md).
