@@ -636,6 +636,10 @@ const jobSchema = new Schema(
       type: Date,
       default: null,
     },
+
+    embeddingText: {
+      type: String,
+    },
   },
   {
     timestamps: true,

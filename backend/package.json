@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:agent": "npm run lint && npm run verify:architecture && npm run test",
+    "reconcile:job-embedding-text": "node scripts/reconcile-job-embedding-text.js",
     "seed:ai-v05-p2": "node scripts/seed-ai-v05-p2.js"
   },
   "dependencies": {

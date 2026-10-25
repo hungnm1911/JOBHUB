@@ -19,6 +19,10 @@ import WORK_MODE from "../../src/constants/work-mode.js";
 import { migrate as migrateExperienceLevels } from "../../src/database/migrations/v4-experience-level-dataset.js";
 import ExperienceLevel from "../../src/models/experience-level.model.js";
 import Job from "../../src/models/job.model.js";
+import {
+  reconcilePublishedJobEmbeddingTexts,
+  synchronizeJobEmbeddingText,
+} from "../../src/services/job-embedding.service.js";
 import User from "../../src/models/user.model.js";
 import {
   createFieldCategory,
@@ -51,6 +55,7 @@ describe("V5 Slice 06 — Approve and publish Job (F06 / TX-01)", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     await clearDatabase();
   });
@@ -177,6 +182,7 @@ describe("V5 Slice 06 — Approve and publish Job (F06 / TX-01)", () => {
       primaryRecruiterCompanyMemberId: recruiter.membership._id.toString(),
     });
     expect(response.body.job.publishedAt).toEqual(expect.any(String));
+    expect(response.body.job).not.toHaveProperty("embeddingText");
     const publishedAtMs = new Date(response.body.job.publishedAt).getTime();
     expect(publishedAtMs).toBeGreaterThanOrEqual(beforeApprove - 1000);
     expect(publishedAtMs).toBeLessThanOrEqual(afterApprove + 1000);
@@ -192,6 +198,66 @@ describe("V5 Slice 06 — Approve and publish Job (F06 / TX-01)", () => {
     expect(persisted.primaryRecruiterCompanyMemberId.toString()).toBe(
       recruiter.membership._id.toString(),
     );
+    expect(persisted.embeddingText).toContain("Job Title: Backend Engineer");
+    expect(persisted.embeddingText).toContain("Career Fields: Software Engineering");
+    expect(persisted.embeddingText).toContain("Required Skills: Node.js, MongoDB");
+    expect(persisted.embeddingText).not.toContain("Salary");
+    expect(persisted.embeddingText).not.toContain("Location");
+  });
+
+  it("publishes when embedding persistence fails and reconciles a stale derived value", async () => {
+    const agent = createTestAgent();
+    const manager = await createActiveCompanyManagerContext({
+      email: "cm.job.embedding.failure@example.com",
+      businessRegistrationNumber: "BRN-V05-EMBED-1",
+    });
+    const recruiter = await createActiveRecruiterContext({
+      email: "recruiter.job.embedding.failure@example.com",
+      company: manager.company,
+      employeeCode: "NV-V05-EMBED-1",
+    });
+    const catalog = await seedCatalog();
+    const { job: pending } = await createSubmittedPendingJob({
+      agent,
+      recruiter,
+      content: buildCompleteContent(catalog),
+    });
+
+    expect((await Job.findById(pending.id).lean()).embeddingText).toBeUndefined();
+
+    const managerToken = await loginAndGetAccessToken(agent, {
+      email: manager.user.email,
+      password: DEFAULT_PASSWORD,
+    });
+    const write = vi.spyOn(Job, "updateOne").mockRejectedValueOnce(new Error("derived write failed"));
+    const response = await agent
+      .post(`/api/jobs/${pending.id}/approve`)
+      .set("Authorization", `Bearer ${managerToken}`);
+    write.mockRestore();
+
+    expect(response.status).toBe(200);
+    const published = await Job.findById(pending.id).lean();
+    expect(published.status).toBe(JOB_STATUS.PUBLISHED);
+    expect(published.embeddingText).toBeUndefined();
+
+    expect(await synchronizeJobEmbeddingText(new mongoose.Types.ObjectId(pending.id))).toBe("UPDATED");
+    const repaired = await Job.findById(pending.id).lean();
+    expect(repaired.embeddingText).toContain("Job Title: Backend Engineer");
+    expect(repaired.updatedAt).toEqual(published.updatedAt);
+    const updatedAt = repaired.updatedAt;
+    expect(await synchronizeJobEmbeddingText(repaired._id)).toBe("UNCHANGED");
+    expect((await Job.findById(pending.id).lean()).updatedAt).toEqual(updatedAt);
+
+    await Job.updateOne(
+      { _id: repaired._id },
+      { $set: { embeddingText: "stale derived text" } },
+      { timestamps: false },
+    );
+    expect(await reconcilePublishedJobEmbeddingTexts()).toMatchObject({
+      UPDATED: 1,
+      FAILED: 0,
+    });
+    expect((await Job.findById(pending.id).lean()).embeddingText).toBe(repaired.embeddingText);
   });
 
   it("rejects Recruiter approve and cross-tenant Manager approve (BR-20/BR-38)", async () => {
