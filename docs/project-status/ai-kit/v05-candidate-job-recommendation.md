@@ -13,16 +13,25 @@ development checkpoint. Slice 04 — Batch Semantic Assessment & Reason (F03)
 is implemented and focused offline verified; the H1 Job normalization failure
 classification finding is fixed with focused regression coverage. Slice 05 —
 Final Scoring, Ranking & Candidate HTTP delivery (F04) is implemented and
-focused offline verified. Actual Atlas Automated Embedding token usage has not
-been captured. Final Acceptance has not started.
+focused offline verified. Live end-to-end checkpoints of
+`POST /api/candidate/job-recommendations` passed for both a Generated and an
+Uploaded Default CV. Actual Atlas Automated Embedding token usage has not been
+captured. AI-V05 Final Acceptance is **PENDING**.
 
 ## Deferred / not started
 
-- Final Acceptance remains deferred.
-- Atlas Automated Embedding token usage and retrieval quality remain unverified;
-  one live query embedding checkpoint was run, without a generative call.
+- AI-V05 Final Acceptance is PENDING.
+- Atlas Automated Embedding token usage and retrieval quality remain unverified.
 - CCPro batch input/output limits and representative semantic quality remain
-  unverified; Slice 04 made no live generative call.
+  unverified beyond the two live end-to-end checkpoints below. Uploaded CV
+  acceptance requires technical correctness only; semantic quality is not an
+  acceptance blocker for it.
+- Operational risk: an earlier Uploaded CV checkpoint (request
+  `89acc87d-4b98-4031-b3a9-0af397bfae1f`) failed with HTTP 500 when the F03
+  batch call hit the 90-second CCPro client timeout
+  (`APIConnectionTimeoutError`, stage `batch_inference`); the passing rerun's
+  batch completed in about 48 seconds. The cause of the earlier timeout is
+  unproven. No timeout, model, or batch-size change is required.
 
 ## Implementation record (slice detail)
 
@@ -128,3 +137,22 @@ been captured. Final Acceptance has not started.
   `npm run verify:architecture` passed. Full `verify:agent` gates, live provider
   calls, and Atlas calls were not run per this slice's focused verification
   limit. Final Acceptance and representative live quality remain unverified.
+- Generated CV live end-to-end checkpoint: PASS. HTTP 200; retrieval returned
+  50 Jobs; the batch held 12 Jobs in one generative inference; 10
+  recommendations were returned with Match Score and reason.
+- Uploaded CV live end-to-end checkpoint on 2026-10-25: PASS. Request
+  `b2158abd-2b0e-4ff8-98f2-430d7ebba188`, HTTP 200 in about 61.9 seconds,
+  against the `jobhub-dev` development Backend (CCPro `gpt-5.6-sol`). Fixture
+  Candidate User `0207a7e0667687e65da04fc9` (seed `candidate-1`); Default CV
+  `6ade1009a1a368ae3eff96b8` (`UPLOADED`, `ACTIVE`), created from
+  `ai-kit/test/fixtures/ai-v02-standard-developer-synthetic.pdf` through the
+  canonical upload and set-Default endpoints; the fixture's original Default
+  CV is Generated CV `6addd1f774d982982464aea8`. V02 normalization was READY,
+  inferred from retrieval proceeding. Retrieval returned 50 candidates and the
+  F03 batch held 12 Jobs. Provider calls, one per use case: V02 normalization
+  1 call (2,033 tokens) and F03 batch assessment 1 call (8,980 tokens). The
+  response `{ recommendations }` held 10 items, each with `job`, `matchScore`,
+  and `reason`. A read-only recheck through `resolveJobDiscoveryVisibility`
+  found all 5 sampled Jobs (of the 10 returned) `PUBLISHED` and
+  `DISCOVERABLE`. Semantic quality was
+  not assessed. No full gate was run.

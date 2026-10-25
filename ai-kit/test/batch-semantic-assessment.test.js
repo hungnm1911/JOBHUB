@@ -87,9 +87,46 @@ describe("AI-V05 F03 batch semantic assessment", () => {
   });
 
   it("rejects incomplete provider completion", async () => {
-    codexCall.mockResolvedValue({ ...response(output), status: "incomplete" });
-    await expect(assess({ cvNormalizationResult, jobs })).rejects
-      .toMatchObject({ code: "INVALID_SEMANTIC_SKILLS_ASSESSMENT" });
+    codexCall.mockResolvedValue({ ...response(output), status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" } });
+    const diagnostic = vi.fn();
+    await expect(assess({ cvNormalizationResult, jobs, diagnostic })).rejects
+      .toMatchObject({ code: "INVALID_SEMANTIC_SKILLS_ASSESSMENT",
+        diagnosticStage: "structured_extraction", diagnosticCode: "RESPONSE_NOT_COMPLETED" });
+    expect(diagnostic).toHaveBeenCalledWith({ gate: "structured_extraction",
+      status: "FAIL", code: "RESPONSE_NOT_COMPLETED" });
+  });
+
+  it("identifies an invalid Responses output message before JSON parsing", async () => {
+    codexCall.mockResolvedValue({ ...response(output), output: [{ type: "message",
+      role: "assistant", status: "completed", content: [] }] });
+    const diagnostic = vi.fn();
+    await expect(assess({ cvNormalizationResult, jobs, diagnostic })).rejects
+      .toMatchObject({ diagnosticStage: "structured_extraction",
+        diagnosticCode: "OUTPUT_MESSAGE_INVALID" });
+    expect(diagnostic).toHaveBeenCalledWith({ gate: "structured_extraction",
+      status: "FAIL", code: "OUTPUT_MESSAGE_INVALID" });
+    expect(diagnostic.mock.calls.some(([event]) => event.gate === "batch_json")).toBe(false);
+  });
+
+  it("identifies invalid JSON and invalid evidence at separate batch gates", async () => {
+    const diagnostic = vi.fn();
+    codexCall.mockResolvedValue({ ...response(output), output: [{ type: "message",
+      role: "assistant", status: "completed", content: [{ type: "output_text", text: "{" }] }] });
+    await expect(assess({ cvNormalizationResult, jobs, diagnostic })).rejects
+      .toMatchObject({ diagnosticStage: "batch_json", diagnosticCode: "INVALID_JSON" });
+    expect(diagnostic).toHaveBeenCalledWith({ gate: "batch_json", status: "FAIL",
+      code: "INVALID_JSON" });
+
+    diagnostic.mockClear();
+    codexCall.mockResolvedValue(response({ jobs: [output.jobs[0], {
+      ...output.jobs[1], requirementGroups: [{ ...group(), jobSourceIds: ["J1"] }],
+    }] }));
+    await expect(assess({ cvNormalizationResult, jobs, diagnostic })).rejects
+      .toMatchObject({ diagnosticStage: "evidence_resolution",
+        diagnosticCode: "EVIDENCE_INVALID" });
+    expect(diagnostic).toHaveBeenCalledWith({ gate: "evidence_resolution", status: "FAIL",
+      code: "EVIDENCE_INVALID", jobIndex: 1 });
   });
 
   it("rejects non READY input before inference", async () => {

@@ -41,7 +41,7 @@ const metadata = (profile, isJob) => isJob ? {
 };
 
 const createBatchSemanticAssessor = ({ llm, logger }) => async ({
-  cvNormalizationResult, jobs, provider = "codex",
+  cvNormalizationResult, jobs, provider = "codex", diagnostic,
 } = {}) => {
   if (cvNormalizationResult?.status !== "READY" || !cvNormalizationResult.profile
     || !Array.isArray(jobs) || jobs.length === 0
@@ -75,29 +75,48 @@ const createBatchSemanticAssessor = ({ llm, logger }) => async ({
       metadata: metadata(jobMatchProfile, true),
     })),
   });
-  const text = await infer({ provider, config, logger, input, instruction: INSTRUCTION,
+  const text = await infer({ provider, config, logger, input, diagnostic, instruction: INSTRUCTION,
     schema: BATCH_SCHEMA, schemaName: "batch_semantic_assessment" });
+  const fail = (gate, code) => {
+    diagnostic?.({ gate, status: "FAIL", code });
+    throw new SemanticSkillsAssessmentError({ diagnosticStage: gate, diagnosticCode: code });
+  };
   let output;
-  try { output = JSON.parse(text); } catch { throw new SemanticSkillsAssessmentError(); }
+  try { output = JSON.parse(text); } catch { fail("batch_json", "INVALID_JSON"); }
+  diagnostic?.({ gate: "batch_json", status: "PASS" });
   if (!exactKeys(output, ["jobs"]) || !Array.isArray(output.jobs)
-    || output.jobs.length !== prepared.length) throw new SemanticSkillsAssessmentError();
+    || output.jobs.length !== prepared.length) fail("batch_validation", "JOB_COUNT_OR_SHAPE_INVALID");
   const byKey = new Map(prepared.map((item) => [item.jobKey, item]));
   const seen = new Set();
-  const results = output.jobs.map((item) => {
+  const results = output.jobs.map((item, index) => {
     if (!exactKeys(item, ["jobKey", "requirementGroups", "reason"])
       || !byKey.has(item.jobKey) || seen.has(item.jobKey)
       || typeof item.reason !== "string" || !item.reason.trim()) {
-      throw new SemanticSkillsAssessmentError();
+      fail("batch_validation", "JOB_MAPPING_OR_REASON_INVALID");
     }
     seen.add(item.jobKey);
     const { jobMatchProfile, jobSources, cvSources } = byKey.get(item.jobKey);
+    let resolved;
+    try {
+      resolved = resolveRequirementGroups(item.requirementGroups, jobSources, cvSources);
+    } catch (error) {
+      diagnostic?.({ gate: "evidence_resolution", status: "FAIL",
+        code: "EVIDENCE_INVALID", jobIndex: index });
+      if (error instanceof Error) {
+        error.diagnosticStage = "evidence_resolution";
+        error.diagnosticCode = "EVIDENCE_INVALID";
+      }
+      throw error;
+    }
     return {
       jobKey: item.jobKey,
       jobId: jobMatchProfile.source.jobId,
-      ...resolveRequirementGroups(item.requirementGroups, jobSources, cvSources),
+      ...resolved,
       reason: item.reason.trim(),
     };
   });
+  diagnostic?.({ gate: "batch_validation", status: "PASS", jobCount: results.length });
+  diagnostic?.({ gate: "evidence_resolution", status: "PASS", jobCount: results.length });
   return prepared.map(({ jobKey }) => results.find((result) => result.jobKey === jobKey));
 };
 

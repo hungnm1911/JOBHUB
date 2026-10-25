@@ -65,7 +65,9 @@ const errorHandler = (error, request, response, _next) => {
     responseBody.error.details = error.details;
   }
 
-  if (config.env !== "production") {
+  if (config.env === "development" && request.aiV05Diagnostic) {
+    responseBody.error.diagnostic = request.aiV05Diagnostic;
+  } else if (config.env !== "production") {
     responseBody.error.stack = error.stack;
   }
 

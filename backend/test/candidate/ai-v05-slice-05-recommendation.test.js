@@ -75,13 +75,23 @@ describe("AI-V05 F04 final recommendation", () => {
   });
 
   it("fails the request on scoring or public read dependency errors", async () => {
+    const scoringDiagnostic = { providerEvents: [] };
     mocks.score.mockImplementationOnce(() => { throw new TypeError("Invalid score"); });
-    await expect(recommendOwnDefaultCvJobs({ actorUser })).rejects.toThrow("Invalid score");
+    await expect(recommendOwnDefaultCvJobs({ actorUser,
+      diagnostic: scoringDiagnostic })).rejects.toMatchObject({
+      diagnosticStage: "scoring", diagnosticCode: "SCORING_FAILED",
+    });
     expect(mocks.publicDetail).not.toHaveBeenCalled();
     mocks.score.mockImplementation(({ jobNormalizationResult }) => ({
       jobId: jobNormalizationResult.profile.source.jobId, matchScore: 50,
     }));
     mocks.publicDetail.mockRejectedValue(new Error("Database unavailable"));
-    await expect(recommendOwnDefaultCvJobs({ actorUser })).rejects.toThrow("Database unavailable");
+    const visibilityDiagnostic = { providerEvents: [] };
+    await expect(recommendOwnDefaultCvJobs({ actorUser,
+      diagnostic: visibilityDiagnostic })).rejects.toMatchObject({
+      diagnosticStage: "visibility", diagnosticCode: "VISIBILITY_FAILED",
+    });
+    expect(visibilityDiagnostic.providerEvents).toContainEqual({ gate: "scoring",
+      status: "PASS", jobCount: 12 });
   });
 });
