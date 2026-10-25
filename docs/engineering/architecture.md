@@ -502,8 +502,9 @@ Backend authenticates actor
 - Recruiter/application access to Generated CV normalization remains deferred.
   AI-V03 Candidate HTTP matching uses V8 public Job visibility and own
   CandidateCV normalization. AI-V05 Slice 01 adds Job `embeddingText`
-  persistence and post-publish synchronization; Atlas retrieval, CV embedding,
-  profile history/freshness, and tool schemas/limits remain deferred.
+  persistence and post-publish synchronization; Slice 03 adds runtime Default CV
+  query text and Atlas retrieval with Backend visibility revalidation. Persisted
+  CV embedding, profile history/freshness, and tool schemas/limits remain deferred.
   AI #1/#2/#3 require their own approved
   Product/Data contracts.
 

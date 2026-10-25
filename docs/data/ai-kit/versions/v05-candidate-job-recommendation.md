@@ -436,15 +436,16 @@ Các nguồn semantic phù hợp gồm:
 
 Đây là allowlist về loại thông tin, không yêu cầu mọi CV phải có đầy đủ từng mục.
 
-Không đưa trực tiếp:
+Không đưa trực tiếp vào query text các trường chuyên biệt sau:
 
 - Email, số điện thoại, địa chỉ liên hệ.
 - Professional links hoặc URL.
 - Source path và provenance.
 - Database identifiers.
-- Thông tin không liên quan đến mục đích matching.
 
-Các trường free text cần được xử lý theo nguyên tắc hạn chế thông tin cá nhân trước khi đưa vào embedding.
+Thông tin không liên quan đến mục đích matching cũng không được đưa vào query text.
+
+Các trường free text cần được xử lý theo nguyên tắc hạn chế thông tin cá nhân trước khi đưa vào embedding. Việc phát hiện và loại bỏ thông tin liên hệ hoặc đường dẫn nằm trong free text là best-effort; không yêu cầu phát hiện tuyệt đối mọi dạng URL hoặc địa chỉ.
 
 ## 7.3. Metadata không nằm trong embedding baseline
 

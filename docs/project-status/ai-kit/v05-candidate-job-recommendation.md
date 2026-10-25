@@ -7,15 +7,18 @@ Embedding Foundation (F02 support) is implemented and verified with focused
 offline tests: READY JobMatchProfile formatting, optional Job `embeddingText`,
 best-effort sync after publish, and explicit reconciliation. Slice 02's
 `jobhub-dev` Atlas Vector Search Index is `READY` and queryable on all three
-nodes. Actual Atlas Automated Embedding token usage has not been captured.
-Final Acceptance is not started.
+nodes. Slice 03 — Default CV query and eligible Job retrieval — is implemented
+as an internal runtime service and passed focused offline and one live
+development checkpoint. Actual Atlas Automated Embedding token usage has not
+been captured. Candidate HTTP delivery, semantic assessment, and Final
+Acceptance are not started.
 
 ## Deferred / not started
 
-- Query embedding, recommendation orchestration, and Candidate HTTP delivery
-  remain deferred.
+- Recommendation orchestration, semantic assessment, V03 scoring, and Candidate
+  HTTP delivery remain deferred.
 - Atlas Automated Embedding token usage and retrieval quality remain unverified;
-  no query embedding or generative provider call was run.
+  one live query embedding checkpoint was run, without a generative call.
 
 ## Implementation record (slice detail)
 
@@ -43,6 +46,13 @@ Final Acceptance is not started.
   replaces an index. Actual indexing token usage must be read from Atlas
   Search & Vector Search → Automated Embedding → Usage, filtered to this index
   and the index creation interval; the MongoDB connection does not expose it.
+- Slice 03 resolves the owning Candidate's active Default CV, reuses V01/V02
+  normalization, builds runtime query text from the READY CV profile, and uses
+  the existing `voyage-4` index. The retrieval pre-filter uses published Job
+  state, future deadline, and APPROVED/ACTIVE Company IDs. Each hit is re-read
+  and checked through `resolveJobDiscoveryVisibility`; only `DISCOVERABLE` hits
+  retain their Vector Score and retrieval order. No CV query text, vector, or
+  candidate list is persisted.
 
 ## Verification status
 
@@ -67,3 +77,13 @@ Final Acceptance is not started.
   deliberately not run for this focused slice. No retrieval or generative
   provider call was run. Atlas token usage remains unavailable from the
   credentials used here; 35,671 characters is source coverage, not token usage.
+- Slice 03 focused AI Kit Vitest passed (2 files, 5 tests); focused Backend
+  Vitest passed (1 file, 5 tests). Focused ESLint and Backend
+  `npm run verify:architecture` passed. The full `verify:agent` gates were not
+  run per the slice limit. Read-only development checks reconfirmed the index
+  `READY/queryable`, six eligible Companies, 65 eligible Jobs with
+  `embeddingText`, and 18 active Generated Default CVs. One live retrieval
+  checkpoint using an active Candidate's Generated Default CV returned 50
+  candidates with 50 numeric Vector Scores after canonical visibility
+  revalidation. No generative provider was called. Atlas token usage remains
+  unavailable from the MongoDB credentials.
