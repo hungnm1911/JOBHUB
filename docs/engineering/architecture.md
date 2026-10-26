@@ -383,8 +383,10 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   fixture, and per-extraction resource lifecycle behavior. Detailed evidence is
   recorded in the [AI Kit foundation status](../project-status/ai-kit/foundation.md).
 - AI-V06 Slice 01 owns its internal strict Optimization Result schema and parser
-  in `src/optimization/optimization-result.js`. Runtime inference and Draft
-  creation are not yet connected.
+  in `src/optimization/optimization-result.js`. Slice 02 adds compact source
+  and V04 advisory context, a seven-section prompt, and one selected provider's
+  structured inference in `src/optimization/cv-optimization.js`. Fallback,
+  baseline merge, Draft creation, and Backend integration are not yet connected.
 
 ## AI Kit — Target Convention
 

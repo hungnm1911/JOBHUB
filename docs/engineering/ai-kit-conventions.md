@@ -270,8 +270,11 @@ AI-V06 Slice 01 output contract (`src/optimization/optimization-result.js`)
 defines the single provider-native strict schema and parser for its seven
 required, nullable career sections. Item fields follow Generated CV V7; the
 parser checks structure, enum values, and ISO date syntax. An all-null result
-passes. Prompting, inference, fallback, and baseline composition remain
-deferred.
+passes. Slice 02 (`src/optimization/cv-optimization.js`) builds a compact
+Job/CV source context separated from V04 advisory feedback, prompts only for
+the seven sections, and uses the existing single-provider structured inference
+helper with the Slice 01 schema and parser. Fallback and baseline composition
+remain deferred.
 
 AI-V02 F01 output contract (`src/normalization/uploaded-cv-normalization.js`):
 
