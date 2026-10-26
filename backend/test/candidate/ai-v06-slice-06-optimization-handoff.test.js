@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   prepareProfiles, prepareGeneratedBaseline, prepareUploadedBaseline, optimizeCv,
+  createGeneratedDraftCandidateCv,
 } = vi.hoisted(() => ({
   prepareProfiles: vi.fn(),
   prepareGeneratedBaseline: vi.fn(),
   prepareUploadedBaseline: vi.fn(),
   optimizeCv: vi.fn(),
+  createGeneratedDraftCandidateCv: vi.fn(),
 }));
 
 vi.mock("../../src/services/candidate-job-match.service.js", () => ({
@@ -17,8 +19,12 @@ vi.mock("../../src/services/candidate-cv-optimization-baseline.service.js", () =
   prepareOwnUploadedCvBaseline: prepareUploadedBaseline,
 }));
 vi.mock("../../src/services/ai-kit.service.js", () => ({ aiKit: { optimizeCv } }));
+vi.mock("../../src/services/candidate-cv.service.js", () => ({ createGeneratedDraftCandidateCv }));
 
-import { optimizeOwnCandidateCvForJob } from "../../src/services/candidate-cv-optimization.service.js";
+import {
+  createOptimizedCandidateCvDraftForJob,
+  optimizeOwnCandidateCvForJob,
+} from "../../src/services/candidate-cv-optimization.service.js";
 
 const actorUser = { _id: "candidate-1" };
 const sourceSnapshot = { _id: { toString: () => "cv-1" },
@@ -31,9 +37,15 @@ const input = { actorUser, jobId: "job-1", candidateCvId: "cv-1", evaluationResu
 const jobMatchProfile = { source: { type: "JOB", jobId: "job-1" } };
 const cvMatchProfile = { source: { type: "GENERATED_CV", candidateCvId: "cv-1" } };
 const generatedBaseline = {
-  metadata: { name: "Source CV" }, generatedContent: { personalInfo: { fullName: "Candidate" } },
-  careerSections: { professionalSummary: "Source summary", skills: [],
-    workExperiences: [], projects: [], educations: [], certifications: [], languages: [] },
+  metadata: { name: "Source CV" }, generatedContent: {
+    personalInfo: { fullName: "Candidate" }, hiddenSections: ["projects"],
+    professionalSummary: "Source summary", skills: ["Original"],
+    workExperiences: [{ companyName: "Source employer" }], projects: [{ name: "Source project" }],
+    educations: [], certifications: [], languages: [],
+  },
+  careerSections: { professionalSummary: "Source summary", skills: ["Original"],
+    workExperiences: [{ companyName: "Source employer" }],
+    projects: [{ name: "Source project" }], educations: [], certifications: [], languages: [] },
 };
 const optimizationResult = { professionalSummary: null, skills: null,
   workExperiences: null, projects: null, educations: null, certifications: null,
@@ -54,6 +66,7 @@ describe("AI-V06 Slice 06 authorized optimization handoff", () => {
     prepareGeneratedBaseline.mockResolvedValue(generatedBaseline);
     prepareUploadedBaseline.mockResolvedValue(generatedBaseline);
     optimizeCv.mockResolvedValue(optimizationResult);
+    createGeneratedDraftCandidateCv.mockResolvedValue({ id: "new-draft", status: "DRAFT" });
   });
 
   it("hands one authorized Generated Job/CV pair, baseline, and V04 advice to AI Kit", async () => {
@@ -157,5 +170,72 @@ describe("AI-V06 Slice 06 authorized optimization handoff", () => {
     const inferenceFailure = new Error("All providers failed");
     optimizeCv.mockRejectedValueOnce(inferenceFailure);
     await expect(optimizeOwnCandidateCvForJob(input)).rejects.toBe(inferenceFailure);
+  });
+});
+
+describe("AI-V06 Slice 07 merge and Draft persistence", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    prepareProfiles.mockImplementation(async ({ onAuthorizedCvSource }) => {
+      onAuthorizedCvSource(sourceSnapshot);
+      return profiles();
+    });
+    prepareGeneratedBaseline.mockResolvedValue(generatedBaseline);
+    optimizeCv.mockResolvedValue(optimizationResult);
+    createGeneratedDraftCandidateCv.mockResolvedValue({ id: "new-draft", status: "DRAFT" });
+  });
+
+  it("retains all-null baseline sections and fixed fields in one new Draft", async () => {
+    const original = structuredClone(generatedBaseline);
+
+    await expect(createOptimizedCandidateCvDraftForJob(input))
+      .resolves.toEqual({ id: "new-draft", status: "DRAFT" });
+    expect(createGeneratedDraftCandidateCv).toHaveBeenCalledExactlyOnceWith({
+      candidateUserId: actorUser._id, actorUser, draft: generatedBaseline.metadata,
+      generatedContent: generatedBaseline.generatedContent,
+    });
+    expect(generatedBaseline).toEqual(original);
+    expect(createGeneratedDraftCandidateCv.mock.calls[0][0].generatedContent)
+      .not.toBe(generatedBaseline.generatedContent);
+  });
+
+  it("replaces whole arrays in AI order and honors empty arrays without changing source", async () => {
+    const replacements = [
+      { companyName: "Second employer" }, { companyName: "First employer" },
+    ];
+    optimizeCv.mockResolvedValue({ ...optimizationResult,
+      professionalSummary: "Targeted summary", skills: [],
+      workExperiences: replacements, projects: [],
+      personalInfo: { fullName: "AI override" }, hiddenSections: [], name: "AI title",
+    });
+    const original = structuredClone(generatedBaseline);
+
+    await createOptimizedCandidateCvDraftForJob(input);
+
+    const { generatedContent } = createGeneratedDraftCandidateCv.mock.calls[0][0];
+    expect(generatedContent).toMatchObject({
+      professionalSummary: "Targeted summary", skills: [],
+      workExperiences: replacements, projects: [],
+      personalInfo: original.generatedContent.personalInfo,
+      hiddenSections: original.generatedContent.hiddenSections,
+    });
+    expect(generatedContent.workExperiences).not.toBe(replacements);
+    expect(generatedBaseline).toEqual(original);
+  });
+
+  it("does not start persistence after optimization failure", async () => {
+    const failure = new Error("Provider failure");
+    optimizeCv.mockRejectedValue(failure);
+
+    await expect(createOptimizedCandidateCvDraftForJob(input)).rejects.toBe(failure);
+    expect(createGeneratedDraftCandidateCv).not.toHaveBeenCalled();
+  });
+
+  it("propagates persistence failure without reporting a Draft", async () => {
+    const failure = new Error("Create failed");
+    createGeneratedDraftCandidateCv.mockRejectedValue(failure);
+
+    await expect(createOptimizedCandidateCvDraftForJob(input)).rejects.toBe(failure);
+    expect(createGeneratedDraftCandidateCv).toHaveBeenCalledOnce();
   });
 });

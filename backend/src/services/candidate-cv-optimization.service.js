@@ -5,6 +5,7 @@ import {
   prepareOwnGeneratedCvBaseline,
   prepareOwnUploadedCvBaseline,
 } from "./candidate-cv-optimization-baseline.service.js";
+import { createGeneratedDraftCandidateCv } from "./candidate-cv.service.js";
 
 // The request supplies only resource IDs and prior V04 advice. Authorized
 // profiles and baseline are always prepared from the current canonical sources.
@@ -67,4 +68,24 @@ const optimizeOwnCandidateCvForJob = async ({
   };
 };
 
-export { optimizeOwnCandidateCvForJob };
+const mergeOptimizationWithBaseline = (generatedBaseline, optimizationResult) => ({
+  ...structuredClone(generatedBaseline.generatedContent),
+  ...Object.fromEntries(Object.entries(generatedBaseline.careerSections).map(([section, value]) => [
+    section,
+    structuredClone(optimizationResult[section] === null ? value : optimizationResult[section]),
+  ])),
+});
+
+const createOptimizedCandidateCvDraftForJob = async (input) => {
+  const { generatedBaseline, optimizationResult } = await optimizeOwnCandidateCvForJob(input);
+  const generatedContent = mergeOptimizationWithBaseline(generatedBaseline, optimizationResult);
+
+  return createGeneratedDraftCandidateCv({
+    candidateUserId: input.actorUser._id,
+    actorUser: input.actorUser,
+    draft: generatedBaseline.metadata,
+    generatedContent,
+  });
+};
+
+export { optimizeOwnCandidateCvForJob, createOptimizedCandidateCvDraftForJob };

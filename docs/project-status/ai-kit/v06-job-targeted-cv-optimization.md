@@ -18,13 +18,15 @@ focused Backend checks. Slice 06 implements and verifies the internal F01/F03
 authorized Job/CV handoff and AI Kit optimization call for BR-AI-01/02/08.
 Its H1 acceptance fix binds normalization and baseline to the same authorized
 request-local CV source snapshot for Generated and Uploaded inputs.
-Draft creation and F04 remain **NOT STARTED**. AI-V06 Final Acceptance is
+Slice 07 implements the F03 merge and one-write Generated Draft creation through
+the Backend V7 CandidateCV owner. HTTP/Frontend integration and F04 remain
+**NOT STARTED**. AI-V06 Final Acceptance is
 **NOT STARTED — NOT ACCEPTED**.
 
 ## Deferred / not started
 
-- Baseline merge, Draft creation, HTTP/Frontend integration, and F04 have not
-  started. Slice 06 returns runtime data only.
+- HTTP/Frontend integration and F04 have not started. Slice 06 still exposes
+  runtime data; Slice 07 adds an internal Draft-creation action.
 - The official AI Kit gate, provider evaluation, and live calls have not been
   run for Slices 01–03.
 
@@ -57,3 +59,9 @@ Draft creation and F04 remain **NOT STARTED**. AI-V06 Final Acceptance is
 - Slice 06 H1 source-consistency fix: 88 focused Backend tests, targeted ESLint,
   and Backend architecture verification passed on 2026-10-26. The official
   Backend gate, live provider calls, and full AI-V06 acceptance were not run.
+- Slice 07 acceptance follow-up: 34 focused Backend tests passed on 2026-10-26,
+  including Generated and Uploaded action-to-persistence cases and propagation
+  of a simulated CandidateCV create failure without an empty Draft. Targeted
+  ESLint, Backend architecture verification, and diff whitespace check passed.
+  The official Backend gate, live provider calls, and full AI-V06 acceptance
+  were not run under the requested focused offline scope.
