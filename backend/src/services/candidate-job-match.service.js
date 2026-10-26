@@ -15,7 +15,9 @@ const requireReady = (result) => {
   return result;
 };
 
-const prepareOwnCandidateCvJobProfiles = async ({ actorUser, jobId, candidateCvId } = {}) => {
+const prepareOwnCandidateCvJobProfiles = async ({
+  actorUser, jobId, candidateCvId, onAuthorizedCvSource,
+} = {}) => {
   const candidateUserId = actorUser?._id;
   const candidateCv = await loadOwnActiveCandidateCv({
     candidateUserId,
@@ -40,6 +42,7 @@ const prepareOwnCandidateCvJobProfiles = async ({ actorUser, jobId, candidateCvI
     candidateUserId,
     actorUser,
     candidateCvId,
+    onAuthorizedSource: onAuthorizedCvSource,
   }));
 
   return { jobNormalizationResult, cvNormalizationResult };

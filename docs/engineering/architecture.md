@@ -382,6 +382,15 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   adapters, fallback policy, dependency boundaries, a real text-native PDF
   fixture, and per-extraction resource lifecycle behavior. Detailed evidence is
   recorded in the [AI Kit foundation status](../project-status/ai-kit/foundation.md).
+- AI-V06 Slice 01 owns its internal strict Optimization Result schema and parser
+  in `src/optimization/optimization-result.js`. Slice 02 adds compact source
+  and V04 advisory context, a seven-section prompt, and one selected provider's
+  structured inference in `src/optimization/cv-optimization.js`. Slice 03
+  composes Codex → Gemini → Groq through `src/llm/llm-fallback.js`, with
+  completion and contract validation inside each attempt. Backend Slices 04–08
+  prepare Generated/Uploaded baselines, merge the result, create a V7 Generated
+  Draft through the CandidateCV service, and expose the Candidate HTTP action.
+  Existing V7 detail, edit, and Preview endpoints consume the new Draft.
 
 ## AI Kit — Target Convention
 
@@ -439,6 +448,12 @@ is an in-process computation package, not a microservice.
   `llm-fallback.js` owns the provider-agnostic fallback decision. Capability
   composition must opt into that policy explicitly; adapters do not retry or
   select one another.
+- AI-V06 composes Codex → Gemini → Groq through the canonical fallback owner.
+  Its capability-specific policy advances after provider errors, timeouts,
+  incomplete responses, or output that fails the structured contract, and
+  reports AI-processing failure if no provider returns a completed, valid
+  result. This applies only to AI-V06 and leaves the single-provider V02–V05
+  flows and default provider-availability classifier unchanged.
 - The PDF extractor owns PDF.js document handling. Every extraction cleans
   its pages and destroys its own loading task/worker, without affecting
   concurrent calls. It extracts existing text only; OCR is deferred. There is

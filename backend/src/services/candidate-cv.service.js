@@ -414,6 +414,7 @@ const createGeneratedDraftCandidateCv = async ({
   candidateUserId,
   actorUser,
   draft,
+  generatedContent,
 }) => {
   assertCandidateCvActor(actorUser);
 
@@ -424,8 +425,8 @@ const createGeneratedDraftCandidateCv = async ({
 
   const metadata = await normalizeCandidateCvCreateMetadata(draft);
 
-  // F03 / BR-09–BR-11: exact Generated Draft initialization.
-  // BR-31: metadata create does not synthesize Harvard content beyond empty shell.
+  // F03 / BR-09–BR-11: create one Generated Draft with its supplied content.
+  // BR-31: metadata-only create still starts with an empty Harvard shell.
   const candidateCv = await CandidateCV.create({
     candidateUserId,
     name: metadata.name,
@@ -439,7 +440,9 @@ const createGeneratedDraftCandidateCv = async ({
     employmentTypes: metadata.employmentTypes,
     workModes: metadata.workModes,
     isDefault: false,
-    generatedContent: {},
+    generatedContent: generatedContent === undefined
+      ? {}
+      : normalizeGeneratedContentForPersistence(generatedContent),
     archivedAt: null,
   });
 

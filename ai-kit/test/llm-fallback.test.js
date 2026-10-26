@@ -280,3 +280,44 @@ describe("LLM provider priority chain", () => {
     expect(groq).toHaveBeenCalledOnce();
   });
 });
+
+describe("AI-V06 scoped output failure policy", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("advances on HTTP 408 only under the AI-V06 policy", async () => {
+    const timeout = createHttpError(408);
+    const primary = vi.fn().mockRejectedValue(timeout);
+    const fallback = vi.fn().mockResolvedValue({ valid: true });
+    const providers = [
+      { name: "codex", execute: primary, maxAttempts: 1 },
+      { name: "gemini", execute: fallback, maxAttempts: 1 },
+    ];
+
+    await expect(executeWithLlmProviderChain({ providers, logger })).rejects.toBe(timeout);
+    expect(fallback).not.toHaveBeenCalled();
+    await expect(executeWithLlmProviderChain({ providers, logger,
+      failurePolicy: "ai-v06" })).resolves.toEqual({ valid: true });
+    expect(primary).toHaveBeenCalledTimes(2);
+    expect(fallback).toHaveBeenCalledOnce();
+  });
+
+  it("advances for an invalid Optimization Result only when AI-V06 opts in", async () => {
+    const invalidResult = Object.assign(new Error("invalid result"), {
+      name: "OptimizationResultError", code: "INVALID_OPTIMIZATION_RESULT",
+    });
+    const primary = vi.fn().mockRejectedValue(invalidResult);
+    const fallback = vi.fn().mockResolvedValue({ valid: true });
+    const providers = [
+      { name: "codex", execute: primary, maxAttempts: 1 },
+      { name: "gemini", execute: fallback, maxAttempts: 1 },
+    ];
+
+    await expect(executeWithLlmProviderChain({ providers, logger }))
+      .rejects.toBe(invalidResult);
+    expect(fallback).not.toHaveBeenCalled();
+
+    await expect(executeWithLlmProviderChain({ providers, logger,
+      failurePolicy: "ai-v06" })).resolves.toEqual({ valid: true });
+    expect(fallback).toHaveBeenCalledOnce();
+  });
+});

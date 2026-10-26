@@ -1,5 +1,6 @@
 import { createMatchResultOrchestrator } from "./matching/match-result-orchestration.js";
 import { createCvEvaluator } from "./evaluation/cv-evaluation.js";
+import { createCvOptimizer } from "./optimization/cv-optimization.js";
 import { normalizeGeneratedCv } from "./normalization/cv-normalization.js";
 import { normalizeJob } from "./normalization/job-normalization.js";
 import { buildJobEmbeddingText } from "./recommendation/job-embedding-text.js";
@@ -71,6 +72,7 @@ function createAiKit({ llm = {}, logger } = {}) {
     assessRecommendationBatch: createBatchSemanticAssessor({ llm, logger }),
     scoreRecommendationAssessment,
     evaluateCv: createCvEvaluator({ llm, logger }),
+    optimizeCv: createCvOptimizer({ llm, logger }),
   });
 }
 

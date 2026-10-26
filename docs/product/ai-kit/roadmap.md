@@ -113,3 +113,25 @@ and the verification limit are recorded in the
 Approval establishes Product/Data authority, not implementation or Final
 Acceptance. Current state and documentation alignment are recorded in the
 [AI-V05 project-status leaf](../../project-status/ai-kit/v05-candidate-job-recommendation.md).
+
+### AI-V06 — Job-Targeted CV Optimization and Generated Draft
+
+- **Product/Data approval status:** `APPROVED` (direct Product Owner approval of
+  the current AI-V06 Product Specification and Data Contract, including the M1
+  fallback decision)
+- **Implementation status:** `IMPLEMENTED — FOCUSED OFFLINE AND REPRESENTATIVE LIVE VERIFIED`
+  for the Backend/AI Kit scope; official full gates were not run for V06.
+- **Final Acceptance status:** `ACCEPTED` (2026-10-26, Product Owner decision;
+  known LLM quality and verification limits recorded in the
+  [acceptance evaluation](../../evaluation/ai-kit/ai-v06-final-acceptance-evaluation.md))
+- **Functional requirements:** `F01` through `F04`
+- **Business rules:** `BR-AI-01` through `BR-AI-10`
+- **Canonical Product Specification:**
+  [`versions/v06-job-targeted-cv-optimization.md`](versions/v06-job-targeted-cv-optimization.md)
+- **Canonical Data Contract:**
+  [`../../data/ai-kit/versions/v06-job-targeted-cv-optimization.md`](../../data/ai-kit/versions/v06-job-targeted-cv-optimization.md)
+
+The [AI-V06 project-status leaf](../../project-status/ai-kit/v06-job-targeted-cv-optimization.md)
+records the implemented slices and verification limits. Frontend integration
+remains outside this completed Backend/AI Kit phase; acceptance does not claim
+live fallback or official full-gate verification.

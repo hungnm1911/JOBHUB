@@ -1,4 +1,5 @@
 const FALLBACK_HTTP_STATUSES = new Set([429, 500, 502, 503, 504]);
+const FAILURE_POLICIES = new Set(["provider-availability", "ai-v06"]);
 
 const NETWORK_ERROR_CODES = new Set([
   "EAI_AGAIN",
@@ -97,13 +98,18 @@ const isNetworkOrTimeoutError = (errorChain) => {
   });
 };
 
-const classifyPrimaryFailure = (error) => {
+const classifyPrimaryFailure = (error, failurePolicy) => {
+  if (failurePolicy === "ai-v06" && error?.code === "INVALID_OPTIMIZATION_RESULT"
+    && error?.name === "OptimizationResultError") {
+    return { shouldFallback: true, status: null };
+  }
   const errorChain = getErrorChain(error);
   const status = getHttpStatus(errorChain);
 
   if (status !== undefined) {
     return {
-      shouldFallback: FALLBACK_HTTP_STATUSES.has(status),
+      shouldFallback: FALLBACK_HTTP_STATUSES.has(status)
+        || (failurePolicy === "ai-v06" && status === 408),
       status,
     };
   }
@@ -153,9 +159,13 @@ const assertProviderChain = (providers) => {
   });
 };
 
-async function executeWithLlmProviderChain({ providers, logger } = {}) {
+async function executeWithLlmProviderChain({ providers, logger,
+  failurePolicy = "provider-availability" } = {}) {
   assertProviderChain(providers);
   assertLogger(logger);
+  if (!FAILURE_POLICIES.has(failurePolicy)) {
+    throw new TypeError("failurePolicy must be provider-availability or ai-v06");
+  }
 
   for (let providerIndex = 0; providerIndex < providers.length; providerIndex += 1) {
     const provider = providers[providerIndex];
@@ -173,7 +183,7 @@ async function executeWithLlmProviderChain({ providers, logger } = {}) {
 
         return result;
       } catch (error) {
-        const { shouldFallback, status } = classifyPrimaryFailure(error);
+        const { shouldFallback, status } = classifyPrimaryFailure(error, failurePolicy);
         const canRetry = shouldFallback && attempt < provider.maxAttempts;
         const fallback = providers[providerIndex + 1];
 

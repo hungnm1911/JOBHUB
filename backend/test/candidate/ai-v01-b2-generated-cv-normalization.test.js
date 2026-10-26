@@ -265,11 +265,12 @@ const expectedCompleteSource = (cv, taxonomy) => ({
 
 const rawCv = (cvId) => CandidateCV.collection.findOne({ _id: cvId });
 
-const normalizeOwn = (candidate, cv) => {
+const normalizeOwn = (candidate, cv, onAuthorizedSource) => {
   return normalizeOwnGeneratedCandidateCv({
     candidateUserId: candidate._id,
     actorUser: candidate,
     candidateCvId: cv._id.toString(),
+    onAuthorizedSource,
   });
 };
 
@@ -310,13 +311,15 @@ describe("AI-V01 Backend Slice B2 — Generated CV → F02 normalization", () =>
     const cv = await createCompleteDraft(candidate, taxonomy);
     const before = await rawCv(cv._id);
     const expectedSource = expectedCompleteSource(cv, taxonomy);
+    const onAuthorizedSource = vi.fn();
 
-    const result = await normalizeOwn(candidate, cv);
+    const result = await normalizeOwn(candidate, cv, onAuthorizedSource);
 
     expect(normalizeGeneratedCvSpy).toHaveBeenCalledOnce();
     expect(normalizeGeneratedCvSpy).toHaveBeenCalledWith(expectedSource);
     expect(result).toEqual(aiKit.normalizeGeneratedCv(expectedSource));
     expect(result.status).toBe("READY");
+    expect(onAuthorizedSource).toHaveBeenCalledExactlyOnceWith(before);
     expect(Object.isFrozen(result)).toBe(true);
 
     const { profile } = result;

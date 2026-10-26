@@ -61,10 +61,11 @@ const createCv = async (owner, pdfBuffer, overrides = {}) => {
   return { cv, category };
 };
 
-const normalize = (owner, cv) => normalizeOwnUploadedCandidateCv({
+const normalize = (owner, cv, onAuthorizedSource) => normalizeOwnUploadedCandidateCv({
   candidateUserId: owner._id,
   actorUser: owner,
   candidateCvId: cv._id.toString(),
+  onAuthorizedSource,
 });
 
 const expectError = async (promise, statusCode) => {
@@ -92,10 +93,15 @@ describe("AI-V02 Slice 4c — own Uploaded CV runtime invocation", () => {
     const before = await CandidateCV.collection.findOne({ _id: cv._id });
     const download = vi.spyOn(fileService, "downloadFileBuffer").mockResolvedValue(pdfBuffer);
     normalizeUploadedCvSpy.mockResolvedValue(aiResult);
+    const onAuthorizedSource = vi.fn();
 
-    const result = await normalize(owner, cv);
+    const result = await normalize(owner, cv, onAuthorizedSource);
 
     expect(result).toBe(aiResult);
+    expect(onAuthorizedSource).toHaveBeenCalledTimes(_status === "READY" ? 1 : 0);
+    if (_status === "READY") {
+      expect(onAuthorizedSource).toHaveBeenCalledWith(before);
+    }
     expect(normalizeUploadedCvSpy).toHaveBeenCalledTimes(1);
     const [{ cvSource, pdfBuffer: suppliedPdf }] = normalizeUploadedCvSpy.mock.calls[0];
     expect(suppliedPdf).toBe(pdfBuffer);

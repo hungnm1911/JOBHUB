@@ -167,6 +167,13 @@ future capability.
   projected metadata and current PDF to one Uploaded file identity, then calls
   the shared `normalizeUploadedCv` entry once and returns its READY/FAILED
   result unchanged. No HTTP consumer or additional actor scope is approved.
+- AI-V06 exposes `optimizeCv` through the same `createAiKit` instance. Backend's
+  `candidate-cv-optimization.service.js` prepares the authorized Job/CV pair and
+  baseline from one request-local authorized CV source snapshot, checks the V04
+  result's pair identity, and passes career content to the optimizer. Uploaded
+  normalization binds PDF bytes to that snapshot's file identity. V04 advice
+  remains advisory; the internal handoff does not
+  merge content, persist a Draft, or expose an HTTP entry.
 - AI Kit must not access Mongoose models, query or mutate MongoDB, authenticate
   JWTs, inspect Express request/response objects, decide JOBHUB permissions, or
   call Backend-internal services directly.
@@ -200,20 +207,33 @@ future capability.
 ### Fallback policy
 
 - `src/llm/llm-fallback.js` is the canonical fallback classifier and
-  orchestrator. Consumers must not duplicate or widen its policy.
+  orchestrator. Consumers must not duplicate its policy or widen eligibility
+  outside this owner.
 - The composing capability declares the provider order and a bounded
   per-provider attempt count. A retry or next-provider fallback occurs only
   after an eligible failure.
-- Eligible HTTP statuses are exactly 429, 500, 502, 503, and 504.
+- Under the current provider-availability policy, eligible HTTP statuses are
+  exactly 429, 500, 502, 503, and 504.
 - A connection/timeout failure is eligible only when the structured error or
   its `cause` chain contains a recognized name, `code`, or `errno` and no HTTP
   response. Error message text alone must not determine eligibility.
-- Authentication, configuration, request-validation, and programming failures
-  must propagate without retry or fallback. A final provider failure propagates
-  unchanged.
-- The fallback utility is internal and currently has no capability
-  composition. Its existence must not be described as automatic fallback for
-  all AI requests.
+- Under that policy, authentication, configuration, request-validation, and
+  programming failures propagate without retry or fallback. A final provider
+  failure propagates unchanged.
+- AI-V06 must compose configured providers in Codex → Gemini → Groq order.
+  For AI-V06 only, provider request errors, timeouts, incomplete responses,
+  and malformed or contract-invalid output are eligible to advance to the next
+  provider. Completion and contract validation must occur inside each provider
+  attempt so a returned response is not mistaken for a valid result. Accept the
+  first completed, contract-valid output, including an all-`null` optimization
+  result, without a semantic quality rejection gate. If no provider produces
+  one, surface an AI-processing failure; do not fabricate a successful result.
+  Caller input, Backend authorization, local configuration, and programming
+  failures are outside this provider fallback boundary. Implement the scoped
+  eligibility in the canonical fallback owner without changing V02–V05
+  behavior.
+- The fallback utility is internal. AI-V06 explicitly composes it; other
+  capabilities do not acquire automatic fallback.
 - Do not add further retries, a circuit breaker, provider registry, or
   universal LLM abstraction without a concrete capability need and an approved
   architecture change.
@@ -251,6 +271,17 @@ dependency, and the AI-V02 validator below interprets its own schema. ESLint's t
 
 An approved capability that consumes structured LLM output must validate that
 output before treating it as trusted data.
+
+AI-V06 Slice 01 output contract (`src/optimization/optimization-result.js`)
+defines the single provider-native strict schema and parser for its seven
+required, nullable career sections. Item fields follow Generated CV V7; the
+parser checks structure, enum values, and ISO date syntax. An all-null result
+passes. Slice 02 (`src/optimization/cv-optimization.js`) builds a compact
+Job/CV source context separated from V04 advisory feedback, prompts only for
+the seven sections, and uses the existing structured inference helper with the
+Slice 01 schema and parser. Slice 03 composes Codex → Gemini → Groq through the
+canonical fallback utility, accepting each attempt only after completion and
+contract validation. Baseline composition remains deferred.
 
 AI-V02 F01 output contract (`src/normalization/uploaded-cv-normalization.js`):
 
