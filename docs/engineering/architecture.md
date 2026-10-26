@@ -387,8 +387,10 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   and V04 advisory context, a seven-section prompt, and one selected provider's
   structured inference in `src/optimization/cv-optimization.js`. Slice 03
   composes Codex → Gemini → Groq through `src/llm/llm-fallback.js`, with
-  completion and contract validation inside each attempt. Baseline merge,
-  Draft creation, and Backend integration are not yet connected.
+  completion and contract validation inside each attempt. Backend Slices 04–08
+  prepare Generated/Uploaded baselines, merge the result, create a V7 Generated
+  Draft through the CandidateCV service, and expose the Candidate HTTP action.
+  Existing V7 detail, edit, and Preview endpoints consume the new Draft.
 
 ## AI Kit — Target Convention
 

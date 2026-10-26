@@ -105,8 +105,9 @@ implementation evidence only; it does not replace engineering authority.
 
 No canonical implementation owner currently exists for:
 
-- AI-V06 baseline merge, Draft persistence, HTTP/Frontend entry, and F04;
-  Slice 06 owns internal authorized orchestration and the shared AI Kit handoff;
+- AI-V06 Frontend entry; the Backend baseline, merge, Draft persistence, HTTP
+  action, and V7 Draft management/Preview consumers have owners in the rows
+  above;
 - AI #1 Match Result orchestration, explanation, or improvement behavior beyond AI-V03 F02/F03/F04;
 - business prompts and structured-output schemas for capabilities other than
   AI-V02 F01 Uploaded CV normalization, AI-V03 F02 Semantic Skills Assessment,

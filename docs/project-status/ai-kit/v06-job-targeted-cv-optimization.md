@@ -21,15 +21,28 @@ request-local CV source snapshot for Generated and Uploaded inputs.
 Slice 07 implements the F03 merge and one-write Generated Draft creation through
 the Backend V7 CandidateCV owner. Slice 08 connects the Candidate HTTP action
 to that workflow and returns the new Draft detail for V7 read/edit/Preview.
-Frontend integration remains **NOT STARTED**. AI-V06 Final Acceptance is
-**NOT STARTED — NOT ACCEPTED**.
+The Backend/AI Kit phase is closed with AI-V06 Final Acceptance **`ACCEPTED`**
+by the Product Owner on 2026-10-26, with the known LLM quality and verification
+limits in the [acceptance evaluation](../../evaluation/ai-kit/ai-v06-final-acceptance-evaluation.md).
+This is business acceptance, not an official full-gate PASS. Frontend
+integration remains **NOT STARTED**.
 
 ## Deferred / not started
 
 - Frontend integration has not started. Slice 08 exposes the action through
   Candidate HTTP and reuses V7 Draft management and Preview.
-- The official AI Kit gate, provider evaluation, and live calls have not been
-  run for Slices 01–03.
+- Live fallback on Gemini/Groq and the official V06 Backend/AI Kit full gates
+  remain unverified. Representative live quality has the accepted limitations
+  recorded in the acceptance evaluation.
+
+## Final Acceptance evidence
+
+The [AI-V06 Final Acceptance evaluation](../../evaluation/ai-kit/ai-v06-final-acceptance-evaluation.md)
+maps F01–F04, BR-AI-01–10, §16.2 acceptance and §20 business completion to
+Slices 01–08, focused verification, and the Generated/Uploaded V04 → V06 live
+captures. The Product Owner accepted the quality backlog for the later LLM
+Optimization phase. The ignored local captures remain the detailed evidence;
+this leaf records the current state without copying CV content or credentials.
 
 ## Verification status
 
@@ -76,3 +89,10 @@ Frontend integration remains **NOT STARTED**. AI-V06 Final Acceptance is
   Preview → V7 edit → Preview coverage, including updated PDF content, DRAFT
   lifecycle, and unchanged Source CV. Targeted ESLint and diff whitespace check
   passed for this follow-up; the official Backend gate was not run.
+- Final Acceptance evidence review on 2026-10-26 used the existing Generated
+  V04/V06 and Uploaded V04/V06 live captures, plus the slice checks above.
+  Generated and Uploaded V06 each returned HTTP 201 and produced a distinct
+  persisted Generated Draft with unchanged Source CV and HTTP 200 Preview.
+  Codex live success was observed; live fallback and official full gates were
+  not run or inferred from that success. This documentation closure ran only
+  targeted document checks and `git diff --check`.
