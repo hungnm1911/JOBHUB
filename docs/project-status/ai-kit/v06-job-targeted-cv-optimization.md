@@ -14,13 +14,17 @@ Codex → Gemini → Groq order for BR-AI-07/09, accepting only completed,
 contract-valid results. Slice 04 implements the Generated Source CV baseline
 part of F02/BR-AI-04. Slice 05 implements the Uploaded Source CV baseline
 part of F02/BR-AI-05 from an existing READY AI-V02 profile, verified with
-focused Backend checks. F01, F03 Draft creation, and F04 remain
-**NOT STARTED**. AI-V06 Final Acceptance is **NOT STARTED — NOT ACCEPTED**.
+focused Backend checks. Slice 06 implements and verifies the internal F01/F03
+authorized Job/CV handoff and AI Kit optimization call for BR-AI-01/02/08.
+Its H1 acceptance fix binds normalization and baseline to the same authorized
+request-local CV source snapshot for Generated and Uploaded inputs.
+Draft creation and F04 remain **NOT STARTED**. AI-V06 Final Acceptance is
+**NOT STARTED — NOT ACCEPTED**.
 
 ## Deferred / not started
 
-- Baseline merge, Draft creation, and Backend/Frontend integration beyond the
-  internal Generated and Uploaded baselines have not started.
+- Baseline merge, Draft creation, HTTP/Frontend integration, and F04 have not
+  started. Slice 06 returns runtime data only.
 - The official AI Kit gate, provider evaluation, and live calls have not been
   run for Slices 01–03.
 
@@ -45,3 +49,11 @@ focused Backend checks. F01, F03 Draft creation, and F04 remain
   cases), targeted ESLint, and Backend architecture verification passed on
   2026-10-26. The official Backend gate and live provider calls were skipped
   under the slice's requested verification scope.
+- Slice 06 focused Backend orchestration and baseline regression tests (17
+  cases), focused AI Kit optimization and contract tests (33 cases), targeted
+  ESLint for both areas, and Backend architecture verification passed on
+  2026-10-26. The official Backend and AI Kit gates and live provider calls
+  were skipped under the slice's requested verification scope.
+- Slice 06 H1 source-consistency fix: 88 focused Backend tests, targeted ESLint,
+  and Backend architecture verification passed on 2026-10-26. The official
+  Backend gate, live provider calls, and full AI-V06 acceptance were not run.

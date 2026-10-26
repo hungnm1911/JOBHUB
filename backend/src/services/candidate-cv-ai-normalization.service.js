@@ -347,7 +347,7 @@ const findUploadedSourceIssues = (source, metadata, persistedCandidateCv) => {
 
 // Projection only: callers must first authorize access with the canonical
 // CandidateCV service. The internal F01 entry below is its approved consumer.
-const projectAuthorizedUploadedCandidateCvSource = async (candidateCv) => {
+const projectAuthorizedUploadedCandidateCvSource = async (candidateCv, onAuthorizedSource) => {
   if (candidateCv?.sourceType !== CANDIDATE_CV_SOURCE_TYPE.UPLOADED) {
     throw new AppError(409, "Only Uploaded Candidate CVs support this projection", {
       field: "sourceType",
@@ -390,6 +390,7 @@ const projectAuthorizedUploadedCandidateCvSource = async (candidateCv) => {
     throw toProjectionError(["/taxonomy must resolve canonical Category and ExperienceLevel"], undefined, UPLOADED_PROJECTION_ERROR_MESSAGE);
   }
 
+  onAuthorizedSource?.(persistedCandidateCv);
   return { ...metadata, taxonomy };
 };
 
@@ -399,14 +400,18 @@ const normalizeOwnUploadedCandidateCv = async ({
   candidateUserId,
   actorUser,
   candidateCvId,
+  onAuthorizedSource,
 } = {}) => {
   const input = { candidateUserId, actorUser, candidateCvId };
   let candidateCv;
   let cvSource;
+  let sourceSnapshot;
 
   try {
     candidateCv = await loadOwnActiveCandidateCv(input);
-    cvSource = await projectAuthorizedUploadedCandidateCvSource(candidateCv);
+    cvSource = await projectAuthorizedUploadedCandidateCvSource(
+      candidateCv, (source) => { sourceSnapshot = source; },
+    );
   } catch (error) {
     if (!isMongoDbAvailabilityError(error)) {
       throw error;
@@ -425,7 +430,11 @@ const normalizeOwnUploadedCandidateCv = async ({
   });
 
   try {
-    return await aiKit.normalizeUploadedCv({ cvSource, pdfBuffer });
+    const result = await aiKit.normalizeUploadedCv({ cvSource, pdfBuffer });
+    if (result?.status === "READY") {
+      onAuthorizedSource?.(sourceSnapshot);
+    }
+    return result;
   } catch (error) {
     if (error?.code === INVALID_UPLOADED_CV_INPUT) {
       throw toProjectionError(error.details, error, UPLOADED_PROJECTION_ERROR_MESSAGE);
@@ -443,6 +452,7 @@ const normalizeOwnGeneratedCandidateCv = async ({
   candidateUserId,
   actorUser,
   candidateCvId,
+  onAuthorizedSource,
 } = {}) => {
   let candidateCv;
   let persistedCandidateCv;
@@ -506,7 +516,11 @@ const normalizeOwnGeneratedCandidateCv = async ({
   }
 
   try {
-    return aiKit.normalizeGeneratedCv({ ...cvSource, taxonomy });
+    const result = aiKit.normalizeGeneratedCv({ ...cvSource, taxonomy });
+    if (result?.status === "READY") {
+      onAuthorizedSource?.(persistedCandidateCv);
+    }
+    return result;
   } catch (error) {
     if (error?.code === INVALID_GENERATED_CV_INPUT) {
       throw toProjectionError(error.details, error);

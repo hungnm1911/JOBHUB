@@ -46,10 +46,23 @@ const careerSectionsFromContent = (generatedContent) => ({
   ])),
 });
 
+const loadBaselineSource = async (sourceSnapshot, input) => {
+  if (!sourceSnapshot) {
+    return loadOwnActiveCandidateCv({ ...input, lean: true });
+  }
+  if (sourceSnapshot._id?.toString() !== input.candidateCvId?.toString()
+    || sourceSnapshot.candidateUserId?.toString() !== input.candidateUserId?.toString()
+    || input.actorUser?._id?.toString() !== input.candidateUserId?.toString()
+    || sourceSnapshot.archivedAt != null) {
+    throw new AppError(409, "Authorized Candidate CV source snapshot does not match the request");
+  }
+  return sourceSnapshot;
+};
+
 // AI-V06 F02: retain the persisted Harvard source independently of the AI
 // normalization profile. Empty section values describe absence, not CV claims.
-const prepareOwnGeneratedCvBaseline = async (input) => {
-  const source = await loadOwnActiveCandidateCv({ ...input, lean: true });
+const prepareOwnGeneratedCvBaseline = async ({ sourceSnapshot, ...input }) => {
+  const source = await loadBaselineSource(sourceSnapshot, input);
 
   if (source.sourceType !== CANDIDATE_CV_SOURCE_TYPE.GENERATED) {
     throw new AppError(409, "Only Generated Candidate CVs support this baseline");
@@ -120,8 +133,8 @@ const toUploadedGeneratedContent = (pdfContent, candidateProfile) => ({
   hiddenSections: [],
 });
 
-const prepareOwnUploadedCvBaseline = async ({ normalizationResult, ...input }) => {
-  const source = await loadOwnActiveCandidateCv({ ...input, lean: true });
+const prepareOwnUploadedCvBaseline = async ({ normalizationResult, sourceSnapshot, ...input }) => {
+  const source = await loadBaselineSource(sourceSnapshot, input);
 
   if (source.sourceType !== CANDIDATE_CV_SOURCE_TYPE.UPLOADED
     || source.status !== CANDIDATE_CV_STATUS.ACTIVE) {

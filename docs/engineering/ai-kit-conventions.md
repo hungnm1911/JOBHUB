@@ -167,6 +167,13 @@ future capability.
   projected metadata and current PDF to one Uploaded file identity, then calls
   the shared `normalizeUploadedCv` entry once and returns its READY/FAILED
   result unchanged. No HTTP consumer or additional actor scope is approved.
+- AI-V06 exposes `optimizeCv` through the same `createAiKit` instance. Backend's
+  `candidate-cv-optimization.service.js` prepares the authorized Job/CV pair and
+  baseline from one request-local authorized CV source snapshot, checks the V04
+  result's pair identity, and passes career content to the optimizer. Uploaded
+  normalization binds PDF bytes to that snapshot's file identity. V04 advice
+  remains advisory; the internal handoff does not
+  merge content, persist a Draft, or expose an HTTP entry.
 - AI Kit must not access Mongoose models, query or mutate MongoDB, authenticate
   JWTs, inspect Express request/response objects, decide JOBHUB permissions, or
   call Backend-internal services directly.

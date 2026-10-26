@@ -14,6 +14,7 @@ vi.mock("../src/llm/groq-client.js", () => ({
 }));
 
 import { buildOptimizationContext, createCvOptimizer } from "../src/optimization/cv-optimization.js";
+import { createAiKit } from "../src/index.js";
 import { OPTIMIZATION_RESULT_SCHEMA } from "../src/optimization/optimization-result.js";
 
 const sourced = (value, sourcePath = "/source") => ({ value, sourcePath });
@@ -87,6 +88,13 @@ const input = (cvMatchProfile = generatedCv) => ({
 
 describe("AI-V06 optimization and provider fallback", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("exposes optimization through the shared production facade", async () => {
+    codexCall.mockResolvedValue(codexResponse(allNull));
+
+    await expect(createAiKit({ llm, logger }).optimizeCv(input())).resolves.toEqual(allNull);
+    expect(codexCall).toHaveBeenCalledOnce();
+  });
 
   it("keeps compact Job/CV source claims separate from V04 advisory feedback", () => {
     const context = buildOptimizationContext(input());
