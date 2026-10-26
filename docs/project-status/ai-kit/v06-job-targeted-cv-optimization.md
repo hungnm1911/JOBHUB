@@ -11,13 +11,15 @@ Slice 02 implements and verifies the AI Kit's single-provider F03 optimization
 inference, compact Job/CV context, and V04 advisory feedback handling for
 BR-AI-06/07. Slice 03 implements and verifies F03 provider fallback in
 Codex → Gemini → Groq order for BR-AI-07/09, accepting only completed,
-contract-valid results. F01, F02, F03 Draft creation, and F04 remain **NOT
-STARTED**. AI-V06 Final Acceptance is **NOT STARTED — NOT ACCEPTED**.
+contract-valid results. Slice 04 implements the Generated Source CV baseline
+part of F02/BR-AI-04, verified with focused Backend checks. F01, the Uploaded
+part of F02, F03 Draft creation, and F04 remain **NOT STARTED**. AI-V06 Final
+Acceptance is **NOT STARTED — NOT ACCEPTED**.
 
 ## Deferred / not started
 
-- Baseline merge, Draft creation, and Backend/Frontend integration have not
-  started.
+- Uploaded CV baseline, baseline merge, Draft creation, and Backend/Frontend
+  integration beyond the internal Generated baseline have not started.
 - The official AI Kit gate, provider evaluation, and live calls have not been
   run for Slices 01–03.
 
@@ -34,3 +36,7 @@ STARTED**. AI-V06 Final Acceptance is **NOT STARTED — NOT ACCEPTED**.
 - Slice 03 focused optimization, output-contract, and fallback tests (49 cases)
   and targeted ESLint passed on 2026-10-26. The official AI Kit gate and live
   provider calls were skipped under the slice's requested verification scope.
+- Slice 04 Generated baseline focused Backend tests (3 cases), targeted ESLint,
+  and Backend architecture verification passed on 2026-10-26. The official
+  Backend gate and live provider calls were skipped under the slice's requested
+  verification scope.
