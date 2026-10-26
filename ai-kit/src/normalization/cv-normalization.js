@@ -29,7 +29,7 @@ const CV_NORMALIZATION_STATUS = NORMALIZATION_STATUS;
 
 // Mirror the Backend CV_LANGUAGE_PROFICIENCY and HARVARD_CV_SECTION constants;
 // AI Kit cannot import Backend, so they must be kept in step with those owners.
-const LANGUAGE_PROFICIENCIES = Object.freeze([
+export const LANGUAGE_PROFICIENCIES = Object.freeze([
   "BEGINNER",
   "INTERMEDIATE",
   "ADVANCED",

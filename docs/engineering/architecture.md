@@ -382,6 +382,9 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   adapters, fallback policy, dependency boundaries, a real text-native PDF
   fixture, and per-extraction resource lifecycle behavior. Detailed evidence is
   recorded in the [AI Kit foundation status](../project-status/ai-kit/foundation.md).
+- AI-V06 Slice 01 owns its internal strict Optimization Result schema and parser
+  in `src/optimization/optimization-result.js`. Runtime inference and Draft
+  creation are not yet connected.
 
 ## AI Kit — Target Convention
 

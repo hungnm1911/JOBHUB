@@ -58,6 +58,7 @@ implementation evidence only; it does not replace engineering authority.
 | AI-V03 F03 — deterministic Career Category, Experience Level, Employment Type, and Work Mode scores from READY Job/CV profile metadata (BR-AI-29/30/31) | `ai-kit/src/matching/deterministic-field-scoring.js` (`scoreDeterministicFields`) | Focused AI Kit tests; AI-V03 Match Result orchestration and AI-V05 recommendation scoring through this internal owner | Duplicate scoring rules, LLM-derived taxonomy or metadata, weighted Match Score, persistence, or package-root export of this internal owner |
 | AI-V03 F04 — Skills group aggregation and fixed-weight Match Score from one score per grouped requirement and the F03 field scores (BR-AI-28/32) | `ai-kit/src/matching/weighted-match-scoring.js` (`calculateWeightedMatchScore`) | Focused AI Kit tests; AI-V03 Match Result orchestration and AI-V05 recommendation scoring through this internal owner | Semantic equivalence inference, provider output schema, duplicate weighted scoring, persistence, or package-root export of this internal owner |
 | AI-V04 F01 Slice 1 — one-inference CV evaluation with V03 semantic rubric and calculators, overall summary, five field reviews, CV improvements, and source-aware section/item feedback (BR-AI-02–07) | `ai-kit/src/evaluation/cv-evaluation.js` (`createCvEvaluator`) | `createAiKit` instance (`evaluateCv`); focused offline tests; approved Backend Slice 2 Candidate evaluation service through the shared instance | A parallel scoring policy, independent career read view, Backend authorization/HTTP, persistence, provider SDK imports, mutation of Job/CV, or a separate package-root export |
+| AI-V06 Slice 01 F03 — strict Optimization Result schema and JSON output validation for seven nullable career sections (BR-AI-06/07) | `ai-kit/src/optimization/optimization-result.js` (`OPTIMIZATION_RESULT_SCHEMA`, `parseOptimizationResult`) | Focused offline tests; future AI-V06 inference composition within AI Kit | Duplicate schema or validation in provider adapters or Backend; prompt, inference, fallback, baseline merge, persistence, or package-root export in this slice |
 | Cross-boundary — Backend runtime integration, dependency injection, and shared AI Kit instance | `backend/src/services/ai-kit.service.js` | B1 `backend/src/services/job-ai-normalization.service.js`; B2 and AI-V02 Slice 4c `backend/src/services/candidate-cv-ai-normalization.service.js`; AI-V03 `backend/src/services/candidate-job-match.service.js`; AI-V04 `backend/src/services/candidate-cv-evaluation.service.js`; AI-V05 `backend/src/services/candidate-job-recommendation-assessment.service.js` and `backend/src/services/candidate-job-recommendation.service.js`; focused integration tests | Other Backend source imports of `@jobhub/ai-kit`; parallel AI Kit instances; deep imports; reverse AI Kit-to-Backend dependencies |
 | Cross-boundary — environment loading and normalized Codex/Gemini/Groq configuration | `backend/src/config/index.js` (`config.aiKit`) | Backend AI Kit integration service; Backend smoke launchers | `process.env` reads or configuration defaults in AI Kit; secondary Backend AI Kit config owners; smoke harness environment loading |
 | Cross-boundary — canonical application logger injected into runtime AI Kit composition | `backend/src/utils/logger.js` | `backend/src/services/ai-kit.service.js` and other approved Backend runtime owners | A second runtime logger in AI Kit; AI Kit logger configuration; logging secrets, private document/prompt content, or raw sensitive provider responses |
@@ -103,12 +104,13 @@ implementation evidence only; it does not replace engineering authority.
 
 No canonical implementation owner currently exists for:
 
-- AI-V06 F01–F04 optimization, structured output, and provider fallback
-  composition; its Product/Data contracts are approved, but implementation has
-  not started;
+- AI-V06 F01–F04 runtime orchestration, prompt, inference, baseline merge,
+  provider fallback, and Backend integration; Slice 01 owns only the output
+  contract;
 - AI #1 Match Result orchestration, explanation, or improvement behavior beyond AI-V03 F02/F03/F04;
 - business prompts and structured-output schemas for capabilities other than
-  AI-V02 F01 Uploaded CV normalization and AI-V03 F02 Semantic Skills Assessment;
+  AI-V02 F01 Uploaded CV normalization, AI-V03 F02 Semantic Skills Assessment,
+  and the AI-V06 Slice 01 Optimization Result contract;
 - an agent/tool registry, capability-specific callback contract, or CV Agent
   workflow;
 - Atlas retrieval, vector search, or provider embedding calls; or

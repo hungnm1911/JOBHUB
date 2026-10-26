@@ -266,6 +266,13 @@ dependency, and the AI-V02 validator below interprets its own schema. ESLint's t
 An approved capability that consumes structured LLM output must validate that
 output before treating it as trusted data.
 
+AI-V06 Slice 01 output contract (`src/optimization/optimization-result.js`)
+defines the single provider-native strict schema and parser for its seven
+required, nullable career sections. Item fields follow Generated CV V7; the
+parser checks structure, enum values, and ISO date syntax. An all-null result
+passes. Prompting, inference, fallback, and baseline composition remain
+deferred.
+
 AI-V02 F01 output contract (`src/normalization/uploaded-cv-normalization.js`):
 
 - `UPLOADED_CV_PDF_EXTRACTION_SCHEMA` is the single strict schema for the LLM
