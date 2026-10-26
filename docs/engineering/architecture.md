@@ -439,6 +439,12 @@ is an in-process computation package, not a microservice.
   `llm-fallback.js` owns the provider-agnostic fallback decision. Capability
   composition must opt into that policy explicitly; adapters do not retry or
   select one another.
+- AI-V06 composes Codex → Gemini → Groq through the canonical fallback owner.
+  Its capability-specific policy advances after provider errors, timeouts,
+  incomplete responses, or output that fails the structured contract, and
+  reports AI-processing failure if no provider returns a completed, valid
+  result. This is a target convention for AI-V06, not a change to the existing
+  single-provider V02–V05 flows or the current implemented fallback classifier.
 - The PDF extractor owns PDF.js document handling. Every extraction cleans
   its pages and destroys its own loading task/worker, without affecting
   concurrent calls. It extracts existing text only; OCR is deferred. There is

@@ -103,6 +103,9 @@ implementation evidence only; it does not replace engineering authority.
 
 No canonical implementation owner currently exists for:
 
+- AI-V06 F01–F04 optimization, structured output, and provider fallback
+  composition; its Product/Data contracts are approved, but implementation has
+  not started;
 - AI #1 Match Result orchestration, explanation, or improvement behavior beyond AI-V03 F02/F03/F04;
 - business prompts and structured-output schemas for capabilities other than
   AI-V02 F01 Uploaded CV normalization and AI-V03 F02 Semantic Skills Assessment;

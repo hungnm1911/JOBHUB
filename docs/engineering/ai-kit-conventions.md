@@ -200,17 +200,31 @@ future capability.
 ### Fallback policy
 
 - `src/llm/llm-fallback.js` is the canonical fallback classifier and
-  orchestrator. Consumers must not duplicate or widen its policy.
+  orchestrator. Consumers must not duplicate its policy or widen eligibility
+  outside this owner.
 - The composing capability declares the provider order and a bounded
   per-provider attempt count. A retry or next-provider fallback occurs only
   after an eligible failure.
-- Eligible HTTP statuses are exactly 429, 500, 502, 503, and 504.
+- Under the current provider-availability policy, eligible HTTP statuses are
+  exactly 429, 500, 502, 503, and 504.
 - A connection/timeout failure is eligible only when the structured error or
   its `cause` chain contains a recognized name, `code`, or `errno` and no HTTP
   response. Error message text alone must not determine eligibility.
-- Authentication, configuration, request-validation, and programming failures
-  must propagate without retry or fallback. A final provider failure propagates
-  unchanged.
+- Under that policy, authentication, configuration, request-validation, and
+  programming failures propagate without retry or fallback. A final provider
+  failure propagates unchanged.
+- AI-V06 must compose configured providers in Codex → Gemini → Groq order.
+  For AI-V06 only, provider request errors, timeouts, incomplete responses,
+  and malformed or contract-invalid output are eligible to advance to the next
+  provider. Completion and contract validation must occur inside each provider
+  attempt so a returned response is not mistaken for a valid result. Accept the
+  first completed, contract-valid output, including an all-`null` optimization
+  result, without a semantic quality rejection gate. If no provider produces
+  one, surface an AI-processing failure; do not fabricate a successful result.
+  Caller input, Backend authorization, local configuration, and programming
+  failures are outside this provider fallback boundary. Implement the scoped
+  eligibility in the canonical fallback owner without changing V02–V05
+  behavior.
 - The fallback utility is internal and currently has no capability
   composition. Its existence must not be described as automatic fallback for
   all AI requests.

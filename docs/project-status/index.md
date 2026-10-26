@@ -70,6 +70,7 @@ Reading rules:
 - [AI-V03 — Job–CV matching and scoring](ai-kit/v03-job-cv-matching-scoring.md)
 - [AI-V04 — CV evaluation and improvement](ai-kit/v04-cv-evaluation-improvement.md)
 - [AI-V05 — Candidate Job Recommendation](ai-kit/v05-candidate-job-recommendation.md)
+- [AI-V06 — Job-targeted CV optimization](ai-kit/v06-job-targeted-cv-optimization.md)
 
 Record each approved AI Kit business version in its own status leaf. Update
 `foundation.md` only for shared package, provider, document extraction, and

@@ -113,3 +113,21 @@ and the verification limit are recorded in the
 Approval establishes Product/Data authority, not implementation or Final
 Acceptance. Current state and documentation alignment are recorded in the
 [AI-V05 project-status leaf](../../project-status/ai-kit/v05-candidate-job-recommendation.md).
+
+### AI-V06 — Job-Targeted CV Optimization and Generated Draft
+
+- **Product/Data approval status:** `APPROVED` (direct Product Owner approval of
+  the current AI-V06 Product Specification and Data Contract, including the M1
+  fallback decision)
+- **Implementation status:** `NOT STARTED — NOT VERIFIED`
+- **Final Acceptance status:** `NOT STARTED — NOT ACCEPTED`
+- **Functional requirements:** `F01` through `F04`
+- **Business rules:** `BR-AI-01` through `BR-AI-10`
+- **Canonical Product Specification:**
+  [`versions/v06-job-targeted-cv-optimization.md`](versions/v06-job-targeted-cv-optimization.md)
+- **Canonical Data Contract:**
+  [`../../data/ai-kit/versions/v06-job-targeted-cv-optimization.md`](../../data/ai-kit/versions/v06-job-targeted-cv-optimization.md)
+
+Approval establishes Product/Data authority only. AI-V06 implementation and
+verification have not started; the [AI-V06 project-status leaf](../../project-status/ai-kit/v06-job-targeted-cv-optimization.md)
+records the current state without claiming Final Acceptance.
