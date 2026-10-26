@@ -42,6 +42,7 @@ import {
 } from "../controllers/candidate-profile.controller.js";
 import { matchOwnCandidateCvToJobHandler } from "../controllers/candidate-job-match.controller.js";
 import { evaluateOwnCandidateCvForJobHandler } from "../controllers/candidate-cv-evaluation.controller.js";
+import { createOptimizedCandidateCvDraftForJobHandler } from "../controllers/candidate-cv-optimization.controller.js";
 import { recommendOwnDefaultCvJobsHandler } from "../controllers/candidate-job-recommendation.controller.js";
 import {
   listSavedJobsHandler,
@@ -62,6 +63,7 @@ import validateSubmitCandidateAvailability from "../middlewares/validate-submit-
 import validateWithdrawApplication from "../middlewares/validate-withdraw-application.js";
 import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
 import validateUpdateCandidateCvMetadata from "../middlewares/validate-update-candidate-cv-metadata.js";
+import validateOptimizeCandidateCv from "../middlewares/validate-optimize-candidate-cv.js";
 
 const router = express.Router();
 
@@ -92,6 +94,14 @@ router.post(
   authenticateAccess,
   authorizeCandidate,
   evaluateOwnCandidateCvForJobHandler,
+);
+
+router.post(
+  "/jobs/:jobId/optimize-cv",
+  authenticateAccess,
+  authorizeCandidate,
+  validateOptimizeCandidateCv,
+  createOptimizedCandidateCvDraftForJobHandler,
 );
 
 router.post(

@@ -19,14 +19,15 @@ authorized Job/CV handoff and AI Kit optimization call for BR-AI-01/02/08.
 Its H1 acceptance fix binds normalization and baseline to the same authorized
 request-local CV source snapshot for Generated and Uploaded inputs.
 Slice 07 implements the F03 merge and one-write Generated Draft creation through
-the Backend V7 CandidateCV owner. HTTP/Frontend integration and F04 remain
-**NOT STARTED**. AI-V06 Final Acceptance is
+the Backend V7 CandidateCV owner. Slice 08 connects the Candidate HTTP action
+to that workflow and returns the new Draft detail for V7 read/edit/Preview.
+Frontend integration remains **NOT STARTED**. AI-V06 Final Acceptance is
 **NOT STARTED — NOT ACCEPTED**.
 
 ## Deferred / not started
 
-- HTTP/Frontend integration and F04 have not started. Slice 06 still exposes
-  runtime data; Slice 07 adds an internal Draft-creation action.
+- Frontend integration has not started. Slice 08 exposes the action through
+  Candidate HTTP and reuses V7 Draft management and Preview.
 - The official AI Kit gate, provider evaluation, and live calls have not been
   run for Slices 01–03.
 
@@ -65,3 +66,13 @@ the Backend V7 CandidateCV owner. HTTP/Frontend integration and F04 remain
   ESLint, Backend architecture verification, and diff whitespace check passed.
   The official Backend gate, live provider calls, and full AI-V06 acceptance
   were not run under the requested focused offline scope.
+- Slice 08: five focused Backend HTTP tests passed on 2026-10-26, covering
+  persisted Draft creation and V7 read/Preview, Uploaded advisory context,
+  input and authorization rejection, mismatched V04 identity, and
+  inference/persistence failures. Targeted ESLint and Backend architecture
+  verification passed. The official Backend gate, live provider calls, and full
+  AI-V06 acceptance were not run under the requested focused offline scope.
+  The focused HTTP suite passed again on 2026-10-26 with V06-created Draft →
+  Preview → V7 edit → Preview coverage, including updated PDF content, DRAFT
+  lifecycle, and unchanged Source CV. Targeted ESLint and diff whitespace check
+  passed for this follow-up; the official Backend gate was not run.
