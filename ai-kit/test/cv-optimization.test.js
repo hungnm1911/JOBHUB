@@ -81,11 +81,11 @@ const llm = {
 };
 const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
 const optimizeCv = createCvOptimizer({ llm, logger });
-const input = (cvMatchProfile = generatedCv, provider = "codex") => ({
-  jobMatchProfile, cvMatchProfile, generatedBaseline, evaluationResult, provider,
+const input = (cvMatchProfile = generatedCv) => ({
+  jobMatchProfile, cvMatchProfile, generatedBaseline, evaluationResult,
 });
 
-describe("AI-V06 Slice 02 optimization capability", () => {
+describe("AI-V06 optimization and provider fallback", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("keeps compact Job/CV source claims separate from V04 advisory feedback", () => {
@@ -167,16 +167,19 @@ describe("AI-V06 Slice 02 optimization capability", () => {
   });
 
   it.each([
-    ["codex", codexCall, codexResponse],
-    ["gemini", geminiCall, geminiResponse],
-    ["groq", groqCall, groqResponse],
-  ])("requests one native structured %s response and accepts all-null", async (
-    provider, call, response,
+    ["codex", codexCall, codexResponse, 0],
+    ["gemini", geminiCall, geminiResponse, 1],
+    ["groq", groqCall, groqResponse, 2],
+  ])("requests native structured %s response and accepts all-null", async (
+    provider, call, response, precedingFailures,
   ) => {
+    if (precedingFailures > 0) codexCall.mockRejectedValue(Object.assign(new Error("busy"), { status: 503 }));
+    if (precedingFailures > 1) geminiCall.mockRejectedValue(Object.assign(new Error("busy"), { status: 503 }));
     call.mockResolvedValue(response(allNull));
-    await expect(optimizeCv(input(generatedCv, provider))).resolves.toEqual(allNull);
+    await expect(optimizeCv(input())).resolves.toEqual(allNull);
     expect(call).toHaveBeenCalledOnce();
-    expect([codexCall, geminiCall, groqCall].filter((mock) => mock.mock.calls.length)).toHaveLength(1);
+    expect([codexCall, geminiCall, groqCall].map((mock) => mock.mock.calls.length))
+      .toEqual([0, 1, 2].map((index) => Number(index <= precedingFailures)));
     const request = call.mock.calls[0][0];
     if (provider === "codex") {
       expect(request.text.format).toEqual({ type: "json_schema", name: "cv_optimization_result",
@@ -199,29 +202,148 @@ describe("AI-V06 Slice 02 optimization capability", () => {
     await expect(optimizeCv(input())).resolves.toEqual(replacement);
   });
 
-  it.each([
-    ["codex", codexCall, { ...codexResponse(allNull), status: "incomplete" }],
-    ["gemini", geminiCall, { ...geminiResponse(allNull), candidates: [{
-      ...geminiResponse(allNull).candidates[0], finishReason: "MAX_TOKENS" }] }],
-    ["groq", groqCall, { ...groqResponse(allNull), choices: [{
-      ...groqResponse(allNull).choices[0], finish_reason: "length" }] }],
-  ])("rejects incomplete %s responses without trying another provider", async (
-    provider, call, response,
-  ) => {
-    call.mockResolvedValue(response);
-    await expect(optimizeCv(input(generatedCv, provider))).rejects.toMatchObject({
-      code: "INVALID_OPTIMIZATION_RESULT",
-    });
-    expect([codexCall, geminiCall, groqCall].filter((mock) => mock.mock.calls.length)).toHaveLength(1);
+  it("falls back through incomplete, invalid JSON, and invalid contract responses", async () => {
+    codexCall.mockResolvedValue({ ...codexResponse(allNull), status: "incomplete" });
+    geminiCall.mockResolvedValue(geminiResponse({ ...allNull, skills: [null] }));
+    groqCall.mockResolvedValue(groqResponse(allNull));
+    await expect(optimizeCv(input())).resolves.toEqual(allNull);
+    expect(codexCall).toHaveBeenCalledOnce();
+    expect(geminiCall).toHaveBeenCalledOnce();
+    expect(groqCall).toHaveBeenCalledOnce();
   });
 
-  it("rejects malformed structured output without a fallback attempt", async () => {
-    codexCall.mockResolvedValue(codexResponse({ ...allNull, skills: [null] }));
+  it("falls back from malformed JSON and stops on a valid Gemini result", async () => {
+    codexCall.mockResolvedValue({ ...codexResponse(allNull), output: [{ type: "message",
+      role: "assistant", status: "completed",
+      content: [{ type: "output_text", text: "{" }] }] });
+    geminiCall.mockResolvedValue(geminiResponse({ ...allNull, skills: [] }));
+    await expect(optimizeCv(input())).resolves.toEqual({ ...allNull, skills: [] });
+    expect(groqCall).not.toHaveBeenCalled();
+  });
+
+  it("advances after a response-free timeout", async () => {
+    codexCall.mockRejectedValue(Object.assign(new Error("timed out"), { code: "ETIMEDOUT" }));
+    geminiCall.mockResolvedValue(geminiResponse(allNull));
+    await expect(optimizeCv(input())).resolves.toEqual(allNull);
+    expect(geminiCall).toHaveBeenCalledOnce();
+    expect(groqCall).not.toHaveBeenCalled();
+  });
+
+  it("advances after Codex HTTP 408 with one attempt per provider", async () => {
+    codexCall.mockRejectedValue(Object.assign(new Error("request timed out"), { status: 408 }));
+    geminiCall.mockResolvedValue(geminiResponse(allNull));
+    await expect(optimizeCv(input())).resolves.toEqual(allNull);
+    expect(codexCall).toHaveBeenCalledOnce();
+    expect(geminiCall).toHaveBeenCalledOnce();
+    expect(groqCall).not.toHaveBeenCalled();
+  });
+
+  it("reports technical failure when all providers return invalid output", async () => {
+    codexCall.mockResolvedValue({ ...codexResponse(allNull), status: "incomplete" });
+    geminiCall.mockResolvedValue({ ...geminiResponse(allNull), candidates: [{
+      ...geminiResponse(allNull).candidates[0], finishReason: "MAX_TOKENS" }] });
+    groqCall.mockResolvedValue(groqResponse({ ...allNull, skills: [null] }));
     await expect(optimizeCv(input())).rejects.toMatchObject({
       code: "INVALID_OPTIMIZATION_RESULT",
       details: expect.arrayContaining([expect.stringContaining("/skills/0")]),
     });
+    expect([codexCall, geminiCall, groqCall].map((mock) => mock.mock.calls.length))
+      .toEqual([1, 1, 1]);
+  });
+
+  it("propagates the final provider failure after eligible earlier failures", async () => {
+    const finalFailure = Object.assign(new Error("provider unavailable"), { status: 503 });
+    codexCall.mockRejectedValue(Object.assign(new Error("busy"), { status: 429 }));
+    geminiCall.mockResolvedValue({ ...geminiResponse(allNull), candidates: [{
+      ...geminiResponse(allNull).candidates[0], finishReason: "MAX_TOKENS" }] });
+    groqCall.mockRejectedValue(finalFailure);
+    await expect(optimizeCv(input())).rejects.toBe(finalFailure);
+    expect([codexCall, geminiCall, groqCall].map((mock) => mock.mock.calls.length))
+      .toEqual([1, 1, 1]);
+  });
+
+  it.each([400, 401, 403])("stops on non-fallback Codex HTTP %i", async (status) => {
+    const failure = Object.assign(new Error("request rejected"), { status });
+    codexCall.mockRejectedValue(failure);
+    await expect(optimizeCv(input())).rejects.toBe(failure);
     expect(geminiCall).not.toHaveBeenCalled();
     expect(groqCall).not.toHaveBeenCalled();
+  });
+
+  it("does not fallback on a provider programming error", async () => {
+    const failure = new TypeError("invalid request construction");
+    codexCall.mockRejectedValue(failure);
+    await expect(optimizeCv(input())).rejects.toBe(failure);
+    expect(geminiCall).not.toHaveBeenCalled();
+  });
+
+  it("rejects incomplete local provider configuration before any request", async () => {
+    const optimizer = createCvOptimizer({ llm: { ...llm, gemini: { apiKey: "offline" } }, logger });
+    await expect(optimizer(input())).rejects.toThrow("gemini provider configuration is incomplete");
+    expect(codexCall).not.toHaveBeenCalled();
+  });
+
+  it("reports malformed credentialless config instead of silently skipping it", async () => {
+    const optimizer = createCvOptimizer({ llm: {
+      codex: llm.codex, gemini: { apiKey: undefined, model: 42 },
+    }, logger });
+    await expect(optimizer(input())).rejects.toThrow("gemini provider configuration is incomplete");
+    expect(codexCall).not.toHaveBeenCalled();
+  });
+
+  it("uses the Backend config shape when only Codex has credentials", async () => {
+    const backendLlm = {
+      codex: llm.codex,
+      gemini: { apiKey: undefined, model: undefined },
+      groq: { apiKey: undefined, model: "openai/gpt-oss-120b" },
+    };
+    const optimizer = createCvOptimizer({ llm: backendLlm, logger });
+    codexCall.mockResolvedValue(codexResponse(allNull));
+    await expect(optimizer(input())).resolves.toEqual(allNull);
+    expect(codexCall).toHaveBeenCalledOnce();
+    expect(geminiCall).not.toHaveBeenCalled();
+    expect(groqCall).not.toHaveBeenCalled();
+  });
+
+  it("falls back only to credentialed providers in priority order", async () => {
+    const optimizer = createCvOptimizer({ llm: {
+      codex: { apiKey: undefined, baseURL: undefined, model: undefined },
+      gemini: llm.gemini,
+      groq: llm.groq,
+    }, logger });
+    geminiCall.mockRejectedValue(Object.assign(new Error("busy"), { status: 503 }));
+    groqCall.mockResolvedValue(groqResponse(allNull));
+    await expect(optimizer(input())).resolves.toEqual(allNull);
+    expect(codexCall).not.toHaveBeenCalled();
+    expect(geminiCall).toHaveBeenCalledOnce();
+    expect(groqCall).toHaveBeenCalledOnce();
+  });
+
+  it("rejects Backend config with no credentialed provider before inference", async () => {
+    const optimizer = createCvOptimizer({ llm: {
+      codex: { apiKey: undefined, baseURL: undefined, model: undefined },
+      gemini: { apiKey: undefined, model: undefined },
+      groq: { apiKey: undefined, model: "openai/gpt-oss-120b" },
+    }, logger });
+    await expect(optimizer(input())).rejects.toThrow("At least one AI-V06 provider must be configured");
+    expect([codexCall, geminiCall, groqCall].every((mock) => mock.mock.calls.length === 0))
+      .toBe(true);
+  });
+
+  it("uses only configured providers in priority order", async () => {
+    const optimizer = createCvOptimizer({ llm: { gemini: llm.gemini, groq: llm.groq }, logger });
+    geminiCall.mockRejectedValue(Object.assign(new Error("busy"), { status: 503 }));
+    groqCall.mockResolvedValue(groqResponse(allNull));
+    await expect(optimizer(input())).resolves.toEqual(allNull);
+    expect(codexCall).not.toHaveBeenCalled();
+    expect(geminiCall).toHaveBeenCalledOnce();
+    expect(groqCall).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an empty provider configuration before inference", async () => {
+    const optimizer = createCvOptimizer({ llm: {}, logger });
+    await expect(optimizer(input())).rejects.toThrow("At least one AI-V06 provider must be configured");
+    expect([codexCall, geminiCall, groqCall].every((mock) => mock.mock.calls.length === 0))
+      .toBe(true);
   });
 });

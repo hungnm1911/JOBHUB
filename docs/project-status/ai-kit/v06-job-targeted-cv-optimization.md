@@ -9,15 +9,17 @@ M1. Slice 00 aligns their canonical documentation and authority references.
 Slice 01 implements and verifies the F03 Optimization Result output contract.
 Slice 02 implements and verifies the AI Kit's single-provider F03 optimization
 inference, compact Job/CV context, and V04 advisory feedback handling for
-BR-AI-06/07. F01, F02, F03 fallback and Draft creation, and F04 remain **NOT
+BR-AI-06/07. Slice 03 implements and verifies F03 provider fallback in
+Codex → Gemini → Groq order for BR-AI-07/09, accepting only completed,
+contract-valid results. F01, F02, F03 Draft creation, and F04 remain **NOT
 STARTED**. AI-V06 Final Acceptance is **NOT STARTED — NOT ACCEPTED**.
 
 ## Deferred / not started
 
-- Provider fallback, baseline merge, Draft creation, and Backend/Frontend
-  integration have not started.
+- Baseline merge, Draft creation, and Backend/Frontend integration have not
+  started.
 - The official AI Kit gate, provider evaluation, and live calls have not been
-  run for Slices 01–02.
+  run for Slices 01–03.
 
 ## Verification status
 
@@ -28,4 +30,7 @@ STARTED**. AI-V06 Final Acceptance is **NOT STARTED — NOT ACCEPTED**.
   under the slice's requested verification scope.
 - Slice 02 focused optimization and output-contract tests (16 cases) and
   targeted ESLint passed on 2026-10-26. The official AI Kit gate and live
+  provider calls were skipped under the slice's requested verification scope.
+- Slice 03 focused optimization, output-contract, and fallback tests (49 cases)
+  and targeted ESLint passed on 2026-10-26. The official AI Kit gate and live
   provider calls were skipped under the slice's requested verification scope.

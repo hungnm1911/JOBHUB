@@ -225,9 +225,8 @@ future capability.
   failures are outside this provider fallback boundary. Implement the scoped
   eligibility in the canonical fallback owner without changing V02–V05
   behavior.
-- The fallback utility is internal and currently has no capability
-  composition. Its existence must not be described as automatic fallback for
-  all AI requests.
+- The fallback utility is internal. AI-V06 explicitly composes it; other
+  capabilities do not acquire automatic fallback.
 - Do not add further retries, a circuit breaker, provider registry, or
   universal LLM abstraction without a concrete capability need and an approved
   architecture change.
@@ -272,9 +271,10 @@ required, nullable career sections. Item fields follow Generated CV V7; the
 parser checks structure, enum values, and ISO date syntax. An all-null result
 passes. Slice 02 (`src/optimization/cv-optimization.js`) builds a compact
 Job/CV source context separated from V04 advisory feedback, prompts only for
-the seven sections, and uses the existing single-provider structured inference
-helper with the Slice 01 schema and parser. Fallback and baseline composition
-remain deferred.
+the seven sections, and uses the existing structured inference helper with the
+Slice 01 schema and parser. Slice 03 composes Codex → Gemini → Groq through the
+canonical fallback utility, accepting each attempt only after completion and
+contract validation. Baseline composition remains deferred.
 
 AI-V02 F01 output contract (`src/normalization/uploaded-cv-normalization.js`):
 

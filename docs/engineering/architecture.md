@@ -385,8 +385,10 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
 - AI-V06 Slice 01 owns its internal strict Optimization Result schema and parser
   in `src/optimization/optimization-result.js`. Slice 02 adds compact source
   and V04 advisory context, a seven-section prompt, and one selected provider's
-  structured inference in `src/optimization/cv-optimization.js`. Fallback,
-  baseline merge, Draft creation, and Backend integration are not yet connected.
+  structured inference in `src/optimization/cv-optimization.js`. Slice 03
+  composes Codex → Gemini → Groq through `src/llm/llm-fallback.js`, with
+  completion and contract validation inside each attempt. Baseline merge,
+  Draft creation, and Backend integration are not yet connected.
 
 ## AI Kit — Target Convention
 
@@ -448,8 +450,8 @@ is an in-process computation package, not a microservice.
   Its capability-specific policy advances after provider errors, timeouts,
   incomplete responses, or output that fails the structured contract, and
   reports AI-processing failure if no provider returns a completed, valid
-  result. This is a target convention for AI-V06, not a change to the existing
-  single-provider V02–V05 flows or the current implemented fallback classifier.
+  result. This applies only to AI-V06 and leaves the single-provider V02–V05
+  flows and default provider-availability classifier unchanged.
 - The PDF extractor owns PDF.js document handling. Every extraction cleans
   its pages and destroys its own loading task/worker, without affecting
   concurrent calls. It extracts existing text only; OCR is deferred. There is

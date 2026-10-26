@@ -4,6 +4,7 @@ import {
 import { OPTIMIZATION_RESULT_SCHEMA, OptimizationResultError,
   parseOptimizationResult } from "./optimization-result.js";
 import { isPlainObject } from "../normalization/normalization-support.js";
+import { executeWithLlmProviderChain } from "../llm/llm-fallback.js";
 
 const INSTRUCTION = [
   "Optimize the Candidate CV for the one target Job in the input. Return only the seven career sections in the supplied structured schema: professionalSummary, skills, workExperiences, projects, educations, certifications, and languages.",
@@ -15,6 +16,11 @@ const INSTRUCTION = [
 const sourcedValue = (field) => field?.value ?? null;
 const sourcedValues = (items) => items.map((item) => item.value);
 const careerSections = Object.keys(OPTIMIZATION_RESULT_SCHEMA.properties);
+const PROVIDER_ORDER = ["codex", "gemini", "groq"];
+const isUnavailableProviderConfig = (config) => isPlainObject(config)
+  && Object.hasOwn(config, "apiKey") && config.apiKey === undefined
+  && Object.entries(config).every(([field, value]) => field === "apiKey"
+    || value === undefined || (typeof value === "string" && value.trim() !== ""));
 
 const buildOptimizationContext = ({
   jobMatchProfile, cvMatchProfile, generatedBaseline, evaluationResult,
@@ -72,24 +78,40 @@ const buildOptimizationContext = ({
 };
 
 const createCvOptimizer = ({ llm, logger }) => async ({
-  jobMatchProfile, cvMatchProfile, generatedBaseline, evaluationResult, provider = "codex",
+  jobMatchProfile, cvMatchProfile, generatedBaseline, evaluationResult,
 } = {}) => {
   const context = buildOptimizationContext({
     jobMatchProfile, cvMatchProfile, generatedBaseline, evaluationResult,
   });
-  const config = requireConfig(llm, provider);
-  let outputText;
-  try {
-    outputText = await infer({ provider, config, logger, input: JSON.stringify(context),
-      instruction: INSTRUCTION, schema: OPTIMIZATION_RESULT_SCHEMA,
-      schemaName: "cv_optimization_result" });
-  } catch (error) {
-    if (error instanceof SemanticSkillsAssessmentError) {
-      throw new OptimizationResultError(["/ provider response must be complete structured output"]);
-    }
-    throw error;
+  const configuredProviders = PROVIDER_ORDER.filter((provider) => llm?.[provider] !== undefined
+    && !isUnavailableProviderConfig(llm[provider]));
+  if (configuredProviders.length === 0) {
+    throw new TypeError("At least one AI-V06 provider must be configured");
   }
-  return parseOptimizationResult(outputText);
+  const configs = configuredProviders.map((provider) => requireConfig(llm, provider));
+  const input = JSON.stringify(context);
+  return executeWithLlmProviderChain({
+    providers: configuredProviders.map((provider, index) => ({
+      name: provider,
+      maxAttempts: 1,
+      execute: async () => {
+        let outputText;
+        try {
+          outputText = await infer({ provider, config: configs[index], logger, input,
+            instruction: INSTRUCTION, schema: OPTIMIZATION_RESULT_SCHEMA,
+            schemaName: "cv_optimization_result" });
+        } catch (error) {
+          if (error instanceof SemanticSkillsAssessmentError) {
+            throw new OptimizationResultError(["/ provider response must be complete structured output"]);
+          }
+          throw error;
+        }
+        return parseOptimizationResult(outputText);
+      },
+    })),
+    logger,
+    failurePolicy: "ai-v06",
+  });
 };
 
 export { buildOptimizationContext, createCvOptimizer };
