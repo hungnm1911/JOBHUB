@@ -1,7 +1,10 @@
 import RootLayout from '@/layouts/RootLayout'
+import CompanyDetailPage from '@/pages/CompanyDetailPage'
 import ConfirmCompanyApprovalPage from '@/pages/ConfirmCompanyApprovalPage'
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
 import HomePage from '@/pages/HomePage'
+import JobDetailPage from '@/pages/JobDetailPage'
+import JobSearchPage from '@/pages/JobSearchPage'
 import LoginPage from '@/pages/LoginPage'
 import RegisterAccountTypePage from '@/pages/RegisterAccountTypePage'
 import RegisterCandidatePage from '@/pages/RegisterCandidatePage'
@@ -18,6 +21,18 @@ const publicRoutes = [
       {
         index: true,
         element: <HomePage />,
+      },
+      {
+        path: 'jobs',
+        element: <JobSearchPage />,
+      },
+      {
+        path: 'jobs/:jobId',
+        element: <JobDetailPage />,
+      },
+      {
+        path: 'companies/:companyId',
+        element: <CompanyDetailPage />,
       },
       {
         path: 'login',

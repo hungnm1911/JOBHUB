@@ -9,15 +9,7 @@ import { FLASH_MESSAGE_TYPE } from '@/utils/constant'
 
 import { logout } from '../services/authentication.service'
 import { selectAuthenticatedUser } from '../slice'
-
-function getInitials(fullName) {
-  return (fullName ?? '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(-2)
-    .map((part) => part[0].toUpperCase())
-    .join('')
-}
+import { getInitials } from '../utils'
 
 function SessionAccountCard({ roleLabel, logoutMessage }) {
   const user = useAppSelector(selectAuthenticatedUser)

@@ -1,13 +1,15 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, ScrollRestoration } from 'react-router-dom'
 
 import AppFooter from '@/components/common/AppFooter'
 import AppHeader from '@/components/common/AppHeader'
 import FlashMessage from '@/components/common/FlashMessage'
+import HeaderAccountMenu from '@/features/authentication/components/HeaderAccountMenu'
 
 function RootLayout() {
   return (
     <div className="flex min-h-svh flex-col">
-      <AppHeader />
+      <ScrollRestoration />
+      <AppHeader accountArea={<HeaderAccountMenu />} />
 
       <FlashMessage />
 
