@@ -1,62 +1,155 @@
-import { ArrowRight, CheckCircle2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useLocation, useSearchParams } from 'react-router-dom'
 
-import { Button } from '@/components/ui/button'
+import DiscoveryJobsSection from '@/features/job-discovery/components/DiscoveryJobsSection'
+import FieldCategoryPanel from '@/features/job-discovery/components/FieldCategoryPanel'
+import FieldPositionPanel from '@/features/job-discovery/components/FieldPositionPanel'
+import HomeHero from '@/features/job-discovery/components/HomeHero'
+import JobSearchBar from '@/features/job-discovery/components/JobSearchBar'
+import PlatformShowcaseCarousel from '@/features/job-discovery/components/PlatformShowcaseCarousel'
+import useDiscoveryCatalogs from '@/features/job-discovery/hooks/useDiscoveryCatalogs'
+import useFieldPositions from '@/features/job-discovery/hooks/useFieldPositions'
+import useSessionViewer from '@/features/authentication/hooks/useSessionViewer'
+import DiscoveryJobActions from '@/pages/discovery-job-actions'
 
-const foundations = [
-  'Routing với nested layout',
-  'Redux Toolkit store dùng chung',
-  'Axios client và chuẩn hóa lỗi',
-  'Socket.IO client kết nối theo nhu cầu',
-]
+const JOBS_SECTION_ID = 'jobs'
+
+function readPage(value) {
+  const page = Number(value)
+  return Number.isSafeInteger(page) && page > 0 ? page : 1
+}
+
+function scrollToJobs() {
+  document.getElementById(JOBS_SECTION_ID)?.scrollIntoView({ behavior: 'smooth' })
+}
 
 function HomePage() {
+  const { hash, key: locationKey } = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [previewFieldId, setPreviewFieldId] = useState(null)
+  const viewer = useSessionViewer()
+
+  useEffect(() => {
+    if (hash === `#${JOBS_SECTION_ID}`) {
+      scrollToJobs()
+    }
+  }, [hash, locationKey])
+  const { fields, fieldsLoading, fieldsError, provinces, provinceNameByCode } =
+    useDiscoveryCatalogs()
+
+  const keyword = searchParams.get('q') ?? ''
+  const provinceCode = searchParams.get('location') ?? ''
+  const fieldId = searchParams.get('field') ?? ''
+  const positionId = fieldId ? (searchParams.get('position') ?? '') : ''
+  const page = readPage(searchParams.get('page'))
+
+  const { positions: selectedFieldPositions } = useFieldPositions(positionId ? fieldId : null)
+  const previewField = fields.find((field) => field.id === previewFieldId) ?? null
+
+  const activeFilterLabels = [
+    keyword && `Từ khóa: “${keyword}”`,
+    provinceCode && (provinceNameByCode.get(provinceCode) ?? 'Địa điểm đã chọn'),
+    fieldId && (fields.find((field) => field.id === fieldId)?.name ?? 'Ngành nghề đã chọn'),
+    positionId &&
+      (selectedFieldPositions.find((position) => position.id === positionId)?.name ??
+        'Vị trí đã chọn'),
+  ].filter(Boolean)
+
+  const updateFilters = (changes, { scroll = true } = {}) => {
+    const next = {
+      q: keyword,
+      location: provinceCode,
+      field: fieldId,
+      position: positionId,
+      page: '',
+      ...changes,
+    }
+    const params = new URLSearchParams()
+
+    if (!next.field) {
+      next.position = ''
+    }
+
+    for (const [key, value] of Object.entries(next)) {
+      if (value && !(key === 'page' && Number(value) === 1)) {
+        params.set(key, String(value))
+      }
+    }
+
+    setSearchParams(params, { preventScrollReset: true })
+
+    if (scroll) {
+      scrollToJobs()
+    }
+  }
+
   return (
-    <section className="mx-auto grid w-full max-w-6xl items-center gap-12 px-6 py-16 lg:grid-cols-[1.2fr_0.8fr] lg:py-24">
-      <div className="max-w-2xl">
-        <span className="inline-flex rounded-full border bg-card px-3 py-1 text-sm font-medium text-muted-foreground shadow-sm">
-          Nền tảng tuyển dụng JOBHUB
-        </span>
-        <h1 className="mt-6 text-balance text-4xl font-bold tracking-tight sm:text-6xl">
-          Frontend đã sẵn sàng để phát triển theo từng tính năng.
-        </h1>
-        <p className="mt-6 max-w-xl text-pretty text-lg leading-8 text-muted-foreground">
-          Bộ khung tối thiểu đã tách rõ UI, routing, global state, HTTP và
-          realtime để các module nghiệp vụ có thể được bổ sung mà không tạo
-          nguồn sự thật song song.
-        </p>
-        <div className="mt-8">
-          <Button asChild size="lg">
-            <a href="#foundation">
-              Xem nền tảng kỹ thuật
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </a>
-          </Button>
+    <div className="w-full">
+      <HomeHero
+        fieldCount={fieldsLoading || fieldsError ? null : fields.length}
+        provinceNameByCode={provinceNameByCode}
+      />
+
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
+        <JobSearchBar
+          keyword={keyword}
+          onSearch={(values) => updateFilters({ q: values.keyword, location: values.provinceCode })}
+          provinceCode={provinceCode}
+          provinces={provinces}
+        />
+
+        <div
+          className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]"
+          onMouseLeave={() => setPreviewFieldId(null)}
+        >
+          <FieldCategoryPanel
+            error={fieldsError}
+            fields={fields}
+            loading={fieldsLoading}
+            onPreview={setPreviewFieldId}
+            onSelect={(id) => updateFilters({ field: id ?? '', position: '' }, { scroll: false })}
+            previewFieldId={previewFieldId}
+            selectedFieldId={fieldId}
+          />
+          <div className="relative">
+            <PlatformShowcaseCarousel />
+            {previewField && (
+              <div className="absolute inset-0 z-10">
+                <FieldPositionPanel
+                  field={previewField}
+                  key={previewField.id}
+                  onClose={() => setPreviewFieldId(null)}
+                  onSelect={(nextFieldId, nextPositionId) => {
+                    setPreviewFieldId(null)
+                    updateFilters({ field: nextFieldId, position: nextPositionId ?? '' })
+                  }}
+                  selectedFieldId={fieldId}
+                  selectedPositionId={positionId}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div
-        className="rounded-2xl border bg-card p-6 shadow-sm sm:p-8"
-        id="foundation"
-      >
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">
-          Base architecture
-        </p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-          Các lớp nền đã hoạt động
-        </h2>
-        <ul className="mt-6 space-y-4">
-          {foundations.map((foundation) => (
-            <li className="flex items-center gap-3" key={foundation}>
-              <CheckCircle2
-                aria-hidden="true"
-                className="size-5 shrink-0 text-primary"
-              />
-              <span className="text-muted-foreground">{foundation}</span>
-            </li>
-          ))}
-        </ul>
+      <div className="mx-auto w-full max-w-6xl px-6 pt-6 pb-16">
+        <DiscoveryJobsSection
+          activeFilterLabels={activeFilterLabels}
+          fieldId={fieldId}
+          id={JOBS_SECTION_ID}
+          keyword={keyword}
+          onClearFilters={() =>
+            updateFilters({ q: '', location: '', field: '', position: '' }, { scroll: false })
+          }
+          onPageChange={(nextPage) => updateFilters({ page: nextPage })}
+          page={page}
+          positionId={positionId}
+          provinceCode={provinceCode}
+          provinceNameByCode={provinceNameByCode}
+          renderJobAction={(job) => <DiscoveryJobActions job={job} revealApplyOnHover viewer={viewer} />}
+        />
       </div>
-    </section>
+    </div>
   )
 }
 

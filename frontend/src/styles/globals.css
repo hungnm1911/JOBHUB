@@ -32,6 +32,8 @@
   --hero-muted: oklch(0.8 0.04 260);
   --warning: oklch(0.666 0.179 58.318);
   --warning-foreground: oklch(0.414 0.112 45.904);
+  --success: oklch(0.962 0.044 156.743);
+  --success-foreground: oklch(0.448 0.119 151.328);
 }
 
 @theme inline {
@@ -62,6 +64,8 @@
   --color-hero-muted: var(--hero-muted);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
 }
 
 @layer base {

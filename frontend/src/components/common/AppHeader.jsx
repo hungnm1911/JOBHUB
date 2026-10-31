@@ -1,43 +1,39 @@
-import { BriefcaseBusiness } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-const navigationLinks = [
-  { to: '/login', label: 'Đăng nhập' },
-  { to: '/register', label: 'Đăng ký' },
-]
-
-function AppHeader() {
+function AppHeader({ accountArea }) {
   return (
-    <header className="border-b bg-card/90 backdrop-blur">
-      <div className="mx-auto grid h-16 w-full max-w-6xl grid-cols-[1fr_auto_1fr] items-center px-6">
+    <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-6">
         <Link
-          className="inline-flex items-center gap-2 justify-self-start font-semibold tracking-tight"
+          className="inline-flex items-center gap-1.5 text-xl font-extrabold tracking-tight"
           to="/"
         >
-          <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <BriefcaseBusiness aria-hidden="true" className="size-5" />
-          </span>
           JOBHUB
+          <span aria-hidden="true" className="size-2 rounded-full bg-primary" />
         </Link>
 
-        <nav aria-label="Điều hướng chính" className="flex items-center gap-6 text-sm">
-          {navigationLinks.map((link) => (
-            <NavLink
-              className={({ isActive }) =>
-                cn(
-                  'font-medium text-muted-foreground transition-colors hover:text-foreground',
-                  isActive && 'text-primary hover:text-primary',
-                )
-              }
-              key={link.to}
-              to={link.to}
-            >
-              {link.label}
-            </NavLink>
-          ))}
-          <span className="font-medium text-muted-foreground">Hỗ trợ</span>
+        <nav aria-label="Điều hướng chính" className="flex items-center gap-2 text-sm sm:gap-5">
+          <NavLink
+            className={({ isActive }) =>
+              cn(
+                'hidden font-semibold text-muted-foreground transition-colors hover:text-foreground sm:inline',
+                isActive && 'text-primary hover:text-primary',
+              )
+            }
+            end
+            to="/"
+          >
+            Trang chủ
+          </NavLink>
+
+          <Button asChild size="sm" className="font-semibold">
+            <Link to="/jobs">Tìm việc làm</Link>
+          </Button>
+
+          {accountArea}
         </nav>
       </div>
     </header>

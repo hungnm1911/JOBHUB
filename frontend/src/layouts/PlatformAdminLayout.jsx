@@ -1,5 +1,5 @@
 import { Building2, BriefcaseBusiness, House, LayoutDashboard } from 'lucide-react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, ScrollRestoration } from 'react-router-dom'
 
 import FlashMessage from '@/components/common/FlashMessage'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ const adminNavigation = [
 function PlatformAdminLayout() {
   return (
     <div className="flex min-h-svh flex-col bg-background lg:flex-row">
+      <ScrollRestoration />
       <aside className="flex shrink-0 flex-col gap-4 bg-hero px-4 py-4 text-hero-foreground lg:sticky lg:top-0 lg:h-svh lg:w-64 lg:gap-8 lg:px-5 lg:py-6">
         <Link className="inline-flex items-center gap-2 font-semibold tracking-tight" to="/admin">
           <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">

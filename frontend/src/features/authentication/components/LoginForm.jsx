@@ -1,31 +1,19 @@
 import { ArrowRight, CircleAlert, LoaderCircle, LockKeyhole, Mail } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { useAppDispatch } from '@/store/hooks'
-import { API_ERROR_MESSAGE, USER_ROLE, USER_STATUS } from '@/utils/constant'
+import { API_ERROR_MESSAGE } from '@/utils/constant'
 import { loginSchema, zodResolver } from '@/validation'
 
 import { loginThunk } from '../services/authentication-thunks'
+import { toPostLoginLocation } from '../utils'
 import { AuthFormField, PasswordVisibilityToggle } from './AuthFormFields'
 
 const LOGIN_FIELDS = ['email', 'password']
-
-function toPostLoginDestination(user) {
-  // V02 BR-21: a PENDING_ACTIVATION Company Manager only has an onboarding session.
-  if (user?.status === USER_STATUS.PENDING_ACTIVATION) {
-    return '/onboarding/company'
-  }
-
-  if (user?.role === USER_ROLE.PLATFORM_ADMIN) {
-    return '/admin'
-  }
-
-  return '/'
-}
 
 function getLoginRejectionMessage(error) {
   const field = error.details?.field
@@ -47,6 +35,7 @@ function getLoginRejectionMessage(error) {
 
 function LoginForm({ defaultEmail = '' }) {
   const dispatch = useAppDispatch()
+  const location = useLocation()
   const navigate = useNavigate()
   const [passwordVisible, setPasswordVisible] = useState(false)
   const {
@@ -80,7 +69,11 @@ function LoginForm({ defaultEmail = '' }) {
 
     toast.success('Đăng nhập thành công.')
 
-    navigate(toPostLoginDestination(authentication.user), { replace: true })
+    const next = toPostLoginLocation(authentication.user, location.state)
+    navigate(
+      { pathname: next.pathname, search: next.search ?? '', hash: next.hash ?? '' },
+      { replace: true, state: next.state },
+    )
   }
 
   return (

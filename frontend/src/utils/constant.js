@@ -51,6 +51,68 @@ const API_ERROR_MESSAGE = Object.freeze({
     'Hồ sơ không còn ở trạng thái chờ duyệt hoặc tài khoản Company Manager không còn hợp lệ. Dữ liệu đã được tải lại.',
   COMPANY_APPROVAL_EMAIL_FAILED:
     'Hồ sơ đã được phê duyệt nhưng chưa gửi được email kích hoạt. Company Manager có thể tự yêu cầu gửi lại email.',
+  JOB_NOT_FOUND: 'Không tìm thấy việc làm hoặc việc làm không còn được công khai.',
+  COMPANY_NOT_FOUND: 'Không tìm thấy công ty hoặc công ty không còn hoạt động công khai.',
+  JOB_DISCOVERY_NOT_AVAILABLE: 'Tài khoản hiện tại không sử dụng được chức năng tìm việc làm.',
+  APPLICATION_ALREADY_EXISTS: 'Bạn đã ứng tuyển việc làm này.',
+  JOB_NOT_ACCEPTING_APPLICATIONS: 'Việc làm này không còn nhận hồ sơ.',
+})
+
+// Must stay aligned with backend/src/constants/job-status.js.
+const JOB_STATUS = Object.freeze({
+  DRAFT: 'DRAFT',
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
+  PUBLISHED: 'PUBLISHED',
+  CLOSED: 'CLOSED',
+  EXPIRED: 'EXPIRED',
+})
+
+// Must stay aligned with backend/src/constants/work-mode.js.
+const WORK_MODE = Object.freeze({
+  ONSITE: 'ONSITE',
+  HYBRID: 'HYBRID',
+  REMOTE: 'REMOTE',
+})
+
+// Must stay aligned with backend/src/constants/employment-type.js.
+const EMPLOYMENT_TYPE = Object.freeze({
+  FULL_TIME: 'FULL_TIME',
+  PART_TIME: 'PART_TIME',
+  INTERNSHIP: 'INTERNSHIP',
+  CONTRACT: 'CONTRACT',
+  TEMPORARY: 'TEMPORARY',
+  FREELANCE: 'FREELANCE',
+  SEASONAL: 'SEASONAL',
+  APPRENTICESHIP: 'APPRENTICESHIP',
+})
+
+// Must stay aligned with backend/src/constants/experience-level.js.
+const EXPERIENCE_LEVEL = Object.freeze({
+  NO_EXPERIENCE: 'NO_EXPERIENCE',
+  UNDER_1_YEAR: 'UNDER_1_YEAR',
+  ONE_TO_THREE_YEARS: 'ONE_TO_THREE_YEARS',
+  THREE_TO_FIVE_YEARS: 'THREE_TO_FIVE_YEARS',
+  FIVE_TO_TEN_YEARS: 'FIVE_TO_TEN_YEARS',
+  OVER_TEN_YEARS: 'OVER_TEN_YEARS',
+})
+
+// Must stay aligned with backend/src/constants/salary-type.js and salary-period.js.
+// V4.2 Salary amounts are always VND.
+const SALARY_TYPE = Object.freeze({
+  FIXED: 'FIXED',
+  RANGE: 'RANGE',
+  FROM: 'FROM',
+  UP_TO: 'UP_TO',
+  NEGOTIABLE: 'NEGOTIABLE',
+})
+
+const SALARY_PERIOD = Object.freeze({
+  HOUR: 'HOUR',
+  DAY: 'DAY',
+  WEEK: 'WEEK',
+  MONTH: 'MONTH',
+  SHIFT: 'SHIFT',
+  ETC: 'ETC',
 })
 
 // Must stay aligned with backend/src/constants/user-role.js.
@@ -94,6 +156,18 @@ const COMPANY_IMAGE_KIND = Object.freeze({
 const COMPANY_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
 
 // Must stay aligned with backend/src/constants/user-status.js.
+// Must stay aligned with backend/src/constants/candidate-cv-status.js.
+const CANDIDATE_CV_STATUS = Object.freeze({
+  DRAFT: 'DRAFT',
+  ACTIVE: 'ACTIVE',
+})
+
+// Must stay aligned with backend/src/constants/candidate-cv-source-type.js.
+const CANDIDATE_CV_SOURCE_TYPE = Object.freeze({
+  GENERATED: 'GENERATED',
+  UPLOADED: 'UPLOADED',
+})
+
 const USER_STATUS = Object.freeze({
   PENDING_ACTIVATION: 'PENDING_ACTIVATION',
   ACTIVE: 'ACTIVE',
@@ -155,6 +229,8 @@ const TOASTER_CONFIG = Object.freeze({
 
 export {
   ACCOUNT_FIELD_LIMIT,
+  CANDIDATE_CV_SOURCE_TYPE,
+  CANDIDATE_CV_STATUS,
   API_CONFIG,
   API_ERROR_MESSAGE,
   AUTH_STORAGE_KEY,
@@ -163,14 +239,20 @@ export {
   COMPANY_IMAGE_KIND,
   COMPANY_OPERATIONAL_STATUS,
   COMPANY_PROFILE_LIMIT,
+  EMPLOYMENT_TYPE,
+  EXPERIENCE_LEVEL,
   FLASH_MESSAGE_CONFIG,
   FLASH_MESSAGE_TYPE,
   HTTP_HEADER,
+  JOB_STATUS,
   REALTIME_EVENT,
   RUNTIME_ENV,
+  SALARY_PERIOD,
+  SALARY_TYPE,
   SOCKET_CONFIG,
   TOASTER_CONFIG,
   USER_ROLE,
   USER_STATUS,
   VALIDATION_MESSAGE,
+  WORK_MODE,
 }
