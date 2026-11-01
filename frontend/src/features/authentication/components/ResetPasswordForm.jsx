@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ACCOUNT_FIELD_LIMIT } from '@/utils/constant'
 import { resetPasswordSchema, zodResolver } from '@/validation'
 
+import { endSessionAfterPasswordReset } from '../services/authentication.service'
 import { AuthFormField, PasswordVisibilityToggle } from './AuthFormFields'
 
 function ResetPasswordForm({ token, onReset, onInvalidToken }) {
@@ -45,6 +46,7 @@ function ResetPasswordForm({ token, onReset, onInvalidToken }) {
       return
     }
 
+    await endSessionAfterPasswordReset()
     onReset()
   }
 

@@ -3,7 +3,7 @@
 ## Current project state
 
 The frontend foundation and V1 authentication lifecycle infrastructure are
-`IMPLEMENTED AND VERIFIED` as of 2026-10-13. The
+`IMPLEMENTED AND VERIFIED` as of 2026-11-01. The
 existing React + Vite application now has Tailwind CSS v4 and shadcn/ui
 configuration, the `@` import alias, a Redux Toolkit provider/store, nested
 React Router composition with a shared layout and runnable sample page, one
@@ -13,26 +13,32 @@ integrated through the official resolver. `src/validation/index.js` is the
 application-wide validation provider; reusable implementations live in focused
 modules such as `common.validators.js`, and future form schemas are exported
 through the provider for React Hook Form consumers. Routing is composed from
-route-group modules; Protected, Guest, and Role guards now consume resolved
-state from the Authentication feature, while concrete guarded routes remain
-deferred until their screens and destinations exist. Authentication persists
+route-group modules; login and registration now use `GuestRoute`, while
+public recovery and token screens remain accessible with or without a session.
+The guest guard uses the existing post-login destination for authenticated
+users. A successful password reset ends this browser's current session before
+navigating to guest-only login. Protected and Role guards consume resolved
+state from the Authentication feature. Authentication persists
 one owned localStorage record, restores a session through refresh on reload,
 marks infrastructure restoration failures as temporarily unavailable without
 discarding credentials, and keeps Redux UI state and Socket.IO lifecycle in
-sync. The Axios client attaches Bearer credentials only to explicitly protected
-requests and performs reactive, single-flight `401` refresh with a one-retry
+sync. For authenticated Company Staff, the bootstrap loads current membership
+through `GET /auth/me` into transient Redux state; login, logout, account switch,
+and reload clear or refresh that context. The Axios client attaches Bearer
+credentials only to explicitly protected requests and performs reactive,
+single-flight `401` refresh with a one-retry
 limit; login/refresh remain public, business `403` responses do not refresh,
 and logout remains protected so it may refresh before revoking the session.
 The focused authentication tests, frontend ESLint, and Vite production build
-passed. Public authentication screens now exist under `/register`,
-`/register/candidate`, `/register/company`, `/login`, `/forgot-password`,
-`/reset-password`, and `/verify-email` (opened from the verification email;
-consumes the token once through `POST /api/auth/verify-email`); login and both registrations dispatch Redux Toolkit
+passed. Guest authentication screens exist under `/register`,
+`/register/candidate`, `/register/company`, and `/login`; `/forgot-password`,
+`/reset-password`, and `/verify-email` remain public (email verification opens
+from the verification email and consumes the token once through
+`POST /api/auth/verify-email`); login and both registrations dispatch Redux Toolkit
 `createAsyncThunk` actions from
 `features/authentication/services/authentication-thunks.js`, which delegate to
 the authentication manager (login, Company Manager onboarding session) or the
-auth API module (Candidate registration). No logout control or concrete
-protected route exists yet. Sonner (`sonner`
+auth API module (Candidate registration). Sonner (`sonner`
 2.0.8) is the transient toast library: `App.jsx` mounts the single
 `<Toaster />` by spreading the application-wide `TOASTER_CONFIG`, and
 consumers call `toast` from `sonner` directly without extra setup. The defaults
@@ -70,6 +76,17 @@ The HTTP client, API error normalizer, socket client, common validators, and
   stack, and the cause, but not the request body.
 
 ## Verification status
+
+- 2026-11-01 CompanyMember context: `cd frontend && yarn verify:agent`
+  passed 17 authentication tests, ESLint, and the production build. Four new
+  focused tests cover `/auth/me` load deduplication, account-switch response
+  isolation, failure/retry, and skipping the request for non-staff accounts.
+  No browser or live-backend check was performed for this addition.
+
+- 2026-11-01 route grouping: `cd frontend && yarn verify:agent` passed 13
+  authentication tests, ESLint, and the production build. A route matching
+  check confirmed 14 paths and their guard boundaries. No browser check was
+  performed for these route changes.
 
 - Frontend `yarn lint` and `yarn build` passed.
 

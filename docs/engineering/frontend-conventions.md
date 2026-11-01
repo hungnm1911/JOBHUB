@@ -163,6 +163,8 @@ API modules must not:
 
 - `src/routes/index.jsx` composes route groups and creates the single browser router.
 - Child `*.routes.jsx` files declare routes for a coherent area or module.
+- Route support components live in `src/routes/components/`; the top level of
+  `src/routes/` contains only `index.jsx` and route-group modules.
 - Route declarations may reference guards, layouts, and pages, but must not contain complete layout markup or business HTTP workflows.
 - Nested routes and `Outlet` should be used when routes share a real layout or guard boundary.
 - Routes must not be split into files solely to pre-create hypothetical modules.
@@ -172,6 +174,7 @@ Route guards have these responsibilities:
 - `ProtectedRoute` redirects users who do not have resolved authenticated state.
 - `GuestRoute` redirects authenticated users away from guest-only routes.
 - `RoleRoute` checks resolved client role state against the roles allowed by the route.
+- `JobDiscoveryRoute` checks the resolved account and CompanyMember context for V8 discovery screens. The Authentication feature loads CompanyMember context through `/auth/me` before this guard decides access.
 - Guards may render nested content through `Outlet` and may preserve navigation context when an approved flow requires it.
 - Guards must consume auth/role state from the approved authentication owner. They must not create auth state, call business APIs, decode authority independently, or hard-code speculative destinations.
 - Frontend guards improve navigation and user experience only. Backend authentication and authorization remain mandatory and authoritative.

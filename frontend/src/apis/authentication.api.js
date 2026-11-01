@@ -64,6 +64,13 @@ async function loginApi(credentials) {
   return response.data
 }
 
+async function getCurrentAccountApi() {
+  const response = await apiClient.get('/auth/me', {
+    requiresAuthentication: true,
+  })
+  return response.data
+}
+
 async function refreshAccessApi(refreshToken) {
   const response = await apiClient.post(
     '/auth/refresh',
@@ -92,6 +99,7 @@ async function logoutApi() {
 export {
   confirmCompanyApprovalApi,
   forgotPasswordApi,
+  getCurrentAccountApi,
   loginApi,
   logoutApi,
   refreshAccessApi,

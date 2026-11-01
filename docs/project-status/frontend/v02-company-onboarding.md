@@ -3,9 +3,10 @@
 ## Current project state
 
 The Company Manager onboarding screens for V2 F02, F03, and F08 are
-`IMPLEMENTED AND VERIFIED` as of 2026-10-19. `/onboarding/company` is guarded
-by `ProtectedRoute` and `RoleRoute` (`COMPANY_STAFF`) and is reached after
-Company Manager registration (F01) or after login with `PENDING_ACTIVATION`.
+`IMPLEMENTED AND VERIFIED` as of 2026-11-01. `/onboarding/company` is guarded
+by `ProtectedRoute` and `RoleRoute` (`COMPANY_STAFF` with `PENDING_ACTIVATION`)
+and is reached after Company Manager registration (F01) or after login with
+`PENDING_ACTIVATION`.
 
 - **F02:** `CompanyProfileForm` edits the V02 profile fields (name,
   business registration number, website, address, contact info, description,
@@ -52,6 +53,11 @@ Company Manager registration (F01) or after login with `PENDING_ACTIVATION`.
   `SessionAccountCard`, composed into the onboarding flow by the page.
 
 ## Verification status
+
+- 2026-11-01 onboarding route guard: `cd frontend && yarn verify:agent` passed
+  13 authentication tests, ESLint, and the production build. Route matching
+  confirmed the protected/role boundary and `PENDING_ACTIVATION` status rule.
+  No browser check was performed for this route change.
 
 - Company Preview approved-prototype implementation (2026-10-21):
   `cd frontend && yarn verify:agent` passed (13 authentication tests, ESLint,

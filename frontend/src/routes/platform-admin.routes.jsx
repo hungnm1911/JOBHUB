@@ -4,8 +4,8 @@ import AdminCompanyRegistrationsPage from '@/pages/AdminCompanyRegistrationsPage
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
 import { USER_ROLE } from '@/utils/constant'
 
-import ProtectedRoute from './ProtectedRoute'
-import RoleRoute from './RoleRoute'
+import ProtectedRoute from './components/ProtectedRoute'
+import RoleRoute from './components/RoleRoute'
 
 const platformAdminRoutes = [
   {
@@ -13,7 +13,7 @@ const platformAdminRoutes = [
     element: <ProtectedRoute redirectTo="/login" />,
     children: [
       {
-        element: <RoleRoute allowedRoles={[USER_ROLE.PLATFORM_ADMIN]} redirectTo="/" />,
+        element: <RoleRoute allowedRoles={[USER_ROLE.PLATFORM_ADMIN]} />,
         children: [
           {
             element: <PlatformAdminLayout />,
