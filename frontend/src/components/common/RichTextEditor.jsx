@@ -1,21 +1,33 @@
 import { EditorContent, useEditor } from '@tiptap/react'
 import { generateJSON } from '@tiptap/core'
 import { Placeholder } from '@tiptap/extensions'
+import Highlight from '@tiptap/extension-highlight'
+import TextAlign from '@tiptap/extension-text-align'
+import { Color, FontFamily, FontSize, TextStyle } from '@tiptap/extension-text-style'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useMemo, useRef } from 'react'
 
+import RichTextToolbar from '@/components/common/RichTextToolbar'
 import { cn } from '@/lib/utils'
 
-const MINIMAL_STARTER_KIT = StarterKit.configure({
+const SHARED_STARTER_KIT = {
   blockquote: false,
-  bulletList: false,
+  code: false,
   codeBlock: false,
-  heading: false,
   horizontalRule: false,
-  listItem: false,
-  orderedList: false,
-})
-const FULL_STARTER_KIT = StarterKit.configure({ trailingNode: false })
+  strike: false,
+  trailingNode: false,
+}
+const MINIMAL_STARTER_KIT = StarterKit.configure({ ...SHARED_STARTER_KIT, heading: false })
+const FULL_STARTER_KIT = StarterKit.configure({ ...SHARED_STARTER_KIT, heading: { levels: [1, 2, 3] } })
+const FULL_FORMATTING = [
+  TextAlign.configure({ types: ['heading', 'paragraph'] }),
+  TextStyle,
+  FontFamily,
+  FontSize,
+  Color,
+  Highlight,
+]
 const EMPTY_HTML = new Set(['', '<p></p>', '<p><br></p>'])
 
 function normalizeEmptyHTML(html) {
@@ -39,6 +51,7 @@ function RichTextEditor({
   const extensions = useMemo(
     () => [
       preset === 'minimal' ? MINIMAL_STARTER_KIT : FULL_STARTER_KIT,
+      ...(preset === 'minimal' ? [] : FULL_FORMATTING),
       Placeholder.configure({ placeholder: readPlaceholder, showOnlyWhenEditable: false }),
     ],
     [preset],
@@ -110,6 +123,7 @@ function RichTextEditor({
         className,
       )}
     >
+      <RichTextToolbar editor={editor} preset={preset} disabled={disabled} />
       <EditorContent editor={editor} />
     </div>
   )
