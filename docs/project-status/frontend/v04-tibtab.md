@@ -2,14 +2,14 @@
 
 ## Current project state
 
-V04 has Slice 01 (F01 core editor) and Slice 02 (F02 toolbar and presets)
-implemented with focused Node tests. No version-level completion or acceptance
-is claimed. There is no formal BR/PT/TX specification for this technical Rich
-Text track.
+V04 has Slice 01 (F01 core editor), Slice 02 (F02 toolbar and presets), and
+Slice 03 (F03 viewer and HTML sanitization) implemented with focused Node tests.
+No version-level completion or acceptance is claimed. There is no formal
+BR/PT/TX specification for this technical Rich Text track.
 
 ## Deferred / not started
 
-Viewer, Job/CV forms, Backend, DB, PDF, and AI Kit integration remain deferred.
+Job/CV forms, Backend, DB, PDF, and AI Kit integration remain deferred.
 Browser acceptance and the full frontend verification gate have not been
 performed for this track.
 
@@ -34,9 +34,21 @@ realtime, or persistence integration in this slice.
 Focused F02 acceptance fixes now cover `rgb(...)` color picker display and
 inline feedback when a link command rejects a URL, including recovery on retry.
 
+### Slice 03 — Viewer and HTML sanitization (F03)
+
+`RichTextViewer` accepts explicit `format="html"` or `format="plain"` input and
+the F02 `full`/`minimal` preset. HTML uses DOMPurify plus tag, attribute, CSS
+property/value, and URL allowlists; new-tab links receive safe `rel` values.
+Plain text renders literally with line breaks. Shared theme-token CSS keeps
+Editor and Viewer typography, list, link, and highlight presentation aligned.
+This slice has no screen, route, actor, API, realtime, or persistence integration.
+Focused F03 acceptance fixes preserve valid ordered-list `start`/`type` markers
+and align Editor link entry, paste, autolink, and reload with the Viewer URL
+allowlist. Viewer sanitization remains the rendering boundary.
+
 ## Verification status
 
-- `cd frontend && node --test test/rich-text-editor.test.js` — 14 focused F01/F02 tests passed, including color HTML round-trip, rejected link retry, active state, selection, and preset isolation.
-- `cd frontend && yarn eslint src/components/common/RichTextToolbar.jsx test/rich-text-editor.test.js` — focused lint for this fix passed.
-- `cd frontend && yarn eslint src/components/common/RichTextEditor.jsx src/components/common/RichTextToolbar.jsx test/rich-text-editor.test.js` — focused lint passed.
+- `cd frontend && yarn test:rich-text` — 25 focused F01/F02/F03 tests passed, including ordered-list and URL Editor → Viewer regressions for both presets, paste/autolink, and Viewer URL sanitization.
+- `cd frontend && yarn eslint src/lib/sanitize-rich-text.js src/components/common/RichTextEditor.jsx src/components/common/RichTextToolbar.jsx src/components/common/RichTextViewer.jsx test/rich-text-editor.test.js test/rich-text-viewer.test.js` — focused lint passed.
+- `git diff --check` — passed.
 - `yarn verify:agent`, full gate, browser acceptance, and live provider checks — not run, per task scope.

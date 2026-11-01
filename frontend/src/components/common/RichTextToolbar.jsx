@@ -235,7 +235,8 @@ function RichTextToolbar({ editor, preset = 'full', disabled = false }) {
               setLinkError('')
             }}
             required
-            type="url"
+            inputMode="url"
+            type="text"
             value={linkHref}
           />
           {linkError && <span className="text-sm text-destructive" role="alert">{linkError}</span>}

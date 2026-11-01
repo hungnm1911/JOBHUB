@@ -8,6 +8,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useMemo, useRef } from 'react'
 
 import RichTextToolbar from '@/components/common/RichTextToolbar'
+import { safeRichTextHref } from '@/lib/sanitize-rich-text'
 import { cn } from '@/lib/utils'
 
 const SHARED_STARTER_KIT = {
@@ -17,6 +18,7 @@ const SHARED_STARTER_KIT = {
   horizontalRule: false,
   strike: false,
   trailingNode: false,
+  link: { isAllowedUri: safeRichTextHref, shouldAutoLink: safeRichTextHref },
 }
 const MINIMAL_STARTER_KIT = StarterKit.configure({ ...SHARED_STARTER_KIT, heading: false })
 const FULL_STARTER_KIT = StarterKit.configure({ ...SHARED_STARTER_KIT, heading: { levels: [1, 2, 3] } })

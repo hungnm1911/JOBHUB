@@ -110,7 +110,7 @@ test('minimal toolbar formats text, lists and links with available commands', as
   assert.equal(mounted.editor.getHTML(), '<p><strong><em><u>hello</u></em></strong></p>')
 
   await clickControl(mounted, 'Chèn hoặc sửa liên kết')
-  const input = mounted.container.querySelector('input[type="url"]')
+  const input = mounted.container.querySelector('input[inputmode="url"]')
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set
     setter.call(input, 'https://example.com')
@@ -121,7 +121,7 @@ test('minimal toolbar formats text, lists and links with available commands', as
     input.closest('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }))
   })
   assert.match(mounted.editor.getHTML(), /href="https:\/\/example\.com"/)
-  assert.equal(mounted.container.querySelector('input[type="url"]'), null)
+  assert.equal(mounted.container.querySelector('input[inputmode="url"]'), null)
   assert.equal(mounted.container.querySelector('[aria-label="Chèn hoặc sửa liên kết"]').getAttribute('aria-pressed'), 'true')
   await clickControl(mounted, 'Gỡ liên kết')
   assert.doesNotMatch(mounted.editor.getHTML(), /href=/)
@@ -203,7 +203,7 @@ test('rejected link URL keeps the form open with feedback and preserves selectio
   const selection = mounted.editor.state.selection
   await clickControl(mounted, 'Chèn hoặc sửa liên kết')
 
-  const input = mounted.container.querySelector('input[type="url"]')
+  const input = mounted.container.querySelector('input[inputmode="url"]')
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set
     setter.call(input, 'javascript:alert(1)')
@@ -214,7 +214,7 @@ test('rejected link URL keeps the form open with feedback and preserves selectio
     input.closest('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }))
   })
 
-  assert.ok(mounted.container.querySelector('input[type="url"]'))
+  assert.ok(mounted.container.querySelector('input[inputmode="url"]'))
   assert.match(mounted.container.querySelector('[role="alert"]')?.textContent ?? '', /URL|liên kết/i)
   assert.equal(mounted.editor.getHTML(), '<p>hello</p>')
   assert.equal(mounted.editor.state.selection.eq(selection), true)
@@ -229,8 +229,27 @@ test('rejected link URL keeps the form open with feedback and preserves selectio
   await act(async () => {
     input.closest('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }))
   })
-  assert.equal(mounted.container.querySelector('input[type="url"]'), null)
+  assert.equal(mounted.container.querySelector('input[inputmode="url"]'), null)
   assert.match(mounted.editor.getHTML(), /href="https:\/\/example\.com"/)
+  await mounted.unmount()
+})
+
+test('link entry accepts a safe relative URL', async () => {
+  const mounted = await mount({ value: '<p>hello</p>', preset: 'minimal' })
+  await act(async () => mounted.editor.commands.setTextSelection({ from: 1, to: 6 }))
+  await clickControl(mounted, 'Chèn hoặc sửa liên kết')
+  const input = mounted.container.querySelector('input[inputmode="url"]')
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set
+    setter.call(input, '../jobs')
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    input.dispatchEvent(new window.Event('change', { bubbles: true }))
+  })
+  assert.equal(input.checkValidity(), true)
+  await act(async () => {
+    input.closest('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }))
+  })
+  assert.match(mounted.editor.getHTML(), /href="\.\.\/jobs"/)
   await mounted.unmount()
 })
 

@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test:auth": "node test/authentication/authentication-interceptors.test.js && node test/authentication/authentication-manager.test.js && node test/authentication/account-context-loader.test.js && node test/authentication/role-route.test.js",
-    "test:rich-text": "node --test test/rich-text-editor.test.js",
+    "test:rich-text": "node --test test/rich-text-editor.test.js test/rich-text-viewer.test.js",
     "preview": "vite preview",
     "verify:agent": "yarn test:auth && yarn test:rich-text && yarn lint && yarn build"
   },
@@ -27,6 +27,7 @@
     "axios": "^1.20.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.17",
     "lucide-react": "^1.54.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
