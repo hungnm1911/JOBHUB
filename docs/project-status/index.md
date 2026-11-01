@@ -55,7 +55,8 @@ Reading rules:
 - [V13 — Notification and realtime distribution](backend/v13-notification-realtime-distribution.md)
 - [V14 — Candidate search public CV](backend/v14-candidate-search-public-cv.md)
 - [V15 — Job invitation and recruiter sourcing](backend/v15-job-invitation-recruiter-sourcing.md)
-- V16 and V17 do not yet have implementation snapshots; see the Backend Product Roadmap.
+- V16 does not yet have an implementation snapshot; see the Backend Product Roadmap.
+- [V17 — Rich Text Content Integration](backend/v17-rich-text-content-integration.md)
 
 ## Frontend
 

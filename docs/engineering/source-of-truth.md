@@ -10,6 +10,7 @@ This document identifies the single canonical owner for each backend responsibil
 
 | Responsibility | Canonical owner | Allowed consumers | Forbidden duplication |
 | --- | --- | --- | --- |
+| V17 Slice 01 Rich Text core: Full/Minimal HTML sanitization and matching plain-text derivation (BR-01–BR-03, BR-09; Data §10) | `backend/src/services/rich-text.service.js` (`normalizeRichText`) | Approved Job, Generated CV, and Company service integrations in later V17 slices | Parallel HTML/preset/URL sanitizers or HTML-to-plain-text rules in resource services; applying new business rejection or persistence from this core |
 | Process entry point, server startup, shutdown, and process-level failure handling | `backend/index.js` | Package start scripts and the Node.js runtime | Additional server listeners, startup entry points, or process signal owners elsewhere |
 | Express application instance and composition order | `backend/src/app.js` | `backend/index.js`; application-level test harnesses when introduced | Creating another production Express app or composing global application middleware in feature modules |
 | Dotenv loading | `backend/src/config/index.js` | No other module loads dotenv | Loading dotenv in any other module or establishing multiple dotenv loaders |
