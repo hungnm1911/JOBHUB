@@ -1,8 +1,8 @@
-# Frontend V8 Job Discovery Project Status
+# Frontend V03 Job Discovery Project Status
 
 ## Current project state
 
-The public homepage and Job detail screens for V8 F02, F03, F04 (Category and
+The public homepage and Job detail screens for Backend V8 F02, F03, F04 (Category and
 Location only) and F06/F07 are `IMPLEMENTED; CODE GATE PASSED` as of
 2026-10-31. Human visual review against the provided homepage mockup is
 pending.
@@ -46,7 +46,7 @@ pending.
 - Mockup items without Product/API authority were not implemented: event
   banner, response-rate/partner statistics, bookmark button, app download and
   links to non-existent tools. "Featured jobs" is presented as "newest jobs"
-  because V8 has no featured concept.
+  because Backend V8 has no featured concept.
 
 ## Verification status
 
