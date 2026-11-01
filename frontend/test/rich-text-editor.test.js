@@ -291,6 +291,30 @@ test('external changes and reset do not emit onChange', async () => {
   await mounted.unmount()
 })
 
+test('external HTML reports the serialized document without an edit callback or selection loss', async () => {
+  const changes = []
+  const synchronized = []
+  const props = {
+    value: '<p>First</p>',
+    preset: 'minimal',
+    onChange: (html) => changes.push(html),
+    onValueSync: (html) => synchronized.push(html),
+  }
+  const mounted = await mount(props)
+  assert.equal(synchronized.at(-1), '<p>First</p>')
+  await mounted.render({ ...props, value: '<p><b>First</b></p>' })
+  assert.equal(mounted.editor.getHTML(), '<p><strong>First</strong></p>')
+  assert.equal(synchronized.at(-1), mounted.editor.getHTML())
+  assert.deepEqual(changes, [])
+
+  await act(async () => mounted.editor.commands.setTextSelection(3))
+  const normalizedSelection = mounted.editor.state.selection
+  await mounted.render({ ...props, value: '<p><strong>First</strong></p>' })
+  assert.equal(mounted.editor.state.selection.eq(normalizedSelection), true)
+  assert.deepEqual(changes, [])
+  await mounted.unmount()
+})
+
 test('user edit emits HTML and parent echo preserves the selection', async () => {
   const changes = []
   const props = { value: '<p>abc</p>', onChange: (html) => changes.push(html) }

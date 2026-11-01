@@ -1,6 +1,5 @@
-const RUNTIME_ENV = Object.freeze({
-  IS_DEVELOPMENT: import.meta.env.DEV,
-})
+const IS_DEVELOPMENT = import.meta.env.DEV
+const RUNTIME_ENV = Object.freeze({ IS_DEVELOPMENT })
 
 // Must stay aligned with backend/src/constants/http-header.js.
 const HTTP_HEADER = Object.freeze({
@@ -259,6 +258,7 @@ export {
   FLASH_MESSAGE_CONFIG,
   FLASH_MESSAGE_TYPE,
   HTTP_HEADER,
+  IS_DEVELOPMENT,
   JOB_STATUS,
   REALTIME_EVENT,
   RUNTIME_ENV,

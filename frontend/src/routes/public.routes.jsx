@@ -6,6 +6,7 @@ import JobDetailPage from '@/pages/JobDetailPage'
 import JobSearchPage from '@/pages/JobSearchPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import VerifyEmailPage from '@/pages/VerifyEmailPage'
+import { IS_DEVELOPMENT } from '@/utils/constant'
 
 import JobDiscoveryRoute from './components/JobDiscoveryRoute'
 
@@ -48,5 +49,12 @@ const publicRoutes = [
     element: <ConfirmCompanyApprovalPage />,
   },
 ]
+
+if (IS_DEVELOPMENT) {
+  publicRoutes.push({
+    path: 'rich-text-preview',
+    lazy: async () => ({ Component: (await import('@/pages/RichTextPreviewPage')).default }),
+  })
+}
 
 export default publicRoutes

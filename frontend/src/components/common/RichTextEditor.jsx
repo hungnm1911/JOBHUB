@@ -43,12 +43,14 @@ function readPlaceholder({ editor }) {
 function RichTextEditor({
   value = '',
   onChange,
+  onValueSync,
   disabled = false,
   placeholder = '',
   preset = 'full',
   className,
 }) {
   const onChangeRef = useRef(onChange)
+  const onValueSyncRef = useRef(onValueSync)
   const pendingEmptyEchoRef = useRef(false)
   const extensions = useMemo(
     () => [
@@ -86,6 +88,10 @@ function RichTextEditor({
   }, [onChange])
 
   useEffect(() => {
+    onValueSyncRef.current = onValueSync
+  }, [onValueSync])
+
+  useEffect(() => {
     if (!editor || editor.isDestroyed) return
     editor.setOptions({
       editorProps: {
@@ -104,12 +110,13 @@ function RichTextEditor({
       return
     }
     pendingEmptyEchoRef.current = false
-    if (editor.getHTML() === nextValue) return
-
-    const nextDocument = editor.schema.nodeFromJSON(generateJSON(nextValue, extensions))
-    if (editor.state.doc.eq(nextDocument)) return
-
-    editor.commands.setContent(nextValue, { emitUpdate: false })
+    if (editor.getHTML() !== nextValue) {
+      const nextDocument = editor.schema.nodeFromJSON(generateJSON(nextValue, extensions))
+      if (!editor.state.doc.eq(nextDocument)) {
+        editor.commands.setContent(nextValue, { emitUpdate: false })
+      }
+    }
+    onValueSyncRef.current?.(editor.isEmpty ? '' : normalizeEmptyHTML(editor.getHTML()))
   }, [editor, extensions, value])
 
   useEffect(() => {
