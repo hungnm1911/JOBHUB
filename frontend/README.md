@@ -157,6 +157,7 @@ cp .env.example .env
 Mẫu mặc định kết nối frontend với backend local:
 
 ```dotenv
+VITE_APP_ENV=development
 VITE_API_BASE_URL=http://localhost:8000/api
 VITE_SOCKET_URL=http://localhost:8000
 ```
@@ -195,10 +196,11 @@ Frontend không cấu hình Vite proxy. Với `.env.example`, request HTTP đi t
 
 | Biến | Default trong code | Giá trị `.env.example` | Mục đích |
 | --- | --- | --- | --- |
+| `VITE_APP_ENV` | `production` | `development` | Chọn môi trường `development`, `staging` hoặc `production`; chỉ `development` bật route preview và log lỗi API |
 | `VITE_API_BASE_URL` | `/api` | `http://localhost:8000/api` | Base URL cho Axios client |
 | `VITE_SOCKET_URL` | `window.location.origin` | `http://localhost:8000` | URL cho Socket.IO client |
 
-`src/utils/constant.js` là nơi duy nhất đọc hai biến này và chuyển chúng thành `API_CONFIG`/`SOCKET_CONFIG`.
+`src/utils/constant.js` là nơi duy nhất đọc các biến này và chuyển chúng thành `RUNTIME_ENV`/`API_CONFIG`/`SOCKET_CONFIG`. `VITE_APP_ENV` được đóng vào bundle lúc build, nên cần đặt đúng giá trị cho từng môi trường triển khai.
 
 > [!WARNING]
 > Mọi biến `VITE_*` đều được Vite đóng gói vào JavaScript gửi xuống trình duyệt. Không đặt JWT secret, database URI, SMTP password, Cloudinary secret hoặc bất kỳ credential riêng tư nào trong frontend environment variables.
@@ -442,8 +444,8 @@ Client validation giúp phản hồi sớm nhưng không xác nhận authorizati
 ```text
 components/ui/                  -> primitive trung lập nghiệp vụ
 components/common/              -> presentation dùng chung cấp ứng dụng
+components/layouts/             -> structural frame + Outlet
 features/<feature>/components/  -> UI chỉ thuộc một feature
-layouts/                        -> structural frame + Outlet
 pages/                          -> complete URL-mapped screen
 ```
 
@@ -561,13 +563,13 @@ frontend/
     │   └── client/                  # Axios, interceptor và ApiError
     ├── components/
     │   ├── common/                  # Shared application presentation
+    │   ├── layouts/                 # Shared structural frames
     │   └── ui/                      # Domain-neutral UI primitives
     ├── features/
     │   └── authentication/
     │       ├── components/          # Authentication bootstrap
     │       ├── services/            # Manager, storage và composition
     │       └── slice.js             # Auth UI state/selectors
-    ├── layouts/                     # Shared structural frames
     ├── lib/                         # External-library integration helpers
     ├── pages/                       # URL-mapped screens
     ├── routes/                      # Router, route groups và guards
@@ -590,7 +592,7 @@ Output nằm trong `frontend/dist/`.
 
 Khi triển khai:
 
-- Cung cấp `VITE_API_BASE_URL` và `VITE_SOCKET_URL` đúng tại thời điểm build.
+- Đặt `VITE_APP_ENV=production`, `VITE_API_BASE_URL` và `VITE_SOCKET_URL` đúng tại thời điểm build.
 - Serve `dist/` bằng static hosting/CDN hoặc web server production; không dùng `yarn preview` làm production server.
 - Cấu hình SPA fallback về `index.html` cho browser routes trong tương lai.
 - Dùng HTTPS cho frontend, backend HTTP API và Socket.IO.

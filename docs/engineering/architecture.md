@@ -553,10 +553,10 @@ frontend/
     │   └── authentication.api.js # Authentication HTTP endpoints
     ├── components/
     │   ├── common/         # Application-level shared components
+    │   ├── layouts/        # Shared route layout frames with Outlet
     │   └── ui/             # shadcn/ui-style primitives
     ├── features/
     │   └── authentication/ # Auth storage/state, lifecycle services, and bootstrap
-    ├── layouts/            # Shared route layout frames with Outlet
     ├── lib/                # External-library integration helpers such as cn()
     ├── pages/              # Complete URL-mapped screens
     ├── routes/             # Router composition, route groups, and navigation guards
@@ -637,7 +637,7 @@ realtime behavior when it does not need them.
 
 ### Layouts and pages
 
-- `frontend/src/layouts/` contains shared structural frames for a group of routes. A layout may compose headers, sidebars, navigation, footers, and an `Outlet`.
+- `frontend/src/components/layouts/` contains shared structural frames for a group of routes. A layout may compose headers, sidebars, navigation, footers, and an `Outlet`.
 - A new layout is created only when a real structural or experience difference exists. Role-specific layouts are not pre-created from role names alone.
 - `frontend/src/pages/` contains complete screens mapped to URLs. Pages compose features and shared components rather than owning an entire business workflow themselves.
 - Pages do not absorb complex HTTP, realtime, persistence, or domain orchestration that belongs to a feature owner.
@@ -656,6 +656,7 @@ realtime behavior when it does not need them.
 
 - `frontend/src/components/ui/` contains general UI primitives managed with shadcn/ui conventions and Tailwind CSS. Primitives contain no JOBHUB-specific business logic.
 - `frontend/src/components/common/` contains application-level presentation shared by multiple pages or features, such as the current `AppHeader`.
+- `frontend/src/components/layouts/` contains route-level structural frames; its layouts keep the layout ownership rules above.
 - `frontend/src/features/<feature>/components/` contains presentation tied to one business feature.
 - Components are promoted from feature scope to `common/` only when their semantics are application-level and they have real cross-area use.
 - UI primitives such as inputs, dialogs, dropdown menus, tables, and badges are added only when a screen actually needs them; empty primitive inventories are not created.

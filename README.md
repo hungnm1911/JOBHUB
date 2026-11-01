@@ -229,9 +229,8 @@ JOBHUB/
 ├── frontend/
 │   ├── src/
 │   │   ├── apis/                    # Axios client và resource APIs
-│   │   ├── components/              # Common và UI primitives
+│   │   ├── components/              # Common, layouts và UI primitives
 │   │   ├── features/                # Feature-owned client behavior
-│   │   ├── layouts/                 # Shared route frames
 │   │   ├── pages/                   # URL-mapped screens
 │   │   ├── routes/                  # Router, route groups và guards
 │   │   ├── socket/                  # Lazy Socket.IO client

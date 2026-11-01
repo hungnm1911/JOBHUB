@@ -1,8 +1,8 @@
-# Frontend V8 Job Discovery Project Status
+# Frontend V03 Job Discovery Project Status
 
 ## Current project state
 
-The public homepage and Job detail screens for V8 F02, F03, F04 (Category and
+The public homepage and Job detail screens for Backend V8 F02, F03, F04 (Category and
 Location only) and F06/F07 are `IMPLEMENTED; CODE GATE PASSED` as of
 2026-10-31. Human visual review against the provided homepage mockup is
 pending.
@@ -18,6 +18,12 @@ pending.
   404/403 are shown as "not viewable" without retry.
 - Discovery requests set `requiresAuthentication: true` so an existing session
   is sent (optional authentication) and the backend applies its actor rules.
+- `JobDiscoveryRoute` now gates `/`, `/jobs`, `/jobs/:jobId`, and
+  `/companies/:companyId` using resolved authentication state and CompanyMember
+  context from `/auth/me`: Guest, Candidate, Recruiter with active membership,
+  and Platform Admin can enter; authenticated Company Manager is shown an
+  unavailable state. Pending activation enters Company onboarding. The backend
+  API remains the authority for every discovery request.
 - `AppHeader` and `AppFooter` were redesigned for every `RootLayout` screen;
   guest Login/Register links are kept and the footer links only to existing
   routes.
@@ -40,9 +46,16 @@ pending.
 - Mockup items without Product/API authority were not implemented: event
   banner, response-rate/partner statistics, bookmark button, app download and
   links to non-existent tools. "Featured jobs" is presented as "newest jobs"
-  because V8 has no featured concept.
+  because Backend V8 has no featured concept.
 
 ## Verification status
+
+- 2026-11-01 actor-aware navigation: `cd frontend && yarn verify:agent`
+  passed 17 authentication tests, ESLint, and the production build (existing
+  >500 kB chunk warning). A one-off route-guard render check covered Guest,
+  Candidate, active Recruiter, Platform Admin, active Company Manager, and
+  unresolved Company Staff context. No browser or live-backend check was
+  performed for this change.
 
 - 2026-10-31: `cd frontend && yarn verify:agent` passed (13 authentication
   tests, ESLint, production build; existing >500 kB chunk warning). Manual
