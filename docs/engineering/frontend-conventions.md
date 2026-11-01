@@ -184,7 +184,7 @@ Route guards have these responsibilities:
 
 ### Layouts
 
-`frontend/src/layouts/` contains shared structural frames for groups of pages.
+`frontend/src/components/layouts/` contains shared structural frames for groups of pages.
 
 - A layout may compose headers, sidebars, navigation, footers, and an `Outlet`.
 - Layouts may own responsive structural behavior but not feature business workflows.

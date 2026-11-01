@@ -1,4 +1,4 @@
-import PlatformAdminLayout from '@/layouts/PlatformAdminLayout'
+import PlatformAdminLayout from '@/components/layouts/PlatformAdminLayout'
 import AdminCompanyRegistrationReviewPage from '@/pages/AdminCompanyRegistrationReviewPage'
 import AdminCompanyRegistrationsPage from '@/pages/AdminCompanyRegistrationsPage'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'

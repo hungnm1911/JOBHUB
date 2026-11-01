@@ -1,6 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom'
 
-import RootLayout from '@/layouts/RootLayout'
+import RootLayout from '@/components/layouts/RootLayout'
 
 import companyManagerRoutes from './company-manager.routes'
 import guestRoutes from './guest.routes'

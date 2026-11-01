@@ -444,8 +444,8 @@ Client validation giúp phản hồi sớm nhưng không xác nhận authorizati
 ```text
 components/ui/                  -> primitive trung lập nghiệp vụ
 components/common/              -> presentation dùng chung cấp ứng dụng
+components/layouts/             -> structural frame + Outlet
 features/<feature>/components/  -> UI chỉ thuộc một feature
-layouts/                        -> structural frame + Outlet
 pages/                          -> complete URL-mapped screen
 ```
 
@@ -563,13 +563,13 @@ frontend/
     │   └── client/                  # Axios, interceptor và ApiError
     ├── components/
     │   ├── common/                  # Shared application presentation
+    │   ├── layouts/                 # Shared structural frames
     │   └── ui/                      # Domain-neutral UI primitives
     ├── features/
     │   └── authentication/
     │       ├── components/          # Authentication bootstrap
     │       ├── services/            # Manager, storage và composition
     │       └── slice.js             # Auth UI state/selectors
-    ├── layouts/                     # Shared structural frames
     ├── lib/                         # External-library integration helpers
     ├── pages/                       # URL-mapped screens
     ├── routes/                      # Router, route groups và guards
