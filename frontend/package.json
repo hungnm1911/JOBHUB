@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test:auth": "node test/authentication/authentication-interceptors.test.js && node test/authentication/authentication-manager.test.js && node test/authentication/account-context-loader.test.js",
+    "test:auth": "node test/authentication/authentication-interceptors.test.js && node test/authentication/authentication-manager.test.js && node test/authentication/account-context-loader.test.js && node test/authentication/role-route.test.js",
     "preview": "vite preview",
     "verify:agent": "yarn test:auth && yarn lint && yarn build"
   },

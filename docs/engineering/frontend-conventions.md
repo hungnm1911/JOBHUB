@@ -173,7 +173,10 @@ Route guards have these responsibilities:
 
 - `ProtectedRoute` redirects users who do not have resolved authenticated state.
 - `GuestRoute` redirects authenticated users away from guest-only routes.
-- `RoleRoute` checks resolved client role state against the roles allowed by the route.
+- `RoleRoute` checks resolved user role/status and, when a route declares
+  `allowedMembershipRoles` or `allowedMembershipStatuses`, waits for the
+  authenticated CompanyMember context before checking its role/status. A failed
+  context load presents a retry state rather than granting access.
 - `JobDiscoveryRoute` checks the resolved account and CompanyMember context for V8 discovery screens. The Authentication feature loads CompanyMember context through `/auth/me` before this guard decides access.
 - Guards may render nested content through `Outlet` and may preserve navigation context when an approved flow requires it.
 - Guards must consume auth/role state from the approved authentication owner. They must not create auth state, call business APIs, decode authority independently, or hard-code speculative destinations.

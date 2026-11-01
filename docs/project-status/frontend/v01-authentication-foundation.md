@@ -18,7 +18,8 @@ public recovery and token screens remain accessible with or without a session.
 The guest guard uses the existing post-login destination for authenticated
 users. A successful password reset ends this browser's current session before
 navigating to guest-only login. Protected and Role guards consume resolved
-state from the Authentication feature. Authentication persists
+state from the Authentication feature; `RoleRoute` can also require a resolved
+CompanyMember role/status for future Company Staff routes. Authentication persists
 one owned localStorage record, restores a session through refresh on reload,
 marks infrastructure restoration failures as temporarily unavailable without
 discarding credentials, and keeps Redux UI state and Socket.IO lifecycle in
@@ -76,6 +77,13 @@ The HTTP client, API error normalizer, socket client, common validators, and
   stack, and the cause, but not the request body.
 
 ## Verification status
+
+- 2026-11-01 membership-aware `RoleRoute`: `cd frontend && yarn verify:agent`
+  passed 20 focused authentication/route tests, ESLint, and the production
+  build. Three new SSR tests cover active Company Manager access, Recruiter and
+  locked/missing membership denial, loading and retry states, and unchanged
+  account-only guard behavior. No browser or live-backend check was performed;
+  no new Company Manager route was added.
 
 - 2026-11-01 CompanyMember context: `cd frontend && yarn verify:agent`
   passed 17 authentication tests, ESLint, and the production build. Four new
