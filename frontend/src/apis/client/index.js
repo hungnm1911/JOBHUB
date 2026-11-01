@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-import { API_CONFIG, RUNTIME_ENV } from '@/utils/constant'
+import { API_CONFIG, DEVELOPMENT_ENV, RUNTIME_ENV } from '@/utils/constant'
 
 import { normalizeApiError } from './api-error'
 import { installAuthenticationInterceptors } from './authentication-interceptors'
@@ -13,7 +13,7 @@ const apiClient = axios.create({
 function logApiErrorInDevelopment(apiError) {
   const axiosError = apiError.cause
 
-  if (!RUNTIME_ENV.IS_DEVELOPMENT || axios.isCancel(axiosError)) {
+  if (RUNTIME_ENV !== DEVELOPMENT_ENV || axios.isCancel(axiosError)) {
     return
   }
 

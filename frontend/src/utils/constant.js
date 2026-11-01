@@ -1,5 +1,5 @@
-const IS_DEVELOPMENT = import.meta.env.DEV
-const RUNTIME_ENV = Object.freeze({ IS_DEVELOPMENT })
+const DEVELOPMENT_ENV = 'development'
+const RUNTIME_ENV = import.meta.env.VITE_APP_ENV || 'production'
 
 // Must stay aligned with backend/src/constants/http-header.js.
 const HTTP_HEADER = Object.freeze({
@@ -258,7 +258,7 @@ export {
   FLASH_MESSAGE_CONFIG,
   FLASH_MESSAGE_TYPE,
   HTTP_HEADER,
-  IS_DEVELOPMENT,
+  DEVELOPMENT_ENV,
   JOB_STATUS,
   REALTIME_EVENT,
   RUNTIME_ENV,

@@ -27,6 +27,8 @@ Editor.prototype.emit = function (event, ...args) {
   return originalEmit.call(this, event, ...args)
 }
 
+const previousAppEnv = process.env.VITE_APP_ENV
+process.env.VITE_APP_ENV = 'development'
 const vite = await createServer({ appType: 'custom', server: { middlewareMode: true } })
 const { default: RichTextPreviewPage } = await vite.ssrLoadModule('/src/pages/RichTextPreviewPage.jsx')
 
@@ -34,6 +36,8 @@ after(async () => {
   Editor.prototype.emit = originalEmit
   await vite.close()
   dom.window.close()
+  if (previousAppEnv === undefined) delete process.env.VITE_APP_ENV
+  else process.env.VITE_APP_ENV = previousAppEnv
 })
 
 test('standalone preview connects editor HTML to safe viewer across presets and reset', async () => {
@@ -95,14 +99,12 @@ test('preview route is lazy in development and absent from production routes', a
   assert.equal(typeof previewRoute.lazy, 'function')
   assert.equal((await previewRoute.lazy()).Component, RichTextPreviewPage)
 
-  const previousNodeEnv = process.env.NODE_ENV
-  process.env.NODE_ENV = 'production'
+  process.env.VITE_APP_ENV = 'production'
   let built
   try {
     built = await build({ build: { write: false }, logLevel: 'silent' })
   } finally {
-    if (previousNodeEnv === undefined) delete process.env.NODE_ENV
-    else process.env.NODE_ENV = previousNodeEnv
+    process.env.VITE_APP_ENV = 'development'
   }
   const files = (Array.isArray(built) ? built : [built]).flatMap((result) => result.output)
   const entry = files.find((file) => file.type === 'chunk' && file.isEntry)

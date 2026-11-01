@@ -3,15 +3,15 @@
 ## Current project state
 
 V04 has Slices 01–03 (F01 editor, F02 toolbar/presets, F03 viewer/sanitization)
-and Slice 04 (F04 standalone preview) implemented with focused Node tests.
-Browser acceptance and version-level completion are pending. There is no
+and Slice 04 (F04 standalone preview) implemented with focused Node tests and
+the full frontend verification gate passed. Browser acceptance and version-level
+completion are pending. There is no
 formal BR/PT/TX specification for this technical Rich Text track.
 
 ## Deferred / not started
 
 Job/CV forms, Backend, DB, PDF, and AI Kit integration remain deferred.
-Interactive browser acceptance and the full frontend verification gate have
-not been performed for this track.
+Interactive browser acceptance has not been performed for this track.
 
 ## Implementation record (slice detail)
 
@@ -74,4 +74,4 @@ automatic format detection for legacy records.
 - `cd frontend && yarn eslint src/components/common/RichTextEditor.jsx src/pages/RichTextPreviewPage.jsx src/routes/public.routes.jsx src/utils/constant.js test/rich-text-editor.test.js test/rich-text-preview.test.js` — targeted lint passed.
 - `cd frontend && yarn build` — passed; Vite reported a non-failing large-chunk warning. The production entry omits Preview, but Vite emits an unreferenced Preview chunk.
 - `git diff --check` — passed.
-- `yarn verify:agent` and the full gate — not run per task scope. Interactive browser acceptance remains unverified because no browser executable was available in this environment. Live provider checks were not run.
+- `cd frontend && yarn verify:agent` — passed on 2026-11-01 (authentication tests, 28 rich-text tests, ESLint, and Vite build) after the preview route switched to `VITE_APP_ENV`; the route test confirms it is excluded from the production entry. Interactive browser acceptance and live provider checks were not run.

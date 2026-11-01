@@ -496,6 +496,7 @@ styling rules.
 - Vite environment files belong at the frontend project root as `frontend/.env*`, not under `frontend/src/`.
 - Only public browser configuration uses the `VITE_*` prefix.
 - Secrets must never be stored in frontend environment variables because Vite embeds them in client assets.
+- `VITE_APP_ENV` selects `development`, `staging`, or `production` behavior through `RUNTIME_ENV` in `src/utils/constant.js`; an unset value defaults to `production`.
 - `VITE_API_BASE_URL` configures the shared HTTP client through `API_CONFIG.BASE_URL` (fallback `/api`).
 - `VITE_SOCKET_URL` configures the shared realtime client through `SOCKET_CONFIG.URL` (fallback: the current browser origin).
 - `src/utils/constant.js` is the only module that reads `import.meta.env`. Other modules consume the derived constants.
@@ -510,7 +511,7 @@ styling rules.
 ## Error handling
 
 - `src/apis/client/api-error.js` owns the normalized API error type and Axios-error translation. It reads the backend error body `{ error: { message, details } }` (falling back to a top-level body) and exposes `message`, `status`, `code`, `details`, `requestId` (from the `X-Request-Id` response header, `HTTP_HEADER.REQUEST_ID`), and the original Axios error as `cause`.
-- `src/apis/client/index.js` owns development API-error logging. When `RUNTIME_ENV.IS_DEVELOPMENT` is true, every failed request except a cancellation is logged once to the browser console as `[API] METHOD url -> status: message`, followed by status, code, `requestId`, details, params, the backend development stack, and the Axios cause. Request bodies are never logged. Production builds do not log.
+- `src/apis/client/index.js` owns development API-error logging. When `RUNTIME_ENV === DEVELOPMENT_ENV`, every failed request except a cancellation is logged once to the browser console as `[API] METHOD url -> status: message`, followed by status, code, `requestId`, details, params, the backend development stack, and the Axios cause. Request bodies are never logged. Builds configured as `staging` or `production` do not log.
 - The `requestId` shown in the browser console matches the scope of the backend terminal log lines for the same request; use it to correlate the two.
 - Components, hooks, and API modules must not add their own `console.error` for API failures that the client already logged; they only decide presentation, such as `toast.error(error.message)`.
 - API modules must reject through that shared error contract rather than invent resource-specific global error classes for the same transport concern.
