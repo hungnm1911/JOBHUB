@@ -267,7 +267,7 @@ test('Job detail Company section reads Full HTML and legacy plain text', async (
     createElement(MemoryRouter, null, createElement(JobDetail, { jobId: 'job-1' })))
   const rich = await mount(element, {})
   await act(async () => {})
-  assert.equal(rich.container.querySelector('.rich-text-viewer strong').textContent, 'Original')
+  assert.equal(rich.container.querySelector('aside .rich-text-viewer strong').textContent, 'Original')
   await rich.unmount()
 
   publicJob = {
@@ -276,7 +276,7 @@ test('Job detail Company section reads Full HTML and legacy plain text', async (
   }
   const plain = await mount(element, {})
   await act(async () => {})
-  const viewer = plain.container.querySelector('.rich-text-viewer')
+  const viewer = plain.container.querySelector('aside .rich-text-viewer')
   assert.equal(viewer.querySelector('b'), null)
   assert.equal(viewer.textContent, '<b>Legacy</b>')
   await plain.unmount()

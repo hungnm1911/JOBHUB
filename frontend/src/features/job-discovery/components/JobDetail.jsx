@@ -157,9 +157,12 @@ function JobDetail({ jobId, renderJobAction }) {
             <h2 className="text-lg font-semibold" id="job-description-heading">
               Mô tả công việc
             </h2>
-            <p className="mt-3 max-w-[70ch] whitespace-pre-line text-base leading-7 text-foreground/90">
-              {job.jobDescription || 'Chưa có mô tả.'}
-            </p>
+            <RichTextViewer
+              className="mt-3 max-w-[70ch] text-base leading-7 text-foreground/90"
+              format={job.jobDescriptionHtml ? 'html' : 'plain'}
+              preset="full"
+              value={job.jobDescriptionHtml || job.jobDescription || 'Chưa có mô tả.'}
+            />
           </section>
 
           {job.requiredSkills?.length > 0 && (
