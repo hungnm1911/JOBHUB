@@ -114,6 +114,10 @@ const companyReviewSnapshotSchema = new Schema(
       default: null,
       trim: true,
     },
+    descriptionHtml: {
+      type: String,
+      default: null,
+    },
     contactInfo: {
       type: String,
       default: null,
@@ -299,6 +303,10 @@ const companySchema = new Schema(
     description: {
       type: String,
       trim: true,
+      default: null,
+    },
+    descriptionHtml: {
+      type: String,
       default: null,
     },
 

@@ -60,6 +60,7 @@ const toPublicReviewSnapshot = (reviewSnapshot) => {
     website: reviewSnapshot.website,
     address: reviewSnapshot.address,
     description: reviewSnapshot.description,
+    descriptionHtml: reviewSnapshot.descriptionHtml ?? null,
     contactInfo: reviewSnapshot.contactInfo,
     businessRegistrationNumber: reviewSnapshot.businessRegistrationNumber,
   };

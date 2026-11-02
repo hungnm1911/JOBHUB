@@ -435,7 +435,11 @@ describe("V8 — Job Discovery", () => {
 
   it("returns only public Company information", async () => {
     const { manager, recruiter, catalog, agent } = await createBaseContext();
-    await createJob({
+    await Company.findByIdAndUpdate(manager.company._id, {
+      description: "Public profile",
+      descriptionHtml: "<p><strong>Public</strong> profile</p>",
+    });
+    const job = await createJob({
       company: manager.company,
       recruiter,
       catalog,
@@ -449,11 +453,20 @@ describe("V8 — Job Discovery", () => {
     expect(response.body.company).toMatchObject({
       id: manager.company._id.toString(),
       name: "Acme Hiring",
+      description: "Public profile",
+      descriptionHtml: "<p><strong>Public</strong> profile</p>",
     });
     expect(response.body.company).not.toHaveProperty("businessRegistrationNumber");
     expect(response.body.company).not.toHaveProperty("approvalStatus");
     expect(response.body.company).not.toHaveProperty("operationalStatus");
     expect(response.body.company).not.toHaveProperty("managerUserId");
+
+    const jobDetail = await agent.get(`/api/job-discovery/jobs/${job._id}`);
+    expect(jobDetail.status).toBe(200);
+    expect(jobDetail.body.job.company).toMatchObject({
+      description: "Public profile",
+      descriptionHtml: "<p><strong>Public</strong> profile</p>",
+    });
   });
 
   it("allows Candidate, Recruiter, and Platform Admin but rejects Company Manager", async () => {

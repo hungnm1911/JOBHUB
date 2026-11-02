@@ -20,10 +20,20 @@ const companyActiveUpdateSchema = z
     bannerUrl: optionalNullableTrimmedString(500, "Banner URL"),
     website: optionalNullableTrimmedString(500, "Website"),
     address: optionalNullableTrimmedString(500, "Address"),
-    description: optionalNullableTrimmedString(5000, "Description"),
+    description: z.string().trim().nullable().optional(),
+    descriptionHtml: z.string().nullable().optional(),
     contactInfo: optionalNullableTrimmedString(500, "Contact info"),
   })
-  .strict();
+  .strict()
+  .superRefine((profile, context) => {
+    if (!Object.hasOwn(profile, "descriptionHtml") && profile.description?.length > 5000) {
+      context.addIssue({
+        code: "custom",
+        path: ["description"],
+        message: "Description must not exceed 5000 characters",
+      });
+    }
+  });
 
 const validateCompanyActiveUpdate = (request, _response, next) => {
   const parsed = companyActiveUpdateSchema.safeParse(request.body);

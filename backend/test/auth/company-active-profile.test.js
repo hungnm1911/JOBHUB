@@ -257,6 +257,31 @@ describe("Active Company profile management (F09)", () => {
     expect(after.activatedAt?.toISOString()).toBe(immutableBefore.activatedAt);
   });
 
+  it("updates active Description as Full HTML without changing the submitted review snapshot", async () => {
+    const agent = createTestAgent();
+    const activated = await registerActivateOwnedCompany(agent, {
+      managerEmail: "active.rich@example.com",
+      adminEmail: "admin.active.rich@example.com",
+      companyName: "Active Rich",
+      businessRegistrationNumber: "BRN-ACTIVE-RICH",
+    });
+    const patch = (body) => agent.patch("/api/company")
+      .set("Authorization", `Bearer ${activated.accessToken}`).send(body);
+    const rich = await patch({ descriptionHtml: "<h2>Active team</h2>" });
+    expect(rich.status).toBe(200);
+    expect(rich.body.company.description).toBe("Active team");
+    expect(rich.body.company.descriptionHtml).toBe("<h2>Active team</h2>");
+    expect(rich.body.company.reviewSnapshot.description).toBe("Active company profile");
+    expect(rich.body.company.reviewSnapshot.descriptionHtml).toBeNull();
+
+    const unrelated = await patch({ website: "https://updated.example" });
+    expect(unrelated.body.company.descriptionHtml).toBe("<h2>Active team</h2>");
+    const plain = await patch({ description: "Plain active" });
+    expect(plain.body.company.description).toBe("Plain active");
+    expect(plain.body.company.descriptionHtml).toBeNull();
+    expect((await Company.findById(activated.companyId)).reviewSnapshot.description).toBe("Active company profile");
+  });
+
   it("resolves tenant ownership from the authenticated manager and blocks cross-tenant identifiers", async () => {
     const agent = createTestAgent();
 

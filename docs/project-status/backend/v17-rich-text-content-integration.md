@@ -2,9 +2,9 @@
 
 ## Current project state
 
-**V17 — Rich Text Content Integration** is in progress. Slices 01–05 — Rich Text
+**V17 — Rich Text Content Integration** is in progress. Slices 01–06 — Rich Text
 Core, Job Description, Generated CV integration, Harvard PDF / CV Snapshot
-Compatibility, and Legacy Migration — are implemented with focused checks
+Compatibility, Legacy Migration, and Company Description — are implemented with focused checks
 passing on 2026-11-02. Slice 04 acceptance was rechecked with PDF and
 Application/Invitation snapshot tests during Slice 05 verification.
 Product and Data authority remain
@@ -13,12 +13,14 @@ Product and Data authority remain
 
 ## Deferred / not started
 
-- Company integration and Frontend display remain for later slices. No local or
+- Frontend display remains for a later slice. Company legacy records remain
+  plain-text compatible; Company backfill is optional and is excluded from the
+  current V17 migration definition. No local or
   Atlas write migration has run; an operator must review the read-only
   `node scripts/run-migration.js v17-legacy-rich-text-backfill --preflight`
   report before any explicit production backfill.
 - The common backend `verify:agent` gate and full regression suite were not run
-  for Slices 01–05 at the user's request. V17 is not marked complete.
+  for Slices 01–06 at the user's request. V17 is not marked complete.
 
 ## Implementation record (slice detail)
 
@@ -62,6 +64,12 @@ updates leave plain text, lifecycle, ownership, and timestamps intact. Locked
 Jobs, archived/Uploaded CVs, incompatible plain strings, Company, and historical
 snapshots remain untouched. Repeated execution makes no further changes.
 
+Slice 06 adds optional Full `Company.descriptionHtml` to existing draft and
+active profile writes and read responses. HTML updates derive the persisted
+plain `description`; plain-only updates clear HTML; unrelated patches preserve
+both. Submit captures both representations in a new immutable review snapshot.
+Legacy Company and historical review snapshots remain readable without HTML.
+
 Slice 01–04 Backend impact audit:
 
 | Classification | Paths and evidence |
@@ -70,8 +78,17 @@ Slice 01–04 Backend impact audit:
 | UNCHANGED-SAFE | Discovery keyword/relevance matches `jobDescription`; Job AI normalization reads plain text; AI-V06 career projection removes HTML; completeness reads plain text; existing Application/Invitation snapshots are independent copies. Existing focused tests and source-path inspection support these boundaries. |
 | DEFERRED | Company integration and Frontend display belong to later slices. |
 
+Slice 06 Backend impact audit:
+
+| Classification | Paths and evidence |
+|---|---|
+| UPDATED | `company.model.js` stores optional live/snapshot HTML; draft/active validators and `company.service.js` normalize writes and capture both fields at submit; `toPublicCompany`, `platform-admin.service.js` review detail, and `job-discovery.service.js` Company and Job detail projections expose nullable HTML. Focused HTTP and persistence tests cover these paths. |
+| UNCHANGED-SAFE | `auth.service.js` registration/confirmation and `platform-admin.service.js` approval/rejection/lock preserve Company content and use existing serializers; list summaries do not carry Description. Existing auth, approval, rejection, confirmation, tenant and Discovery tests passed. Historical snapshots are not updated. |
+| DEFERRED | Frontend rendering; optional Company legacy backfill. The V17 migration currently excludes Company, and legacy plain-only reads return `descriptionHtml: null`. |
+
 ## Verification status
 
+- 2026-11-02: Slice 06 focused `cd backend && LOG_LEVEL=silent npx vitest run` with Company draft/active/submit, Platform Admin registrations/approve/reject, confirmation, and V8 Discovery files passed (8 files, 59 tests). After adding Job detail Company HTML projection, the affected V8 test passed again (1 passed, 19 skipped); after strengthening registration and rich approval assertions, the two affected tests passed again (2 passed, 11 skipped). Focused ESLint, `git diff --check`, and `npm run verify:architecture` passed (`ARCH-001`–`ARCH-019`). `verify:agent`, full gate, LLM/provider calls, and data-write migration were skipped by user scope.
 - 2026-11-02: Candidate My Application and Candidate Invitation Job summaries now expose nullable `jobDescriptionHtml` alongside unchanged plain text. Four focused HTTP regressions (Rich Text and legacy Job, list and detail for each surface) failed before the serializer fix and passed afterward. `cd backend && npx vitest run test/application/v10-candidate-my-applications.test.js test/application/v15-slice03-candidate-invitation-read.test.js` passed (2 files, 23 tests); focused ESLint on both services and tests passed. The full `verify:agent` gate was skipped by user scope.
 - 2026-11-02: `cd backend && npx vitest run test/database/v17-slice05-legacy-rich-text-backfill.test.js test/candidate/v17-slice04-harvard-pdf-layout.test.js test/application/v9-direct-apply-generated.test.js test/application/v9-replace-submitted-cv.test.js test/application/v15-slice08-atomic-accept-availability-handoff.test.js` passed (5 files, 36 tests). Migration tests cover dry-run document/index preservation, eligibility, exact escaped legacy text, idempotency, locked Job and historical snapshot preservation. Slice 04 PDF and snapshot acceptance passed in the same run. Focused ESLint on the new migration/test passed; `npm run verify:architecture` passed (`ARCH-001`–`ARCH-019`). No LLM or local/Atlas write migration ran. The full `verify:agent` gate was skipped by user scope.
 - 2026-11-02: after strengthening ordered/unordered-list PDF assertions, `cd backend && npx vitest run test/candidate/v7-candidate-cv-harvard-unicode.test.js` passed (6 tests); focused ESLint and `git diff --check` passed.

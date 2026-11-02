@@ -16,6 +16,7 @@ import CompanyMember from "../models/company-member.model.js";
 import User from "../models/user.model.js";
 import { uploadFileBuffer } from "./file.service.js";
 import sendMail from "./mail.service.js";
+import { normalizeRichText } from "./rich-text.service.js";
 import AppError from "../utils/app-error.js";
 import buildCompanyApprovalConfirmationEmail from "../utils/company-approval-confirmation-email.js";
 import { generateAuthToken, hashAuthToken } from "../utils/hash-auth-token.js";
@@ -94,6 +95,7 @@ const toPublicCompany = (company, managerUserId) => {
     website: company.website,
     address: company.address,
     description: company.description,
+    descriptionHtml: company.descriptionHtml ?? null,
     contactInfo: company.contactInfo,
     businessRegistrationNumber: company.businessRegistrationNumber,
     approvalStatus: company.approvalStatus,
@@ -106,6 +108,7 @@ const toPublicCompany = (company, managerUserId) => {
           website: company.reviewSnapshot.website,
           address: company.reviewSnapshot.address,
           description: company.reviewSnapshot.description,
+          descriptionHtml: company.reviewSnapshot.descriptionHtml ?? null,
           contactInfo: company.reviewSnapshot.contactInfo,
           businessRegistrationNumber:
             company.reviewSnapshot.businessRegistrationNumber,
@@ -561,6 +564,23 @@ const normalizeOptionalString = (value) => {
   return trimmed === "" ? null : trimmed;
 };
 
+const applyCompanyDescriptionUpdate = (profile, profileUpdate) => {
+  if (Object.hasOwn(profile, "descriptionHtml")) {
+    const { html, text } = normalizeRichText(profile.descriptionHtml, "full");
+
+    if (text.length > 5000) {
+      throw new AppError(400, "Description must not exceed 5000 characters", {
+        field: "description",
+      });
+    }
+
+    profileUpdate.description = text || null;
+    profileUpdate.descriptionHtml = html || null;
+  } else if (Object.hasOwn(profile, "description")) {
+    profileUpdate.descriptionHtml = null;
+  }
+};
+
 const updateOwnedCompanyDraft = async ({ managerUserId, profile }) => {
   const { company, managerUserId: resolvedManagerUserId } =
     await resolveOwnedCompany({ managerUserId });
@@ -574,6 +594,8 @@ const updateOwnedCompanyDraft = async ({ managerUserId, profile }) => {
       profileUpdate[fieldName] = normalizeOptionalString(profile[fieldName]);
     }
   }
+
+  applyCompanyDescriptionUpdate(profile, profileUpdate);
 
   if (Object.keys(profileUpdate).length === 0) {
     return toPublicCompany(company, resolvedManagerUserId);
@@ -636,6 +658,8 @@ const updateOwnedCompanyActiveProfile = async ({ managerUserId, profile }) => {
       profileUpdate[fieldName] = normalizeOptionalString(profile[fieldName]);
     }
   }
+
+  applyCompanyDescriptionUpdate(profile, profileUpdate);
 
   if (Object.keys(profileUpdate).length === 0) {
     return toPublicCompany(company, resolvedManagerUserId);
@@ -728,6 +752,7 @@ const submitOwnedCompany = async ({ managerUserId }) => {
             website: "$website",
             address: "$address",
             description: "$description",
+            descriptionHtml: "$descriptionHtml",
             contactInfo: "$contactInfo",
             businessRegistrationNumber: "$businessRegistrationNumber",
           },

@@ -33,6 +33,7 @@ const registerAndSubmitCompany = async (
     companyName,
     businessRegistrationNumber,
     description = "Submitted for review",
+    descriptionHtml,
   },
 ) => {
   const registration = await agent
@@ -61,6 +62,7 @@ const registerAndSubmitCompany = async (
       name: companyName,
       businessRegistrationNumber,
       description,
+      ...(descriptionHtml !== undefined && { descriptionHtml }),
       website: "https://example.com",
     });
 
@@ -219,6 +221,7 @@ describe("GET /api/platform-admin/company-registrations/:companyId", () => {
       companyName: "Snapshot Source Co",
       businessRegistrationNumber: "BRN-DETAIL-1",
       description: "Snapshot description",
+      descriptionHtml: "<p><strong>Snapshot</strong> description</p>",
     });
 
     // Force live profile divergence without changing immutable snapshot.
@@ -228,6 +231,7 @@ describe("GET /api/platform-admin/company-registrations/:companyId", () => {
         $set: {
           name: "Live Profile Must Not Be Used",
           description: "Live description must not be used for review",
+          descriptionHtml: "<p>Live HTML must not be used for review</p>",
         },
       },
     );
@@ -256,6 +260,7 @@ describe("GET /api/platform-admin/company-registrations/:companyId", () => {
         name: "Snapshot Source Co",
         businessRegistrationNumber: "BRN-DETAIL-1",
         description: "Snapshot description",
+        descriptionHtml: "<p><strong>Snapshot</strong> description</p>",
         website: "https://example.com",
       },
     });

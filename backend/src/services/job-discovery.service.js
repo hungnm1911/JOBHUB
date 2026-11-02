@@ -330,6 +330,7 @@ const buildPublicCompany = (company) => {
     website: company.website,
     address: company.address,
     description: company.description,
+    descriptionHtml: company.descriptionHtml ?? null,
     contactInfo: company.contactInfo,
   };
 };
@@ -792,7 +793,7 @@ const loadPublicJobDiscoverySource = async ({
 
   const company = await Company.findById(job.companyId)
     .select(
-      "_id name logoUrl bannerUrl website address description contactInfo approvalStatus operationalStatus",
+      "_id name logoUrl bannerUrl website address description descriptionHtml contactInfo approvalStatus operationalStatus",
     )
     .lean();
   const visibility = resolveJobDiscoveryVisibility({ job, company, now });
@@ -842,7 +843,7 @@ const getPublicCompanyInformation = async ({ actorUser, companyId } = {}) => {
     operationalStatus: COMPANY_OPERATIONAL_STATUS.ACTIVE,
   })
     .select(
-      "_id name logoUrl bannerUrl website address description contactInfo",
+      "_id name logoUrl bannerUrl website address description descriptionHtml contactInfo",
     )
     .lean();
 
