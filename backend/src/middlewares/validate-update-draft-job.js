@@ -36,7 +36,8 @@ const jobSalaryInput = z
 const updateDraftJobSchema = z
   .object({
     title: optionalNullableTrimmedString.optional(),
-    jobDescription: optionalNullableTrimmedString.optional(),
+    jobDescription: z.union([z.string(), z.null()]).optional(),
+    jobDescriptionHtml: z.string().nullable().optional(),
     requiredSkills: z.array(z.string().trim().min(1)).optional(),
     salary: jobSalaryInput.nullable().optional(),
     fieldCategoryIds: z.array(objectIdString).optional(),
@@ -50,7 +51,18 @@ const updateDraftJobSchema = z
     experienceLevelId: objectIdString.nullable().optional(),
     applicationDeadline: z.union([z.string(), z.null()]).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (content) =>
+      !Object.hasOwn(content, "jobDescription") ||
+      Object.hasOwn(content, "jobDescriptionHtml") ||
+      content.jobDescription == null ||
+      content.jobDescription.trim() !== "",
+    {
+      message: "Value must be a non-empty string when provided",
+      path: ["jobDescription"],
+    },
+  );
 
 const validateUpdateDraftJob = (request, _response, next) => {
   const parsed = updateDraftJobSchema.safeParse(request.body ?? {});

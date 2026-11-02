@@ -33,6 +33,7 @@ import {
 } from "./company.service.js";
 import { validateLocation } from "./location.service.js";
 import { synchronizeJobEmbeddingText } from "./job-embedding.service.js";
+import { normalizeRichText } from "./rich-text.service.js";
 import AppError from "../utils/app-error.js";
 import logger from "../utils/logger.js";
 
@@ -99,6 +100,7 @@ const buildValidatedDraftContentMatch = (job) => {
   return {
     title: job.title,
     jobDescription: job.jobDescription,
+    jobDescriptionHtml: job.jobDescriptionHtml ?? null,
     requiredSkills: [...job.requiredSkills],
     ...buildJobSalaryMatch(job.salary),
     fieldCategoryIds: [...job.fieldCategoryIds],
@@ -150,6 +152,7 @@ const toPublicJob = (job) => {
       job.primaryRecruiterCompanyMemberId.toString(),
     title: job.title,
     jobDescription: job.jobDescription,
+    jobDescriptionHtml: job.jobDescriptionHtml ?? null,
     requiredSkills: job.requiredSkills,
     salary: toPublicJobSalary(job.salary),
     fieldCategoryIds: job.fieldCategoryIds.map((id) => id.toString()),
@@ -455,6 +458,17 @@ const assertNoLegacySalaryText = (content) => {
   }
 };
 
+const normalizeDraftJobDescriptionHtml = (value) => {
+  if (value != null && typeof value !== "string") {
+    throw new AppError(400, "jobDescriptionHtml must be a string when provided", {
+      field: "jobDescriptionHtml",
+    });
+  }
+
+  const { html, text } = normalizeRichText(value, "full");
+  return { html: html || null, text: text || null };
+};
+
 const buildDraftContent = (content = {}) => {
   assertNoLegacySalaryText(content);
 
@@ -465,6 +479,12 @@ const buildDraftContent = (content = {}) => {
       field,
       Object.hasOwn(content, field) ? content[field] : undefined,
     );
+  }
+
+  if (Object.hasOwn(content, "jobDescriptionHtml")) {
+    const { html, text } = normalizeDraftJobDescriptionHtml(content.jobDescriptionHtml);
+    draftContent.jobDescriptionHtml = html;
+    draftContent.jobDescription = text;
   }
 
   return draftContent;
@@ -481,6 +501,14 @@ const buildDraftContentPatch = (content = {}) => {
     }
 
     patch[field] = normalizeDraftContentField(field, content[field]);
+  }
+
+  if (Object.hasOwn(content, "jobDescriptionHtml")) {
+    const { html, text } = normalizeDraftJobDescriptionHtml(content.jobDescriptionHtml);
+    patch.jobDescriptionHtml = html;
+    patch.jobDescription = text;
+  } else if (Object.hasOwn(content, "jobDescription")) {
+    patch.jobDescriptionHtml = null;
   }
 
   return patch;

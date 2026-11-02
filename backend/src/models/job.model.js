@@ -525,6 +525,11 @@ const jobSchema = new Schema(
       },
     },
 
+    jobDescriptionHtml: {
+      type: String,
+      default: null,
+    },
+
     requiredSkills: {
       type: [
         {

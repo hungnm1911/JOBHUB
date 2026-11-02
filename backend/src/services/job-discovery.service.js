@@ -409,6 +409,7 @@ const buildPublicJob = ({
 
   if (detail) {
     publicJob.jobDescription = job.jobDescription;
+    publicJob.jobDescriptionHtml = job.jobDescriptionHtml ?? null;
     publicJob.requiredSkills = job.requiredSkills;
   }
 

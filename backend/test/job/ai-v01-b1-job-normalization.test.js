@@ -187,6 +187,10 @@ describe("AI-V01 Backend Slice B1 — internal Job → F01 normalization", () =>
     const staff = await createStaff();
     const taxonomy = await createTaxonomy();
     const job = await createCompleteJob(staff, taxonomy);
+    await Job.updateOne(
+      { _id: job._id },
+      { $set: { jobDescriptionHtml: "<p>HTML-only <strong>decoy</strong></p>" } },
+    );
     const before = await rawJob(job._id);
     const normalizeSpy = normalizeJobSpy;
 

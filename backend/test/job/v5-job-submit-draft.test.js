@@ -141,7 +141,9 @@ describe("V5 Slice 04 — Submit Job for approval (F04)", () => {
       employeeCode: "NV-SUB-1",
     });
     const catalog = await seedCatalog();
-    const content = buildCompleteContent(catalog);
+    const content = buildCompleteContent(catalog, {
+      jobDescriptionHtml: "<p>Build Job lifecycle APIs.</p>",
+    });
     const { accessToken, job } = await createCompleteDraftViaApi(
       agent,
       recruiter,
@@ -162,6 +164,7 @@ describe("V5 Slice 04 — Submit Job for approval (F04)", () => {
       primaryRecruiterCompanyMemberId: recruiter.membership._id.toString(),
       title: content.title,
       jobDescription: content.jobDescription,
+      jobDescriptionHtml: content.jobDescriptionHtml,
       requiredSkills: content.requiredSkills,
       salary: content.salary,
       fieldCategoryIds: content.fieldCategoryIds,
@@ -182,6 +185,7 @@ describe("V5 Slice 04 — Submit Job for approval (F04)", () => {
     expect(persisted.status).toBe(JOB_STATUS.PENDING_APPROVAL);
     expect(persisted.publishedAt).toBeNull();
     expect(persisted.title).toBe(content.title);
+    expect(persisted.jobDescriptionHtml).toBe(content.jobDescriptionHtml);
     expect(persisted.companyId.toString()).toBe(manager.company._id.toString());
     expect(persisted.createdByCompanyMemberId.toString()).toBe(
       recruiter.membership._id.toString(),

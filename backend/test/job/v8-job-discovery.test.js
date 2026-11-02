@@ -579,6 +579,14 @@ describe("V8 — Job Discovery", () => {
       jobDescription: "Works on orbit systems.",
       publishedAt: new Date(now - 1 * day),
     });
+    await Job.updateOne(
+      { _id: descriptionMatch._id },
+      {
+        $set: {
+          jobDescriptionHtml: "<p>Works on <strong>orbit</strong> systems.</p>",
+        },
+      },
+    );
     await createJob({
       company: manager.company,
       recruiter,
@@ -603,6 +611,22 @@ describe("V8 — Job Discovery", () => {
     expect(relevanceResponse.body.jobs.map((job) => job.id)).toEqual(
       expectedRelevanceOrder,
     );
+    expect(relevanceResponse.body.jobs[3]).not.toHaveProperty("jobDescriptionHtml");
+
+    const markupKeywordResponse = await agent
+      .get("/api/job-discovery/jobs")
+      .query({ keyword: "strong" });
+    expect(markupKeywordResponse.status).toBe(200);
+    expect(markupKeywordResponse.body.pagination.total).toBe(0);
+
+    const detail = await agent.get(
+      `/api/job-discovery/jobs/${descriptionMatch._id.toString()}`,
+    );
+    expect(detail.status).toBe(200);
+    expect(detail.body.job).toMatchObject({
+      jobDescription: "Works on orbit systems.",
+      jobDescriptionHtml: "<p>Works on <strong>orbit</strong> systems.</p>",
+    });
 
     const explicitRelevanceResponse = await agent
       .get("/api/job-discovery/jobs")
