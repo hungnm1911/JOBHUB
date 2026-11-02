@@ -13,7 +13,9 @@ Product and Data authority remain
 
 ## Deferred / not started
 
-- Frontend display remains for a later slice. Company legacy records remain
+- Frontend Company Description integration is recorded in the
+  [Frontend V17 status](../frontend/v17-rich-text-content-integration.md);
+  other Frontend display work remains for later slices. Company legacy records remain
   plain-text compatible; Company backfill is optional and is excluded from the
   current V17 migration definition. No local or
   Atlas write migration has run; an operator must review the read-only
@@ -84,7 +86,7 @@ Slice 06 Backend impact audit:
 |---|---|
 | UPDATED | `company.model.js` stores optional live/snapshot HTML; draft/active validators and `company.service.js` normalize writes and capture both fields at submit; `toPublicCompany`, `platform-admin.service.js` review detail, and `job-discovery.service.js` Company and Job detail projections expose nullable HTML. Focused HTTP and persistence tests cover these paths. |
 | UNCHANGED-SAFE | `auth.service.js` registration/confirmation and `platform-admin.service.js` approval/rejection/lock preserve Company content and use existing serializers; list summaries do not carry Description. Existing auth, approval, rejection, confirmation, tenant and Discovery tests passed. Historical snapshots are not updated. |
-| DEFERRED | Frontend rendering; optional Company legacy backfill. The V17 migration currently excludes Company, and legacy plain-only reads return `descriptionHtml: null`. |
+| DEFERRED | Frontend display outside Company Description; optional Company legacy backfill. The V17 migration currently excludes Company, and legacy plain-only reads return `descriptionHtml: null`. |
 
 ## Verification status
 

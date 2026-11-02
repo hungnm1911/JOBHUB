@@ -64,6 +64,7 @@ Reading rules:
 - [V2 — Company onboarding](frontend/v02-company-onboarding.md)
 - [V03 — Job discovery](frontend/v03-job-discovery.md)
 - [V04 — Tiptap](frontend/v04-tibtab.md)
+- [V17 — Rich Text Content Integration](frontend/v17-rich-text-content-integration.md)
 
 ## AI Kit
 

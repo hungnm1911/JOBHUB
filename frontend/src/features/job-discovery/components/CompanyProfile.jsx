@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import CenteredState from '@/components/common/CenteredState'
+import RichTextViewer from '@/components/common/RichTextViewer'
 import { Button } from '@/components/ui/button'
 import { API_ERROR_MESSAGE } from '@/utils/constant'
 
@@ -146,9 +147,14 @@ function CompanyProfile({ companyId }) {
           <h2 className="text-lg font-semibold" id="company-description-heading">
             Giới thiệu công ty
           </h2>
-          <p className="mt-3 max-w-[70ch] whitespace-pre-line text-base leading-7 text-foreground/90">
-            {company.description || 'Công ty chưa cập nhật phần giới thiệu.'}
-          </p>
+          {company.descriptionHtml || company.description ? (
+            <RichTextViewer
+              className="mt-3 max-w-[70ch] text-base leading-7 text-foreground/90"
+              format={company.descriptionHtml ? 'html' : 'plain'}
+              preset="full"
+              value={company.descriptionHtml || company.description}
+            />
+          ) : <p className="mt-3 text-base">Công ty chưa cập nhật phần giới thiệu.</p>}
         </section>
 
         <aside

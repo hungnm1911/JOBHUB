@@ -21,6 +21,7 @@ const companyDraftSchema = z.object({
   address: optionalText(COMPANY_PROFILE_LIMIT.ADDRESS_MAX_LENGTH),
   contactInfo: optionalText(COMPANY_PROFILE_LIMIT.CONTACT_INFO_MAX_LENGTH),
   description: optionalText(COMPANY_PROFILE_LIMIT.DESCRIPTION_MAX_LENGTH),
+  descriptionHtml: z.string(),
   logoUrl: optionalText(COMPANY_PROFILE_LIMIT.URL_MAX_LENGTH),
   bannerUrl: optionalText(COMPANY_PROFILE_LIMIT.URL_MAX_LENGTH),
 })

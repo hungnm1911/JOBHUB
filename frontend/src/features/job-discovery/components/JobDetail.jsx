@@ -16,6 +16,7 @@ import {
 import { Link } from 'react-router-dom'
 
 import CenteredState from '@/components/common/CenteredState'
+import RichTextViewer from '@/components/common/RichTextViewer'
 import { Button } from '@/components/ui/button'
 
 import useDiscoveryCatalogs from '../hooks/useDiscoveryCatalogs'
@@ -208,10 +209,13 @@ function JobDetail({ jobId, renderJobAction }) {
               {job.company.name}
             </span>
           </Link>
-          {job.company.description && (
-            <p className="mt-4 line-clamp-6 whitespace-pre-line text-sm text-muted-foreground">
-              {job.company.description}
-            </p>
+          {(job.company.descriptionHtml || job.company.description) && (
+            <RichTextViewer
+              className="mt-4 line-clamp-6 text-sm text-muted-foreground"
+              format={job.company.descriptionHtml ? 'html' : 'plain'}
+              preset="full"
+              value={job.company.descriptionHtml || job.company.description}
+            />
           )}
           <dl className="mt-4 space-y-3 text-sm">
             {job.company.address && (
