@@ -1,16 +1,30 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, PDFName } from "pdf-lib";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { renderHarvardCandidateCvPdf } from "../../src/services/candidate-cv-harvard-pdf.service.js";
+import { APPLICATION_CV_SNAPSHOT_STORAGE, captureCvSnapshot } from "../../src/services/cv-snapshot.service.js";
+
+const snapshotUpload = vi.hoisted(() => ({ buffer: null }));
+vi.mock("../../src/services/file.service.js", () => ({
+  uploadFileBuffer: vi.fn(async ({ buffer }) => {
+    snapshotUpload.buffer = Buffer.from(buffer);
+    return { publicId: "v17-unicode-snapshot-test" };
+  }),
+  downloadFileBuffer: vi.fn(),
+  deleteFile: vi.fn(),
+}));
 
 const fontPaths = {
   Regular: new URL("../../assets/fonts/noto-serif/NotoSerif-Regular.ttf", import.meta.url),
   Bold: new URL("../../assets/fonts/noto-serif/NotoSerif-Bold.ttf", import.meta.url),
   Italic: new URL("../../assets/fonts/noto-serif/NotoSerif-Italic.ttf", import.meta.url),
+  CjkRegular: new URL("../../assets/fonts/noto-serif-cjk-jp/NotoSerifJP-Regular.ttf", import.meta.url),
+  CjkBold: new URL("../../assets/fonts/noto-serif-cjk-jp/NotoSerifJP-Bold.ttf", import.meta.url),
 };
 
 const inspectPdf = async (bytes) => {
@@ -38,13 +52,14 @@ const inspectPdf = async (bytes) => {
     const separators = [...content.matchAll(/54 ([\d.]+) m\s+54 [\d.]+ m\s+558 [\d.]+ l/gu)]
       .map(([, y]) => Number(y));
     const text = [...content.matchAll(/BT\s+([\s\S]*?)ET/gu)].map(([, operators]) => {
-      const [, fontName, size] = /\/(NotoSerif-[^\s]+) ([\d.]+) Tf/u.exec(operators) ?? [];
-      const [, x, y] = /1 0 0 1 ([\d.]+) ([\d.]+) Tm/u.exec(operators) ?? [];
+      const [, fontName, size] = /\/(NotoSerif(?:JP)?-[^\s]+) ([\d.]+) Tf/u.exec(operators) ?? [];
+      const [, x, y] = /[-\d.]+ [-\d.]+ [-\d.]+ [-\d.]+ ([-\d.]+) ([-\d.]+) Tm/u.exec(operators) ?? [];
       const [, hex] = /<([0-9A-F]+)> Tj/u.exec(operators) ?? [];
       if (!hex) return null;
       const cmap = maps.get(`/${fontName}`);
       const value = (hex.match(/.{4}/gu) ?? []).map((cid) => cmap.get(cid)).join("");
-      const style = /NotoSerif-(Regular|Bold|Italic)-/u.exec(fontName)[1];
+      const [, family, weight] = /NotoSerif(JP)?-(Regular|Bold|Italic)-/u.exec(fontName);
+      const style = `${family ? "Cjk" : ""}${weight}`;
       return {
         value, x: Number(x), y: Number(y), size: Number(size),
         width: fonts[style].widthOfTextAtSize(value, Number(size)),
@@ -78,6 +93,73 @@ const expectWithinPage = ({ text, annotations }) => {
 };
 
 describe("V17 Slice 04 Harvard PDF layout", () => {
+  it("preserves Japanese and Vietnamese text in mixed-style PDF runs", async () => {
+    const pdf = await inspectPdf(await renderHarvardCandidateCvPdf({
+      personalInfo: { fullName: "Nguyễn 日本語" },
+      professionalSummary: "Định dạng 日本語",
+      professionalSummaryHtml: "<p>Định dạng <strong>日本語</strong> <em>日本語</em> <a href=\"https://example.com\">日本語</a></p>",
+    }));
+    const drawnText = pdf.text.map(({ value }) => value).join("");
+    expect(drawnText).toContain("Nguyễn 日本語");
+    expect(drawnText.replace(/\s/gu, "")).toContain("Địnhdạng日本語日本語日本語");
+    expect(pdf.annotations).toHaveLength(1);
+    expectWithinPage(pdf);
+  });
+
+  it("wraps Japanese long lines across pages without losing glyphs or links", async () => {
+    const japanese = "日本語".repeat(90);
+    const html = `<p><strong>${japanese}</strong> <em>${japanese}</em> <a href="https://example.com/japanese">${japanese}</a></p>`;
+    const bytes = await renderHarvardCandidateCvPdf({
+      personalInfo: { fullName: "Nguyễn 日本語" },
+      professionalSummary: japanese,
+      professionalSummaryHtml: html.repeat(5),
+    });
+    const pdf = await inspectPdf(bytes);
+    const extracted = pdf.text.map(({ value }) => value).join("").replace(/\s/gu, "");
+    expect(pdf.pages.length).toBeGreaterThan(1);
+    expect((extracted.match(/日本語/gu) ?? []).length).toBe(90 * 3 * 5 + 1);
+    expect(pdf.annotations.length).toBeGreaterThan(5);
+    expect(pdf.annotations.every(({ uri }) => uri === "https://example.com/japanese")).toBe(true);
+    expectWithinPage(pdf);
+    if (process.env.V17_PDF_EVIDENCE_DIR) {
+      mkdirSync(process.env.V17_PDF_EVIDENCE_DIR, { recursive: true });
+      writeFileSync(join(process.env.V17_PDF_EVIDENCE_DIR, "new-unicode-multipage.pdf"), bytes);
+    }
+  });
+
+  it("fails explicitly when neither embedded face covers a character", async () => {
+    await expect(renderHarvardCandidateCvPdf({
+      personalInfo: { fullName: "Candidate" },
+      professionalSummary: "unsupported 😀",
+    })).rejects.toThrow(/font coverage missing for U\+1F600/u);
+  });
+
+  it("captures a fresh Generated CV snapshot PDF with Unicode and Minimal formatting", async () => {
+    const generatedContent = {
+      personalInfo: { fullName: "Nguyễn 日本語" },
+      professionalSummary: "Định dạng 日本語",
+      professionalSummaryHtml: '<p><strong>Định dạng</strong> <em>日本語</em> <a href="https://example.com">liên kết</a></p>',
+    };
+    const { snapshot } = await captureCvSnapshot({
+      candidateCv: { _id: "6ae8c3969ae0ebd4f487c1d5", name: "Unicode CV", sourceType: "GENERATED", generatedContent },
+      capturedAt: new Date("2026-11-03T00:00:00Z"),
+      storage: APPLICATION_CV_SNAPSHOT_STORAGE,
+    });
+    expect(snapshot.generatedContent).toEqual(generatedContent);
+    expect(snapshot.pdfFile.pageCount).toBe(1);
+    expect(snapshot.pdfFile.sizeBytes).toBe(snapshotUpload.buffer.length);
+    expect(snapshot.pdfFile.storageKey).toBe("v17-unicode-snapshot-test");
+    const pdf = await inspectPdf(snapshotUpload.buffer);
+    expect(pdf.text.map(({ value }) => value).join("")).toContain("日本語");
+    expect(pdf.annotations.length).toBeGreaterThan(0);
+    expect(pdf.annotations.every(({ uri }) => uri === "https://example.com")).toBe(true);
+    expectWithinPage(pdf);
+    if (process.env.V17_PDF_EVIDENCE_DIR) {
+      mkdirSync(process.env.V17_PDF_EVIDENCE_DIR, { recursive: true });
+      writeFileSync(join(process.env.V17_PDF_EVIDENCE_DIR, "new-snapshot-capture.pdf"), snapshotUpload.buffer);
+    }
+  });
+
   it("wraps long header fields without losing text or moving lines outside the page", async () => {
     const name = "Nguyễn Văn Hùng ".repeat(12).trim();
     const contact = "very.long.email.address@example.com".repeat(7);

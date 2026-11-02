@@ -7,6 +7,15 @@ Core, Job Description, Generated CV integration, Harvard PDF / CV Snapshot
 Compatibility, Legacy Migration, and Company Description — are implemented with focused checks
 passing on 2026-11-02. Slice 04 acceptance was rechecked with PDF and
 Application/Invitation snapshot tests during Slice 05 verification.
+Final E2E Phase 01 on Atlas `jobhub-dev/jobhub` verified Company and Job
+HTML/plain persistence, sanitization, legacy reads, and authorized Job publish.
+It also verified an HTML Company review snapshot through submit, admin approval,
+email confirmation/activation, and a later active profile update; the snapshot
+remained unchanged. Final E2E Phase 02 is **ACCEPTED within the Product Owner's
+Vietnamese Harvard PDF scope**: Generated CV, V09 and V15 snapshot flows, and
+read-only migration preflight passed. The original Japanese glyph finding is
+outside acceptance scope and is not a blocker. V17 remains in progress and is
+not yet Final Accepted.
 Product and Data authority remain
 `docs/product/backend/versions/v17-rich-text-content-integration.md` and
 `docs/data/backend/versions/v17-rich-text-content-integration-data-model.md`.
@@ -23,6 +32,12 @@ Product and Data authority remain
   report before any explicit production backfill.
 - The common backend `verify:agent` gate and full regression suite were not run
   for Slices 01–06 at the user's request. V17 is not marked complete.
+- Final E2E Phases 01 and 02 are complete; Phase 02 is ACCEPTED for Generated
+  CV, Vietnamese Harvard PDF, and V09/V15 snapshots. Japanese glyph coverage
+  is outside acceptance scope. The common verification gate remains unrun;
+  confirm its disposition before V17 Final Acceptance. See
+  `tmp/evidence/v17/e2e-phase01/checkpoint.md` and
+  `tmp/evidence/v17/e2e-phase02/checkpoint.md`.
 
 ## Implementation record (slice detail)
 
@@ -90,6 +105,45 @@ Slice 06 Backend impact audit:
 
 ## Verification status
 
+- 2026-11-03: Final E2E Phase 02 is ACCEPTED within the Product Owner's
+  Vietnamese Harvard PDF scope. It used authenticated Candidate and Recruiter
+  APIs against Atlas test records. Generated CV Minimal HTML sanitize,
+  derived plain text, save/reload, partial preservation, legacy plain-only
+  fallback, V09 Direct Apply and immutable snapshot/PDF, V15 Send → Accept
+  locked snapshot copy, and CV ownership checks passed. Chromium visual and
+  PDF structure checks passed bold/italic/underline, links, lists, Vietnamese,
+  wrapping, two-page pagination, and page bounds. Later Chromium screenshots
+  `new-unicode-CV-preview-chromium.png` and
+  `new-unicode-CV-download-chromium.png` show Vietnamese in newly delivered
+  preview/download PDFs. The original Japanese glyph gap remains an observed
+  finding outside acceptance scope, not a Phase 02 blocker. V17 read-only
+  preflight found 25 pre-existing eligible CVs / 74 fields, 0 incompatible fields, and 0
+  modified records before Phase 02 test data. No write backfill is required
+  for legacy runtime fallback. Evidence:
+  `tmp/evidence/v17/e2e-phase02/checkpoint.md`. The original E2E made no
+  production code or migration write; no E2E case was rerun for the acceptance
+  decision. Live LLM, Vector Search, and `verify:agent` did not run. V17 is
+  not yet Final Accepted.
+- 2026-11-03: Final E2E Phase 01 completed the same-record Company review
+  snapshot lifecycle: new test Company submit, Platform Admin approve, email
+  confirmation/activation, and valid active profile update all used existing
+  APIs. Admin API and Browser retained the captured HTML/plain snapshot while
+  public Company API and Browser showed new live content. Snapshot hashes
+  matched from submit through active update; the Manager and Company finished
+  `ACTIVE`, and the confirmation token was consumed. Evidence:
+  `tmp/evidence/v17/e2e-phase01/checkpoint.md`. No production code, migration
+  write, live LLM, Vector Search, or full `verify:agent` ran.
+- 2026-11-02: Atlas Final E2E Phase 01 used existing APIs and test records.
+  Company HTML create/update/read, website-only preservation, plain-only
+  fallback, new review-snapshot capture at submit, and snapshot immutability
+  after rejected post-submit writes passed. Authorized Job submit/approve
+  published the HTML test Job; public API values matched persisted data for
+  Company, Rich Text Job, and legacy Job. The existing active test Company
+  snapshot remained unchanged across valid profile updates. The new snapshot's
+  post-approval/activation path was pending at this checkpoint and completed on
+  2026-11-03.
+  Evidence: `tmp/evidence/v17/e2e-phase01/checkpoint.md`. No migration write,
+  live LLM, Vector Search, or full `verify:agent` ran under this scope.
 - 2026-11-02: Slice 06 focused `cd backend && LOG_LEVEL=silent npx vitest run` with Company draft/active/submit, Platform Admin registrations/approve/reject, confirmation, and V8 Discovery files passed (8 files, 59 tests). After adding Job detail Company HTML projection, the affected V8 test passed again (1 passed, 19 skipped); after strengthening registration and rich approval assertions, the two affected tests passed again (2 passed, 11 skipped). Focused ESLint, `git diff --check`, and `npm run verify:architecture` passed (`ARCH-001`–`ARCH-019`). `verify:agent`, full gate, LLM/provider calls, and data-write migration were skipped by user scope.
 - 2026-11-02: Candidate My Application and Candidate Invitation Job summaries now expose nullable `jobDescriptionHtml` alongside unchanged plain text. Four focused HTTP regressions (Rich Text and legacy Job, list and detail for each surface) failed before the serializer fix and passed afterward. `cd backend && npx vitest run test/application/v10-candidate-my-applications.test.js test/application/v15-slice03-candidate-invitation-read.test.js` passed (2 files, 23 tests); focused ESLint on both services and tests passed. The full `verify:agent` gate was skipped by user scope.
 - 2026-11-02: `cd backend && npx vitest run test/database/v17-slice05-legacy-rich-text-backfill.test.js test/candidate/v17-slice04-harvard-pdf-layout.test.js test/application/v9-direct-apply-generated.test.js test/application/v9-replace-submitted-cv.test.js test/application/v15-slice08-atomic-accept-availability-handoff.test.js` passed (5 files, 36 tests). Migration tests cover dry-run document/index preservation, eligibility, exact escaped legacy text, idempotency, locked Job and historical snapshot preservation. Slice 04 PDF and snapshot acceptance passed in the same run. Focused ESLint on the new migration/test passed; `npm run verify:architecture` passed (`ARCH-001`–`ARCH-019`). No LLM or local/Atlas write migration ran. The full `verify:agent` gate was skipped by user scope.

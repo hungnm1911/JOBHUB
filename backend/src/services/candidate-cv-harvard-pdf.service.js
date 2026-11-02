@@ -26,6 +26,51 @@ const HARVARD_FONT_FILES = Object.freeze({
   bold: join(FONT_DIRECTORY, "NotoSerif-Bold.ttf"),
   italic: join(FONT_DIRECTORY, "NotoSerif-Italic.ttf"),
 });
+const CJK_FONT_DIRECTORY = join(FONT_DIRECTORY, "../noto-serif-cjk-jp");
+const CJK_FONT_FILES = Object.freeze({
+  regular: join(CJK_FONT_DIRECTORY, "NotoSerifJP-Regular.ttf"),
+  bold: join(CJK_FONT_DIRECTORY, "NotoSerifJP-Bold.ttf"),
+});
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+const supportsText = (font, text) => [...text].every((character) =>
+  font.embedder.font.glyphForCodePoint(character.codePointAt(0)).id !== 0);
+
+const fontFamily = (primary, fallback, italicFallback = false) => {
+  const segments = (text) => {
+    const result = [];
+    for (const { segment } of graphemes.segment(text)) {
+      const font = supportsText(primary, segment) ? primary
+        : fallback && supportsText(fallback, segment) ? fallback
+          : null;
+      if (!font) {
+        const points = [...segment].map((character) =>
+          `U+${character.codePointAt(0).toString(16).toUpperCase()}`).join(" ");
+        throw new Error(`Harvard PDF font coverage missing for ${points}`);
+      }
+      const previous = result.at(-1);
+      if (previous?.font === font) previous.text += segment;
+      else result.push({ text: segment, font, skew: font === fallback && italicFallback });
+    }
+    return result;
+  };
+  return {
+    segments,
+    widthOfTextAtSize: (text, size) => segments(text).reduce((width, part) =>
+      width + part.font.widthOfTextAtSize(part.text, size), 0),
+  };
+};
+
+const drawFontText = (page, text, { font, x, y, size, ...options }) => {
+  let left = x;
+  for (const part of font.segments(text)) {
+    page.drawText(part.text, {
+      x: left, y, size, font: part.font, ...options,
+      ...(part.skew && !options.xSkew && { xSkew: degrees(12) }),
+    });
+    left += part.font.widthOfTextAtSize(part.text, size);
+  }
+};
 
 const SECTION_ORDER = Object.freeze([
   {
@@ -231,7 +276,7 @@ const richBlocks = (html) => {
   return blocks;
 };
 
-const loadHarvardFonts = async (pdfDocument) => {
+const loadHarvardFonts = async (pdfDocument, content) => {
   pdfDocument.registerFontkit(fontkit);
 
   const [regularFont, boldFont, italicFont] = await Promise.all([
@@ -246,10 +291,19 @@ const loadHarvardFonts = async (pdfDocument) => {
     }),
   ]);
 
+  // CJK assets are parsed only for content that the original Harvard face cannot draw.
+  const needsFallback = [...JSON.stringify(content)].some((character) =>
+    character.codePointAt(0) > 127 && !supportsText(regularFont, character));
+  const [cjkRegular, cjkBold] = needsFallback ? await Promise.all([
+    pdfDocument.embedFont(readFileSync(CJK_FONT_FILES.regular), { subset: true }),
+    // fontkit's subset of the static bold CJK face loses glyph outlines in Chromium.
+    pdfDocument.embedFont(readFileSync(CJK_FONT_FILES.bold), { subset: false }),
+  ]) : [null, null];
+
   return {
-    regularFont,
-    boldFont,
-    italicFont,
+    regularFont: fontFamily(regularFont, cjkRegular),
+    boldFont: fontFamily(boldFont, cjkBold),
+    italicFont: fontFamily(italicFont, cjkRegular, true),
   };
 };
 
@@ -268,7 +322,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
 
   const pdfDocument = await PDFDocument.create();
   const { regularFont, boldFont, italicFont } =
-    await loadHarvardFonts(pdfDocument);
+    await loadHarvardFonts(pdfDocument, content);
 
   let page = pdfDocument.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   let cursorY = PAGE_HEIGHT - MARGIN_TOP;
@@ -292,7 +346,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
   }) => {
     for (const line of lines) {
       ensureSpace(lineHeight);
-      page.drawText(line, {
+      drawFontText(page, line, {
         x: MARGIN_X,
         y: cursorY - fontSize,
         size: fontSize,
@@ -351,7 +405,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
             ensureSpace(13);
             const x = MARGIN_X + lineWidth;
             const y = cursorY - 10;
-            page.drawText(chunk, {
+            drawFontText(page, chunk, {
               x, y, size: 10, font, color,
               ...(run.bold && run.italic && { xSkew: degrees(12) }),
             });
@@ -392,7 +446,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
     for (const line of lines) {
       ensureSpace(lineHeight);
       const textWidth = font.widthOfTextAtSize(line, fontSize);
-      page.drawText(line, {
+      drawFontText(page, line, {
         x: MARGIN_X + (CONTENT_WIDTH - textWidth) / 2,
         y: cursorY - fontSize,
         size: fontSize,
@@ -408,7 +462,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
     // 8 before the title, 14 through the separator, 10 after it, then a first line.
     ensureSpace(32 + 13);
     cursorY -= 8;
-    page.drawText(title.toUpperCase(), {
+    drawFontText(page, title.toUpperCase(), {
       x: MARGIN_X,
       y: cursorY - 11,
       size: 11,

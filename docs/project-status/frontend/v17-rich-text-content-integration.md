@@ -4,9 +4,13 @@
 
 Company Description integration (`F03`, `F06`) and the existing public Job
 detail read surface (`F01`, `F03`, `F05`) are implemented as of 2026-11-02.
-Focused Rich Text tests, focused ESLint, and the production build passed. This
-is a focused verification snapshot; the common frontend `verify:agent` gate and
-browser acceptance were not run by user scope. V17 is not marked complete.
+Focused Rich Text tests, focused ESLint, and the production build passed.
+Final E2E Phase 01 browser acceptance passed for public Company Rich Text and
+legacy fallback, and published Rich Text and legacy Job detail on desktop and
+mobile. The common frontend `verify:agent` gate was not run by user scope.
+Admin review of the newly captured Company HTML snapshot and public display
+after activation passed on 2026-11-03. Phase 01 is complete; V17 is not marked
+complete.
 
 - `/onboarding/company` (Company Staff in the existing pending-activation flow)
   uses the Full `RichTextEditor`. `PATCH /api/company` omits both description
@@ -36,8 +40,8 @@ browser acceptance were not run by user scope. V17 is not marked complete.
   the Job title.
 - Generated CV and any other V17 Frontend display work outside the Company and
   public Job detail surfaces remain deferred.
-- Browser acceptance and the common frontend `verify:agent` gate remain pending
-  under the requested focused-only verification scope.
+- The common frontend `verify:agent` gate remains unrun by scope. Other V17
+  Frontend surfaces remain deferred as described above.
 
 ## Impact coverage — Job UI
 
@@ -50,6 +54,20 @@ browser acceptance were not run by user scope. V17 is not marked complete.
 
 ## Verification status
 
+- 2026-11-03: Final E2E Phase 01 Browser displayed the new test Company's
+  captured HTML review snapshot in the Platform Admin surface after approval,
+  activation, and active profile update; its public Company page displayed the
+  updated live HTML. Browser DOM values matched admin/public API and database
+  values. Evidence: `tmp/evidence/v17/e2e-phase01/checkpoint.md`. No frontend
+  code changed or full `verify:agent` ran in this phase.
+- 2026-11-02: Final E2E Phase 01 Browser checked public Company HTML and
+  escaped legacy plain text, published Job HTML and legacy fallback, and the
+  Rich Text Job layout at 1280px and 390px without horizontal overflow. The
+  browser DOM contained no `script` or unsafe link `href`; public API and
+  database values matched. Screenshots and DOM evidence:
+  `tmp/evidence/v17/e2e-phase01/checkpoint.md`. Admin review of the new
+  Company snapshot was pending at this checkpoint and completed on 2026-11-03.
+  No frontend code changed or full `verify:agent` ran in this phase.
 - 2026-11-02: `cd frontend && yarn test:rich-text` passed (36 tests), including
   public Job detail HTML sanitization, legacy/missing-HTML response fallback,
   and the existing Company integration coverage. Focused ESLint on the affected
