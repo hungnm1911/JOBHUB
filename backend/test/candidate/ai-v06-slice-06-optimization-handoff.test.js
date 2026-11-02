@@ -223,6 +223,33 @@ describe("AI-V06 Slice 07 merge and Draft persistence", () => {
     expect(generatedBaseline).toEqual(original);
   });
 
+  it("retains source HTML for unchanged sections and clears it for AI-replaced text", async () => {
+    const richBaseline = structuredClone(generatedBaseline);
+    richBaseline.generatedContent.professionalSummaryHtml = "<p>Source summary</p>";
+    richBaseline.generatedContent.workExperiences[0].description = "Source work";
+    richBaseline.generatedContent.workExperiences[0].descriptionHtml = "<p>Source work</p>";
+    richBaseline.generatedContent.projects[0].description = "Source project";
+    richBaseline.generatedContent.projects[0].descriptionHtml = "<p>Source project</p>";
+    prepareGeneratedBaseline.mockResolvedValue(richBaseline);
+
+    await createOptimizedCandidateCvDraftForJob(input);
+    const kept = createGeneratedDraftCandidateCv.mock.calls[0][0].generatedContent;
+    expect(kept.professionalSummaryHtml).toBe("<p>Source summary</p>");
+    expect(kept.workExperiences[0].descriptionHtml).toBe("<p>Source work</p>");
+    expect(kept.projects[0].descriptionHtml).toBe("<p>Source project</p>");
+
+    optimizeCv.mockResolvedValue({ ...optimizationResult,
+      professionalSummary: "Target summary",
+      workExperiences: [{ companyName: "New employer", description: "New work" }],
+      projects: [{ name: "New project", description: "New project" }],
+    });
+    await createOptimizedCandidateCvDraftForJob(input);
+    const replaced = createGeneratedDraftCandidateCv.mock.calls[1][0].generatedContent;
+    expect(replaced.professionalSummaryHtml).toBeNull();
+    expect(replaced.workExperiences[0]).not.toHaveProperty("descriptionHtml");
+    expect(replaced.projects[0]).not.toHaveProperty("descriptionHtml");
+  });
+
   it("does not start persistence after optimization failure", async () => {
     const failure = new Error("Provider failure");
     optimizeCv.mockRejectedValue(failure);

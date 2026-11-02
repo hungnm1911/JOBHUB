@@ -72,8 +72,13 @@ const mergeOptimizationWithBaseline = (generatedBaseline, optimizationResult) =>
   ...structuredClone(generatedBaseline.generatedContent),
   ...Object.fromEntries(Object.entries(generatedBaseline.careerSections).map(([section, value]) => [
     section,
-    structuredClone(optimizationResult[section] === null ? value : optimizationResult[section]),
+    structuredClone(optimizationResult[section] === null
+      ? generatedBaseline.generatedContent[section] ?? value
+      : optimizationResult[section]),
   ])),
+  ...(optimizationResult.professionalSummary === null
+    ? {}
+    : { professionalSummaryHtml: null }),
 });
 
 const createOptimizedCandidateCvDraftForJob = async (input) => {

@@ -2,18 +2,20 @@
 
 ## Current project state
 
-**V17 — Rich Text Content Integration** is in progress. Slice 01 — Rich Text
-Core and Slice 02 — Job Description integration are implemented with focused
-checks passing on 2026-11-02. Product and Data authority remain
+**V17 — Rich Text Content Integration** is in progress. Slices 01–03 — Rich Text
+Core, Job Description, and Generated CV integration — are implemented with
+focused checks passing on 2026-11-02. Product and Data authority remain
 `docs/product/backend/versions/v17-rich-text-content-integration.md` and
 `docs/data/backend/versions/v17-rich-text-content-integration-data-model.md`.
 
 ## Deferred / not started
 
-- Generated CV and Company integration, snapshot, PDF, migration, and Frontend
-  display remain for later slices.
+- Company integration, Harvard PDF formatting, Application/Invitation snapshot
+  verification, migration, and Frontend display remain for later slices. The
+  Generated CV HTML fields reuse the snapshot schema and existing copy paths;
+  PDF output and snapshot behavior still need their dedicated slices.
 - The common backend `verify:agent` gate and full regression suite were not run
-  for Slices 01–02 at the user's request. V17 is not marked complete.
+  for Slices 01–03 at the user's request. V17 is not marked complete.
 
 ## Implementation record (slice detail)
 
@@ -33,8 +35,29 @@ unrelated patches preserve both. Existing internal Job and public Discovery
 detail responses expose HTML alongside the existing plain text field; Search,
 ranking, and AI normalization continue consuming plain text.
 
+Slice 03 adds optional Minimal HTML alongside the three approved Generated CV
+text fields. Existing CV writes sanitize HTML and derive plain text, clear stale
+HTML on plain updates, and preserve untouched fields on partial saves. Existing
+CV detail responses return both representations. Completeness and Draft/Active
+transitions continue using meaningful plain text. The AI-V01 source projection
+and AI-V06 optimization career sections omit HTML; the optimization Draft keeps
+source HTML only for unchanged content. No AI Kit contract or LLM behavior
+changed.
+
 ## Verification status
 
+- 2026-11-02: `cd backend && npx vitest run test/candidate/ai-v06-slice-07-action-persistence.test.js`
+  passed (6 tests), including persisted Generated Draft checks for unchanged
+  source HTML and AI-replaced plain text without stale HTML. Targeted ESLint on
+  that test file passed; AI inference was mocked.
+- 2026-11-02: `cd backend && npx vitest run` with eight focused Candidate CV,
+  AI-V01, AI-V06, Builder, and lifecycle test files passed (87 tests); after
+  adding the ACTIVE/default HTML regression, four directly affected files
+  passed (64 tests). The final create-path addition passed in the Slice 03
+  focused file (6 tests).
+- 2026-11-02: focused ESLint on Slice 03 source and test files passed.
+- 2026-11-02: `cd backend && npm run verify:architecture` passed
+  (`ARCH-001` through `ARCH-019`); `git diff --check` passed.
 - 2026-11-02: `cd backend && npx vitest run test/job/v17-slice02-job-rich-text.test.js test/job/v5-job-create-draft.test.js test/job/v5-job-edit-draft.test.js test/job/v5-job-submit-draft.test.js test/job/v8-job-discovery.test.js test/job/ai-v01-b1-job-normalization.test.js test/services/v17-slice01-rich-text-core.test.js` passed (7 files, 105 tests).
 - 2026-11-02: focused ESLint on all changed backend source/test files passed.
 - 2026-11-02: after adding HTML preservation to the submit regression,
@@ -49,4 +72,4 @@ ranking, and AI normalization continue consuming plain text.
 - 2026-11-02: `cd backend && npm run verify:architecture` passed
   (`ARCH-001` through `ARCH-019`).
 - `cd backend && npm run verify:agent` was intentionally skipped by user scope
-  for Slices 01–02.
+  for Slices 01–03.

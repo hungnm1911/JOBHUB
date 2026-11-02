@@ -79,6 +79,7 @@ const toSectionItemsSource = (items, path, dateFields, issues) => {
     }
 
     const itemSource = { ...item };
+    delete itemSource.descriptionHtml;
 
     for (const field of dateFields) {
       itemSource[field] = toPersistedIsoDate(
@@ -100,6 +101,7 @@ const toGeneratedContentSource = (generatedContent, issues) => {
   }
 
   const { personalInfo, ...content } = generatedContent;
+  delete content.professionalSummaryHtml;
   const sections = Object.fromEntries(
     Object.entries(SECTION_DATE_FIELDS).map(([section, dateFields]) => {
       return [

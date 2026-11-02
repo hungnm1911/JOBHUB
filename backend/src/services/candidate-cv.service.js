@@ -28,6 +28,7 @@ import {
   resolveLocationFilterSelections,
   validateLocation,
 } from "./location.service.js";
+import { normalizeRichText } from "./rich-text.service.js";
 
 const uploadOwnUploadedCandidateCvFile = (buffer) => {
   return uploadFileBuffer({
@@ -142,6 +143,7 @@ const toPublicGeneratedContent = (generatedContent) => {
       avatarUrl: generatedContent.personalInfo?.avatarUrl ?? null,
     },
     professionalSummary: generatedContent.professionalSummary ?? null,
+    professionalSummaryHtml: generatedContent.professionalSummaryHtml ?? null,
     educations: (generatedContent.educations ?? []).map((education) => ({
       institutionName: education.institutionName ?? null,
       degree: education.degree ?? null,
@@ -157,6 +159,7 @@ const toPublicGeneratedContent = (generatedContent) => {
         startDate: experience.startDate ?? null,
         endDate: experience.endDate ?? null,
         description: experience.description ?? null,
+        descriptionHtml: experience.descriptionHtml ?? null,
         achievements: [...(experience.achievements ?? [])],
       }),
     ),
@@ -165,6 +168,7 @@ const toPublicGeneratedContent = (generatedContent) => {
       role: project.role ?? null,
       technologies: [...(project.technologies ?? [])],
       description: project.description ?? null,
+      descriptionHtml: project.descriptionHtml ?? null,
       projectUrl: project.projectUrl ?? null,
     })),
     certifications: (generatedContent.certifications ?? []).map(
@@ -827,7 +831,32 @@ const normalizeStringArray = (values) => {
     .filter((value) => value != null);
 };
 
-const normalizeGeneratedContentForPersistence = (content = {}) => {
+const normalizeCvRichTextPair = (patch, previous, textField, htmlField) => {
+  if (Object.hasOwn(patch, htmlField) && patch[htmlField] != null) {
+    const normalized = normalizeRichText(patch[htmlField], "minimal");
+    return {
+      [textField]: normalized.text || null,
+      [htmlField]: normalized.html || null,
+    };
+  }
+
+  return {
+    [textField]: normalizeOptionalContentString(
+      Object.hasOwn(patch, textField) ? patch[textField] : previous?.[textField],
+    ),
+    [htmlField]: Object.hasOwn(patch, textField) || Object.hasOwn(patch, htmlField)
+      ? null
+      : previous?.[htmlField] ?? null,
+  };
+};
+
+const normalizeGeneratedContentForPersistence = (patch = {}, previous = {}) => {
+  const old = typeof previous.toObject === "function" ? previous.toObject() : previous;
+  const content = {
+    ...old,
+    ...patch,
+    personalInfo: { ...(old.personalInfo ?? {}), ...(patch.personalInfo ?? {}) },
+  };
   const personalInfo = content.personalInfo ?? {};
 
   return {
@@ -841,8 +870,8 @@ const normalizeGeneratedContentForPersistence = (content = {}) => {
       links: normalizeStringArray(personalInfo.links),
       avatarUrl: normalizeOptionalContentString(personalInfo.avatarUrl),
     },
-    professionalSummary: normalizeOptionalContentString(
-      content.professionalSummary,
+    ...normalizeCvRichTextPair(
+      patch, old, "professionalSummary", "professionalSummaryHtml",
     ),
     educations: (content.educations ?? []).map((education) => ({
       institutionName: normalizeOptionalContentString(education.institutionName),
@@ -852,21 +881,31 @@ const normalizeGeneratedContentForPersistence = (content = {}) => {
       endDate: education.endDate ?? null,
     })),
     skills: normalizeStringArray(content.skills),
-    workExperiences: (content.workExperiences ?? []).map((experience) => ({
-      companyName: normalizeOptionalContentString(experience.companyName),
-      position: normalizeOptionalContentString(experience.position),
-      startDate: experience.startDate ?? null,
-      endDate: experience.endDate ?? null,
-      description: normalizeOptionalContentString(experience.description),
-      achievements: normalizeStringArray(experience.achievements),
-    })),
-    projects: (content.projects ?? []).map((project) => ({
-      name: normalizeOptionalContentString(project.name),
-      role: normalizeOptionalContentString(project.role),
-      technologies: normalizeStringArray(project.technologies),
-      description: normalizeOptionalContentString(project.description),
-      projectUrl: normalizeOptionalContentString(project.projectUrl),
-    })),
+    workExperiences: (content.workExperiences ?? []).map((item, index) => {
+      const oldItem = old.workExperiences?.[index] ?? {};
+      const itemPatch = patch.workExperiences?.[index] ?? {};
+      const experience = { ...oldItem, ...item };
+      return {
+        companyName: normalizeOptionalContentString(experience.companyName),
+        position: normalizeOptionalContentString(experience.position),
+        startDate: experience.startDate ?? null,
+        endDate: experience.endDate ?? null,
+        ...normalizeCvRichTextPair(itemPatch, oldItem, "description", "descriptionHtml"),
+        achievements: normalizeStringArray(experience.achievements),
+      };
+    }),
+    projects: (content.projects ?? []).map((item, index) => {
+      const oldItem = old.projects?.[index] ?? {};
+      const itemPatch = patch.projects?.[index] ?? {};
+      const project = { ...oldItem, ...item };
+      return {
+        name: normalizeOptionalContentString(project.name),
+        role: normalizeOptionalContentString(project.role),
+        technologies: normalizeStringArray(project.technologies),
+        ...normalizeCvRichTextPair(itemPatch, oldItem, "description", "descriptionHtml"),
+        projectUrl: normalizeOptionalContentString(project.projectUrl),
+      };
+    }),
     certifications: (content.certifications ?? []).map((certification) => ({
       name: normalizeOptionalContentString(certification.name),
       issuer: normalizeOptionalContentString(certification.issuer),
@@ -972,7 +1011,7 @@ const saveOwnGeneratedContent = async ({
   }
 
   const normalizedContent =
-    normalizeGeneratedContentForPersistence(generatedContent);
+    normalizeGeneratedContentForPersistence(generatedContent, candidateCv.generatedContent);
   const completeness = evaluateGeneratedCvCompleteness(normalizedContent);
 
   // BR-13 / BR-31: content save mutates only generatedContent (+ ACTIVE

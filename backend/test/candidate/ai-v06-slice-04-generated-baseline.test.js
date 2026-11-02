@@ -79,8 +79,12 @@ describe("AI-V06 Slice 04 — Generated CV baseline (F02/BR-AI-04)", () => {
     expect(baseline.careerSections).toEqual({
       professionalSummary: before.generatedContent.professionalSummary,
       skills: before.generatedContent.skills,
-      workExperiences: before.generatedContent.workExperiences,
-      projects: before.generatedContent.projects,
+      workExperiences: before.generatedContent.workExperiences.map((item) => {
+        const plain = { ...item }; delete plain.descriptionHtml; return plain;
+      }),
+      projects: before.generatedContent.projects.map((item) => {
+        const plain = { ...item }; delete plain.descriptionHtml; return plain;
+      }),
       educations: before.generatedContent.educations,
       certifications: before.generatedContent.certifications,
       languages: before.generatedContent.languages,
