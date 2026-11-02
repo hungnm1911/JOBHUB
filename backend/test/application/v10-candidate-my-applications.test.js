@@ -744,6 +744,55 @@ describe("V10 Slice 13 — Candidate My Applications (F08 / F09 partial)", () =>
   });
 
   describe("HTTP — GET /api/candidate/applications", () => {
+    it.each([
+      ["Rich Text", "<p>Build <strong>APIs</strong></p>"],
+      ["legacy", null],
+    ])("returns %s Job Description in list and detail", async (_, html) => {
+      const agent = createTestAgent();
+      const { primary } = await setupCompany({
+        emailPrefix: "v17.s05.application",
+      });
+      const job = await createJob({
+        companyId: primary.membership.companyId,
+        primaryMemberId: primary.membership._id,
+      });
+      await Job.updateOne(
+        { _id: job._id },
+        html == null
+          ? { $unset: { jobDescriptionHtml: "" } }
+          : { $set: { jobDescriptionHtml: html } },
+      );
+      const candidate = await createVerifiedUser({
+        email: "v17.s05.application.candidate@example.com",
+      });
+      const application = await createDirectApplication({
+        candidateUserId: candidate.user._id,
+        jobId: job._id,
+      });
+      const token = await loginAndGetAccessToken(agent, {
+        email: candidate.user.email,
+        password: DEFAULT_PASSWORD,
+      });
+
+      const list = await agent
+        .get("/api/candidate/applications")
+        .set("Authorization", `Bearer ${token}`);
+      const detail = await agent
+        .get(`/api/candidate/applications/${application._id}`)
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(list.status).toBe(200);
+      expect(detail.status).toBe(200);
+      expect(list.body.applications).toHaveLength(1);
+      for (const view of [list.body.applications[0], detail.body.application]) {
+        expect(view.job).toMatchObject({
+          id: job._id.toString(),
+          jobDescription: "Build APIs",
+          jobDescriptionHtml: html,
+        });
+      }
+    });
+
     it("returns list and detail for authenticated Candidate", async () => {
       const agent = createTestAgent();
       const { primary, supporting } = await setupCompany({
