@@ -3,9 +3,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import fontkit from "@pdf-lib/fontkit";
-import { PDFDocument, rgb } from "pdf-lib";
+import { convert } from "html-to-text";
+import { PDFDocument, PDFName, PDFString, degrees, rgb } from "pdf-lib";
 
 import HARVARD_CV_SECTION from "../constants/harvard-cv-section.js";
+import { normalizeRichText } from "./rich-text.service.js";
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -130,6 +132,105 @@ const wrapText = (text, font, fontSize, maxWidth) => {
   return lines;
 };
 
+// The stored HTML has the Minimal vocabulary. Normalize it again on read so
+// legacy or externally written content cannot introduce PDF layout commands.
+const richBlocks = (html) => {
+  const safeHtml = normalizeRichText(html, "minimal").html;
+  const blocks = [];
+  let runs = [];
+  const styles = [];
+  const lists = [];
+  let anchor = null;
+  const listLabel = (list) => {
+    if (!list?.ordered) return "•";
+    const value = list.index++;
+    if ((list.type === "a" || list.type === "A") && value > 0 && value < 10000) {
+      let number = value;
+      let letters = "";
+      while (number > 0) {
+        number -= 1;
+        letters = String.fromCharCode(97 + number % 26) + letters;
+        number = Math.floor(number / 26);
+      }
+      return list.type === "A" ? letters.toUpperCase() : letters;
+    }
+    if ((list.type === "i" || list.type === "I") && value > 0 && value < 4000) {
+      let number = value;
+      let roman = "";
+      for (const [amount, symbol] of [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]]) {
+        while (number >= amount) {
+          roman += symbol;
+          number -= amount;
+        }
+      }
+      return list.type === "i" ? roman.toLowerCase() : roman;
+    }
+    return String(value);
+  };
+
+  const flush = () => {
+    if (runs.some((run) => run.text.trim())) blocks.push(runs);
+    runs = [];
+  };
+  const append = (text) => {
+    if (!text) return;
+    runs.push({
+      text,
+      bold: styles.includes("strong"),
+      italic: styles.includes("em"),
+      underline: styles.includes("u") || anchor != null,
+      href: anchor?.href,
+    });
+    if (anchor != null) anchor.label += text;
+  };
+
+  for (const token of safeHtml.match(/<[^>]*>|[^<]+/gu) ?? []) {
+    if (!token.startsWith("<")) {
+      const decoded = convert(token, { wordwrap: false });
+      append(`${/^\s/u.test(token) ? " " : ""}${decoded}${/\s$/u.test(token) ? " " : ""}`);
+      continue;
+    }
+
+    const match = /^<\s*(\/)?\s*([a-z]+)\b([^>]*)>/iu.exec(token);
+    if (!match) continue;
+    const [, closing, rawTag, attributes] = match;
+    const tag = rawTag.toLowerCase();
+
+    if (["strong", "em", "u"].includes(tag)) {
+      if (closing) {
+        if (styles.includes(tag)) styles.splice(styles.lastIndexOf(tag), 1);
+      } else {
+        styles.push(tag);
+      }
+    } else if (tag === "a") {
+      if (closing && anchor) {
+        const { href, label } = anchor;
+        anchor = null;
+        if (href && label.trim() !== href) append(` (${href})`);
+      } else if (!closing) {
+        const href = /\bhref="([^"]+)"/iu.exec(attributes)?.[1];
+        anchor = { href: href ? convert(href, { wordwrap: false }) : null, label: "" };
+      }
+    } else if (tag === "ul" || tag === "ol") {
+      flush();
+      if (closing) lists.pop();
+      else lists.push({
+        ordered: tag === "ol",
+        index: Number(/\bstart="([+-]?\d+)"/iu.exec(attributes)?.[1] ?? 1),
+        type: /\btype="([1aAiI])"/u.exec(attributes)?.[1] ?? "1",
+      });
+    } else if (tag === "li" && !closing) {
+      flush();
+      const list = lists.at(-1);
+      append(list?.ordered ? `${listLabel(list)}. ` : "• ");
+    } else if (tag === "p" || tag === "br" || (tag === "li" && closing)) {
+      if (tag !== "p" || closing) flush();
+    }
+  }
+  flush();
+  return blocks;
+};
+
 const loadHarvardFonts = async (pdfDocument) => {
   pdfDocument.registerFontkit(fontkit);
 
@@ -204,27 +305,108 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
     cursorY -= gapAfter;
   };
 
-  const drawCentered = ({ text, font, fontSize, lineHeight, gapAfter = 0 }) => {
-    const line = toDisplayText(text);
-
-    if (line === "") {
+  const drawRichText = ({ html, plainText, gapAfter = 0 }) => {
+    if (!hasPresentString(plainText)) return;
+    const blocks = hasPresentString(html) ? richBlocks(html) : [];
+    if (blocks.length === 0) {
+      drawLines({
+        lines: wrapText(plainText, regularFont, 10, CONTENT_WIDTH),
+        font: regularFont,
+        fontSize: 10,
+        lineHeight: 13,
+        gapAfter,
+      });
       return;
     }
 
-    ensureSpace(lineHeight);
-    const textWidth = font.widthOfTextAtSize(line, fontSize);
-    page.drawText(line, {
-      x: MARGIN_X + Math.max(0, (CONTENT_WIDTH - textWidth) / 2),
-      y: cursorY - fontSize,
-      size: fontSize,
-      font,
-      color: rgb(0.05, 0.05, 0.05),
-    });
-    cursorY -= lineHeight + gapAfter;
+    for (const runs of blocks) {
+      let lineWidth = 0;
+      let hasText = false;
+      const nextLine = () => {
+        cursorY -= 13;
+        lineWidth = 0;
+        hasText = false;
+      };
+
+      for (const run of runs) {
+        const font = run.bold ? boldFont : run.italic ? italicFont : regularFont;
+        const color = run.href ? rgb(0.12, 0.28, 0.58) : rgb(0.1, 0.1, 0.1);
+        for (const piece of run.text.match(/\s+|\S+/gu) ?? []) {
+          const space = /^\s+$/u.test(piece);
+          if (space && !hasText) continue;
+          const text = space ? " " : piece;
+          const width = font.widthOfTextAtSize(text, 10);
+          if (!space && hasText && lineWidth + width > CONTENT_WIDTH) nextLine();
+          if (space && lineWidth + width > CONTENT_WIDTH) {
+            nextLine();
+            continue;
+          }
+
+          // Long URLs and words use the same character fallback as plain text.
+          const chunks = width > CONTENT_WIDTH
+            ? wrapText(text, font, 10, CONTENT_WIDTH)
+            : [text];
+          for (const [index, chunk] of chunks.entries()) {
+            if (index > 0) nextLine();
+            ensureSpace(13);
+            const x = MARGIN_X + lineWidth;
+            const y = cursorY - 10;
+            page.drawText(chunk, {
+              x, y, size: 10, font, color,
+              ...(run.bold && run.italic && { xSkew: degrees(12) }),
+            });
+            const chunkWidth = font.widthOfTextAtSize(chunk, 10);
+            if (run.underline) {
+              page.drawLine({
+                start: { x, y: y - 1 },
+                end: { x: x + chunkWidth, y: y - 1 },
+                thickness: 0.5,
+                color,
+              });
+            }
+            if (run.href && !space) {
+              const annotation = pdfDocument.context.obj({
+                Type: PDFName.of("Annot"),
+                Subtype: PDFName.of("Link"),
+                Rect: [x, y - 2, x + chunkWidth, y + 11],
+                Border: [0, 0, 0],
+                A: pdfDocument.context.obj({
+                  S: PDFName.of("URI"),
+                  URI: PDFString.of(run.href),
+                }),
+              });
+              page.node.addAnnot(pdfDocument.context.register(annotation));
+            }
+            lineWidth += chunkWidth;
+            hasText = true;
+          }
+        }
+      }
+      if (hasText) nextLine();
+    }
+    cursorY -= gapAfter;
+  };
+
+  const drawCentered = ({ text, font, fontSize, lineHeight, gapAfter = 0 }) => {
+    const lines = wrapText(text, font, fontSize, CONTENT_WIDTH);
+    for (const line of lines) {
+      ensureSpace(lineHeight);
+      const textWidth = font.widthOfTextAtSize(line, fontSize);
+      page.drawText(line, {
+        x: MARGIN_X + (CONTENT_WIDTH - textWidth) / 2,
+        y: cursorY - fontSize,
+        size: fontSize,
+        font,
+        color: rgb(0.05, 0.05, 0.05),
+      });
+      cursorY -= lineHeight;
+    }
+    if (lines.length > 0) cursorY -= gapAfter;
   };
 
   const drawSectionHeading = (title) => {
-    ensureSpace(28);
+    // 8 before the title, 14 through the separator, 10 after it, then a first line.
+    ensureSpace(32 + 13);
     cursorY -= 8;
     page.drawText(title.toUpperCase(), {
       x: MARGIN_X,
@@ -297,11 +479,9 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
       }
 
       drawSectionHeading(section.title);
-      drawLines({
-        lines: wrapText(summary, regularFont, 10, CONTENT_WIDTH),
-        font: regularFont,
-        fontSize: 10,
-        lineHeight: 13,
+      drawRichText({
+        html: content.professionalSummaryHtml,
+        plainText: summary,
         gapAfter: 6,
       });
       continue;
@@ -406,11 +586,9 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
         }
 
         if (hasPresentString(experience.description)) {
-          drawLines({
-            lines: wrapText(experience.description, regularFont, 10, CONTENT_WIDTH),
-            font: regularFont,
-            fontSize: 10,
-            lineHeight: 13,
+          drawRichText({
+            html: experience.descriptionHtml,
+            plainText: experience.description,
           });
         }
 
@@ -475,11 +653,9 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
         }
 
         if (hasPresentString(project.description)) {
-          drawLines({
-            lines: wrapText(project.description, regularFont, 10, CONTENT_WIDTH),
-            font: regularFont,
-            fontSize: 10,
-            lineHeight: 13,
+          drawRichText({
+            html: project.descriptionHtml,
+            plainText: project.description,
           });
         }
 

@@ -2,20 +2,20 @@
 
 ## Current project state
 
-**V17 — Rich Text Content Integration** is in progress. Slices 01–03 — Rich Text
-Core, Job Description, and Generated CV integration — are implemented with
-focused checks passing on 2026-11-02. Product and Data authority remain
+**V17 — Rich Text Content Integration** is in progress. Slices 01–04 — Rich Text
+Core, Job Description, Generated CV integration, and Harvard PDF / CV Snapshot
+Compatibility — are implemented with focused checks passing on 2026-11-02.
+Product and Data authority remain
 `docs/product/backend/versions/v17-rich-text-content-integration.md` and
 `docs/data/backend/versions/v17-rich-text-content-integration-data-model.md`.
 
 ## Deferred / not started
 
-- Company integration, Harvard PDF formatting, Application/Invitation snapshot
-  verification, migration, and Frontend display remain for later slices. The
-  Generated CV HTML fields reuse the snapshot schema and existing copy paths;
-  PDF output and snapshot behavior still need their dedicated slices.
+- Company integration, migration, and Frontend display remain for later slices.
+  Slice 04 reuses the existing Application/Invitation snapshot schema, capture,
+  copy, persistence, and read paths; no historical snapshot rewrite was made.
 - The common backend `verify:agent` gate and full regression suite were not run
-  for Slices 01–03 at the user's request. V17 is not marked complete.
+  for Slices 01–04 at the user's request. V17 is not marked complete.
 
 ## Implementation record (slice detail)
 
@@ -46,6 +46,9 @@ changed.
 
 ## Verification status
 
+- 2026-11-02: after strengthening ordered/unordered-list PDF assertions, `cd backend && npx vitest run test/candidate/v7-candidate-cv-harvard-unicode.test.js` passed (6 tests); focused ESLint and `git diff --check` passed.
+- 2026-11-02: `cd backend && npx vitest run test/candidate/v7-candidate-cv-harvard-unicode.test.js test/application/v9-direct-apply-generated.test.js test/application/v9-replace-submitted-cv.test.js test/application/v15-slice08-atomic-accept-availability-handoff.test.js` passed (4 files, 37 tests). Coverage includes Minimal and legacy plain-only PDF, Generated CV preview/download, V09 Direct Apply/Replace snapshot HTML and plain text, V15 Send → Accept copy, and source-edit independence.
+- 2026-11-02: focused ESLint on the Slice 04 renderer and four affected test files passed; `git diff --check` passed. The common backend `verify:agent` gate was intentionally skipped by user scope.
 - 2026-11-02: `cd backend && npx vitest run test/candidate/ai-v06-slice-07-action-persistence.test.js`
   passed (6 tests), including persisted Generated Draft checks for unchanged
   source HTML and AI-replaced plain text without stale HTML. Targeted ESLint on
