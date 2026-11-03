@@ -8,6 +8,7 @@ import {
   vi,
 } from "vitest";
 
+import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
 import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
@@ -469,9 +470,9 @@ describe("V8 — Job Discovery", () => {
     });
   });
 
-  it("allows Candidate, Recruiter, and Platform Admin but rejects Company Manager", async () => {
+  it("allows Guest and Candidate and rejects Company Staff and Platform Admin on every V8 endpoint", async () => {
     const { manager, recruiter, catalog, agent } = await createBaseContext();
-    await createJob({
+    const job = await createJob({
       company: manager.company,
       recruiter,
       catalog,
@@ -495,24 +496,21 @@ describe("V8 — Job Discovery", () => {
     const managerToken = await loginAndGetAccessToken(agent, {
       email: manager.user.email,
     });
+    const endpoints = [
+      "/api/job-discovery/jobs",
+      `/api/job-discovery/jobs?companyId=${manager.company._id}`,
+      `/api/job-discovery/jobs/${job._id}`,
+      `/api/job-discovery/companies/${manager.company._id}`,
+    ];
 
-    for (const token of [candidateToken, recruiterToken, adminToken]) {
-      const response = await agent
-        .get("/api/job-discovery/jobs")
-        .set("Authorization", `Bearer ${token}`);
-
-      expect(response.status).toBe(200);
+    for (const endpoint of endpoints) {
+      expect((await agent.get(endpoint)).status).toBe(200);
+      expect((await agent.get(endpoint).set("Authorization", `Bearer ${candidateToken}`)).status).toBe(200);
+      for (const token of [recruiterToken, managerToken, adminToken]) {
+        expect((await agent.get(endpoint).set("Authorization", `Bearer ${token}`)).status).toBe(403);
+      }
+      expect((await agent.get(endpoint).set("Authorization", "Bearer invalid-token")).status).toBe(401);
     }
-
-    const managerResponse = await agent
-      .get("/api/job-discovery/jobs")
-      .set("Authorization", `Bearer ${managerToken}`);
-    const invalidTokenResponse = await agent
-      .get("/api/job-discovery/jobs")
-      .set("Authorization", "Bearer invalid-token");
-
-    expect(managerResponse.status).toBe(403);
-    expect(invalidTokenResponse.status).toBe(401);
   });
 
   it("rejects an invalid Position-to-Field category selection", async () => {
@@ -548,6 +546,200 @@ describe("V8 — Job Discovery", () => {
 
     return { manager, recruiter };
   };
+
+  describe("F02B — Company filter on the public Job list", () => {
+    it("keeps the unfiltered list and limits a valid companyId to its owning Company", async () => {
+      const { manager, recruiter, catalog, agent } = await createBaseContext();
+      const other = await createSecondCompanyContext({
+        name: "Other Hiring",
+        suffix: "F02BOTHER",
+      });
+      const ownJob = await createJob({ company: manager.company, recruiter, catalog });
+      const otherJob = await createJob({
+        company: other.manager.company,
+        recruiter: other.recruiter,
+        catalog,
+      });
+
+      const unfiltered = await agent.get("/api/job-discovery/jobs");
+      const filtered = await agent.get("/api/job-discovery/jobs").query({
+        companyId: manager.company._id.toString(),
+      });
+
+      expect(unfiltered.status).toBe(200);
+      expect(unfiltered.body.jobs.map((job) => job.id).sort()).toEqual(
+        [ownJob, otherJob].map((job) => job._id.toString()).sort(),
+      );
+      expect(unfiltered.body.pagination.total).toBe(2);
+      expect(filtered.status).toBe(200);
+      expect(Object.keys(filtered.body).sort()).toEqual(["jobs", "pagination", "sort"]);
+      expect(filtered.body.jobs.map((job) => job.id)).toEqual([ownJob._id.toString()]);
+      expect(filtered.body.pagination.total).toBe(1);
+      expect(filtered.body.sort).toBe("NEWEST");
+    });
+
+    it("rejects empty, malformed, and repeated companyId values", async () => {
+      const { manager, agent } = await createBaseContext();
+      const id = manager.company._id.toString();
+      const invalidQueries = [
+        "companyId=",
+        "companyId=invalid",
+        `companyId=${id}&companyId=${id}`,
+        `companyId=${id},${id}`,
+      ];
+
+      for (const query of invalidQueries) {
+        const response = await agent.get(`/api/job-discovery/jobs?${query}`);
+
+        expect(response.status).toBe(400);
+        expect(response.body.error.details).toEqual({ field: "companyId" });
+      }
+    });
+
+    it("returns an empty list for an unknown or ineligible Company and excludes non-public Jobs", async () => {
+      const { manager, recruiter, catalog, agent } = await createBaseContext();
+      const locked = await createSecondCompanyContext({
+        name: "Locked Hiring",
+        suffix: "F02BLOCKED",
+      });
+      const pending = await createSecondCompanyContext({
+        name: "Pending Hiring",
+        suffix: "F02BPENDING",
+      });
+      const publicJob = await createJob({ company: manager.company, recruiter, catalog });
+      for (const status of [JOB_STATUS.DRAFT, JOB_STATUS.CLOSED, JOB_STATUS.EXPIRED]) {
+        await createJob({
+          company: manager.company,
+          recruiter,
+          catalog,
+          status,
+          publishedAt: status === JOB_STATUS.DRAFT ? null : new Date(),
+        });
+      }
+      await createJob({
+        company: manager.company,
+        recruiter,
+        catalog,
+        applicationDeadline: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      });
+      await createJob({
+        company: locked.manager.company,
+        recruiter: locked.recruiter,
+        catalog,
+      });
+      await createJob({
+        company: pending.manager.company,
+        recruiter: pending.recruiter,
+        catalog,
+      });
+      await Company.findByIdAndUpdate(locked.manager.company._id, {
+        operationalStatus: COMPANY_OPERATIONAL_STATUS.LOCKED,
+      });
+      await Company.findByIdAndUpdate(pending.manager.company._id, {
+        $set: {
+          approvalStatus: COMPANY_APPROVAL_STATUS.PENDING,
+          operationalStatus: COMPANY_OPERATIONAL_STATUS.INACTIVE,
+          reviewedByUserId: null,
+          reviewedAt: null,
+          activatedAt: null,
+        },
+      });
+
+      const cases = [
+        [manager.company._id.toString(), [publicJob._id.toString()]],
+        [locked.manager.company._id.toString(), []],
+        [pending.manager.company._id.toString(), []],
+        ["000000000000000000000001", []],
+      ];
+      for (const [companyId, expectedIds] of cases) {
+        const response = await agent.get("/api/job-discovery/jobs").query({ companyId });
+
+        expect(response.status).toBe(200);
+        expect(response.body.jobs.map((job) => job.id)).toEqual(expectedIds);
+        expect(response.body.pagination.total).toBe(expectedIds.length);
+      }
+    });
+
+    it("combines companyId with keyword, filters, sort, and facet pagination", async () => {
+      const { manager, recruiter, catalog, agent } = await createBaseContext();
+      const other = await createSecondCompanyContext({
+        name: "Other Platform Hiring",
+        suffix: "F02BPAGE",
+      });
+      const now = Date.now();
+      const ownJobs = [];
+      for (let index = 0; index < 3; index += 1) {
+        ownJobs.push(await createJob({
+          company: manager.company,
+          recruiter,
+          catalog,
+          title: `Platform Engineer ${index}`,
+          workModes: [WORK_MODE.REMOTE],
+          applicationDeadline: new Date(now + (index + 2) * 24 * 60 * 60 * 1000),
+        }));
+      }
+      await createJob({
+        company: other.manager.company,
+        recruiter: other.recruiter,
+        catalog,
+        title: "Platform Engineer Other",
+        workModes: [WORK_MODE.REMOTE],
+      });
+      await createJob({
+        company: manager.company,
+        recruiter,
+        catalog,
+        title: "Platform Engineer Onsite",
+        workModes: [WORK_MODE.ONSITE],
+      });
+      await createJob({
+        company: manager.company,
+        recruiter,
+        catalog,
+        title: "Backend Engineer Remote",
+        workModes: [WORK_MODE.REMOTE],
+      });
+
+      const query = {
+        companyId: manager.company._id.toString(),
+        keyword: "platform",
+        categories: JSON.stringify({ [catalog.engineering.id]: [catalog.backend.id] }),
+        workModes: WORK_MODE.REMOTE,
+        experienceLevels: catalog.experienceLevelId.toString(),
+        sort: "EXPIRING_SOON",
+        limit: 2,
+      };
+      const aggregateSpy = vi.spyOn(Job, "aggregate");
+
+      try {
+        const first = await agent.get("/api/job-discovery/jobs").query({ ...query, page: 1 });
+        const second = await agent.get("/api/job-discovery/jobs").query({ ...query, page: 2 });
+
+        expect(first.status).toBe(200);
+        expect(second.status).toBe(200);
+        expect(first.body.jobs.map((job) => job.id)).toEqual(
+          ownJobs.slice(0, 2).map((job) => job._id.toString()),
+        );
+        expect(second.body.jobs.map((job) => job.id)).toEqual([
+          ownJobs[2]._id.toString(),
+        ]);
+        for (const response of [first, second]) {
+          expect(response.body.pagination.total).toBe(3);
+          expect(response.body.pagination.totalPages).toBe(2);
+          expect(response.body.sort).toBe("EXPIRING_SOON");
+        }
+        for (const [pipeline] of aggregateSpy.mock.calls) {
+          expect(pipeline[0].$match.$and).toContainEqual({
+            companyId: manager.company._id,
+          });
+          expect(pipeline[1]).toHaveProperty("$lookup");
+          expect(pipeline.at(-1)).toHaveProperty("$facet");
+        }
+      } finally {
+        aggregateSpy.mockRestore();
+      }
+    });
+  });
 
   // BR-16 / BR-31: keyword scope and business priority
   // title > requiredSkills > Company name > jobDescription.
@@ -779,35 +971,6 @@ describe("V8 — Job Discovery", () => {
     expect(keywordResponse.body.jobs.map((job) => job.id)).toEqual([
       activeJob._id.toString(),
     ]);
-  });
-
-  // BR-04: Company Manager context has no V8 capability on any V8 endpoint.
-  it("rejects Company Manager on Job detail and Company information", async () => {
-    const { manager, recruiter, catalog, agent } = await createBaseContext();
-    const job = await createJob({
-      company: manager.company,
-      recruiter,
-      catalog,
-    });
-    const managerToken = await loginAndGetAccessToken(agent, {
-      email: manager.user.email,
-    });
-
-    const detailResponse = await agent
-      .get(`/api/job-discovery/jobs/${job._id}`)
-      .set("Authorization", `Bearer ${managerToken}`);
-    const companyResponse = await agent
-      .get(`/api/job-discovery/companies/${manager.company._id}`)
-      .set("Authorization", `Bearer ${managerToken}`);
-
-    expect(detailResponse.status).toBe(403);
-    expect(companyResponse.status).toBe(403);
-
-    const guestDetailResponse = await agent.get(
-      `/api/job-discovery/jobs/${job._id}`,
-    );
-
-    expect(guestDetailResponse.status).toBe(200);
   });
 
   // BR-01 / BR-41: list, search, filter, sort, detail, and Company reads do

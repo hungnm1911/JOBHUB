@@ -18,12 +18,13 @@ pending.
   404/403 are shown as "not viewable" without retry.
 - Discovery requests set `requiresAuthentication: true` so an existing session
   is sent (optional authentication) and the backend applies its actor rules.
-- `JobDiscoveryRoute` now gates `/`, `/jobs`, `/jobs/:jobId`, and
-  `/companies/:companyId` using resolved authentication state and CompanyMember
-  context from `/auth/me`: Guest, Candidate, Recruiter with active membership,
-  and Platform Admin can enter; authenticated Company Manager is shown an
-  unavailable state. Pending activation enters Company onboarding. The backend
-  API remains the authority for every discovery request.
+- `JobDiscoveryRoute` gates `/`, `/jobs`, `/jobs/:jobId`, and
+  `/companies/:companyId` using resolved authentication state and User role:
+  Guest and Candidate can enter; authenticated Company Staff and Platform Admin
+  see an access-denied state. It no longer reads CompanyMember context. Pending
+  activation enters Company onboarding. The backend API remains the authority
+  for every discovery request. F03A is focused-verified as of 2026-11-03 and
+  awaits review/acceptance.
 - `AppHeader` and `AppFooter` were redesigned for every `RootLayout` screen;
   guest Login/Register links are kept and the footer links only to existing
   routes.
@@ -43,12 +44,19 @@ pending.
 - Work mode, Employment type, Experience and Salary filters; Position
   selection inside a Field; multi-select filters; explicit sort selection.
 - My CVs, upload-during-apply (V9 F02 steps 4–5), and a Saved Jobs list page.
+- F03B Company Jobs UI is not implemented by the F03A access restriction slice.
 - Mockup items without Product/API authority were not implemented: event
   banner, response-rate/partner statistics, bookmark button, app download and
   links to non-existent tools. "Featured jobs" is presented as "newest jobs"
   because Backend V8 has no featured concept.
 
 ## Verification status
+
+- 2026-11-03 F03A: `cd frontend && yarn test:auth` passed all 5 directly
+  related authentication/route files (31 tests, including 11 focused discovery
+  route tests). Targeted ESLint on the changed guard and test passed;
+  `git diff --check` passed. The full `yarn verify:agent` gate, browser, and E2E
+  checks were not run per the F03A slice instruction.
 
 - 2026-11-01 actor-aware navigation: `cd frontend && yarn verify:agent`
   passed 17 authentication tests, ESLint, and the production build (existing

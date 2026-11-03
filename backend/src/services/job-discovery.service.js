@@ -2,8 +2,6 @@ import mongoose from "mongoose";
 
 import CATEGORY_LEVEL from "../constants/category-level.js";
 import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
-import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
-import COMPANY_MEMBER_STATUS from "../constants/company-member-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import JOB_DISCOVERY_SORT from "../constants/job-discovery-sort.js";
@@ -15,7 +13,6 @@ import USER_ROLE from "../constants/user-role.js";
 import WORK_MODE from "../constants/work-mode.js";
 import Category from "../models/category.model.js";
 import Company from "../models/company.model.js";
-import CompanyMember from "../models/company-member.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import Job from "../models/job.model.js";
 import SavedJob from "../models/saved-job.model.js";
@@ -82,6 +79,18 @@ const normalizeObjectIds = (values, field) => {
   }
 
   return normalized.map((value) => new mongoose.Types.ObjectId(value));
+};
+
+const normalizeCompanyId = (value) => {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value !== "string" || !mongoose.Types.ObjectId.isValid(value)) {
+    throw new AppError(400, "Invalid companyId", { field: "companyId" });
+  }
+
+  return new mongoose.Types.ObjectId(value);
 };
 
 const normalizePageValue = (value, field, fallback, maximum = Infinity) => {
@@ -271,51 +280,9 @@ const resolveCategoryBranches = async (categoryBranches) => {
   });
 };
 
-const assertJobDiscoveryActor = async (user) => {
-  if (!user) {
-    return;
-  }
-
-  if (
-    ![
-      USER_ROLE.CANDIDATE,
-      USER_ROLE.COMPANY_STAFF,
-      USER_ROLE.PLATFORM_ADMIN,
-    ].includes(user.role)
-  ) {
+const assertJobDiscoveryActor = (user) => {
+  if (user && user.role !== USER_ROLE.CANDIDATE) {
     throw new AppError(403, "Job Discovery access is not available for this actor", {
-      field: "role",
-    });
-  }
-
-  if (user.role !== USER_ROLE.COMPANY_STAFF) {
-    return;
-  }
-
-  const managerMembership = await CompanyMember.findOne({
-    userId: user._id,
-    role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
-    status: COMPANY_MEMBER_STATUS.ACTIVE,
-  })
-    .select("_id")
-    .lean();
-
-  if (managerMembership) {
-    throw new AppError(403, "Company Manager access is not available in V8", {
-      field: "role",
-    });
-  }
-
-  const recruiterMembership = await CompanyMember.findOne({
-    userId: user._id,
-    role: COMPANY_MEMBER_ROLE.RECRUITER,
-    status: COMPANY_MEMBER_STATUS.ACTIVE,
-  })
-    .select("_id")
-    .lean();
-
-  if (!recruiterMembership) {
-    throw new AppError(403, "Recruiter access is required for Job Discovery", {
       field: "role",
     });
   }
@@ -521,6 +488,7 @@ const getDiscoveryCatalogData = async (jobs) => {
 // Job-level conditions only: they run before the Company lookup so the
 // `job_discovery_*` indexes can narrow the candidate set first.
 const buildDiscoveryFilter = ({
+  companyId,
   fieldFilters,
   locationSelections,
   workModes,
@@ -536,6 +504,10 @@ const buildDiscoveryFilter = ({
       applicationDeadline: { $gt: now },
     },
   ];
+
+  if (companyId) {
+    conditions.push({ companyId });
+  }
 
   if (fieldFilters.length > 0) {
     conditions.push({
@@ -667,6 +639,7 @@ const listJobDiscoveryJobs = async ({
 } = {}) => {
   await assertJobDiscoveryActor(actorUser);
 
+  const companyId = normalizeCompanyId(filters.companyId);
   const keyword = normalizeKeyword(filters.keyword);
   const locationSelections = normalizeLocationFilterSelections(
     filters.locations,
@@ -723,6 +696,7 @@ const listJobDiscoveryJobs = async ({
   );
 
   const discoveryFilter = buildDiscoveryFilter({
+    companyId,
     fieldFilters,
     locationSelections,
     workModes,

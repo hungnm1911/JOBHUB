@@ -1297,8 +1297,8 @@ Các constraint cần cross-document, actor, current time hoặc business contex
 | Filter không bypass visibility                                          | Service                 | Business ordering                |
 | Sort không bypass visibility                                            | Service                 | Business ordering                |
 | Relevance priority `title > skills > Company > jobDescription`          | Service                 | Business relevance rule          |
-| Recruiter được cross-Company public read                                | Service / authorization | Actor + public scope             |
-| Company Manager không có V8 discovery capability                        | Authorization layer     | Product authorization            |
+| Guest/Candidate được cross-Company public read                           | Service / authorization | Actor + public scope             |
+| Platform Admin/Company Staff không có V8 discovery capability            | Authorization layer     | Product authorization            |
 | Internal Job fields không public                                        | Service / projection    | Data exposure rule               |
 | Internal Company fields không public                                    | Service / projection    | Data exposure rule               |
 
@@ -1395,8 +1395,6 @@ V8 cho phép:
 ```text
 Guest
 Candidate
-Recruiter
-Platform Admin
         ↓
 public Job Discovery
         ↓
@@ -1409,19 +1407,8 @@ nếu từng Job thỏa public visibility contract.
 
 Đây là **public cross-tenant read**, không phải ownership transfer.
 
-Đặc biệt:
-
-```text
-Recruiter của Company A
-```
-
-có thể đọc:
-
-```text
-Job public của Company B
-```
-
-cho mục đích Job Discovery.
+Candidate có thể đọc Job public của nhiều Company khác nhau thông qua V8.
+Authenticated Platform Admin và Company Staff sử dụng API nghiệp vụ riêng.
 
 ---
 
@@ -1915,7 +1902,7 @@ Các field Recruitment Team hiện hữu trên Job không bị remove hoặc rei
 
 ### PI-16 — Public cross-tenant read không thay đổi ownership
 
-Recruiter hoặc actor khác đọc Job của Company khác không làm thay đổi:
+Guest hoặc Candidate đọc Job của Company khác không làm thay đổi:
 
 ```text
 Job.companyId

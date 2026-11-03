@@ -177,7 +177,7 @@ Route guards have these responsibilities:
   `allowedMembershipRoles` or `allowedMembershipStatuses`, waits for the
   authenticated CompanyMember context before checking its role/status. A failed
   context load presents a retry state rather than granting access.
-- `JobDiscoveryRoute` checks the resolved account and CompanyMember context for V8 discovery screens. The Authentication feature loads CompanyMember context through `/auth/me` before this guard decides access.
+- `JobDiscoveryRoute` checks resolved authentication status and User role for V8 discovery screens. It does not wait for CompanyMember context; the Authentication feature continues to load that context through `/auth/me` for routes that require it.
 - Guards may render nested content through `Outlet` and may preserve navigation context when an approved flow requires it.
 - Guards must consume auth/role state from the approved authentication owner. They must not create auth state, call business APIs, decode authority independently, or hard-code speculative destinations.
 - Frontend guards improve navigation and user experience only. Backend authentication and authorization remain mandatory and authoritative.
