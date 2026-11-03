@@ -1,4 +1,4 @@
-import { ArrowRight, Banknote, MapPin } from 'lucide-react'
+import { Banknote, MapPin } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { formatProvince, formatRelativeTime, formatSalary, formatWorkModes, getJobTags } from '../utils'
@@ -12,11 +12,24 @@ function JobCard({ job, provinceNameByCode, action }) {
   const publishedAgo = formatRelativeTime(job.publishedAt)
 
   return (
-    <article className="group relative flex h-full flex-col rounded-xl border bg-card p-5 transition-shadow hover:shadow-md">
+    <article className="group flex h-full flex-col rounded-xl border bg-card p-5 transition-shadow hover:shadow-md">
       <div className="flex items-start gap-3">
-        <CompanyLogo company={job.company} />
+        <Link
+          aria-label={`Xem công ty ${job.company.name}`}
+          className="shrink-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          to={`/companies/${job.company.id}`}
+        >
+          <CompanyLogo company={job.company} />
+        </Link>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{job.company.name}</p>
+          <p className="truncate text-sm font-medium">
+            <Link
+              className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              to={`/companies/${job.company.id}`}
+            >
+              {job.company.name}
+            </Link>
+          </p>
           {locationParts && (
             <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
               <MapPin aria-hidden="true" className="size-3.5 shrink-0" />
@@ -28,7 +41,7 @@ function JobCard({ job, provinceNameByCode, action }) {
 
       <h3 className="mt-4 line-clamp-2 text-base font-semibold leading-6">
         <Link
-          className="outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
+          className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
           to={`/jobs/${job.id}`}
         >
           {job.title}
@@ -55,15 +68,7 @@ function JobCard({ job, provinceNameByCode, action }) {
           <span className="text-xs text-muted-foreground">
             {publishedAgo ? `Đăng ${publishedAgo}` : null}
           </span>
-          {action ?? (
-            <span
-              aria-hidden="true"
-              className="inline-flex items-center gap-1 text-sm font-semibold text-primary"
-            >
-              Xem chi tiết
-              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-            </span>
-          )}
+          {action}
         </div>
       </div>
     </article>

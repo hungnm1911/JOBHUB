@@ -19,6 +19,7 @@ import { API_ERROR_MESSAGE } from '@/utils/constant'
 import useDiscoveryCompany from '../hooks/useDiscoveryCompany'
 import { toJobDiscoveryErrorMessage } from '../utils'
 import CompanyLogo from './CompanyLogo'
+import CompanyJobsSection from './CompanyJobsSection'
 
 function toExternalUrl(website) {
   return /^https?:\/\//i.test(website) ? website : `https://${website}`
@@ -194,6 +195,7 @@ function CompanyProfile({ companyId }) {
           )}
         </aside>
       </div>
+      <CompanyJobsSection companyId={companyId} key={companyId} />
     </article>
   )
 }

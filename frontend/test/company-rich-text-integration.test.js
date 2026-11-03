@@ -50,6 +50,7 @@ apiClient.defaults.adapter = async (config) => {
     const data = {
       '/job-discovery/companies/company-1': { company: publicCompany },
       '/job-discovery/jobs/job-1': { job: publicJob },
+      '/job-discovery/jobs': { jobs: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 }, sort: 'NEWEST' },
       '/categories/fields': { fields: [] },
       '/locations/provinces': { provinces: [] },
     }[config.url]
@@ -235,7 +236,7 @@ test('review and admin card presentations render sanitized HTML and legacy text'
 test('public Company profile reads HTML and falls back to escaped legacy text', async () => {
   publicCompany = { ...initialCompany, id: 'company-1' }
   const mounted = await mount(MemoryRouter, {
-    children: createElement(CompanyProfile, { companyId: 'company-1' }),
+    children: createElement(Provider, { store }, createElement(CompanyProfile, { companyId: 'company-1' })),
   })
   await act(async () => {})
   assert.equal(mounted.container.querySelector('.rich-text-viewer strong').textContent, 'Original')
@@ -243,7 +244,7 @@ test('public Company profile reads HTML and falls back to escaped legacy text', 
 
   publicCompany = { ...initialCompany, id: 'company-1', descriptionHtml: null, description: '<b>Legacy</b>' }
   const legacy = await mount(MemoryRouter, {
-    children: createElement(CompanyProfile, { companyId: 'company-1' }),
+    children: createElement(Provider, { store }, createElement(CompanyProfile, { companyId: 'company-1' })),
   })
   await act(async () => {})
   const viewer = legacy.container.querySelector('.rich-text-viewer')
