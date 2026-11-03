@@ -2,10 +2,14 @@
 
 ## Current project state
 
-The public homepage and Job detail screens for Backend V8 F02, F03, F04 (Category and
-Location only) and F06/F07 are `IMPLEMENTED; CODE GATE PASSED` as of
-2026-10-31. Human visual review against the provided homepage mockup is
-pending.
+The public homepage and Job detail screens for Backend V8 F02, F03, F04
+(Category and Location only) and F06/F07 retain their `IMPLEMENTED; CODE GATE
+PASSED` baseline as of 2026-10-31. The V8 Enhancement (F01–F03B) is
+**ACCEPTED within the focused verification scope** as of 2026-11-03, with
+Product Owner acceptance of each slice. This does not newly accept all V8 or
+V17 work. Human visual review against the provided homepage mockup is pending.
+The [Backend V8 status](../backend/v8-job-discovery.md) records its baseline and
+focused backend evidence.
 
 - **Homepage (`/`):** hero with the two newest discoverable Jobs and the live
   discoverable total; keyword + province search bar; Field Category panel
@@ -25,11 +29,12 @@ pending.
   activation enters Company onboarding. The backend API remains the authority
   for every discovery request. F03A is accepted.
 - **Company Detail (`/companies/:companyId`):** F03B Company Jobs section is
-  implemented and focused-verified as of 2026-11-03, pending review/acceptance.
+  implemented, focused-verified, and accepted as of 2026-11-03.
   It mounts after a successful Company profile read, uses the existing public
   Job list with `companyId`, `NEWEST`, and ten Jobs per page, and keeps Jobs
   pagination/loading/error/retry separate from the profile. Company changes
-  reset the Jobs page and discard stale results.
+  reset the Jobs page and discard stale results. The Company description keeps
+  the V17 Rich Text viewer path.
 - `AppHeader` and `AppFooter` were redesigned for every `RootLayout` screen;
   guest Login/Register links are kept and the footer links only to existing
   routes.
@@ -54,7 +59,7 @@ pending.
 - Work mode, Employment type, Experience and Salary filters; Position
   selection inside a Field; multi-select filters; explicit sort selection.
 - My CVs, upload-during-apply (V9 F02 steps 4–5), and a Saved Jobs list page.
-- F03B review/acceptance and browser-level visual/integration checks.
+- Browser-level visual/integration checks for the enhancement.
 - Mockup items without Product/API authority were not implemented: event
   banner, response-rate/partner statistics, bookmark button, app download and
   links to non-existent tools. "Featured jobs" is presented as "newest jobs"
@@ -67,15 +72,19 @@ pending.
   (8 tests), and `cd frontend && yarn verify:agent` passed authentication,
   Job card navigation, and rich-text tests, ESLint, and production build.
   The build retained the existing >500 kB chunk warning. Browser interaction
-  and Candidate-session Save/Apply were not checked.
+  and Candidate-session Save/Apply were not checked. This later gate entry is
+  for Job card navigation; it is not a rerun of the F03B slice's full gate.
 
 - 2026-11-03 F03B: the new Company Jobs focused file and the related Company
   rich-text and Job rich-text integration files passed (3 files / 16 tests);
-  the discovery route guard file passed (11 tests). Targeted ESLint on the
-  changed Frontend source and tests passed; `git diff --check` passed. The
-  full `yarn verify:agent` gate, browser, and E2E checks were not run per the
-  F03B slice instruction. Review/acceptance is pending; V8 Enhancement is not
-  Final Accepted.
+  the discovery route guard file passed (11 tests), for 27 focused tests in
+  total. Targeted ESLint on the changed Frontend source and tests passed;
+  `git diff --check` passed. The full `yarn verify:agent` gate, browser, and
+  E2E checks were not run per the F03B slice instruction. F03B and the V8
+  Enhancement were accepted by the Product Owner within this focused scope.
+  The accumulated local code diff has
+  not received an independent direct review; full enhancement gates, browser,
+  and E2E verification remain unconfirmed.
 
 - 2026-11-03 F03A: `cd frontend && yarn test:auth` passed all 5 directly
   related authentication/route files (31 tests, including 11 focused discovery

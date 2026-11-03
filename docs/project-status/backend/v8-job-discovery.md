@@ -2,12 +2,15 @@
 
 ## Current project state
 
-**V8 — Job Discovery** has a `COMPLETED AND VERIFIED` backend baseline; F02A
-actor authorization is accepted, and F02B optional `companyId` list filtering
-is implemented and focused-verified in Backend, pending review/acceptance.
-Its Product and Data
-contracts are `docs/product/backend/versions/v8-job-discovery.md` and
-`docs/data/backend/versions/v8-job-discovery-data-model.md`.
+**V8 — Job Discovery** retains its previously `COMPLETED AND VERIFIED` backend
+baseline. The V8 Enhancement (F01 Product/API contract, F02A actor
+authorization, F02B optional `companyId` filtering, and Frontend F03A–F03B)
+is **ACCEPTED within the focused verification scope** as of 2026-11-03.
+This does not represent a new full-gate acceptance of V8 or other versions.
+Its Product and Data contracts are
+[V8 Product](../../product/backend/versions/v8-job-discovery.md) and
+[V8 Data](../../data/backend/versions/v8-job-discovery-data-model.md); the
+[Frontend V03 status](../frontend/v03-job-discovery.md) records the consumer.
 
 The read-only public surface is implemented under `/api/job-discovery` with
 optional authentication: `GET /jobs` (list, search, filter, sort, pagination),
@@ -25,26 +28,27 @@ The V8 Product/API contract specifies an optional single-ObjectId `companyId`
 on `GET /api/job-discovery/jobs` for the public Company Detail Jobs list.
 Backend applies it in the initial MongoDB Job match before Company eligibility,
 keyword, sort, and facet pagination; the response envelope remains unchanged.
-The Frontend Company Detail consumer is not implemented by F02B.
+Company Detail reads the public Company profile and the filtered Jobs list
+through separate V8 requests; its Frontend implementation is recorded in the
+Frontend V03 status leaf.
 
-The final architecture review of V8 found no Critical or High finding and no
-Medium finding that blocks completion. List pagination and ordering now run in
-MongoDB (single aggregation: Job filter, Company eligibility lookup, keyword,
-sort, skip/limit, and total count) instead of loading every match and every
-active Company into memory; the public response shape, sort semantics, and
+The earlier baseline architecture review of V8 found no Critical or High
+finding and no Medium finding that blocks completion. List pagination and
+ordering now run in MongoDB (single aggregation: Job filter, Company
+eligibility lookup, keyword, sort, skip/limit, and total count) instead of
+loading every match and every active Company into memory; the public response
+shape, sort semantics, and
 pagination metadata are unchanged and no index or schema changed.
 
 ## Deferred / not started
 
-- **Company Detail consumer:** Frontend integration for the optional
-  `companyId` list query is deferred to a later slice.
-- **F02B review gate:** review and accept the focused Backend implementation.
 - **Non-blocking review items:** the list pipeline restates the discoverable
   predicate that `resolveJobDiscoveryVisibility` applies to detail, so the two
   must be kept in sync (the V8 owner row in `docs/engineering/source-of-truth.md`
   records this).
-- **Not verified:** MongoDB query plans (`explain`) and performance on large
-  data sets; V8 has no frontend, so frontend behavior is out of scope here.
+- **Not verified for the enhancement:** full Backend gate, MongoDB query plans
+  (`explain`), and performance on large data sets. Frontend focused evidence
+  and its remaining browser/E2E checks are recorded in the Frontend V03 leaf.
 - **Out of V8 by design:** Apply, Application, Saved Jobs, Candidate Search,
   Job Invitation, Chat, Interview, Notification, Job recommendation, view
   tracking, and posted-date filtering.
@@ -83,6 +87,11 @@ pagination metadata are unchanged and no index or schema changed.
 
 ## Verification status
 
+- V8 Enhancement closure: F01 Product/API contract and F02A–F02B were accepted
+  by the Product Owner. Acceptance relies on the focused evidence below;
+  the accumulated local code diff has not received an independent direct
+  review. The full Backend `verify:agent` gate was not rerun for the
+  enhancement. The baseline gate below predates the enhancement.
 - F02B focused verification: full V8 Job Discovery file plus the directly
   related V4.1 Location and V4.2 Salary Discovery filter files passed
   (3 files / 63 tests). Targeted ESLint on the changed controller, service,
