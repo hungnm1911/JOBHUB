@@ -134,6 +134,7 @@ describe("V7 Slice 03 — Create Generated CV Draft (F03)", () => {
           avatarUrl: null,
         },
         professionalSummary: null,
+        professionalSummaryHtml: null,
         educations: [],
         skills: [],
         workExperiences: [],

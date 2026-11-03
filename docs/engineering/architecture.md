@@ -284,8 +284,10 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   returns a frozen instance with AI-V01 entries `normalizeJob` (F01) and
   `normalizeGeneratedCv` (F02), AI-V02 `normalizeUploadedCv` (F01),
   AI-V03 `matchJobCv` (F01 orchestration), AI-V04 `evaluateCv` (F01 Slice 1),
-  and AI-V05 `assessRecommendationBatch` (Slice 04 F03) and
-  `scoreRecommendationAssessment` (Slice 05 F04). The AI-V01 entries
+  AI-V05 `buildJobEmbeddingText` (Slice 01), `buildCvQueryText` (Slice 03),
+  `assessRecommendationBatch` (Slice 04 F03), and
+  `scoreRecommendationAssessment` (Slice 05 F04), and AI-V06 `optimizeCv`
+  (Slices 02–03 F03). The AI-V01 entries
   remain synchronous, deterministic, and provider-free; they
   need no LLM configuration and do not log. The AI-V02 entry is asynchronous
   and calls one explicitly selected provider after PDF text extraction.

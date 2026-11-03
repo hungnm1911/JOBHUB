@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { createAiKit } from "../src/index.js";
 import { extractPdfTextFromBuffer, PdfTextExtractionError } from "../src/document/pdf-text-extractor.js";
+import { normalizeTokenCount } from "../src/llm/provider-usage.js";
 import { assertUploadedCvSource } from "../src/normalization/uploaded-cv-normalization.js";
 
 // A synthetic, contract-valid projection. This smoke tool does not assert
@@ -34,7 +35,7 @@ const emptyUsage = () => ({
   cached_tokens: null,
 });
 
-const tokenCount = (value) => Number.isInteger(value) && value >= 0 ? value : null;
+const tokenCount = normalizeTokenCount;
 const DEFAULT_OUTPUT_ROOT = fileURLToPath(new URL("../.smoke-output/", import.meta.url));
 
 const extractionArtifact = (outputTexts) => {
@@ -151,6 +152,8 @@ const runUploadedCvCodexSmoke = async ({ pdfBuffer, codex, live = false, debug =
   const startedAt = performance.now();
   const saveArtifacts = async (summary, profile) => {
     if (!artifactDir) return summary;
+    const responseVerdict = diagnostics.find((event) => event.gate === "responses_api"
+      && (event.status === "PASS" || event.status === "FAIL"));
     const paths = {
       extraction: join(artifactDir, "llm-extraction.json"),
       profile: join(artifactDir, "cv-match-profile.json"),
@@ -169,7 +172,7 @@ const runUploadedCvCodexSmoke = async ({ pdfBuffer, codex, live = false, debug =
         httpStatus: diagnostics.find((event) => event.gate === "http_sdk")?.httpStatus ?? null,
         requestCount: diagnostics.find((event) => event.gate === "http_sdk")?.sdkRequestCount ??
           Number(requestStarted),
-        responseCompletion: diagnostics.find((event) => event.gate === "responses_api")?.responseStatus ?? null,
+        responseCompletion: responseVerdict?.responseStatus ?? null,
         completion: summary.completion, usage: summary.usage, durationMs: summary.durationMs,
         source: "synthetic smoke metadata", correlationId, gates: diagnostics,
       });
@@ -190,8 +193,8 @@ const runUploadedCvCodexSmoke = async ({ pdfBuffer, codex, live = false, debug =
           event = { ...event, stage: "execution" };
         }
         if (event.gate === "responses_api" && event.usage) {
-          event = { ...event, usage: Object.fromEntries(Object.entries(event.usage)
-            .map(([key, value]) => [key, tokenCount(value)])) };
+          event = { ...event, usage: Object.fromEntries(Object.keys(emptyUsage())
+            .map((key) => [key, tokenCount(event.usage[key])])) };
         }
         diagnostic(event);
       } : undefined });

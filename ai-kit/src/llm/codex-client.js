@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-import { logProviderUsage } from "./provider-usage.js";
+import { logProviderUsage, normalizeTokenCount } from "./provider-usage.js";
 import { getProviderErrorMetadata } from "./provider-error-metadata.js";
 
 const assertNonEmptyString = (value, fieldName) => {
@@ -23,7 +23,7 @@ const NETWORK_CODES = new Set([
 
 const safeName = (value) => typeof value === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)
   ? value : "UnknownError";
-const tokenCount = (value) => Number.isInteger(value) && value >= 0 ? value : null;
+const tokenCount = normalizeTokenCount;
 const safeResponseValue = (value, allowed) => allowed.includes(value) ? value : "UNKNOWN";
 
 const summarizeResponse = (response, requestMaxOutputTokens) => {
@@ -136,9 +136,9 @@ function createCodexClient({ apiKey, baseURL, model, logger }) {
         },
       });
       diagnostic?.({ gate: "usage", status: "PASS",
-        inputTokens: response?.usage?.input_tokens ?? null,
-        outputTokens: response?.usage?.output_tokens ?? null,
-        totalTokens: response?.usage?.total_tokens ?? null });
+        inputTokens: tokenCount(response?.usage?.input_tokens),
+        outputTokens: tokenCount(response?.usage?.output_tokens),
+        totalTokens: tokenCount(response?.usage?.total_tokens) });
 
       return response;
     } catch (error) {

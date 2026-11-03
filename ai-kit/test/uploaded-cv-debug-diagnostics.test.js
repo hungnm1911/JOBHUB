@@ -46,6 +46,11 @@ describe("F01 debug diagnostics on the existing smoke path", () => {
     expect(gate(records, "responses_api")).toMatchObject({ status: "PASS", responseStatus: "completed",
       outputCount: 1, outputTypes: ["message"], contentCount: [1], contentTypes: [["output_text"]],
       usage: { total_tokens: 30 } });
+    expect(gate(records, "sdk_response")).toMatchObject({ status: "OBSERVED",
+      responseStatus: "completed", outputItemCount: 1, outputTextCount: 1 });
+    expect(records.filter((record) => record.gate === "responses_api")).toHaveLength(1);
+    expect(records.indexOf(gate(records, "sdk_response")))
+      .toBeLessThan(records.indexOf(gate(records, "responses_api")));
     for (const name of ["pdf_extraction", "request", "json_parse", "schema_validation",
       "evidence_validation", "composition"]) {
       expect(gate(records, name).status).toBe("PASS");
@@ -95,6 +100,9 @@ describe("F01 debug diagnostics on the existing smoke path", () => {
     expect(result.failureKind).toBe("RESPONSE_REJECTED");
     expect(gate(records, "responses_api")).toMatchObject({ status: "FAIL",
       code: "RESPONSE_NOT_COMPLETED", incompleteReason: "max_output_tokens" });
+    expect(records.filter((record) => record.gate === "responses_api")).toHaveLength(1);
+    expect(gate(records, "sdk_response")).toMatchObject({ status: "OBSERVED",
+      responseStatus: "incomplete" });
     expect(gate(records, "json_parse").status).toBe("SKIPPED");
   });
 
@@ -106,6 +114,10 @@ describe("F01 debug diagnostics on the existing smoke path", () => {
     const failed = await runHttp({ error: { message: "raw-private-payload", type: "bad_request" } }, 429);
     expect(failed.result.status).toBe("PROVIDER_ERROR");
     expect(gate(failed.records, "http_sdk")).toMatchObject({ status: "FAIL", httpStatus: 429 });
+    expect(gate(failed.records, "responses_api")).toMatchObject({ status: "SKIPPED",
+      code: "UPSTREAM_FAILED" });
+    expect(failed.records.filter((record) => record.gate === "responses_api")).toHaveLength(1);
+    expect(gate(failed.records, "sdk_response")).toBeUndefined();
   });
 
   it("reports output shape failure with counts and types", async () => {

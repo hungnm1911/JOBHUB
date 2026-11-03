@@ -12,6 +12,7 @@ vi.mock("openai", () => ({
 import OpenAI from "openai";
 
 import { createCodexClient } from "../src/llm/codex-client.js";
+import { normalizeTokenCount } from "../src/llm/provider-usage.js";
 
 const logger = Object.freeze({
   error: vi.fn(),
@@ -154,6 +155,41 @@ describe("Codex client adapter", () => {
       outputTokens: 4088, reasoningOutputTokens: 200,
     }));
     expect(JSON.stringify(events)).not.toContain(marker);
+  });
+
+  it("accepts only finite non-negative safe integer token counts", () => {
+    expect([0, 23, Number.MAX_SAFE_INTEGER].map(normalizeTokenCount))
+      .toEqual([0, 23, Number.MAX_SAFE_INTEGER]);
+    expect([-1, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1,
+      "23", {}, []].map(normalizeTokenCount))
+      .toEqual([null, null, null, null, null, null, null, null]);
+  });
+
+  it("emits only safe token counts when provider usage is malformed", async () => {
+    const marker = "SENSITIVE_USAGE_CANARY";
+    const response = { status: "completed", output: [], usage: {
+      input_tokens: marker, output_tokens: { private: marker }, total_tokens: [marker],
+      input_tokens_details: { cached_tokens: -1 },
+      output_tokens_details: { reasoning_tokens: Number.MAX_SAFE_INTEGER + 1 },
+    } };
+    createResponseMock.mockReturnValue({ withResponse: () => Promise.resolve({
+      data: response, response: { status: 200 },
+    }) });
+    const diagnostic = vi.fn();
+    const client = createCodexClient({ apiKey: "test-codex-api-key",
+      baseURL: "https://codex.example.test/v1", model: "test-codex-model", logger });
+
+    await expect(client.createResponse({ input: "offline", diagnostic })).resolves.toBe(response);
+    const events = diagnostic.mock.calls.map(([event]) => event);
+    expect(events.find((event) => event.gate === "usage")).toMatchObject({
+      inputTokens: null, outputTokens: null, totalTokens: null,
+    });
+    expect(events.find((event) => event.gate === "responses_api")).toMatchObject({
+      inputTokens: null, outputTokens: null, totalTokens: null,
+      cachedInputTokens: null, reasoningOutputTokens: null,
+    });
+    expect(JSON.stringify(events)).not.toContain(marker);
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(marker);
   });
 
   it("rejects incomplete config before SDK initialization", () => {

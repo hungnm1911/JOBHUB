@@ -1,5 +1,6 @@
 import { extractPdfTextFromBuffer } from "../document/pdf-text-extractor.js";
 import { createCodexClient } from "../llm/codex-client.js";
+import { normalizeTokenCount } from "../llm/provider-usage.js";
 import { createGeminiClient } from "../llm/gemini-client.js";
 import { createGroqClient } from "../llm/groq-client.js";
 import {
@@ -53,10 +54,10 @@ const summarizeCodexResponse = (response) => ({
     length + (Array.isArray(item?.content) ? item.content.reduce((sum, part) =>
       sum + (typeof part?.text === "string" ? part.text.length : 0), 0) : 0), 0) : null,
   usage: {
-    input_tokens: response?.usage?.input_tokens ?? null,
-    output_tokens: response?.usage?.output_tokens ?? null,
-    total_tokens: response?.usage?.total_tokens ?? null,
-    cached_tokens: response?.usage?.input_tokens_details?.cached_tokens ?? null,
+    input_tokens: normalizeTokenCount(response?.usage?.input_tokens),
+    output_tokens: normalizeTokenCount(response?.usage?.output_tokens),
+    total_tokens: normalizeTokenCount(response?.usage?.total_tokens),
+    cached_tokens: normalizeTokenCount(response?.usage?.input_tokens_details?.cached_tokens),
   },
 });
 
@@ -70,7 +71,11 @@ const interpretWithCodex = async ({ config, logger, extractedText, diagnostic, c
     throw error;
   }
   const response = await client.createResponse({
-    ...(diagnostic ? { diagnostic } : {}),
+    // Keep the SDK observation separate from AI-V02's response verdict.
+    ...(diagnostic ? { diagnostic: (event) => diagnostic(
+      event.gate === "responses_api" && event.status === "OBSERVED"
+        ? { ...event, gate: "sdk_response" } : event,
+    ) } : {}),
     instructions: EXTRACTION_INSTRUCTION,
     input: extractedText,
     text: {

@@ -109,4 +109,38 @@ describe("Uploaded CV Codex smoke launcher", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("does not print malformed provider usage in CLI diagnostics", async () => {
+    const marker = "SENSITIVE_USAGE_CANARY";
+    const pdf = await readFile(new URL("../../../ai-kit/test/fixtures/pdf-text-extraction.pdf", import.meta.url));
+    const extraction = Object.fromEntries(["careerPositioning", "professionalSummary", "skills",
+      "workExperiences", "projects", "educations", "certifications", "languages",
+      "otherCareerClaims", "unresolvedContent"].map((key) => [key, []]));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      id: "resp_mock", object: "response", status: "completed", incomplete_details: null,
+      error: null, usage: { input_tokens: 20, output_tokens: marker,
+        total_tokens: { private: marker }, input_tokens_details: { cached_tokens: [marker] } },
+      output: [{ type: "message", role: "assistant", status: "completed",
+        content: [{ type: "output_text", text: JSON.stringify(extraction) }] }],
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const emit = vi.fn();
+    try {
+      const result = await runBackendUploadedCvCodexSmoke({
+        args: ["--pdf", "private-name.pdf", "--live", "--debug"], config,
+        runSmoke: runUploadedCvCodexSmoke, readPdf: vi.fn().mockResolvedValue(pdf), emit,
+      });
+      expect(result).toMatchObject({ status: "READY", usage: {
+        input_tokens: 20, output_tokens: null, total_tokens: null, cached_tokens: null,
+      } });
+      expect(fetchMock).toHaveBeenCalledOnce();
+      const lines = emit.mock.calls.map(([line]) => line);
+      const events = lines.map((line) => JSON.parse(line));
+      expect(events.find((event) => event.gate === "usage"))
+        .toMatchObject({ inputTokens: 20, outputTokens: null, totalTokens: null });
+      expect(lines.join("\n")).not.toContain(marker);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
