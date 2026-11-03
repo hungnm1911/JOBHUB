@@ -20,8 +20,13 @@ import logger from "../../src/utils/logger.js";
 describe("AI Kit backend integration", () => {
   it("creates the shared instance with normalized config and the canonical logger", () => {
     expect(Object.keys(aiKit)).toEqual([
-      "normalizeJob", "normalizeGeneratedCv", "normalizeUploadedCv", "matchJobCv",
+      "normalizeJob", "buildJobEmbeddingText", "buildCvQueryText",
+      "normalizeGeneratedCv", "normalizeUploadedCv", "matchJobCv",
+      "assessRecommendationBatch", "scoreRecommendationAssessment", "evaluateCv", "optimizeCv",
     ]);
+    for (const method of Object.values(aiKit)) {
+      expect(method).toBeTypeOf("function");
+    }
     expect(Object.isFrozen(aiKit)).toBe(true);
     expect(createAiKitSpy).toHaveBeenCalledOnce();
     expect(createAiKitSpy).toHaveBeenCalledWith({

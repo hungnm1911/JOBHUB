@@ -52,6 +52,10 @@ describe("F01 full local smoke output", () => {
         httpStatus: 200, requestCount: 1, responseCompletion: "completed",
         usage: { total_tokens: 65 }, source: "synthetic smoke metadata" });
       expect(summary.gates.find((gate) => gate.gate === "composition").status).toBe("PASS");
+      expect(summary.gates.filter((gate) => gate.gate === "responses_api"))
+        .toMatchObject([{ status: "PASS", code: "RESPONSE_ACCEPTED" }]);
+      expect(summary.gates.find((gate) => gate.gate === "sdk_response"))
+        .toMatchObject({ status: "OBSERVED", responseStatus: "completed" });
       expect((await stat(result.outputPaths.extraction)).mode & 0o777).toBe(0o600);
       expect(JSON.stringify(records)).not.toMatch(/PRIVATE_KEY|Private skill|Private work|Private ambiguity/);
       expect(JSON.stringify(summary)).not.toMatch(/PRIVATE_KEY|Private skill|Private work|Private ambiguity/);
@@ -75,7 +79,43 @@ describe("F01 full local smoke output", () => {
       expect(JSON.parse(await readFile(result.outputPaths.profile, "utf8"))).toBeNull();
       const summary = JSON.parse(await readFile(result.outputPaths.diagnostic, "utf8"));
       expect(summary).toMatchObject({ requestCount: 1, responseCompletion: "incomplete" });
-      expect(summary.gates.find((gate) => gate.gate === "responses_api").status).toBe("FAIL");
+      expect(summary.gates.filter((gate) => gate.gate === "responses_api"))
+        .toMatchObject([{ status: "FAIL", code: "RESPONSE_NOT_COMPLETED" }]);
+      expect(summary.gates.find((gate) => gate.gate === "sdk_response"))
+        .toMatchObject({ status: "OBSERVED", responseStatus: "incomplete" });
+    } finally {
+      await rm(outputRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps malformed usage out of console records and the diagnostic summary", async () => {
+    const marker = "SENSITIVE_USAGE_CANARY";
+    const outputRoot = await mkdtemp(join(tmpdir(), "jobhub-smoke-output-"));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      id: "resp_offline", object: "response", status: "completed",
+      incomplete_details: null, error: null,
+      usage: { input_tokens: 12, output_tokens: marker, total_tokens: { private: marker },
+        input_tokens_details: { cached_tokens: [marker] } },
+      output: [{ type: "message", role: "assistant", status: "completed",
+        content: [{ type: "output_text", text: JSON.stringify(emptyExtraction) }] }],
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const records = [];
+    try {
+      const result = await runUploadedCvCodexSmoke({ pdfBuffer, codex, live: true, debug: true,
+        fullOutput: true, outputRoot, report: (record) => records.push(record) });
+      expect(result.status).toBe("READY");
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(result.usage).toEqual({ input_tokens: 12, output_tokens: null,
+        total_tokens: null, cached_tokens: null });
+      const summary = JSON.parse(await readFile(result.outputPaths.diagnostic, "utf8"));
+      expect(summary).toMatchObject({ status: "READY", requestCount: 1, usage: result.usage });
+      expect(summary.gates.find((event) => event.gate === "responses_api").usage)
+        .toEqual(result.usage);
+      expect(summary.gates.find((event) => event.gate === "usage"))
+        .toMatchObject({ inputTokens: 12, outputTokens: null, totalTokens: null });
+      expect(JSON.stringify(records)).not.toContain(marker);
+      expect(JSON.stringify(summary)).not.toContain(marker);
     } finally {
       await rm(outputRoot, { recursive: true, force: true });
     }

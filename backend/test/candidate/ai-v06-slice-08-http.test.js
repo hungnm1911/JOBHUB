@@ -74,7 +74,17 @@ const setup = async ({ sourceType = "GENERATED" } = {}) => {
     categoryId: category._id,
     ...(sourceType === "GENERATED" ? { generatedContent: {
       personalInfo: { fullName: "Candidate Name" },
-      professionalSummary: "Original summary", skills: ["JavaScript"],
+      professionalSummary: "Original summary",
+      professionalSummaryHtml: "<p>Original <strong>summary</strong></p>",
+      skills: ["JavaScript"],
+      workExperiences: [{
+        companyName: "Acme", description: "Built APIs",
+        descriptionHtml: "<p>Built <em>APIs</em></p>",
+      }],
+      projects: [{
+        name: "Ledger", description: "Used Node",
+        descriptionHtml: "<p>Used <strong>Node</strong></p>",
+      }],
     } } : { uploadedFile: {
       storageKey: `candidate-cvs/uploaded/${marker}.pdf`,
       originalFileName: "source.pdf", mimeType: "application/pdf",
@@ -122,7 +132,14 @@ describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
       status: "DRAFT", visibility: "PRIVATE", isDefault: false,
       generatedContent: {
         personalInfo: { fullName: "Candidate Name" },
-        professionalSummary: "Targeted summary", skills: ["Node.js"],
+        professionalSummary: "Targeted summary", professionalSummaryHtml: null,
+        skills: ["Node.js"],
+        workExperiences: [{
+          description: "Built APIs", descriptionHtml: "<p>Built <em>APIs</em></p>",
+        }],
+        projects: [{
+          description: "Used Node", descriptionHtml: "<p>Used <strong>Node</strong></p>",
+        }],
       },
     });
     expect(optimizeCv).toHaveBeenCalledWith(expect.objectContaining({
@@ -137,7 +154,12 @@ describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
     const saved = await CandidateCV.findById(response.body.cv.id).lean();
     expect(saved).toMatchObject({
       candidateUserId: candidate.user._id, status: "DRAFT", isDefault: false,
-      generatedContent: { professionalSummary: "Targeted summary", skills: ["Node.js"] },
+      generatedContent: {
+        professionalSummary: "Targeted summary", professionalSummaryHtml: null,
+        skills: ["Node.js"],
+        workExperiences: [{ descriptionHtml: "<p>Built <em>APIs</em></p>" }],
+        projects: [{ descriptionHtml: "<p>Used <strong>Node</strong></p>" }],
+      },
     });
     expect(await CandidateCV.findById(source._id).lean()).toEqual(sourceBefore);
     expect(await CandidateCV.countDocuments()).toBe(2);
@@ -157,7 +179,7 @@ describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
       .send({ professionalSummary: editedSummary }).expect(200);
     expect(edited.body.cv).toMatchObject({
       id: cvId, status: "DRAFT", isDefault: false,
-      generatedContent: { professionalSummary: editedSummary },
+      generatedContent: { professionalSummary: editedSummary, professionalSummaryHtml: null },
     });
 
     const secondPreview = await previewPdf(agent, token, cvId);
@@ -173,6 +195,11 @@ describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
     expect(updated.status).toBe("DRAFT");
     expect(updated.isDefault).toBe(false);
     expect(updated.generatedContent.professionalSummary).toBe(editedSummary);
+    expect(updated.generatedContent.professionalSummaryHtml).toBeNull();
+    expect(updated.generatedContent.workExperiences[0].descriptionHtml)
+      .toBe("<p>Built <em>APIs</em></p>");
+    expect(updated.generatedContent.projects[0].descriptionHtml)
+      .toBe("<p>Used <strong>Node</strong></p>");
     expect(await CandidateCV.findById(source._id).lean()).toEqual(sourceBefore);
     expect(await CandidateCV.countDocuments()).toBe(2);
   });
@@ -209,9 +236,10 @@ describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
     expect(normalizeUploaded).toHaveBeenCalledOnce();
     expect(optimizeCv).toHaveBeenCalledWith(expect.objectContaining({ evaluationResult: advice }));
     expect(Object.keys(response.body.cv.generatedContent).sort()).toEqual([
-      "personalInfo", "hiddenSections", "professionalSummary", "skills",
+      "personalInfo", "hiddenSections", "professionalSummary", "professionalSummaryHtml", "skills",
       "workExperiences", "projects", "educations", "certifications", "languages",
     ].sort());
+    expect(response.body.cv.generatedContent.professionalSummaryHtml).toBeNull();
     expect(Object.keys(optimizeCv.mock.calls[0][0].generatedBaseline).sort())
       .toEqual(Object.keys(optimizationResult).sort());
     expect(await CandidateCV.countDocuments()).toBe(2);

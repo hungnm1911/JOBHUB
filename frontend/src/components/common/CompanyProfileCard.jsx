@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 
+import RichTextViewer from '@/components/common/RichTextViewer'
 import { cn } from '@/lib/utils'
 
 const EMPTY_VALUE = 'Chưa cung cấp'
@@ -112,9 +113,14 @@ function CompanyProfileCard({ profile, badge, presentation = 'default' }) {
 
         <section className="mt-7 grid min-w-0 gap-3.5 border-t pt-7 sm:gap-4 md:mt-8 md:grid-cols-[10rem_minmax(0,1fr)] md:gap-6 md:pt-8">
           <h3 className="text-base leading-6 font-semibold tracking-[-0.01em]">Giới thiệu doanh nghiệp</h3>
-          <p className="max-w-[65ch] text-base leading-7 whitespace-pre-line text-pretty [overflow-wrap:anywhere]">
-            {profile.description || EMPTY_VALUE}
-          </p>
+          {profile.descriptionHtml || profile.description ? (
+            <RichTextViewer
+              className="max-w-[65ch] text-base leading-7 text-pretty [overflow-wrap:anywhere]"
+              format={profile.descriptionHtml ? 'html' : 'plain'}
+              preset="full"
+              value={profile.descriptionHtml || profile.description}
+            />
+          ) : <p>{EMPTY_VALUE}</p>}
         </section>
 
         <section className="mt-7 grid min-w-0 gap-3.5 border-t pt-7 sm:gap-4 md:mt-8 md:grid-cols-[10rem_minmax(0,1fr)] md:gap-6 md:pt-8">
@@ -200,10 +206,13 @@ function CompanyProfileCard({ profile, badge, presentation = 'default' }) {
           {profile.logoUrl}
         </ProfileItem>
         <ProfileItem className="sm:col-span-2" label="Mô tả doanh nghiệp">
-          {profile.description && (
-            <p className="font-normal whitespace-pre-line text-muted-foreground">
-              {profile.description}
-            </p>
+          {(profile.descriptionHtml || profile.description) && (
+            <RichTextViewer
+              className="font-normal text-muted-foreground"
+              format={profile.descriptionHtml ? 'html' : 'plain'}
+              preset="full"
+              value={profile.descriptionHtml || profile.description}
+            />
           )}
         </ProfileItem>
         <ProfileItem className="sm:col-span-2" icon={ImageIcon} label="Ảnh bìa doanh nghiệp">

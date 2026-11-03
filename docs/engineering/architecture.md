@@ -284,8 +284,10 @@ Current deviations from these constraints are catalogued in [`source-of-truth.md
   returns a frozen instance with AI-V01 entries `normalizeJob` (F01) and
   `normalizeGeneratedCv` (F02), AI-V02 `normalizeUploadedCv` (F01),
   AI-V03 `matchJobCv` (F01 orchestration), AI-V04 `evaluateCv` (F01 Slice 1),
-  and AI-V05 `assessRecommendationBatch` (Slice 04 F03) and
-  `scoreRecommendationAssessment` (Slice 05 F04). The AI-V01 entries
+  AI-V05 `buildJobEmbeddingText` (Slice 01), `buildCvQueryText` (Slice 03),
+  `assessRecommendationBatch` (Slice 04 F03), and
+  `scoreRecommendationAssessment` (Slice 05 F04), and AI-V06 `optimizeCv`
+  (Slices 02–03 F03). The AI-V01 entries
   remain synchronous, deterministic, and provider-free; they
   need no LLM configuration and do not log. The AI-V02 entry is asynchronous
   and calls one explicitly selected provider after PDF text extraction.
@@ -533,9 +535,9 @@ The current browser runtime is composed as follows:
 
 1. [`frontend/src/main.jsx`](../../frontend/src/main.jsx) imports global styles, creates the React root, and mounts the application inside the single Redux `Provider`.
 2. [`frontend/src/App.jsx`](../../frontend/src/App.jsx) composes authentication bootstrap around the single React Router `RouterProvider` and renders the single Sonner `<Toaster />` for transient action feedback. The Toaster receives the application-wide defaults from `TOASTER_CONFIG` in `frontend/src/utils/constant.js`: top-right position, rich success/error colors, close button, 4,000 ms duration, and theme-token styling. Components and feature hooks call `toast` from `sonner` directly without extra setup; toasts are not persisted business notifications.
-3. [`frontend/src/routes/index.jsx`](../../frontend/src/routes/index.jsx) composes route groups and creates the browser router. The current public route group maps `/` to `RootLayout` and its nested `HomePage` index route.
+3. [`frontend/src/routes/index.jsx`](../../frontend/src/routes/index.jsx) composes route groups and creates the browser router. The public route group maps `/`, `/jobs`, `/jobs/:jobId`, and `/companies/:companyId` through `JobDiscoveryRoute` under `RootLayout`; the guard admits Guest and Candidate based on resolved User role, while backend authorization remains authoritative.
 4. `RootLayout` composes the application-level `AppHeader` with an `Outlet`; the page owns the complete URL-mapped screen content.
-5. One configured Axios client applies `API_CONFIG` (base URL and timeout) from `frontend/src/utils/constant.js`, attaches access credentials only to requests declaring `requiresAuthentication: true`, coordinates reactive single-flight refresh/retry through the Authentication feature, and owns normalized `ApiError` output (including `requestId` from the backend `X-Request-Id` header) plus development-only console logging. `authentication.api.js` is its first resource consumer.
+5. One configured Axios client applies `API_CONFIG` (base URL and timeout) from `frontend/src/utils/constant.js`, attaches access credentials only to requests declaring `requiresAuthentication: true`, coordinates reactive single-flight refresh/retry through the Authentication feature, and owns normalized `ApiError` output (including `requestId` from the backend `X-Request-Id` header) plus development-only console logging. Resource consumers include `authentication.api.js` and `job-discovery.api.js`; the latter sends an existing session for optional-auth V8 reads.
 6. One lazy Socket.IO client applies `SOCKET_CONFIG` from `frontend/src/utils/constant.js` and owns connection lifecycle and access-token handshake auth. Authentication login/bootstrap connects it, access refresh updates its credential and reconnects an active connection, and logout/session invalidation disconnects it.
 7. The Redux store registers the Authentication feature reducer. Authentication storage is an owned localStorage record; Redux reflects restoration, authenticated, unauthenticated, and temporarily-unavailable UI state without becoming the token source of truth.
 
@@ -550,13 +552,15 @@ frontend/
 └── src/
     ├── apis/
     │   ├── client/         # Shared Axios instance, auth interceptors, and error normalization
-    │   └── authentication.api.js # Authentication HTTP endpoints
+    │   ├── authentication.api.js # Authentication HTTP endpoints
+    │   └── job-discovery.api.js # V8 public reads
     ├── components/
     │   ├── common/         # Application-level shared components
+    │   ├── layouts/        # Shared route layout frames with Outlet
     │   └── ui/             # shadcn/ui-style primitives
     ├── features/
-    │   └── authentication/ # Auth storage/state, lifecycle services, and bootstrap
-    ├── layouts/            # Shared route layout frames with Outlet
+    │   ├── authentication/ # Auth storage/state, lifecycle services, and bootstrap
+    │   └── job-discovery/  # V8 client workflows and presentation
     ├── lib/                # External-library integration helpers such as cn()
     ├── pages/              # Complete URL-mapped screens
     ├── routes/             # Router composition, route groups, and navigation guards
@@ -576,12 +580,12 @@ yet.
 
 ### Current capability boundary
 
-The frontend currently provides a runnable technical foundation, sample
-screen, and V1 authentication lifecycle infrastructure. It still has no
-concrete login/logout screen, feature-specific realtime listener, or
-role-specific application shell. Route guards consume the Authentication
-feature's resolved state, but no concrete guarded routes or redirect
-destinations have been approved and declared yet.
+The frontend has V1 authentication lifecycle infrastructure and concrete V8
+discovery screens. `JobDiscoveryRoute` guards the discovery routes using
+resolved authentication state and User role; authenticated Company Staff and
+Platform Admin receive an access-denied state, while the Backend V8 APIs
+enforce authorization. Company Detail reads the public Company profile and
+the `companyId`-filtered Jobs list independently.
 
 The canonical frontend owners and known mismatches remain in
 [`frontend-source-of-truth.md`](frontend-source-of-truth.md). This architecture
@@ -637,7 +641,7 @@ realtime behavior when it does not need them.
 
 ### Layouts and pages
 
-- `frontend/src/layouts/` contains shared structural frames for a group of routes. A layout may compose headers, sidebars, navigation, footers, and an `Outlet`.
+- `frontend/src/components/layouts/` contains shared structural frames for a group of routes. A layout may compose headers, sidebars, navigation, footers, and an `Outlet`.
 - A new layout is created only when a real structural or experience difference exists. Role-specific layouts are not pre-created from role names alone.
 - `frontend/src/pages/` contains complete screens mapped to URLs. Pages compose features and shared components rather than owning an entire business workflow themselves.
 - Pages do not absorb complex HTTP, realtime, persistence, or domain orchestration that belongs to a feature owner.
@@ -656,6 +660,7 @@ realtime behavior when it does not need them.
 
 - `frontend/src/components/ui/` contains general UI primitives managed with shadcn/ui conventions and Tailwind CSS. Primitives contain no JOBHUB-specific business logic.
 - `frontend/src/components/common/` contains application-level presentation shared by multiple pages or features, such as the current `AppHeader`.
+- `frontend/src/components/layouts/` contains route-level structural frames; its layouts keep the layout ownership rules above.
 - `frontend/src/features/<feature>/components/` contains presentation tied to one business feature.
 - Components are promoted from feature scope to `common/` only when their semantics are application-level and they have real cross-area use.
 - UI primitives such as inputs, dialogs, dropdown menus, tables, and badges are added only when a screen actually needs them; empty primitive inventories are not created.

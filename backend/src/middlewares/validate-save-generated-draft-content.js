@@ -66,6 +66,7 @@ const workExperienceSchema = z
     startDate: optionalNullableDate,
     endDate: optionalNullableDate,
     description: optionalNullableTrimmedString,
+    descriptionHtml: optionalNullableTrimmedString,
     achievements: stringArray,
   })
   .strict();
@@ -76,6 +77,7 @@ const projectSchema = z
     role: optionalNullableTrimmedString,
     technologies: stringArray,
     description: optionalNullableTrimmedString,
+    descriptionHtml: optionalNullableTrimmedString,
     projectUrl: optionalNullableTrimmedString,
   })
   .strict();
@@ -112,6 +114,7 @@ const saveGeneratedDraftContentSchema = z
   .object({
     personalInfo: personalInfoSchema,
     professionalSummary: optionalNullableTrimmedString,
+    professionalSummaryHtml: optionalNullableTrimmedString,
     educations: z.array(educationSchema).optional(),
     skills: stringArray,
     workExperiences: z.array(workExperienceSchema).optional(),

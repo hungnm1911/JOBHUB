@@ -16,6 +16,7 @@ import {
 import { Link } from 'react-router-dom'
 
 import CenteredState from '@/components/common/CenteredState'
+import RichTextViewer from '@/components/common/RichTextViewer'
 import { Button } from '@/components/ui/button'
 
 import useDiscoveryCatalogs from '../hooks/useDiscoveryCatalogs'
@@ -156,9 +157,12 @@ function JobDetail({ jobId, renderJobAction }) {
             <h2 className="text-lg font-semibold" id="job-description-heading">
               Mô tả công việc
             </h2>
-            <p className="mt-3 max-w-[70ch] whitespace-pre-line text-base leading-7 text-foreground/90">
-              {job.jobDescription || 'Chưa có mô tả.'}
-            </p>
+            <RichTextViewer
+              className="mt-3 max-w-[70ch] text-base leading-7 text-foreground/90"
+              format={job.jobDescriptionHtml ? 'html' : 'plain'}
+              preset="full"
+              value={job.jobDescriptionHtml || job.jobDescription || 'Chưa có mô tả.'}
+            />
           </section>
 
           {job.requiredSkills?.length > 0 && (
@@ -208,10 +212,13 @@ function JobDetail({ jobId, renderJobAction }) {
               {job.company.name}
             </span>
           </Link>
-          {job.company.description && (
-            <p className="mt-4 line-clamp-6 whitespace-pre-line text-sm text-muted-foreground">
-              {job.company.description}
-            </p>
+          {(job.company.descriptionHtml || job.company.description) && (
+            <RichTextViewer
+              className="mt-4 line-clamp-6 text-sm text-muted-foreground"
+              format={job.company.descriptionHtml ? 'html' : 'plain'}
+              preset="full"
+              value={job.company.descriptionHtml || job.company.description}
+            />
           )}
           <dl className="mt-4 space-y-3 text-sm">
             {job.company.address && (

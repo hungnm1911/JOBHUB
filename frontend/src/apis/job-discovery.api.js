@@ -9,6 +9,7 @@ const OPTIONALLY_AUTHENTICATED_REQUEST = Object.freeze({
 const JOB_DISCOVERY_PATH = '/job-discovery'
 
 async function listDiscoveryJobsApi({
+  companyId,
   keyword,
   categories,
   locations,
@@ -25,6 +26,7 @@ async function listDiscoveryJobsApi({
   const response = await apiClient.get(`${JOB_DISCOVERY_PATH}/jobs`, {
     ...OPTIONALLY_AUTHENTICATED_REQUEST,
     params: {
+      companyId,
       keyword,
       categories,
       locations,

@@ -41,9 +41,18 @@ const sourceMetadata = (source) => Object.fromEntries(BASELINE_METADATA_FIELDS
 
 const careerSectionsFromContent = (generatedContent) => ({
   professionalSummary: generatedContent.professionalSummary ?? null,
-  ...Object.fromEntries(CAREER_ARRAY_SECTIONS.map((section) => [
-    section, structuredClone(generatedContent[section] ?? []),
-  ])),
+  ...Object.fromEntries(CAREER_ARRAY_SECTIONS.map((section) => {
+    const items = generatedContent[section] ?? [];
+    if (!["workExperiences", "projects"].includes(section) || !Array.isArray(items)) {
+      return [section, structuredClone(items)];
+    }
+    return [section, structuredClone(items.map((item) => {
+      if (item == null || typeof item !== "object") return item;
+      const plainItem = { ...item };
+      delete plainItem.descriptionHtml;
+      return plainItem;
+    }))];
+  })),
 });
 
 const loadBaselineSource = async (sourceSnapshot, input) => {

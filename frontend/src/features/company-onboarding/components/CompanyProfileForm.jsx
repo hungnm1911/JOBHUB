@@ -8,16 +8,23 @@ import {
   Phone,
   Save,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { updateOwnedCompanyApi } from '@/apis/company.api'
+import RichTextEditor from '@/components/common/RichTextEditor'
 import { Button } from '@/components/ui/button'
 import { API_ERROR_MESSAGE, COMPANY_IMAGE_KIND, COMPANY_PROFILE_LIMIT } from '@/utils/constant'
 import { companyDraftSchema, companySubmissionSchema, zodResolver } from '@/validation'
 
-import { COMPANY_PROFILE_FIELDS, toCompanyProfileFormValues } from '../utils'
+import {
+  COMPANY_PROFILE_FIELDS,
+  toCompanyDescriptionEditorValue,
+  toCompanyDescriptionPlainText,
+  toCompanyProfileFormValues,
+  toCompanyProfileUpdatePayload,
+} from '../utils'
 import CompanyImageField from './CompanyImageField'
 import CompanyProfileField from './CompanyProfileField'
 
@@ -43,10 +50,11 @@ function FormSection({ title, description, children }) {
 
 function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, onStateChanged }) {
   const intentRef = useRef(SAVE_INTENT.DRAFT)
+  const descriptionLabelId = useId()
   const [pendingIntent, setPendingIntent] = useState(null)
   const {
     control,
-    formState: { errors, isSubmitting, isDirty },
+    formState: { errors, isSubmitting, isDirty, dirtyFields },
     handleSubmit,
     register,
     reset,
@@ -61,9 +69,9 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
         options,
       ),
   })
-  const [logoUrl, bannerUrl, description] = useWatch({
+  const [logoUrl, bannerUrl, description, descriptionHtml] = useWatch({
     control,
-    name: ['logoUrl', 'bannerUrl', 'description'],
+    name: ['logoUrl', 'bannerUrl', 'description', 'descriptionHtml'],
   })
 
   const assignImageUrl = (field, url) => {
@@ -84,7 +92,7 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
     let result
 
     try {
-      result = await updateOwnedCompanyApi(values)
+      result = await updateOwnedCompanyApi(toCompanyProfileUpdatePayload(values, dirtyFields))
     } catch (error) {
       const field = error.details?.field
 
@@ -203,17 +211,25 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
       </FormSection>
 
       <FormSection title="Giới thiệu doanh nghiệp">
-        <CompanyProfileField
-          error={errors.description}
-          hint={`${description?.length ?? 0}/${COMPANY_PROFILE_LIMIT.DESCRIPTION_MAX_LENGTH} ký tự`}
-          inputProps={{
-            placeholder: 'Lĩnh vực hoạt động, sản phẩm, văn hóa doanh nghiệp…',
-            rows: 6,
-            ...register('description'),
-          }}
-          label="Mô tả doanh nghiệp"
-          multiline
-        />
+        <div aria-labelledby={descriptionLabelId} className="space-y-1.5" role="group">
+          <p className="text-sm font-medium" id={descriptionLabelId}>Mô tả doanh nghiệp</p>
+          <RichTextEditor
+            disabled={isSubmitting}
+            onChange={(html) => {
+              setValue('descriptionHtml', html, { shouldDirty: true })
+              setValue('description', toCompanyDescriptionPlainText(html), {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }}
+            placeholder="Lĩnh vực hoạt động, sản phẩm, văn hóa doanh nghiệp…"
+            preset="full"
+            value={descriptionHtml || toCompanyDescriptionEditorValue({ description })}
+          />
+          <p className={errors.description ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+            {errors.description?.message ?? `${description?.length ?? 0}/${COMPANY_PROFILE_LIMIT.DESCRIPTION_MAX_LENGTH} ký tự`}
+          </p>
+        </div>
       </FormSection>
 
       <FormSection

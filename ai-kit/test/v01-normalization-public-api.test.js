@@ -163,7 +163,7 @@ describe("AI-V01 public runtime entry", () => {
     expect(Object.keys(aiKit)).toEqual([
       "normalizeJob", "buildJobEmbeddingText", "buildCvQueryText",
       "normalizeGeneratedCv", "normalizeUploadedCv", "matchJobCv",
-      "assessRecommendationBatch", "evaluateCv",
+      "assessRecommendationBatch", "scoreRecommendationAssessment", "evaluateCv", "optimizeCv",
     ]);
     expect(Object.isFrozen(aiKit)).toBe(true);
     expect(aiKit.normalizeJob).toBeTypeOf("function");

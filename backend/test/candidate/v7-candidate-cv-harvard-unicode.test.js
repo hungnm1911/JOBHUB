@@ -1,4 +1,5 @@
 import { inflateSync } from "node:zlib";
+import { PDFDocument, PDFName } from "pdf-lib";
 
 import {
   afterAll,
@@ -190,6 +191,51 @@ describe("V7 acceptance — Harvard Unicode rendering (F08)", () => {
     expect(inflated.toUpperCase()).toMatch(/1EC5|1EA1|1ED9|0111|1B0/);
   });
 
+  it("renders V17 Minimal formatting in the existing Harvard sections", async () => {
+    const content = vietnameseGeneratedContent();
+    content.professionalSummary = "Bold italic under link list ordered";
+    content.professionalSummaryHtml = '<p><strong>Bold</strong> <em>italic</em> <u>under</u> <a href="https://example.com">link</a></p><ul><li>list</li></ul><ol start="2" type="a"><li>ordered</li></ol>';
+    content.workExperiences = [{ position: "Engineer", companyName: "Example", description: "Built APIs", descriptionHtml: "<p>Built <strong><em>APIs</em></strong></p>", achievements: [] }];
+    content.projects = [{ name: "JobHub", description: "Recruitment platform", descriptionHtml: "<p><u>Recruitment</u> platform</p>" }];
+
+    const pdfBuffer = await renderHarvardCandidateCvPdf(content);
+    const document = await PDFDocument.load(pdfBuffer);
+    const operators = inflatePdfStreams(pdfBuffer);
+    expect(document.getPageCount()).toBe(1);
+    expect(operators).toMatch(/NotoSerif-Bold-\d+ 10 Tf/u);
+    expect(operators).toMatch(/NotoSerif-Italic-\d+ 10 Tf/u);
+    expect(operators).toContain("0.5 w");
+    expect(operators).toMatch(/0\.12 0\.28 0\.58 rg/u);
+    expect((operators.match(/ 10 Tf/gu) ?? []).length).toBeGreaterThan(8);
+    const withoutLists = await renderHarvardCandidateCvPdf({
+      ...content,
+      professionalSummaryHtml: '<p><strong>Bold</strong> <em>italic</em> <u>under</u> <a href="https://example.com">link</a></p>',
+    });
+    expect((operators.match(/ 10 Tf/gu) ?? []).length).toBeGreaterThan(
+      (inflatePdfStreams(withoutLists).match(/ 10 Tf/gu) ?? []).length,
+    );
+
+    const annotations = document.getPages()[0].node.Annots();
+    expect(annotations.size()).toBe(1);
+    const link = document.context.lookup(annotations.get(0));
+    expect(document.context.lookup(link.get(PDFName.of("A"))).toString())
+      .toContain("/URI (https://example.com)");
+  });
+
+  it("renders legacy plain-only summary, work and project without HTML", async () => {
+    const content = vietnameseGeneratedContent();
+    content.workExperiences = [{ position: "Engineer", description: "Built APIs" }];
+    content.projects = [{ name: "JobHub", description: "Recruitment platform" }];
+    const pdfBuffer = await renderHarvardCandidateCvPdf(content);
+    const document = await PDFDocument.load(pdfBuffer);
+    const operators = inflatePdfStreams(pdfBuffer);
+
+    expect(document.getPageCount()).toBe(1);
+    expect(document.getPages()[0].node.Annots().size()).toBe(0);
+    expect(operators).toMatch(/NotoSerif-Regular-\d+ 10 Tf/u);
+    expect((operators.match(/ 10 Tf/gu) ?? []).length).toBeGreaterThanOrEqual(3);
+  });
+
   it("previews Generated DRAFT Vietnamese content successfully", async () => {
     const { user } = await createVerifiedUser({
       email: "cv.unicode.draft@example.com",
@@ -199,6 +245,10 @@ describe("V7 acceptance — Harvard Unicode rendering (F08)", () => {
       candidateUserId: user._id,
       categoryId: category._id,
       status: CANDIDATE_CV_STATUS.DRAFT,
+      generatedContent: {
+        ...vietnameseGeneratedContent(),
+        professionalSummaryHtml: "<p><strong>Kỹ sư</strong> phần mềm</p>",
+      },
     });
 
     const agent = createTestAgent();
@@ -219,6 +269,7 @@ describe("V7 acceptance — Harvard Unicode rendering (F08)", () => {
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toMatch(/application\/pdf/);
     expect(response.body.subarray(0, 4).toString("utf8")).toBe("%PDF");
+    expect(inflatePdfStreams(response.body)).toMatch(/NotoSerif-Bold-\d+ 10 Tf/u);
 
     const drawnText = decodePdfHexStrings(
       inflatePdfStreams(response.body),
@@ -240,6 +291,10 @@ describe("V7 acceptance — Harvard Unicode rendering (F08)", () => {
       candidateUserId: user._id,
       categoryId: category._id,
       status: CANDIDATE_CV_STATUS.ACTIVE,
+      generatedContent: {
+        ...vietnameseGeneratedContent(),
+        professionalSummaryHtml: '<p><a href="https://example.com">Kỹ sư phần mềm</a></p>',
+      },
     });
 
     const agent = createTestAgent();
@@ -272,6 +327,8 @@ describe("V7 acceptance — Harvard Unicode rendering (F08)", () => {
 
     const response = deniedDraftDownload;
     expect(response.headers["content-disposition"]).toContain("attachment");
+    const downloadedPdf = await PDFDocument.load(response.body);
+    expect(downloadedPdf.getPages()[0].node.Annots().size()).toBeGreaterThan(0);
     const drawnText = decodePdfHexStrings(
       inflatePdfStreams(response.body),
     ).join("\n");

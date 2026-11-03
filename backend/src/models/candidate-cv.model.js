@@ -171,6 +171,10 @@ const cvWorkExperienceSchema = new Schema(
       trim: true,
       default: null,
     },
+    descriptionHtml: {
+      type: String,
+      default: null,
+    },
     achievements: {
       type: [
         {
@@ -211,6 +215,10 @@ const cvProjectSchema = new Schema(
     description: {
       type: String,
       trim: true,
+      default: null,
+    },
+    descriptionHtml: {
+      type: String,
       default: null,
     },
     projectUrl: {
@@ -293,6 +301,10 @@ const generatedCvContentSchema = new Schema(
     professionalSummary: {
       type: String,
       trim: true,
+      default: null,
+    },
+    professionalSummaryHtml: {
+      type: String,
       default: null,
     },
     educations: {

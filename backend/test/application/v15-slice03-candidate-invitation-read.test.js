@@ -753,6 +753,46 @@ describe("V15 Slice 03 — Candidate Invitation Read + Current-State Evaluation"
   });
 
   describe("HTTP", () => {
+    it.each([
+      ["Rich Text", "<p>Build <strong>APIs</strong></p>"],
+      ["legacy", null],
+    ])("returns %s Job Description in Candidate invitation list and detail", async (_, html) => {
+      const context = await seedSendableContext({
+        candidateEmail: "v17.s05.invitation.candidate@example.com",
+        recruiterEmail: "v17.s05.invitation.recruiter@example.com",
+        managerEmail: "v17.s05.invitation.manager@example.com",
+      });
+      await Job.updateOne(
+        { _id: context.job._id },
+        html == null
+          ? { $unset: { jobDescriptionHtml: "" } }
+          : { $set: { jobDescriptionHtml: html } },
+      );
+      const invitation = await sendPendingInvitation(context);
+      const agent = createTestAgent();
+      const token = await loginAndGetAccessToken(agent, {
+        email: context.candidate.email,
+      });
+
+      const list = await agent
+        .get("/api/candidate/invitations")
+        .set("Authorization", `Bearer ${token}`);
+      const detail = await agent
+        .get(`/api/candidate/invitations/${invitation.id}`)
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(list.status).toBe(200);
+      expect(detail.status).toBe(200);
+      expect(list.body.invitations).toHaveLength(1);
+      for (const view of [list.body.invitations[0], detail.body.invitation]) {
+        expect(view.job).toMatchObject({
+          id: context.job._id.toString(),
+          jobDescription: "Build APIs",
+          jobDescriptionHtml: html,
+        });
+      }
+    });
+
     it("exposes Candidate GET list/detail and denies foreign, Recruiter, and anonymous access", async () => {
       const context = await seedSendableContext({
         candidateEmail: "http.read@example.com",

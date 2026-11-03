@@ -1,5 +1,5 @@
 const normalizeTokenCount = (value) => {
-  return Number.isInteger(value) && value >= 0 ? value : null;
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
 };
 
 const logProviderUsage = ({ logger, provider, model, usage }) => {
@@ -8,7 +8,7 @@ const logProviderUsage = ({ logger, provider, model, usage }) => {
   const reportedTotalTokens = normalizeTokenCount(usage?.totalTokens);
   const totalTokens = reportedTotalTokens
     ?? (inputTokens !== null && outputTokens !== null
-      ? inputTokens + outputTokens
+      ? normalizeTokenCount(inputTokens + outputTokens)
       : null);
 
   logger.info("AI provider API usage", {
@@ -21,4 +21,4 @@ const logProviderUsage = ({ logger, provider, model, usage }) => {
   });
 };
 
-export { logProviderUsage };
+export { logProviderUsage, normalizeTokenCount };

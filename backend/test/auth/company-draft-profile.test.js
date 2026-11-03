@@ -136,6 +136,7 @@ describe("Company draft profile and tenant ownership (F02)", () => {
     const registration = await registerCompanyManager(agent, {
       email: "draft.owner@example.com",
     });
+    expect(registration.company.descriptionHtml).toBeNull();
     const loginResponse = await loginAs(agent, {
       email: "draft.owner@example.com",
     });
@@ -151,6 +152,7 @@ describe("Company draft profile and tenant ownership (F02)", () => {
       approvalStatus: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
       operationalStatus: COMPANY_OPERATIONAL_STATUS.INACTIVE,
       name: null,
+      descriptionHtml: null,
     });
 
     const patchResponse = await agent
@@ -191,6 +193,55 @@ describe("Company draft profile and tenant ownership (F02)", () => {
     expect(persistedCompany.approvalStatus).toBe(
       COMPANY_APPROVAL_STATUS.NOT_SUBMITTED,
     );
+  });
+
+  it("stores Full HTML with derived plain text and preserves or clears it on draft patches", async () => {
+    const agent = createTestAgent();
+    const registration = await registerCompanyManager(agent, {
+      email: "rich.draft@example.com",
+    });
+    const { accessToken } = await loginAs(agent, {
+      email: "rich.draft@example.com",
+    });
+    const patch = (body) => agent.patch("/api/company")
+      .set("Authorization", `Bearer ${accessToken}`).send(body);
+
+    const rich = await patch({
+      description: "ignored plain input",
+      descriptionHtml: '<h2>Welcome</h2><p><strong>Team</strong><script>alert(1)</script></p>',
+    });
+    expect(rich.status).toBe(200);
+    expect(rich.body.company.description).toBe("Welcome\n\nTeam");
+    expect(rich.body.company.descriptionHtml).toContain("<strong>Team</strong>");
+    expect(rich.body.company.descriptionHtml).not.toContain("script");
+
+    const unrelated = await patch({ website: "https://company.example" });
+    expect(unrelated.status).toBe(200);
+    expect(unrelated.body.company.descriptionHtml).toBe(rich.body.company.descriptionHtml);
+
+    const persisted = await Company.findById(registration.company.id);
+    expect(persisted.description).toBe(rich.body.company.description);
+    expect(persisted.descriptionHtml).toBe(rich.body.company.descriptionHtml);
+
+    const plain = await patch({ description: "<b>Literal legacy text</b>" });
+    expect(plain.status).toBe(200);
+    expect(plain.body.company.description).toBe("<b>Literal legacy text</b>");
+    expect(plain.body.company.descriptionHtml).toBeNull();
+
+    const read = await agent.get("/api/company")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(read.body.company.description).toBe("<b>Literal legacy text</b>");
+    expect(read.body.company.descriptionHtml).toBeNull();
+
+    const empty = await patch({ descriptionHtml: "<p><br></p>" });
+    expect(empty.status).toBe(200);
+    expect(empty.body.company.description).toBeNull();
+    expect(empty.body.company.descriptionHtml).toBeNull();
+
+    const tooLong = await patch({ descriptionHtml: `<p>${"x".repeat(5001)}</p>` });
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.body.error.details.field).toBe("description");
+    expect((await Company.findById(registration.company.id)).description).toBeNull();
   });
 
   it("resolves ownership from the authenticated manager and ignores client-supplied company identifiers", async () => {

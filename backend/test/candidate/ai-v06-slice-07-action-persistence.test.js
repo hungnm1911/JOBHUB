@@ -25,7 +25,17 @@ const pdfContent = {
   workExperiences: [], projects: [], educations: [], certifications: [], languages: [],
 };
 
-const createContext = async (sourceType) => {
+const richGeneratedContent = {
+  personalInfo: { fullName: "Source name" }, hiddenSections: ["projects"],
+  professionalSummaryHtml: "<p>Source <strong>summary</strong></p>",
+  skills: ["Source skill"],
+  workExperiences: [{ companyName: "Source employer",
+    descriptionHtml: "<p>Source <em>work</em></p>" }],
+  projects: [{ name: "Source project",
+    descriptionHtml: "<p>Source <u>project</u></p>" }],
+};
+
+const createContext = async (sourceType, generatedContent) => {
   const { user } = await createVerifiedUser({ email: `v06-action-${sourceType}@example.com` });
   const category = await Category.create({ name: "Engineering", level: "FIELD" });
   const metadata = {
@@ -35,7 +45,7 @@ const createContext = async (sourceType) => {
   const source = sourceType === "GENERATED"
     ? await createGeneratedDraftCandidateCv({
       candidateUserId: user._id, actorUser: user, draft: metadata,
-      generatedContent: {
+      generatedContent: generatedContent ?? {
         personalInfo: { fullName: "Source name" }, hiddenSections: ["projects"],
         professionalSummary: "Source summary", skills: ["Source skill"],
       },
@@ -110,6 +120,50 @@ describe("AI-V06 Slice 07 action to CandidateCV persistence", () => {
     expect(result.generatedContent.skills).toEqual(["Target skill"]);
     expect(await CandidateCV.findById(input.candidateCvId).lean()).toEqual(sourceBefore);
     expect(await CandidateCV.countDocuments()).toBe(2);
+  });
+
+  it("persists source HTML with unchanged AI sections in the Generated Draft", async () => {
+    const { sourceBefore, input } = await createContext("GENERATED", richGeneratedContent);
+    optimizeCv.mockResolvedValue({
+      professionalSummary: null, skills: null, workExperiences: null,
+      projects: null, educations: null, certifications: null, languages: null,
+    });
+
+    const result = await createOptimizedCandidateCvDraftForJob(input);
+    const draft = await CandidateCV.findById(result.id).lean();
+
+    expect(JSON.stringify(optimizeCv.mock.calls[0][0].generatedBaseline)).not.toContain("Html");
+    expect(draft.generatedContent).toMatchObject({
+      professionalSummary: "Source summary",
+      professionalSummaryHtml: "<p>Source <strong>summary</strong></p>",
+      workExperiences: [{ description: "Source work",
+        descriptionHtml: "<p>Source <em>work</em></p>" }],
+      projects: [{ description: "Source project",
+        descriptionHtml: "<p>Source <u>project</u></p>" }],
+    });
+    expect(await CandidateCV.findById(input.candidateCvId).lean()).toEqual(sourceBefore);
+  });
+
+  it("persists AI-replaced plain text without the source HTML in the Generated Draft", async () => {
+    const { sourceBefore, input } = await createContext("GENERATED", richGeneratedContent);
+    optimizeCv.mockResolvedValue({
+      professionalSummary: "Target summary", skills: null,
+      workExperiences: [{ companyName: "Target employer", description: "Target work" }],
+      projects: [{ name: "Target project", description: "Target project details" }],
+      educations: null, certifications: null, languages: null,
+    });
+
+    const result = await createOptimizedCandidateCvDraftForJob(input);
+    const draft = await CandidateCV.findById(result.id).lean();
+
+    expect(draft.generatedContent).toMatchObject({
+      professionalSummary: "Target summary", professionalSummaryHtml: null,
+      workExperiences: [{ companyName: "Target employer", description: "Target work",
+        descriptionHtml: null }],
+      projects: [{ name: "Target project", description: "Target project details",
+        descriptionHtml: null }],
+    });
+    expect(await CandidateCV.findById(input.candidateCvId).lean()).toEqual(sourceBefore);
   });
 
   it("saves an Uploaded source as a merged Generated Draft without changing its PDF", async () => {

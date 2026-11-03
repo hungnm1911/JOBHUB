@@ -534,8 +534,22 @@ describe("V15 Slice 08 — Atomic Accept + Availability Handoff", () => {
         recruiterEmail: "snapshot.accept.recruiter@example.com",
         managerEmail: "snapshot.accept.manager@example.com",
       });
+      await CandidateCV.updateOne(
+        { _id: context.candidateCv._id },
+        { $set: {
+          "generatedContent.professionalSummaryHtml": "<p><strong>Backend</strong> engineer summary</p>",
+          "generatedContent.workExperiences.0.descriptionHtml": "<p>Built <em>APIs</em></p>",
+          "generatedContent.projects.0.descriptionHtml": "<p><u>Recruitment</u> platform</p>",
+        } },
+      );
       const sent = await sendPendingInvitation(context);
       const invited = (await readPersistedInvitation(sent.id)).invitedCvSnapshot;
+      expect(invited.generatedContent).toMatchObject({
+        professionalSummary: "Backend engineer summary",
+        professionalSummaryHtml: "<p><strong>Backend</strong> engineer summary</p>",
+        workExperiences: [{ description: "Built APIs", descriptionHtml: "<p>Built <em>APIs</em></p>" }],
+        projects: [{ description: "Recruitment platform", descriptionHtml: "<p><u>Recruitment</u> platform</p>" }],
+      });
 
       await CandidateCV.updateOne(
         { _id: context.candidateCv._id },
@@ -543,6 +557,7 @@ describe("V15 Slice 08 — Atomic Accept + Availability Handoff", () => {
           $set: {
             name: "Edited After Send",
             "generatedContent.professionalSummary": "Changed after Send",
+            "generatedContent.professionalSummaryHtml": "<p>Changed after Send</p>",
           },
         },
       );
@@ -561,6 +576,15 @@ describe("V15 Slice 08 — Atomic Accept + Availability Handoff", () => {
       expect(
         application.submittedCvSnapshot.generatedContent.professionalSummary,
       ).not.toBe("Changed after Send");
+      expect(application.submittedCvSnapshot.generatedContent.professionalSummaryHtml)
+        .toBe(invited.generatedContent.professionalSummaryHtml);
+      expect(application.submittedCvSnapshot.generatedContent.workExperiences[0].descriptionHtml)
+        .toBe(invited.generatedContent.workExperiences[0].descriptionHtml);
+      expect(application.submittedCvSnapshot.generatedContent.projects[0].descriptionHtml)
+        .toBe(invited.generatedContent.projects[0].descriptionHtml);
+      const invitedAfterAccept = (await readPersistedInvitation(sent.id)).invitedCvSnapshot;
+      expect(invitedAfterAccept.generatedContent.professionalSummaryHtml)
+        .toBe(invited.generatedContent.professionalSummaryHtml);
     });
 
     it("does not let Accept win when an expiration cause already has earlier effective time", async () => {

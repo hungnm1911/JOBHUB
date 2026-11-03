@@ -839,7 +839,10 @@ describe("V9 Slice 04 — Replace Submitted CV (F03, F04)", () => {
     const replacementCv = await createGeneratedCv({
       candidateUserId: owner._id,
       categoryId: category._id,
-      generatedContent: completeGeneratedContent("Replacement Source"),
+      generatedContent: {
+        ...completeGeneratedContent("Replacement Source"),
+        professionalSummaryHtml: "<p><strong>Backend</strong> engineer summary</p>",
+      },
     });
     const replacementBefore = await CandidateCV.findById(replacementCv._id).lean();
     const created = await directApplyToJob({
@@ -872,5 +875,10 @@ describe("V9 Slice 04 — Replace Submitted CV (F03, F04)", () => {
     expect(
       persisted.submittedCvSnapshot.generatedContent.personalInfo.fullName,
     ).toBe("Replacement Source");
+    expect(persisted.submittedCvSnapshot.generatedContent.professionalSummary)
+      .toBe("Backend engineer summary");
+    expect(persisted.submittedCvSnapshot.generatedContent.professionalSummaryHtml)
+      .toBe("<p><strong>Backend</strong> engineer summary</p>");
+    expect(replacementAfter.generatedContent.professionalSummaryHtml).toBeNull();
   });
 });

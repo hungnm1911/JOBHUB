@@ -894,6 +894,7 @@ const toCandidateMyApplicationJob = (job) => {
     companyId: job.companyId.toString(),
     title: job.title,
     jobDescription: job.jobDescription,
+    jobDescriptionHtml: job.jobDescriptionHtml ?? null,
     requiredSkills: job.requiredSkills,
     salary: toPublicJobSalary(job.salary),
     location: toPublicJobLocation(job.location),

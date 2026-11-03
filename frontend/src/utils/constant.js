@@ -1,6 +1,5 @@
-const RUNTIME_ENV = Object.freeze({
-  IS_DEVELOPMENT: import.meta.env.DEV,
-})
+const DEVELOPMENT_ENV = 'development'
+const RUNTIME_ENV = import.meta.env.VITE_APP_ENV || 'production'
 
 // Must stay aligned with backend/src/constants/http-header.js.
 const HTTP_HEADER = Object.freeze({
@@ -122,6 +121,19 @@ const USER_ROLE = Object.freeze({
   PLATFORM_ADMIN: 'PLATFORM_ADMIN',
 })
 
+// Must stay aligned with backend/src/constants/company-member-role.js and
+// backend/src/constants/company-member-status.js.
+const COMPANY_MEMBER_ROLE = Object.freeze({
+  COMPANY_MANAGER: 'COMPANY_MANAGER',
+  RECRUITER: 'RECRUITER',
+})
+
+const COMPANY_MEMBER_STATUS = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  LOCKED: 'LOCKED',
+  TERMINATED: 'TERMINATED',
+})
+
 // Must stay aligned with backend/src/constants/company-approval-status.js and
 // company-operational-status.js.
 const COMPANY_APPROVAL_STATUS = Object.freeze({
@@ -238,12 +250,15 @@ export {
   COMPANY_IMAGE_ACCEPT,
   COMPANY_IMAGE_KIND,
   COMPANY_OPERATIONAL_STATUS,
+  COMPANY_MEMBER_ROLE,
+  COMPANY_MEMBER_STATUS,
   COMPANY_PROFILE_LIMIT,
   EMPLOYMENT_TYPE,
   EXPERIENCE_LEVEL,
   FLASH_MESSAGE_CONFIG,
   FLASH_MESSAGE_TYPE,
   HTTP_HEADER,
+  DEVELOPMENT_ENV,
   JOB_STATUS,
   REALTIME_EVENT,
   RUNTIME_ENV,

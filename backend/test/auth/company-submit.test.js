@@ -113,6 +113,7 @@ describe("POST /api/company/submit", () => {
         website: "https://acme.example",
         address: "1 Market St",
         description: "Submitted draft",
+        descriptionHtml: null,
         contactInfo: "ops@acme.example",
         businessRegistrationNumber: "BRN-SUBMIT-1",
       },
@@ -134,6 +135,34 @@ describe("POST /api/company/submit", () => {
       businessRegistrationNumber: "BRN-SUBMIT-1",
     });
     expect(persistedCompany.submittedAt).not.toBeNull();
+  });
+
+  it("captures both Description representations at submit and leaves them fixed for review", async () => {
+    const agent = createTestAgent();
+    const registration = await registerCompanyManager(agent, { email: "submit.rich@example.com" });
+    const { accessToken } = await loginAs(agent, { email: "submit.rich@example.com" });
+    await prepareDraftProfile(agent, accessToken, {
+      name: "Rich Submitted",
+      businessRegistrationNumber: "BRN-RICH-SUBMIT",
+      descriptionHtml: "<p><strong>Captured</strong> profile</p>",
+    });
+    const submit = await agent.post("/api/company/submit")
+      .set("Authorization", `Bearer ${accessToken}`).send();
+    expect(submit.status).toBe(200);
+    expect(submit.body.company.description).toBe("Captured profile");
+    expect(submit.body.company.reviewSnapshot).toMatchObject({
+      description: "Captured profile",
+      descriptionHtml: "<p><strong>Captured</strong> profile</p>",
+    });
+    const persisted = await Company.findById(registration.company.id);
+    expect(persisted.reviewSnapshot.descriptionHtml).toBe("<p><strong>Captured</strong> profile</p>");
+
+    const blocked = await agent.patch("/api/company")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ descriptionHtml: "<p>Changed</p>" });
+    expect(blocked.status).not.toBe(200);
+    expect((await Company.findById(registration.company.id)).reviewSnapshot.descriptionHtml)
+      .toBe("<p><strong>Captured</strong> profile</p>");
   });
 
   it("rejects submit when required profile fields are missing", async () => {

@@ -95,6 +95,7 @@ const getPublicJobsHandler = async (request, response, next) => {
     const result = await listJobDiscoveryJobs({
       actorUser: request.auth?.user,
       filters: {
+        companyId: request.query.companyId,
         keyword: request.query.keyword,
         categories: parseCategories(request.query.categories),
         locations: parseLocationFilterQuery(request.query.locations, "locations"),

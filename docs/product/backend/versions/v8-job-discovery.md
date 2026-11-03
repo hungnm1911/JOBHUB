@@ -227,18 +227,15 @@ V8 chưa trao cho Candidate khả năng Apply Job.
 
 Recruiter thuộc Company Staff.
 
-Recruiter được sử dụng Job Discovery để xem và nghiên cứu các cơ hội
-tuyển dụng đang công khai trên nền tảng, bao gồm Job của các Company
-khác.
-
-Khả năng sử dụng Job Discovery không làm Recruiter trở thành Candidate
-và không tạo quyền Apply Job.
+Recruiter sử dụng các API nghiệp vụ Company Staff riêng. Request có
+authenticated Recruiter context không được sử dụng API V8 (`403`).
 
 ### 4.4. Company Manager
 
 Company Manager thuộc Company Staff.
 
-Company Manager không phải actor nghiệp vụ của Job Discovery trong V8.
+Request có authenticated Company Manager context không được sử dụng API
+V8 (`403`).
 
 Các nhu cầu của Company Manager tiếp tục được xử lý trong business
 context quản lý Company và các resource thuộc Company.
@@ -247,14 +244,8 @@ V8 không bổ sung capability Job Discovery riêng cho Company Manager.
 
 ### 4.5. Platform Admin
 
-Platform Admin được sử dụng Job Discovery để quan sát các Job đang được
-công khai trên nền tảng.
-
-Quyền truy cập Job Discovery của Platform Admin là quyền đọc trong
-boundary V8.
-
-Các nghiệp vụ quản trị, kiểm soát hoặc xử lý Job ngoài phạm vi public
-Job Discovery không được định nghĩa bởi V8.
+Platform Admin sử dụng các API nghiệp vụ quản trị riêng. Request có
+authenticated Platform Admin context không được sử dụng API V8 (`403`).
 
 ### 4.6. Discoverable Job
 
@@ -333,19 +324,16 @@ Một Position chỉ được sử dụng trong context của Field cha tương 
 
 ### 5.4. User và Job
 
-Guest, Candidate, Recruiter và Platform Admin chỉ đọc Job thông qua V8.
+Guest và Candidate chỉ đọc Job thông qua V8.
 
 V8 không tạo quan hệ ownership giữa các actor này và Job.
 
 V8 không tạo quan hệ Candidate--Job.
 
-### 5.5. Recruiter và Company khác
+### 5.5. Public read và Company khác
 
-Recruiter được phép đọc dữ liệu Job Discovery công khai của các Company
-khác.
-
-Việc Recruiter thuộc một Company không giới hạn Job Discovery vào
-Company của chính Recruiter.
+Guest và Candidate được phép đọc dữ liệu Job Discovery công khai của
+các Company khác nhau.
 
 Phần này chỉ mô tả **quan hệ nghiệp vụ**.
 
@@ -487,8 +475,6 @@ Không còn truy cập được qua public Job detail của V8
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Mục tiêu
 
@@ -512,11 +498,14 @@ hội tuyển dụng đang công khai.
 
 -   Actor có thể tiếp tục xem danh sách, tìm kiếm, lọc, sắp xếp và xem
     Job.
+-   Trong public Company Detail, actor có thể xem danh sách Job đang
+    tuyển dụng của Company đó qua danh sách Job Discovery với điều kiện
+    `companyId`; thông tin Company vẫn được đọc qua API Company riêng.
 
 ### Trường hợp từ chối
 
--   Authenticated Company Manager không phải actor của Job Discovery
-    capability V8.
+-   Authenticated Platform Admin hoặc Company Staff (Company Manager,
+    Recruiter) không được sử dụng Job Discovery capability V8 (`403`).
 -   Resource không đủ điều kiện public không được truy cập thông qua Job
     Discovery.
 
@@ -550,8 +539,6 @@ thực thông qua các public read API của `F02`--`F08`.
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Mục tiêu
 
@@ -573,6 +560,18 @@ Job phải đồng thời:
 3.  Hệ thống hiển thị các Job thuộc tập đó.
 4.  Nếu actor chưa chỉ định sort khác, áp dụng default sort theo các
     rule của V8.
+
+Danh sách có thể được giới hạn vào một Company bằng `companyId` tùy chọn.
+Khi có `companyId`, chỉ Job có `Job.companyId` bằng identifier đó và vẫn
+thỏa toàn bộ điều kiện `DISCOVERABLE` được trả về. Điều kiện Company này
+kết hợp bằng `AND` với keyword và tất cả filter hiện có; sort và
+pagination tiếp tục áp dụng trên tập kết quả đã giới hạn. Không có
+`companyId` thì hành vi danh sách hiện hữu được giữ nguyên. Company
+Detail sử dụng cùng danh sách này để hiển thị Job đang tuyển dụng, còn
+thông tin Company tiếp tục sử dụng API Company riêng.
+`companyId` hợp lệ nhưng không có Job public phù hợp cho kết quả rỗng.
+Salary filter hiện có trên cùng endpoint tiếp tục theo Product V4.2 F02;
+V8 không định nghĩa lại semantics của filter đó.
 
 ### Kết quả
 
@@ -628,8 +627,6 @@ Không đưa vào danh sách:
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Mục tiêu
 
@@ -691,8 +688,6 @@ Search không được làm xuất hiện:
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Mục tiêu
 
@@ -769,8 +764,6 @@ Actor có thể lọc theo:
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Mục tiêu
 
@@ -831,8 +824,6 @@ Quy tắc mặc định:
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Mục tiêu
 
@@ -904,8 +895,6 @@ Không public:
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Mục tiêu
 
@@ -966,8 +955,6 @@ và:
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Mục tiêu
 
@@ -1043,23 +1030,21 @@ với Job hiện hữu.
 Các actor được sử dụng Job Discovery gồm:
 
 -   Guest;
--   Candidate;
--   Recruiter;
--   Platform Admin.
+-   Candidate.
 
 ------------------------------------------------------------------------
 
-## BR-04 --- Company Manager không phải actor của V8
+## BR-04 --- Authenticated Platform Admin và Company Staff không phải actor của V8
 
-V8 không bổ sung Job Discovery capability cho Company Manager khi
-request có authenticated Company Manager context.
+V8 không bổ sung Job Discovery capability cho Platform Admin hoặc
+Company Staff (Company Manager, Recruiter) khi request có authenticated
+context của các role này. Các API V8 trả `403`.
 
 Điều này không thay đổi public access của Guest. Khi request không có
-authenticated Company Manager context, hệ thống xử lý request theo Guest
-rules; V8 không cố ngăn một người đã logout sử dụng public website.
+authenticated context, hệ thống xử lý request theo Guest rules; V8
+không cố ngăn một người đã logout sử dụng public website.
 
-Business capability của Company Manager tiếp tục nằm trong context quản
-lý Company.
+Platform Admin và Company Staff sử dụng các API nghiệp vụ riêng.
 
 ------------------------------------------------------------------------
 
@@ -1433,22 +1418,17 @@ V8 không công khai:
 
 ------------------------------------------------------------------------
 
-## BR-38 --- Recruiter Discovery không tạo Candidate capability
+## BR-38 --- Recruiter sử dụng API nghiệp vụ riêng
 
-Recruiter được sử dụng Job Discovery để nghiên cứu thị trường.
-
-Quyền này không làm Recruiter trở thành Candidate và không tạo quyền
-Apply Job.
+Recruiter không có Job Discovery capability V8. Authenticated Recruiter
+request tới API V8 bị từ chối `403`.
 
 ------------------------------------------------------------------------
 
-## BR-39 --- Platform Admin access không thay đổi boundary V8
+## BR-39 --- Platform Admin sử dụng API nghiệp vụ riêng
 
-Platform Admin được sử dụng Job Discovery để đọc các Job đang thuộc phạm
-vi public V8.
-
-V8 không dùng quyền Platform Admin để mở rộng Job Discovery thành module
-quản trị hoặc mutation Job.
+Platform Admin không có Job Discovery capability V8. Authenticated
+Platform Admin request tới API V8 bị từ chối `403`.
 
 ------------------------------------------------------------------------
 
@@ -1456,8 +1436,6 @@ quản trị hoặc mutation Job.
 
 Actor được phép sử dụng Job Discovery có thể đọc các Job public của
 nhiều Company khác nhau.
-
-Recruiter không bị giới hạn chỉ xem Job thuộc Company của mình.
 
 Việc đọc cross-Company chỉ áp dụng cho dữ liệu đã được V8 xác định là
 public.
@@ -1534,41 +1512,36 @@ V8 không định nghĩa transition mới cho Job hoặc Company.
   ---------------------------------------------------------------------------
   Hành động      Actor được phép      Resource / Scope Điều kiện
   -------------- -------------------- ---------------- ----------------------
-  Mở Job         Guest, Candidate,    Public Job       Theo boundary V8
-  Discovery      Recruiter, Platform  Discovery        
-                 Admin                                 
+  Mở Job         Guest, Candidate     Public Job       Theo boundary V8
+  Discovery                            Discovery
 
-  Xem Job list   Guest, Candidate,    Job              Job `PUBLISHED`, còn
-                 Recruiter, Platform  `DISCOVERABLE`   deadline, Company
-                 Admin                                 `ACTIVE`
+  Xem Job list   Guest, Candidate     Job              Job `PUBLISHED`, còn
+                                      `DISCOVERABLE`   deadline, Company
+                                                       `ACTIVE`
 
-  Search Job     Guest, Candidate,    Job              Không bypass
-                 Recruiter, Platform  `DISCOVERABLE`   visibility
-                 Admin                                 
+  Search Job     Guest, Candidate     Job              Không bypass
+                                      `DISCOVERABLE`   visibility
 
-  Filter Job     Guest, Candidate,    Job              Không bypass
-                 Recruiter, Platform  `DISCOVERABLE`   visibility
-                 Admin                                 
+  Filter Job     Guest, Candidate     Job              Không bypass
+                                      `DISCOVERABLE`   visibility
 
-  Sort Job       Guest, Candidate,    Tập kết quả hợp  Không thay đổi
-                 Recruiter, Platform  lệ               resource
-                 Admin                                 
+  Sort Job       Guest, Candidate     Tập kết quả hợp  Không thay đổi
+                                      lệ               resource
 
-  Xem Job detail Guest, Candidate,    Job              Company `ACTIVE`
-  đang mở        Recruiter, Platform  `DISCOVERABLE`   
-                 Admin                                 
+  Xem Job detail Guest, Candidate     Job              Company `ACTIVE`
+  đang mở                             `DISCOVERABLE`
 
-  Xem Job        Guest, Candidate,    Job đã đóng/hết  Company `ACTIVE`
-  historical     Recruiter, Platform  hạn              
-  read-only      Admin                                 
+  Xem Job        Guest, Candidate     Job đã đóng/hết  Company `ACTIVE`
+  historical                         hạn
+  read-only
 
-  Xem Company    Guest, Candidate,    Public Company   Company `ACTIVE`
-  public         Recruiter, Platform  information      
-  information    Admin                                 
+  Xem Company    Guest, Candidate     Public Company   Company `ACTIVE`
+  public                              information
+  information
 
-  Job Discovery  Company Manager      Không thuộc V8   V8 không định nghĩa
-  capability                                           capability này
-  riêng                                                
+  Job Discovery  Platform Admin,      Không thuộc V8   API V8 trả `403`
+  capability     Company Staff
+  riêng
   ---------------------------------------------------------------------------
 
 Nguyên tắc authorization:
@@ -1576,11 +1549,8 @@ Nguyên tắc authorization:
 -   Guest không cần account để sử dụng các chức năng public được V8 cho
     phép.
 -   Candidate không cần có CV để đọc Job.
--   Recruiter có thể đọc public Job của Company khác.
--   Platform Admin có quyền đọc Job Discovery nhưng V8 không mở rộng
-    quyền đó thành Job administration.
--   Company Manager không phải actor của Job Discovery trong version
-    này.
+-   Authenticated Platform Admin và Company Staff (Company Manager,
+    Recruiter) bị từ chối `403` trên các API V8.
 -   Không actor nào nhận được mutation permission đối với Job thông qua
     V8.
 
@@ -1605,16 +1575,8 @@ V8 không thay đổi ownership này.
 
 Job Discovery là public/read-only surface.
 
-Vì vậy Guest, Candidate, Recruiter và Platform Admin có thể đọc Job của
+Vì vậy Guest và Candidate có thể đọc Job của
 nhiều Company khác nhau nếu Job thỏa mãn public visibility rules của V8.
-
-Recruiter thuộc Company A vẫn có thể:
-
-``` text
-xem Job public của Company B
-```
-
-để phục vụ Job Discovery và market research.
 
 ### Tenant isolation đối với dữ liệu nội bộ
 
@@ -1668,11 +1630,9 @@ Các invariant sau phải luôn đúng đối với V8:
 17. Location và Work mode luôn là hai dimension độc lập.
 18. `REMOTE` không phải Location.
 19. Candidate không cần CV để sử dụng V8.
-20. Recruiter được Discovery access nhưng không nhận Candidate
-    capability.
-21. Platform Admin Discovery access không biến V8 thành Job
-    administration.
-22. Company Manager không nhận Job Discovery capability mới từ V8.
+20. Authenticated Recruiter không có V8 capability.
+21. Authenticated Platform Admin không có V8 capability.
+22. Authenticated Company Manager không có V8 capability.
 23. Public Job response không được leak Recruitment Team hoặc hiring
     internals.
 24. Public Company information không được leak Company administration
@@ -1854,6 +1814,9 @@ V8 có 8 Functional Requirements nhưng không cần 8 REST endpoint riêng.
                           information             
   -----------------------------------------------------------------------------------------------
 
+`F02` dùng query `companyId` tùy chọn trên endpoint danh sách hiện hữu
+để phục vụ danh sách Job của public Company Detail.
+
 Base path `/api/job-discovery` được tách khỏi `/api/jobs` để phân biệt
 public Job Discovery với internal Job Management/Recruitment context.
 
@@ -1871,12 +1834,12 @@ public Job Discovery.
 
   Candidate hợp lệ                    Cho phép V8
 
-  Recruiter hợp lệ                    Cho phép V8
+  Recruiter hợp lệ                    Từ chối `403`
 
-  Platform Admin hợp lệ               Cho phép V8
+  Platform Admin hợp lệ               Từ chối `403`
 
-  Authenticated Company Manager       Không có V8 capability
-  context                             
+  Authenticated Company Manager       Từ chối `403`
+  context
 
   Có bearer token nhưng               Theo authentication contract hiện
   authentication thất bại             hữu
@@ -1906,8 +1869,6 @@ GET /api/job-discovery/jobs
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Input
 
@@ -1917,6 +1878,7 @@ Query contract ở mức thiết kế:
 
   Field                Required   Ý nghĩa
   -------------------- ---------- ------------------------------------------------
+  `companyId`          No         Một Company ObjectId để giới hạn Job public
   `keyword`            No         Keyword search
   `categories`         No         Category filter theo cấu trúc Field → Position
   `locations`          No         Location filter
@@ -1931,6 +1893,10 @@ Query contract ở mức thiết kế:
 Field đó. Exact query serialization là engineering decision và chưa được
 Product Specification chốt.
 
+Khi truyền, `companyId` phải là đúng một ObjectId hợp lệ; giá trị rỗng,
+sai định dạng hoặc nhiều giá trị đều không hợp lệ (`400`). Không truyền
+`companyId` giữ nguyên hành vi hiện hữu của endpoint.
+
 ### Business processing
 
 **1. Public pool**
@@ -1942,6 +1908,13 @@ now < applicationDeadline
 AND
 Company.operationalStatus = ACTIVE
 ```
+
+Nếu có `companyId`, chỉ lấy Job có `Job.companyId` bằng ObjectId đó
+trong public pool trên. Đây là điều kiện giới hạn kết quả, không phải
+authorization claim từ client và không mở quyền đọc dữ liệu nội bộ.
+Một ObjectId hợp lệ nhưng không có Job public (kể cả Company không tồn
+tại hoặc không đủ điều kiện public) trả về danh sách rỗng, không phải
+`404`.
 
 **2. Keyword search**
 
@@ -1977,11 +1950,16 @@ AND giữa các nhóm
 keyword AND filter conditions
 ```
 
+Khi có `companyId`, điều kiện Company kết hợp bằng `AND` với keyword và
+mọi filter đang được sử dụng. Các quy tắc filter hiện có không đổi.
+
 Category cho phép nhiều Field; mỗi Field có thể không chọn Position hoặc
 chọn một/nhiều Position thuộc chính Field đó. `REMOTE` là Work mode,
 không phải Location.
 
-V8 không có posted-date filter hoặc salary filter.
+V8 gốc không có posted-date filter hoặc salary filter. Salary filter
+được bổ sung trên cùng endpoint theo Product V4.2 F02 và cũng kết hợp
+với `companyId` bằng `AND` khi được sử dụng.
 
 **4. Sort**
 
@@ -2008,6 +1986,8 @@ thuộc Product Specification.
 Pagination là technical concern. Default page size, maximum page size và
 cơ chế page/cursor phải được chốt trong Engineering/API contract trước
 implementation; không tự coi các giá trị này là business rule.
+Khi có `companyId`, pagination và tổng số kết quả tính trên tập Job đã
+giới hạn theo Company cùng mọi điều kiện public, keyword và filter.
 
 ### Success
 
@@ -2017,6 +1997,10 @@ implementation; không tự coi các giá trị này là business rule.
 
 Response phải biểu diễn danh sách Job public và pagination metadata nếu
 pagination được áp dụng.
+
+Giữ nguyên response envelope hiện hữu `{ jobs, pagination, sort }` cho
+cả request có hoặc không có `companyId`; không thêm Company detail vào
+response danh sách.
 
 Public list projection có thể chứa các field đã được Product
 Specification cho phép:
@@ -2037,6 +2021,7 @@ Exact JSON naming/nesting phải căn theo Data Contract/API conventions
 của project.
 
 Empty result là request thành công với danh sách rỗng.
+`companyId` sai định dạng hoặc không phải một giá trị đơn trả `400`.
 
 ### Không được trả
 
@@ -2072,8 +2057,6 @@ GET /api/job-discovery/jobs/:jobId
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Input
 
@@ -2189,8 +2172,6 @@ GET /api/job-discovery/companies/:companyId
 
 -   Guest.
 -   Candidate.
--   Recruiter.
--   Platform Admin.
 
 ### Input
 

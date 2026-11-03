@@ -1,4 +1,4 @@
-import { ArrowRight, MapPin } from 'lucide-react'
+import { MapPin } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -24,14 +24,25 @@ function JobResultCard({ job, provinceNameByCode, action }) {
   const publishedAgo = formatRelativeTime(job.publishedAt)
 
   return (
-    <article className="group relative flex gap-4 rounded-xl border bg-card p-5 transition-shadow hover:shadow-md">
-      <CompanyLogo company={job.company} />
+    <article className="group flex gap-4 rounded-xl border bg-card p-5 transition-shadow hover:shadow-md">
+      <Link
+        aria-label={`Xem công ty ${job.company.name}`}
+        className="h-fit shrink-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        to={`/companies/${job.company.id}`}
+      >
+        <CompanyLogo company={job.company} />
+      </Link>
 
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0">
             <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-              <span className="font-semibold tracking-wide text-primary uppercase">{job.company.name}</span>
+              <Link
+                className="rounded-sm font-semibold tracking-wide text-primary uppercase outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                to={`/companies/${job.company.id}`}
+              >
+                {job.company.name}
+              </Link>
               {locationParts && (
                 <span className="inline-flex items-center gap-1">
                   <MapPin aria-hidden="true" className="size-3.5" />
@@ -41,7 +52,7 @@ function JobResultCard({ job, provinceNameByCode, action }) {
             </p>
             <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-6">
               <Link
-                className="outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
                 to={`/jobs/${job.id}`}
               >
                 {job.title}
@@ -74,12 +85,7 @@ function JobResultCard({ job, provinceNameByCode, action }) {
           ) : (
             <span />
           )}
-          {action ?? (
-            <span aria-hidden="true" className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
-              Xem chi tiết
-              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-            </span>
-          )}
+          {action}
         </div>
       </div>
     </article>

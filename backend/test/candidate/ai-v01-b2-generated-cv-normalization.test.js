@@ -418,6 +418,26 @@ describe("AI-V01 Backend Slice B2 — Generated CV → F02 normalization", () =>
     expect(await rawCv(cv._id)).toEqual(before);
   });
 
+  it("projects only the previous plain Generated CV fields when HTML is stored", async () => {
+    const candidate = await createCandidate();
+    const taxonomy = await createTaxonomy();
+    const cv = await createCompleteDraft(candidate, taxonomy);
+    await CandidateCV.collection.updateOne({ _id: cv._id }, {
+      $set: {
+        "generatedContent.professionalSummaryHtml": "<p>Backend engineer</p>",
+        "generatedContent.workExperiences.0.descriptionHtml": "<p>Own the payments API.</p>",
+        "generatedContent.projects.0.descriptionHtml": "<p>Project</p>",
+      },
+    });
+
+    const result = await normalizeOwn(candidate, cv);
+
+    expect(result.status).toBe("READY");
+    expect(normalizeGeneratedCvSpy).toHaveBeenCalledWith(expectedCompleteSource(cv, taxonomy));
+    const aiInput = normalizeGeneratedCvSpy.mock.calls[0][0];
+    expect(JSON.stringify(aiInput)).not.toContain("Html");
+  });
+
   it("returns READY for a sparse DRAFT without completeness, default, or PUBLIC gates", async () => {
     const candidate = await createCandidate();
     const taxonomy = await createTaxonomy();

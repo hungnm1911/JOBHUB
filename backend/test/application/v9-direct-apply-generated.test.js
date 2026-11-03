@@ -215,7 +215,18 @@ describe("V9 Slice 02 — Direct Apply with Generated ACTIVE CV (F01–F03)", ()
         categoryId: category._id,
         name: "Apply CV",
         visibility: CANDIDATE_CV_VISIBILITY.PUBLIC,
-        generatedContent: completeGeneratedContent("Captured Name"),
+        generatedContent: {
+          ...completeGeneratedContent("Captured Name"),
+          professionalSummaryHtml: "<p><strong>Backend</strong> engineer summary</p>",
+          workExperiences: [{
+            ...completeGeneratedContent().workExperiences[0],
+            descriptionHtml: "<p>Built <em>APIs</em></p>",
+          }],
+          projects: [{
+            ...completeGeneratedContent().projects[0],
+            descriptionHtml: "<p><u>Recruitment</u> platform</p>",
+          }],
+        },
       });
       const jobBefore = await Job.findById(job._id).lean();
       const cvBefore = await CandidateCV.findById(candidateCv._id).lean();
@@ -254,6 +265,12 @@ describe("V9 Slice 02 — Direct Apply with Generated ACTIVE CV (F01–F03)", ()
         response.body.application.submittedCvSnapshot.generatedContent
           .personalInfo.fullName,
       ).toBe("Captured Name");
+      expect(response.body.application.submittedCvSnapshot.generatedContent).toMatchObject({
+        professionalSummary: "Backend engineer summary",
+        professionalSummaryHtml: "<p><strong>Backend</strong> engineer summary</p>",
+        workExperiences: [{ description: "Built APIs", descriptionHtml: "<p>Built <em>APIs</em></p>" }],
+        projects: [{ description: "Recruitment platform", descriptionHtml: "<p><u>Recruitment</u> platform</p>" }],
+      });
       expect(
         response.body.application.submittedCvSnapshot.pdfFile,
       ).toMatchObject({
@@ -274,6 +291,8 @@ describe("V9 Slice 02 — Direct Apply with Generated ACTIVE CV (F01–F03)", ()
       expect(persisted.submittedCvSnapshot.pdfFile.storageKey).toBe(
         "jobhub/applications/submitted-cv-snapshots/snapshot.pdf",
       );
+      expect(persisted.submittedCvSnapshot.generatedContent.professionalSummaryHtml)
+        .toBe("<p><strong>Backend</strong> engineer summary</p>");
       expect(persisted).not.toHaveProperty("companyId");
       expect(persisted.assignedRecruiterCompanyMemberId).toBeNull();
 
@@ -664,7 +683,10 @@ describe("V9 Slice 02 — Direct Apply with Generated ACTIVE CV (F01–F03)", ()
       const candidateCv = await createGeneratedCv({
         candidateUserId: user._id,
         categoryId: category._id,
-        generatedContent: completeGeneratedContent("Snapshot Original"),
+        generatedContent: {
+          ...completeGeneratedContent("Snapshot Original"),
+          professionalSummaryHtml: "<p><strong>Backend</strong> engineer summary</p>",
+        },
       });
 
       const application = await directApplyToJob({
@@ -685,9 +707,12 @@ describe("V9 Slice 02 — Direct Apply with Generated ACTIVE CV (F01–F03)", ()
       expect(
         persisted.submittedCvSnapshot.generatedContent.personalInfo.fullName,
       ).toBe("Snapshot Original");
+      expect(persisted.submittedCvSnapshot.generatedContent.professionalSummaryHtml)
+        .toBe("<p><strong>Backend</strong> engineer summary</p>");
 
       const liveCv = await CandidateCV.findById(candidateCv._id).lean();
       expect(liveCv.generatedContent.personalInfo.fullName).toBe("Live Updated");
+      expect(liveCv.generatedContent.professionalSummaryHtml).toBeNull();
     });
 
     it("allows only one Application per Candidate–Job under concurrent Apply", async () => {

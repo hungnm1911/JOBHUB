@@ -41,6 +41,7 @@ const createDraftJobSchema = z
   .object({
     title: optionalNonEmptyString,
     jobDescription: optionalNonEmptyString,
+    jobDescriptionHtml: z.string().nullable().optional(),
     requiredSkills: z.array(z.string().trim().min(1)).optional(),
     salary: jobSalaryInput.nullable().optional(),
     fieldCategoryIds: z.array(objectIdString).optional(),

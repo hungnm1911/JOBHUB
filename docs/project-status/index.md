@@ -55,13 +55,16 @@ Reading rules:
 - [V13 — Notification and realtime distribution](backend/v13-notification-realtime-distribution.md)
 - [V14 — Candidate search public CV](backend/v14-candidate-search-public-cv.md)
 - [V15 — Job invitation and recruiter sourcing](backend/v15-job-invitation-recruiter-sourcing.md)
-- V16 and V17 do not yet have implementation snapshots; see the Backend Product Roadmap.
+- V16 does not yet have an implementation snapshot; see the Backend Product Roadmap.
+- [V17 — Rich Text Content Integration](backend/v17-rich-text-content-integration.md)
 
 ## Frontend
 
 - [V1 — Authentication foundation](frontend/v01-authentication-foundation.md)
 - [V2 — Company onboarding](frontend/v02-company-onboarding.md)
-- [V8 — Job discovery](frontend/v08-job-discovery.md)
+- [V03 — Job discovery](frontend/v03-job-discovery.md)
+- [V04 — Tiptap](frontend/v04-tibtab.md)
+- [V17 — Rich Text Content Integration](frontend/v17-rich-text-content-integration.md)
 
 ## AI Kit
 

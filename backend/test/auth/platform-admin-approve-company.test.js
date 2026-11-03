@@ -52,6 +52,7 @@ const registerAndSubmitCompany = async (
     companyName,
     businessRegistrationNumber,
     description = "Submitted for review",
+    descriptionHtml,
   },
 ) => {
   const registration = await agent
@@ -80,6 +81,7 @@ const registerAndSubmitCompany = async (
       name: companyName,
       businessRegistrationNumber,
       description,
+      ...(descriptionHtml !== undefined && { descriptionHtml }),
       website: "https://example.com",
     });
 
@@ -127,9 +129,13 @@ describe("POST /api/platform-admin/company-registrations/:companyId/approve", ()
       companyName: "Approve Co",
       businessRegistrationNumber: "BRN-APPROVE-1",
       description: "Immutable approve snapshot",
+      descriptionHtml: "<p><strong>Immutable</strong> approve snapshot</p>",
     });
 
     const snapshotBeforeApprove = submitted.company.reviewSnapshot;
+    expect(snapshotBeforeApprove.descriptionHtml).toBe(
+      "<p><strong>Immutable</strong> approve snapshot</p>",
+    );
     const adminAccessToken = await loginAndGetAccessToken(agent, {
       email: "admin.approve@example.com",
     });

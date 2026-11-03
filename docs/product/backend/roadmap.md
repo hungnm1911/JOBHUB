@@ -42,7 +42,9 @@ When a detailed version specification exists and has been reviewed and approved,
 | V14 | Candidate Search trên CV PUBLIC | COMPLETED AND VERIFIED |
 | V15 | Job Invitation và nhánh Recruiter săn ứng viên | COMPLETED AND VERIFIED |
 | V16 | Saved Jobs | PLANNED |
-| V17 | Dashboard, thống kê và giám sát | PLANNED |
+| V17 | Rich Text Content Integration | READY FOR IMPLEMENTATION |
+
+Dashboard, thống kê và giám sát vẫn `PLANNED`; chưa được gán version.
 
 ---
 
@@ -174,8 +176,17 @@ passed; V15 is therefore `COMPLETED AND VERIFIED` against the approved Job
 Invitation Product/Data contracts. Sourcing KPI/report/dashboard, Company
 Manager Invitation management, Invitation audit/history, configurable
 lifetime, `EXPIRED` notification, Candidate Accept self-notification, and a
-new realtime protocol remain outside V15 by product boundary. V16 and V17
-must not be implemented merely from their roadmap titles.
+new realtime protocol remain outside V15 by product boundary. V16 must not be
+implemented merely from its roadmap title. V17 Rich Text Content Integration
+follows its approved Product Specification and Data Contract.
+
+V17 canonical specification:
+
+`docs/product/backend/versions/v17-rich-text-content-integration.md`
+
+V17 canonical persistence contract:
+
+`docs/data/backend/versions/v17-rich-text-content-integration-data-model.md`
 
 V15 canonical specification:
 
