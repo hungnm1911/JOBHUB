@@ -6,5 +6,6 @@
     "server": "yarn --cwd backend",
     "ai-kit": "yarn --cwd ai-kit",
     "build": "yarn client build"
-  }
+  },
+  "packageManager": "yarn@1.22.22"
 }
