@@ -630,15 +630,15 @@ hoặc chủ động hoàn tất ngay khi tạo nếu nội dung đủ completen
 3. Candidate chọn `PRIVATE` hoặc `PUBLIC`.
 4. Candidate chọn đúng một Category.
 5. Candidate có thể khai báo các metadata không bắt buộc.
-6. Tại `POST /api/candidate/cvs`, Candidate có thể chọn `creationIntent = SAVE_DRAFT | COMPLETE`; khi không gửi, mặc định là `SAVE_DRAFT`.
-7. Với `SAVE_DRAFT` (kể cả khi thiếu `creationIntent`), Candidate có thể gửi `generatedContent` cùng metadata. Nội dung được chuẩn hóa và lưu ngay khi tạo CV `GENERATED/DRAFT`, không yêu cầu completeness. Nếu chỉ gửi metadata, CV được tạo với content rỗng; Candidate có thể tiếp tục nhập nội dung sau đó.
-8. Với `COMPLETE`, Candidate gửi `generatedContent` theo Harvard Builder. Hệ thống kiểm tra nội dung sau chuẩn hóa và exact completeness hiện hành trước khi tạo CV; nếu hợp lệ, tạo trực tiếp một CV `GENERATED/ACTIVE`.
+6. Candidate có thể chọn ý định tạo `SAVE_DRAFT` hoặc `COMPLETE`; nếu không chọn, mặc định là `SAVE_DRAFT`.
+7. Với `SAVE_DRAFT` (kể cả khi không chọn ý định tạo), Candidate có thể cung cấp nội dung Generated CV cùng metadata. Nội dung được chuẩn hóa và lưu ngay khi tạo CV `GENERATED/DRAFT`, không yêu cầu completeness. Nếu chỉ cung cấp metadata, CV được tạo với nội dung rỗng; Candidate có thể tiếp tục nhập nội dung sau đó.
+8. Với `COMPLETE`, Candidate cung cấp nội dung Generated CV theo Harvard Builder. Hệ thống kiểm tra nội dung sau chuẩn hóa và exact completeness hiện hành trước khi tạo CV; nếu hợp lệ, tạo trực tiếp một CV `GENERATED/ACTIVE`.
 
 ### Kết quả
 
 * Generated CV thuộc Candidate được tạo ở `DRAFT` hoặc `ACTIVE` theo lựa chọn hợp lệ.
 * CV xuất hiện trong My CVs.
-* Việc tạo Draft giữ nội dung Candidate đã gửi (nếu có) và không yêu cầu Generated content phải hoàn thiện.
+* Việc tạo Draft giữ nội dung Candidate đã cung cấp (nếu có) và không yêu cầu Generated content phải hoàn thiện.
 * Tạo `COMPLETE` thất bại không tạo Candidate CV nào.
 
 ### Trường hợp từ chối
@@ -1196,19 +1196,19 @@ Candidate không được nhập Category tự do hoặc tạo Category mới tr
 
 ## BR-11 — Generated CV tạo theo creation intent
 
-Tại `POST /api/candidate/cvs`, `creationIntent` nhận `SAVE_DRAFT` hoặc
-`COMPLETE`. Thiếu `creationIntent` tương đương `SAVE_DRAFT` để giữ tương thích.
+Candidate có thể chọn ý định tạo `SAVE_DRAFT` hoặc `COMPLETE`. Khi không chọn ý
+định tạo, hệ thống xử lý như `SAVE_DRAFT` để giữ tương thích.
 
-Với `SAVE_DRAFT` (kể cả khi thiếu `creationIntent`), Candidate có thể gửi
-`generatedContent` cùng metadata. Nội dung đã chuẩn hóa được lưu ngay trong CV
-mới; nếu chỉ gửi metadata thì content rỗng. Không yêu cầu completeness khi tạo Draft:
+Với `SAVE_DRAFT` (kể cả khi không chọn ý định tạo), Candidate có thể cung cấp
+nội dung Generated CV cùng metadata. Nội dung đã chuẩn hóa được lưu ngay trong CV
+mới; nếu chỉ cung cấp metadata thì nội dung rỗng. Không yêu cầu completeness khi tạo Draft:
 
 ```text
 sourceType = GENERATED
 lifecycle = DRAFT
 ```
 
-Với `COMPLETE`, Candidate phải cung cấp `generatedContent`; chỉ nội dung hợp lệ sau
+Với `COMPLETE`, Candidate phải cung cấp nội dung Generated CV; chỉ nội dung hợp lệ sau
 chuẩn hóa và đạt exact completeness của `BR-14`–`BR-18` mới được tạo trực tiếp:
 
 ```text
