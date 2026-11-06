@@ -314,7 +314,8 @@ Generated CV có hai trạng thái:
 
 `DRAFT` không tự động chuyển sang `ACTIVE` chỉ vì nội dung đã đầy đủ.
 
-Candidate phải chủ động thực hiện quyết định hoàn tất CV.
+Candidate phải chủ động thực hiện quyết định hoàn tất CV: chọn `COMPLETE` khi tạo
+Generated CV với nội dung đầy đủ, hoặc Activate một Draft đã tồn tại.
 
 Uploaded CV không sử dụng Draft lifecycle của Harvard Builder.
 
@@ -417,13 +418,15 @@ Việc này không tự động thay đổi bất kỳ Candidate CV nào.
 ### 8.2. Generated CV
 
 ```text
-Candidate chọn tạo Generated CV
+Candidate chọn tạo Generated CV, nhập name + visibility + category
         ↓
-Nhập name + visibility + category
-        ↓
-Generated CV được tạo ở DRAFT
-        ↓
-Candidate nhập/chỉnh sửa nội dung
+Chọn SAVE_DRAFT (mặc định) hoặc COMPLETE
+        ├─ COMPLETE → kiểm tra normalized content + completeness
+        │              → hợp lệ: tạo trực tiếp ACTIVE
+        │              → không hợp lệ: không tạo CV
+        └─ SAVE_DRAFT → tạo DRAFT
+                         ↓
+Candidate tiếp tục nhập/chỉnh sửa nội dung Draft
         ↓
 Hệ thống đánh giá completeness
         ↓
@@ -605,7 +608,7 @@ Candidate có thể quản lý `0..N` Candidate CV của chính mình.
 
 ---
 
-## F03 — Khởi tạo Generated CV Draft
+## F03 — Khởi tạo Generated CV
 
 ### Actor
 
@@ -613,7 +616,8 @@ Candidate có thể quản lý `0..N` Candidate CV của chính mình.
 
 ### Mục tiêu
 
-Candidate tạo một CV mới bằng Harvard Builder và có thể lưu tiến độ trước khi CV hoàn thiện.
+Candidate tạo một CV mới bằng Harvard Builder, có thể lưu tiến độ dưới dạng Draft
+hoặc chủ động hoàn tất ngay khi tạo nếu nội dung đủ completeness.
 
 ### Tiền điều kiện
 
@@ -626,15 +630,16 @@ Candidate tạo một CV mới bằng Harvard Builder và có thể lưu tiến 
 3. Candidate chọn `PRIVATE` hoặc `PUBLIC`.
 4. Candidate chọn đúng một Category.
 5. Candidate có thể khai báo các metadata không bắt buộc.
-6. Generated CV được tạo với source type `GENERATED`.
-7. CV bắt đầu ở trạng thái `DRAFT`.
-8. Candidate có thể tiếp tục nhập nội dung sau đó.
+6. Tại `POST /api/candidate/cvs`, Candidate có thể chọn `creationIntent = SAVE_DRAFT | COMPLETE`; khi không gửi, mặc định là `SAVE_DRAFT`.
+7. Với `SAVE_DRAFT`, giữ nguyên HTTP create từ metadata, không nhận `generatedContent` từ Candidate: CV được tạo với source type `GENERATED`, trạng thái `DRAFT`; Candidate có thể tiếp tục nhập nội dung sau đó.
+8. Với `COMPLETE`, Candidate gửi `generatedContent` theo Harvard Builder. Hệ thống kiểm tra nội dung sau chuẩn hóa và exact completeness hiện hành trước khi tạo CV; nếu hợp lệ, tạo trực tiếp một CV `GENERATED/ACTIVE`.
 
 ### Kết quả
 
-* Generated CV `DRAFT` thuộc Candidate được tạo.
+* Generated CV thuộc Candidate được tạo ở `DRAFT` hoặc `ACTIVE` theo lựa chọn hợp lệ.
 * CV xuất hiện trong My CVs.
 * Việc tạo Draft không yêu cầu Generated content phải hoàn thiện.
+* Tạo `COMPLETE` thất bại không tạo Candidate CV nào.
 
 ### Trường hợp từ chối
 
@@ -644,6 +649,9 @@ Không hoàn tất khởi tạo Draft nếu thiếu một trong:
 * visibility;
 * category.
 
+Không hoàn tất tạo `COMPLETE` nếu Generated content thiếu, không hợp lệ sau chuẩn
+hóa, hoặc không đạt exact completeness của `BR-14`–`BR-18`.
+
 ### Business Rules liên quan
 
 * `BR-04`
@@ -651,10 +659,11 @@ Không hoàn tất khởi tạo Draft nếu thiếu một trong:
 * `BR-09`
 * `BR-10`
 * `BR-11`
+* `BR-14` đến `BR-20` với `COMPLETE`.
 
 ### Không thuộc chức năng này
 
-* tự động Activate CV;
+* tự động Activate Draft chỉ vì content đã complete;
 * tạo Uploaded CV;
 * Apply bằng Draft.
 
@@ -685,7 +694,7 @@ Candidate xây nội dung Generated CV theo Harvard Template, biết được kh
 6. Hệ thống đánh giá trạng thái completeness dựa trên các required content.
 7. Nếu chưa complete, CV không được Candidate hoàn tất thành `ACTIVE`.
 8. Nếu complete, Candidate được phép chủ động chọn hoàn tất CV.
-9. Khi Candidate xác nhận hoàn tất và completeness vẫn hợp lệ, CV chuyển `DRAFT → ACTIVE`.
+9. Khi Candidate xác nhận hoàn tất một Draft đã tồn tại và completeness vẫn hợp lệ, CV chuyển `DRAFT → ACTIVE`. Candidate cũng có thể chọn `COMPLETE` ngay lúc tạo theo F03.
 
 ### Kết quả
 
@@ -1185,16 +1194,33 @@ Candidate không được nhập Category tự do hoặc tạo Category mới tr
 
 ---
 
-## BR-11 — Generated CV bắt đầu ở DRAFT
+## BR-11 — Generated CV tạo theo creation intent
 
-Generated CV được tạo với:
+Tại `POST /api/candidate/cvs`, `creationIntent` nhận `SAVE_DRAFT` hoặc
+`COMPLETE`. Thiếu `creationIntent` tương đương `SAVE_DRAFT` để giữ tương thích.
+
+Với `SAVE_DRAFT`, giữ nguyên HTTP khởi tạo Draft từ metadata, không nhận
+`generatedContent` từ Candidate:
 
 ```text
 sourceType = GENERATED
 lifecycle = DRAFT
 ```
 
-Việc tạo Draft không tự động tạo một CV `ACTIVE`.
+Với `COMPLETE`, Candidate phải cung cấp `generatedContent`; chỉ nội dung hợp lệ sau
+chuẩn hóa và đạt exact completeness của `BR-14`–`BR-18` mới được tạo trực tiếp:
+
+```text
+sourceType = GENERATED
+lifecycle = ACTIVE
+```
+
+Tạo `COMPLETE` không phải transition của một Draft đã tồn tại. Nội dung không
+hợp lệ hoặc chưa complete phải bị từ chối trước khi CV được tạo; không lưu Draft
+thay thế hay bất kỳ Candidate CV chưa hoàn tất nào. Tạo Draft không tự động tạo
+`ACTIVE` dù nội dung đã complete.
+
+AI-V06 tiếp tục chỉ tạo Generated `DRAFT`; nó không chọn `COMPLETE`.
 
 ---
 
@@ -1325,6 +1351,10 @@ Mục đích là để Candidate biết khi nào có thể chủ động thực 
 ## BR-20 — Candidate chủ động Activate Generated CV
 
 Generated CV không tự động chuyển sang `ACTIVE` khi vừa đạt completeness.
+
+Candidate có thể chủ động chọn `COMPLETE` ngay tại F03 để tạo trực tiếp `ACTIVE`
+sau khi nội dung được chuẩn hóa và kiểm tra completeness. Với Draft đã tồn tại,
+Candidate chủ động Activate theo transition dưới đây:
 
 Transition:
 
@@ -1656,7 +1686,8 @@ Vì V4 không có catalog deactivation nghiệp vụ, V7 không bổ sung rule d
 
 | Hành động                                                   | Trước                        | Sau                      | Actor     |
 | ----------------------------------------------------------- | ---------------------------- | ------------------------ | --------- |
-| Tạo Generated CV                                            | Không tồn tại                | `GENERATED / DRAFT`      | Candidate |
+| Tạo Generated CV với `SAVE_DRAFT` hoặc thiếu intent          | Không tồn tại                | `GENERATED / DRAFT`      | Candidate |
+| Tạo Generated CV với `COMPLETE` hợp lệ                       | Không tồn tại                | `GENERATED / ACTIVE`     | Candidate |
 | Hoàn tất Generated CV                                       | `GENERATED / DRAFT` complete | `GENERATED / ACTIVE`     | Candidate |
 | Lưu Generated CV ACTIVE sau khi nội dung trở nên incomplete | `GENERATED / ACTIVE`         | `GENERATED / DRAFT`      | Candidate |
 | Đổi visibility                                              | `PRIVATE`                    | `PUBLIC`                 | Candidate |
@@ -1756,9 +1787,9 @@ Các invariant sau phải luôn đúng:
 15. Metadata không tự động sửa CV content.
 16. Generated content không tự động đồng bộ với Candidate Profile.
 17. Generated CV có lifecycle `DRAFT` và `ACTIVE`.
-18. Generated CV mới bắt đầu ở `DRAFT`.
+18. Generated CV mới bắt đầu ở `DRAFT` theo `SAVE_DRAFT` (mặc định) hoặc trực tiếp `ACTIVE` theo `COMPLETE` hợp lệ.
 19. Completeness không tự động Activate CV.
-20. Candidate phải chủ động quyết định `DRAFT → ACTIVE`.
+20. Candidate phải chủ động chọn `COMPLETE` khi tạo trực tiếp `ACTIVE` hoặc quyết định `DRAFT → ACTIVE` cho Draft đã tồn tại.
 21. Generated CV chỉ được Activate khi đáp ứng exact completeness của V7.
 22. Generated CV cần fullName, email, phone và professionalSummary.
 23. Generated CV cần ít nhất một Education item hợp lệ.
@@ -1882,7 +1913,7 @@ V7 được coi là hoàn thành về mặt nghiệp vụ khi:
 
 * `F01` — Candidate Profile được đáp ứng;
 * `F02` — My CVs được đáp ứng;
-* `F03` — Generated Draft creation được đáp ứng;
+* `F03` — Generated creation với `SAVE_DRAFT` mặc định và `COMPLETE` được đáp ứng;
 * `F04` — Harvard Builder, completeness và Generated lifecycle được đáp ứng;
 * `F05` — Uploaded CV creation được đáp ứng;
 * `F06` — Uploaded file replacement được đáp ứng;

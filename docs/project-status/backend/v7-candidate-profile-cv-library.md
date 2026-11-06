@@ -2,8 +2,9 @@
 
 ## Current project state
 
-**V7 — Candidate Profile và thư viện CV** is `COMPLETED AND VERIFIED`. Slices
-01–11 are implemented and verified
+**V7 — Candidate Profile và thư viện CV** is `IN PROGRESS` for the approved
+F03/F04 `creationIntent` extension. The previously approved Slices 01–11 are
+implemented and verified
 (Candidate Profile / F01; CandidateCV foundation + My CVs read / F02; Generated
 CV Draft create / F03; Generated Builder save + completeness feedback / F04
 Builder; Generated activation + ACTIVE edit lifecycle / F04 activation;
@@ -13,16 +14,18 @@ Archive CV / F10). Recorded Final Acceptance blockers (Uploaded restricted
 Cloudinary delivery; Harvard Unicode PDF fidelity; `hiddenSections[]` Harvard
 vocabulary; Generated activation same-millisecond content CAS; CandidateCV
 query-update local-invariant enforcement) are remediated and verified. Final
-Acceptance / regression closure passed across F01–F10, BR-01–BR-46, and TX-01.
+Acceptance / regression closure passed against that earlier F01–F10,
+BR-01–BR-46, and TX-01 baseline; it does not verify direct `COMPLETE` creation.
 
 V7's approved business specification is at `docs/product/backend/versions/v7-candidate-profile-cv-library.md`, and its approved persistence contract is at `docs/data/backend/versions/v7-candidate-profile-cv-library-data-model.md`.
 
-V7 Final Acceptance / regression closure passed across F01–F10, BR-01–BR-46,
-and TX-01.
+The new contract defaults omitted `creationIntent` to `SAVE_DRAFT` and permits
+`COMPLETE` to validate normalized content and completeness before one direct
+`ACTIVE` insert. Code and verification for this extension are pending.
 
 ## Deferred / not started
 
-- **V7 closure:** Final Acceptance / regression closure is complete across F01–F10, BR-01–BR-46, and TX-01. V7 is `COMPLETED AND VERIFIED`; no V7 business slice remains in the approved specification.
+- **Pending — F03/F04 `creationIntent` extension:** `POST /api/candidate/cvs` does not yet accept `SAVE_DRAFT | COMPLETE` or create `ACTIVE` directly. Existing Draft create, Builder save, and `DRAFT → ACTIVE` paths remain the verified baseline. AI-V06 still creates Drafts. Implementation and focused/backend verification are pending.
 
 - **Resolved in S09 / acceptance:** Fixed Harvard PDF renderer (including Unicode fidelity) and owner-scoped Uploaded PDF delivery via restricted Cloudinary `authenticated` delivery are established; Preview/Download do not persist public URLs or Generated PDF state.
 

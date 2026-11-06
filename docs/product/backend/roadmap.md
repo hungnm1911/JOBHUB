@@ -32,7 +32,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V4.2 | Structured Salary, Metadata Catalog & Candidate Skill Keyword Search | COMPLETED / ACCEPTED |
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
-| V7 | Candidate Profile và thư viện CV | COMPLETED AND VERIFIED |
+| V7 | Candidate Profile và thư viện CV | IN PROGRESS |
 | V8 | Job Discovery | COMPLETED AND VERIFIED |
 | V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
 | V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
@@ -85,7 +85,9 @@ Review in addition to implementation and repository verification.
 
 ## Current project state
 
-V1 through V7 are `COMPLETED AND VERIFIED`.
+V1 through V6 are `COMPLETED AND VERIFIED`. V7's previously approved baseline is
+completed and verified; its Generated CV `creationIntent` extension (F03/F04)
+is approved in Product/Data V7 and pending implementation and verification.
 
 V4.1 has canonical Product/Data contracts and is `COMPLETED / ACCEPTED` as of
 2026-10-07. Final Acceptance passed across F01–F06 and BR-01–BR-24 after Slices
@@ -124,8 +126,9 @@ V5 Final Acceptance / regression closure passed across F01–F12 after Slices
 01–12 and the recorded acceptance corrections. V6 Final Acceptance / regression
 closure passed across F01–F05, BR-01–BR-33, and TX-01–TX-03 after its recorded
 remediations and the required backend verification gate. V7 Final Acceptance /
-regression closure passed across F01–F10, BR-01–BR-46, and TX-01 after Slices
-01–11 and the recorded acceptance remediations. V8 is
+regression closure passed against the earlier F01–F10, BR-01–BR-46, and TX-01
+baseline after Slices 01–11 and the recorded acceptance remediations. The later
+F03/F04 `creationIntent` extension remains pending. V8 is
 `COMPLETED AND VERIFIED`. V9 has
 approved Product/Data contracts; Slices 01–05 and Slice 06 Final Acceptance /
 Regression Closure are complete, including the recorded Application identity
