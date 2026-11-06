@@ -1326,20 +1326,22 @@ skillTags = [...]
 employmentTypes = [...]
 workModes = [...]
 isDefault = false
-generatedContent = empty/partial structured content
+generatedContent = normalized supplied content, or empty structured content when omitted
 uploadedFile = absent
 archivedAt = null
 ```
 
 ### Invariant
 
-Không cần Generated content complete để tạo Draft.
+`SAVE_DRAFT` nhận `generatedContent` tùy chọn từ Candidate. Nếu có, service
+chuẩn hóa và persist nội dung đó cùng metadata trong một insert
+`GENERATED/DRAFT`, kể cả khi content chưa complete. Nếu không có, cùng insert
+tạo Draft với empty content. Không cần Generated content complete để tạo Draft.
 
 `POST /api/candidate/cvs` thiếu `creationIntent` được xử lý như `SAVE_DRAFT`;
-HTTP Draft creation hiện có vẫn nhận metadata, không nhận `generatedContent` từ
-Candidate, và tạo một CandidateCV `GENERATED/DRAFT` với empty content. AI-V06
-vẫn chỉ tạo Generated `DRAFT`, kể cả khi có Generated content do server cung cấp
-trong cùng insert.
+quy tắc content tùy chọn và một insert ở trên cũng áp dụng khi thiếu intent.
+AI-V06 vẫn chỉ tạo Generated `DRAFT`, kể cả khi có Generated content do server
+cung cấp trong cùng insert.
 
 ### `COMPLETE`: kiểm tra trước insert và sau
 
@@ -1956,7 +1958,7 @@ nếu cần cross-document hoặc external context.
 | ExperienceLevel phải tồn tại nếu được chọn           | Service                 | Cross-document               |
 | Không mutate archived CV                             | Service                 | Lifecycle                    |
 | `sourceType` không được đổi                          | Service + schema        | Lifecycle                    |
-| `creationIntent` thiếu → `SAVE_DRAFT`; `COMPLETE` chỉ tạo `ACTIVE` sau khi normalized content complete | Service | Create contract |
+| `creationIntent` thiếu → `SAVE_DRAFT`; Draft lưu optional normalized content trong cùng insert; `COMPLETE` chỉ tạo `ACTIVE` sau khi normalized content complete | Service | Create contract |
 | `COMPLETE` validation thất bại → không insert CV     | Service                 | Create atomicity             |
 | DRAFT → ACTIVE chỉ khi exact completeness pass       | Service                 | Business transition          |
 | Candidate phải explicit activate                     | Service                 | Business ordering            |
