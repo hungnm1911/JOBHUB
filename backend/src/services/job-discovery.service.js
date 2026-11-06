@@ -11,6 +11,7 @@ import SALARY_PERIOD from "../constants/salary-period.js";
 import SALARY_TYPE from "../constants/salary-type.js";
 import USER_ROLE from "../constants/user-role.js";
 import WORK_MODE from "../constants/work-mode.js";
+import Application from "../models/application.model.js";
 import Category from "../models/category.model.js";
 import Company from "../models/company.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
@@ -28,6 +29,8 @@ import { escapeRegex } from "../utils/escape-regex.js";
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const FEATURED_LIMIT = 6;
+const FEATURED_TOP_JOBS = 18;
 
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
@@ -434,6 +437,30 @@ const buildRelevanceRankExpression = (keyword) => {
 // `_id` descending is the deterministic tie-breaker for every sort, so
 // skip/limit pages never duplicate or drop items.
 const buildDiscoverySortStages = ({ sort, keyword }) => {
+  if (sort === JOB_DISCOVERY_SORT.FEATURED) {
+    return [
+      {
+        $lookup: {
+          from: Application.collection.name,
+          let: { jobId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$jobId", "$$jobId"] } } },
+            { $count: "count" },
+          ],
+          as: "applicationCountResult",
+        },
+      },
+      {
+        $addFields: {
+          applicationCount: {
+            $ifNull: [{ $arrayElemAt: ["$applicationCountResult.count", 0] }, 0],
+          },
+        },
+      },
+      { $sort: { applicationCount: -1, publishedAt: -1, _id: -1 } },
+    ];
+  }
+
   if (sort === JOB_DISCOVERY_SORT.RELEVANCE && keyword !== "") {
     return [
       { $addFields: { relevanceRank: buildRelevanceRankExpression(keyword) } },
@@ -606,19 +633,30 @@ const queryDiscoveryPage = async ({
   page,
   limit,
 }) => {
+  const featured = sort === JOB_DISCOVERY_SORT.FEATURED;
   const pipeline = [
     { $match: discoveryFilter },
     ...COMPANY_PUBLIC_ELIGIBILITY_LOOKUP_STAGES,
     ...(keyword === "" ? [] : [{ $match: buildKeywordFilter(keyword) }]),
+    ...(featured
+      ? [...buildDiscoverySortStages({ sort, keyword }), { $limit: FEATURED_TOP_JOBS }]
+      : []),
     {
       $facet: {
         total: [{ $count: "count" }],
         jobs: [
-          ...buildDiscoverySortStages({ sort, keyword }),
+          ...(featured ? [] : buildDiscoverySortStages({ sort, keyword })),
           { $skip: (page - 1) * limit },
           { $limit: limit },
           // The list projection never exposes these; do not carry them.
-          { $project: { jobDescription: 0, requiredSkills: 0 } },
+          {
+            $project: {
+              jobDescription: 0,
+              requiredSkills: 0,
+              applicationCount: 0,
+              applicationCountResult: 0,
+            },
+          },
         ],
       },
     },
@@ -688,12 +726,10 @@ const listJobDiscoveryJobs = async ({
   }
 
   const page = normalizePageValue(filters.page, "page", DEFAULT_PAGE);
-  const limit = normalizePageValue(
-    filters.limit,
-    "limit",
-    DEFAULT_LIMIT,
-    MAX_LIMIT,
-  );
+  const limit =
+    sort === JOB_DISCOVERY_SORT.FEATURED
+      ? FEATURED_LIMIT
+      : normalizePageValue(filters.limit, "limit", DEFAULT_LIMIT, MAX_LIMIT);
 
   const discoveryFilter = buildDiscoveryFilter({
     companyId,

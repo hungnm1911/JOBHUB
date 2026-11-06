@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import {
   afterAll,
   afterEach,
@@ -8,6 +9,9 @@ import {
   vi,
 } from "vitest";
 
+import APPLICATION_SOURCE from "../../src/constants/application-source.js";
+import APPLICATION_STATUS from "../../src/constants/application-status.js";
+import CANDIDATE_CV_SOURCE_TYPE from "../../src/constants/candidate-cv-source-type.js";
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
@@ -15,11 +19,14 @@ import EXPERIENCE_LEVEL from "../../src/constants/experience-level.js";
 import JOB_DISCOVERY_VISIBILITY from "../../src/constants/job-discovery-visibility.js";
 import JOB_STATUS from "../../src/constants/job-status.js";
 import USER_ROLE from "../../src/constants/user-role.js";
+import USER_STATUS from "../../src/constants/user-status.js";
 import WORK_MODE from "../../src/constants/work-mode.js";
 import { migrate as migrateExperienceLevels } from "../../src/database/migrations/v4-experience-level-dataset.js";
 import Company from "../../src/models/company.model.js";
+import Application from "../../src/models/application.model.js";
 import ExperienceLevel from "../../src/models/experience-level.model.js";
 import Job from "../../src/models/job.model.js";
+import User from "../../src/models/user.model.js";
 import {
   createActiveCompanyManagerContext,
   createActiveRecruiterContext,
@@ -145,6 +152,221 @@ describe("V8 — Job Discovery", () => {
       agent: createTestAgent(),
     };
   };
+
+  const createFeaturedApplication = async ({
+    job,
+    candidateUserId = new mongoose.Types.ObjectId(),
+    source = APPLICATION_SOURCE.DIRECT_APPLICATION,
+    status = APPLICATION_STATUS.APPLIED,
+    recruiterId = new mongoose.Types.ObjectId(),
+  }) => {
+    const invited = source === APPLICATION_SOURCE.RECRUITER_INVITATION;
+    const application = await Application.create({
+      candidateUserId,
+      jobId: job._id,
+      source,
+      ...(invited ? { sourceInvitationId: new mongoose.Types.ObjectId() } : {}),
+      status: invited ? APPLICATION_STATUS.CONTACTED : APPLICATION_STATUS.APPLIED,
+      appliedAt: invited ? null : new Date(),
+      assignedRecruiterCompanyMemberId: invited ? recruiterId : null,
+      submittedCvSnapshot: {
+        sourceCandidateCvId: new mongoose.Types.ObjectId(),
+        name: "Uploaded CV",
+        sourceType: CANDIDATE_CV_SOURCE_TYPE.UPLOADED,
+        capturedAt: new Date(),
+        pdfFile: {
+          storageKey: "featured.pdf",
+          originalFileName: "featured.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 1,
+          pageCount: 1,
+        },
+      },
+    });
+
+    if (status !== application.status) {
+      await Application.updateOne(
+        { _id: application._id },
+        {
+          $set: {
+            status,
+            ...(status === APPLICATION_STATUS.WITHDRAWN
+              ? { withdrawnAt: new Date() }
+              : {}),
+            ...([APPLICATION_STATUS.REJECTED, APPLICATION_STATUS.HIRED].includes(status)
+              ? { assignedRecruiterCompanyMemberId: recruiterId }
+              : {}),
+          },
+        },
+      );
+    }
+
+    return application;
+  };
+
+  describe("Featured ranking", () => {
+    it("counts all Application sources and statuses, includes zero counts, and keeps counts private", async () => {
+      const { manager, recruiter, catalog, agent } = await createBaseContext();
+      const publishedAt = new Date("2026-10-01T00:00:00.000Z");
+      const older = await createJob({ company: manager.company, recruiter, catalog, title: "Older", publishedAt: new Date("2026-09-01T00:00:00.000Z") });
+      const tieLow = await createJob({ company: manager.company, recruiter, catalog, title: "Tie Low", publishedAt });
+      const tieHigh = await createJob({ company: manager.company, recruiter, catalog, title: "Tie High", publishedAt });
+      const zero = await createJob({ company: manager.company, recruiter, catalog, title: "Zero", publishedAt: new Date("2026-10-02T00:00:00.000Z") });
+      const candidate = await createVerifiedUser({ email: "featured.locked@example.com" });
+
+      await createFeaturedApplication({ job: older, candidateUserId: candidate.user._id, status: APPLICATION_STATUS.WITHDRAWN });
+      await createFeaturedApplication({ job: older, status: APPLICATION_STATUS.REJECTED });
+      await createFeaturedApplication({ job: older, status: APPLICATION_STATUS.HIRED, source: APPLICATION_SOURCE.RECRUITER_INVITATION });
+      await createFeaturedApplication({ job: tieLow });
+      await createFeaturedApplication({ job: tieHigh });
+      await User.updateOne({ _id: candidate.user._id }, { $set: { status: USER_STATUS.LOCKED } });
+
+      const response = await agent.get("/api/job-discovery/jobs").query({ sort: "FEATURED" });
+      expect(response.status).toBe(200);
+      expect(Object.keys(response.body).sort()).toEqual(["jobs", "pagination", "sort"]);
+      expect(response.body.sort).toBe("FEATURED");
+      expect(response.body.pagination).toEqual({ page: 1, limit: 6, total: 4, totalPages: 1 });
+      expect(response.body.jobs.map((job) => job.id)).toEqual([
+        older._id.toString(), tieHigh._id.toString(), tieLow._id.toString(), zero._id.toString(),
+      ]);
+      for (const job of response.body.jobs) {
+        expect(job).not.toHaveProperty("applicationCount");
+        expect(job).not.toHaveProperty("applications");
+      }
+      expect(await Application.countDocuments()).toBe(5);
+    });
+
+    it.each([
+      {
+        caseName: "invitation source",
+        source: APPLICATION_SOURCE.RECRUITER_INVITATION,
+        status: APPLICATION_STATUS.CONTACTED,
+      },
+      { caseName: "withdrawn status", status: APPLICATION_STATUS.WITHDRAWN },
+      { caseName: "rejected status", status: APPLICATION_STATUS.REJECTED },
+      { caseName: "hired status", status: APPLICATION_STATUS.HIRED },
+      { caseName: "locked Candidate", lockCandidate: true },
+    ])("ranks all Applications including $caseName", async ({ source, status, lockCandidate }) => {
+      const { manager, recruiter, catalog, agent } = await createBaseContext();
+      const jobA = await createJob({
+        company: manager.company,
+        recruiter,
+        catalog,
+        title: "Featured A",
+        publishedAt: new Date("2026-09-01T00:00:00.000Z"),
+      });
+      const jobB = await createJob({
+        company: manager.company,
+        recruiter,
+        catalog,
+        title: "Featured B",
+        publishedAt: new Date("2026-10-01T00:00:00.000Z"),
+      });
+      const candidate = lockCandidate
+        ? await createVerifiedUser({ email: "featured.locked.case@example.com" })
+        : null;
+
+      await createFeaturedApplication({ job: jobA });
+      await createFeaturedApplication({ job: jobA });
+      await createFeaturedApplication({
+        job: jobA,
+        ...(source ? { source } : {}),
+        ...(status ? { status } : {}),
+        ...(candidate ? { candidateUserId: candidate.user._id } : {}),
+      });
+      await createFeaturedApplication({ job: jobB });
+      await createFeaturedApplication({ job: jobB });
+      if (candidate) {
+        await User.updateOne(
+          { _id: candidate.user._id },
+          { $set: { status: USER_STATUS.LOCKED } },
+        );
+      }
+
+      const response = await agent.get("/api/job-discovery/jobs").query({ sort: "FEATURED" });
+      expect(response.status).toBe(200);
+      expect(response.body.jobs.map((job) => job.id)).toEqual([
+        jobA._id.toString(),
+        jobB._id.toString(),
+      ]);
+    });
+
+    it("caps the ranked pool at 18 before fixed six-per-page pagination", async () => {
+      const { manager, recruiter, catalog, agent } = await createBaseContext();
+      const jobs = [];
+      for (let index = 0; index < 20; index += 1) {
+        jobs.push(await createJob({
+          company: manager.company,
+          recruiter,
+          catalog,
+          title: `Featured ${index}`,
+          publishedAt: new Date(Date.UTC(2026, 8, 1 + index)),
+        }));
+      }
+      await createFeaturedApplication({ job: jobs[0] });
+      const expected = [jobs[0], ...jobs.slice(3).reverse()].map((job) => job._id.toString());
+
+      for (const page of [1, 2, 3, 4]) {
+        const response = await agent.get("/api/job-discovery/jobs").query({ sort: "FEATURED", page, limit: 1 });
+        expect(response.status).toBe(200);
+        expect(response.body.pagination).toEqual({ page, limit: 6, total: 18, totalPages: 3 });
+        expect(response.body.jobs.map((job) => job.id)).toEqual(expected.slice((page - 1) * 6, page * 6));
+      }
+    });
+
+    it("applies public eligibility, companyId, keyword, and filters before ranking", async () => {
+      const { manager, recruiter, catalog, agent } = await createBaseContext();
+      const other = await createSecondCompanyContext({ name: "Other Hiring", suffix: "FEATURED" });
+      const included = await createJob({ company: manager.company, recruiter, catalog, title: "Platform Included", workModes: [WORK_MODE.REMOTE] });
+      const wrongMode = await createJob({ company: manager.company, recruiter, catalog, title: "Platform Hybrid" });
+      const wrongCompany = await createJob({ company: other.manager.company, recruiter: other.recruiter, catalog, title: "Platform Other", workModes: [WORK_MODE.REMOTE] });
+      const closed = await createJob({ company: manager.company, recruiter, catalog, title: "Platform Closed", status: JOB_STATUS.CLOSED, workModes: [WORK_MODE.REMOTE] });
+      const expired = await createJob({ company: manager.company, recruiter, catalog, title: "Platform Expired", applicationDeadline: new Date("2026-01-01T00:00:00.000Z"), workModes: [WORK_MODE.REMOTE] });
+      const wrongKeyword = await createJob({ company: manager.company, recruiter, catalog, title: "Unrelated", jobDescription: "No match", requiredSkills: [], workModes: [WORK_MODE.REMOTE] });
+      for (const job of [wrongMode, wrongCompany, closed, expired, wrongKeyword]) {
+        await createFeaturedApplication({ job });
+        await createFeaturedApplication({ job });
+      }
+
+      const response = await agent.get("/api/job-discovery/jobs").query({ sort: "FEATURED", companyId: manager.company._id.toString(), keyword: "Platform", workModes: WORK_MODE.REMOTE });
+      expect(response.status).toBe(200);
+      expect(response.body.jobs.map((job) => job.id)).toEqual([included._id.toString()]);
+      expect(response.body.pagination).toEqual({ page: 1, limit: 6, total: 1, totalPages: 1 });
+    });
+
+    it("removes ineligible Company Jobs before selecting the Top 18", async () => {
+      const { manager, recruiter, catalog, agent } = await createBaseContext();
+      const other = await createSecondCompanyContext({
+        name: "Locked Featured Company",
+        suffix: "FEATURED-LOCKED",
+      });
+      const included = await createJob({
+        company: manager.company,
+        recruiter,
+        catalog,
+        title: "Eligible Featured Job",
+      });
+
+      for (let index = 0; index < 19; index += 1) {
+        const excluded = await createJob({
+          company: other.manager.company,
+          recruiter: other.recruiter,
+          catalog,
+          title: `Ineligible Featured Job ${index}`,
+        });
+        await createFeaturedApplication({ job: excluded });
+        await createFeaturedApplication({ job: excluded });
+      }
+      await Company.findByIdAndUpdate(other.manager.company._id, {
+        operationalStatus: COMPANY_OPERATIONAL_STATUS.LOCKED,
+      });
+
+      const response = await agent.get("/api/job-discovery/jobs").query({ sort: "FEATURED" });
+      expect(response.status).toBe(200);
+      expect(response.body.jobs.map((job) => job.id)).toEqual([included._id.toString()]);
+      expect(response.body.pagination).toEqual({ page: 1, limit: 6, total: 1, totalPages: 1 });
+    });
+  });
 
   it("lists only discoverable Jobs for Guest with the safe public projection", async () => {
     const { manager, recruiter, catalog, agent } = await createBaseContext();
@@ -498,6 +720,7 @@ describe("V8 — Job Discovery", () => {
     });
     const endpoints = [
       "/api/job-discovery/jobs",
+      "/api/job-discovery/jobs?sort=FEATURED",
       `/api/job-discovery/jobs?companyId=${manager.company._id}`,
       `/api/job-discovery/jobs/${job._id}`,
       `/api/job-discovery/companies/${manager.company._id}`,
