@@ -1,9 +1,11 @@
 import { z } from "zod";
 
+import CANDIDATE_CV_CREATION_INTENT from "../constants/candidate-cv-creation-intent.js";
 import CANDIDATE_CV_VISIBILITY from "../constants/candidate-cv-visibility.js";
 import EMPLOYMENT_TYPE from "../constants/employment-type.js";
 import WORK_MODE from "../constants/work-mode.js";
 import AppError from "../utils/app-error.js";
+import { saveGeneratedDraftContentSchema } from "./validate-save-generated-draft-content.js";
 
 const objectIdString = z
   .string()
@@ -61,6 +63,8 @@ const createGeneratedDraftCvSchema = z
       "employmentTypes",
     ),
     workModes: uniqueEnumArray(Object.values(WORK_MODE), "workModes"),
+    creationIntent: z.enum(Object.values(CANDIDATE_CV_CREATION_INTENT)).optional(),
+    generatedContent: saveGeneratedDraftContentSchema.optional(),
   })
   .strict();
 

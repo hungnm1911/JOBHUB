@@ -110,7 +110,7 @@ const languageSchema = z
   })
   .strict();
 
-const saveGeneratedDraftContentSchema = z
+export const saveGeneratedDraftContentSchema = z
   .object({
     personalInfo: personalInfoSchema,
     professionalSummary: optionalNullableTrimmedString,

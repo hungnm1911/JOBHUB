@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+import CANDIDATE_CV_CREATION_INTENT from "../constants/candidate-cv-creation-intent.js";
 import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
 import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
@@ -419,6 +420,7 @@ const createGeneratedDraftCandidateCv = async ({
   actorUser,
   draft,
   generatedContent,
+  creationIntent = CANDIDATE_CV_CREATION_INTENT.SAVE_DRAFT,
 }) => {
   assertCandidateCvActor(actorUser);
 
@@ -429,13 +431,41 @@ const createGeneratedDraftCandidateCv = async ({
 
   const metadata = await normalizeCandidateCvCreateMetadata(draft);
 
-  // F03 / BR-09–BR-11: create one Generated Draft with its supplied content.
-  // BR-31: metadata-only create still starts with an empty Harvard shell.
+  if (!Object.values(CANDIDATE_CV_CREATION_INTENT).includes(creationIntent)) {
+    throw new AppError(400, "Invalid Generated CV creation intent", {
+      field: "creationIntent",
+    });
+  }
+
+  if (
+    creationIntent === CANDIDATE_CV_CREATION_INTENT.COMPLETE &&
+    generatedContent === undefined
+  ) {
+    throw new AppError(400, "Generated content is required to complete a CV", {
+      field: "generatedContent",
+    });
+  }
+
+  const normalizedContent = normalizeGeneratedContentForPersistence(
+    generatedContent ?? {},
+  );
+  if (
+    creationIntent === CANDIDATE_CV_CREATION_INTENT.COMPLETE &&
+    !evaluateGeneratedCvCompleteness(normalizedContent).isComplete
+  ) {
+    throw new AppError(400, "Generated CV must satisfy completeness", {
+      field: "generatedContent",
+    });
+  }
+
+  // F03 / BR-11: one insert with normalized content and the selected lifecycle.
   const candidateCv = await CandidateCV.create({
     candidateUserId,
     name: metadata.name,
     sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
-    status: CANDIDATE_CV_STATUS.DRAFT,
+    status: creationIntent === CANDIDATE_CV_CREATION_INTENT.COMPLETE
+      ? CANDIDATE_CV_STATUS.ACTIVE
+      : CANDIDATE_CV_STATUS.DRAFT,
     visibility: metadata.visibility,
     categoryId: metadata.categoryId,
     experienceLevelId: metadata.experienceLevelId,
@@ -444,9 +474,7 @@ const createGeneratedDraftCandidateCv = async ({
     employmentTypes: metadata.employmentTypes,
     workModes: metadata.workModes,
     isDefault: false,
-    generatedContent: generatedContent === undefined
-      ? {}
-      : normalizeGeneratedContentForPersistence(generatedContent),
+    generatedContent: normalizedContent,
     archivedAt: null,
   });
 
