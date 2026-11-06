@@ -1,21 +1,15 @@
-import { MapPin, Network, Search } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Network, Search } from 'lucide-react'
+import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 
-import useDistrictLevelUnits from '../hooks/useDistrictLevelUnits'
 import useFieldPositions from '../hooks/useFieldPositions'
 import HierarchyPicker from './HierarchyPicker'
+import LocationHierarchyPicker from './LocationHierarchyPicker'
 
 function usePositionOptions(fieldId) {
   const { positions, loading, error, reload } = useFieldPositions(fieldId)
   return { items: positions, loading, error, reload }
-}
-
-function useDistrictOptions(provinceCode) {
-  const { units, loading, error, reload } = useDistrictLevelUnits(provinceCode)
-  const items = useMemo(() => units.map((unit) => ({ id: unit.code, name: unit.name })), [units])
-  return { items, loading, error, reload }
 }
 
 const CATEGORY_TEXT = Object.freeze({
@@ -23,13 +17,6 @@ const CATEGORY_TEXT = Object.freeze({
   childSearch: 'Nhập vị trí',
   chooseParent: 'Chọn một ngành nghề để xem vị trí.',
   unknownParent: 'Ngành nghề đã chọn',
-})
-
-const LOCATION_TEXT = Object.freeze({
-  parentSearch: 'Nhập Tỉnh/Thành phố',
-  childSearch: 'Nhập Quận/Huyện',
-  chooseParent: 'Chọn một tỉnh/thành phố để xem quận/huyện.',
-  unknownParent: 'Địa điểm đã chọn',
 })
 
 function JobSearchToolbar({
@@ -43,11 +30,6 @@ function JobSearchToolbar({
 }) {
   const [keywordDraft, setKeywordDraft] = useState(keyword)
   const [syncedKeyword, setSyncedKeyword] = useState(keyword)
-  const provinceOptions = useMemo(
-    () => provinces.map((province) => ({ id: province.code, name: province.name })),
-    [provinces],
-  )
-
   if (syncedKeyword !== keyword) {
     setSyncedKeyword(keyword)
     setKeywordDraft(keyword)
@@ -90,17 +72,10 @@ function JobSearchToolbar({
         </span>
       </label>
 
-      <HierarchyPicker
-        align="end"
-        allLabel="Tất cả địa điểm"
-        icon={MapPin}
-        label="Địa điểm"
+      <LocationHierarchyPicker
+        locations={locations}
         onApply={(selection) => onSearch({ locations: selection, keyword: keywordDraft.trim() })}
-        parents={provinceOptions}
-        parentsLoading={provinces.length === 0}
-        text={LOCATION_TEXT}
-        useChildren={useDistrictOptions}
-        value={locations}
+        provinces={provinces}
       />
 
       <Button className="h-12 rounded-xl px-6" type="submit">

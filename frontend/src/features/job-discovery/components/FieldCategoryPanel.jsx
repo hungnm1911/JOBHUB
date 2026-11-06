@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, Network } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Network } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,6 @@ function FieldCategoryPanel({
   fields,
   loading,
   error,
-  selectedFieldId,
   previewFieldId,
   onSelect,
   onPreview,
@@ -40,11 +39,6 @@ function FieldCategoryPanel({
           <Network aria-hidden="true" className="size-5 text-primary" />
           Danh mục ngành nghề
         </h2>
-        {selectedFieldId && (
-          <Button className="h-8 px-2 text-xs" onClick={() => onSelect(null)} variant="ghost">
-            Bỏ chọn
-          </Button>
-        )}
       </div>
 
       <div className="flex-1 px-2 py-2">
@@ -69,7 +63,6 @@ function FieldCategoryPanel({
         {!loading && !error && visibleFields.length > 0 && (
           <ul className="space-y-1">
             {visibleFields.map((field) => {
-              const selected = field.id === selectedFieldId
               const previewed = field.id === previewFieldId
               const count = counts.get(field.id)
 
@@ -78,15 +71,13 @@ function FieldCategoryPanel({
                   <button
                     aria-controls={previewed ? 'field-position-panel' : undefined}
                     aria-expanded={previewed}
-                    aria-pressed={selected}
                     className={cn(
                       'group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring',
                       previewed && 'bg-secondary',
-                      selected && 'bg-primary/10 hover:bg-primary/10',
                     )}
                     onClick={() => {
                       onPreview(field.id)
-                      onSelect(selected ? null : field.id)
+                      onSelect(field.id)
                     }}
                     onFocus={() => onPreview(field.id)}
                     onMouseEnter={() => onPreview(field.id)}
@@ -97,7 +88,7 @@ function FieldCategoryPanel({
                       <span
                         className={cn(
                           'block truncate text-sm font-medium',
-                          (selected || previewed) && 'text-primary',
+                          previewed && 'text-primary',
                         )}
                       >
                         {field.name}
@@ -110,17 +101,13 @@ function FieldCategoryPanel({
                             : `${countFormatter.format(count)} việc làm`}
                       </span>
                     </span>
-                    {selected ? (
-                      <Check aria-hidden="true" className="size-4 text-primary" />
-                    ) : (
-                      <ChevronRight
-                        aria-hidden="true"
-                        className={cn(
-                          'size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5',
-                          previewed && 'translate-x-0.5 text-primary',
-                        )}
-                      />
-                    )}
+                    <ChevronRight
+                      aria-hidden="true"
+                      className={cn(
+                        'size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5',
+                        previewed && 'translate-x-0.5 text-primary',
+                      )}
+                    />
                   </button>
                 </li>
               )

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+import CANDIDATE_CV_CREATION_INTENT from "../constants/candidate-cv-creation-intent.js";
 import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CANDIDATE_CV_STATUS from "../constants/candidate-cv-status.js";
 import CANDIDATE_CV_UPLOADED_PDF from "../constants/candidate-cv-uploaded-pdf.js";
@@ -419,6 +420,7 @@ const createGeneratedDraftCandidateCv = async ({
   actorUser,
   draft,
   generatedContent,
+  creationIntent = CANDIDATE_CV_CREATION_INTENT.SAVE_DRAFT,
 }) => {
   assertCandidateCvActor(actorUser);
 
@@ -429,13 +431,42 @@ const createGeneratedDraftCandidateCv = async ({
 
   const metadata = await normalizeCandidateCvCreateMetadata(draft);
 
-  // F03 / BR-09–BR-11: create one Generated Draft with its supplied content.
-  // BR-31: metadata-only create still starts with an empty Harvard shell.
+  if (!Object.values(CANDIDATE_CV_CREATION_INTENT).includes(creationIntent)) {
+    throw new AppError(400, "Invalid Generated CV creation intent", {
+      field: "creationIntent",
+    });
+  }
+
+  if (
+    creationIntent === CANDIDATE_CV_CREATION_INTENT.COMPLETE &&
+    generatedContent === undefined
+  ) {
+    throw new AppError(400, "Generated content is required to complete a CV", {
+      field: "generatedContent",
+    });
+  }
+
+  const normalizedContent = normalizeGeneratedContentForPersistence(
+    generatedContent ?? {},
+  );
+  if (creationIntent === CANDIDATE_CV_CREATION_INTENT.COMPLETE) {
+    const completeness = evaluateGeneratedCvCompleteness(normalizedContent);
+    if (!completeness.isComplete) {
+      throw new AppError(400, "Generated CV must satisfy completeness", {
+        field: "generatedContent",
+        unmetRequirements: completeness.unmetRequirements,
+      });
+    }
+  }
+
+  // F03 / BR-11: one insert with normalized content and the selected lifecycle.
   const candidateCv = await CandidateCV.create({
     candidateUserId,
     name: metadata.name,
     sourceType: CANDIDATE_CV_SOURCE_TYPE.GENERATED,
-    status: CANDIDATE_CV_STATUS.DRAFT,
+    status: creationIntent === CANDIDATE_CV_CREATION_INTENT.COMPLETE
+      ? CANDIDATE_CV_STATUS.ACTIVE
+      : CANDIDATE_CV_STATUS.DRAFT,
     visibility: metadata.visibility,
     categoryId: metadata.categoryId,
     experienceLevelId: metadata.experienceLevelId,
@@ -444,9 +475,7 @@ const createGeneratedDraftCandidateCv = async ({
     employmentTypes: metadata.employmentTypes,
     workModes: metadata.workModes,
     isDefault: false,
-    generatedContent: generatedContent === undefined
-      ? {}
-      : normalizeGeneratedContentForPersistence(generatedContent),
+    generatedContent: normalizedContent,
     archivedAt: null,
   });
 
@@ -734,17 +763,6 @@ const isValidGeneratedEducation = (education) => {
   );
 };
 
-const isValidGeneratedCertification = (certification) => {
-  return hasPresentString(certification?.name);
-};
-
-const isValidGeneratedLanguage = (language) => {
-  return (
-    hasPresentString(language?.name) &&
-    LANGUAGE_PROFICIENCY_VALUES.has(language?.proficiency)
-  );
-};
-
 const evaluateGeneratedCvCompleteness = (generatedContent) => {
   const content = generatedContent ?? {};
   const personalInfo = content.personalInfo ?? {};
@@ -756,31 +774,42 @@ const evaluateGeneratedCvCompleteness = (generatedContent) => {
   // BR-14 / BR-15 / BR-16: exact Product completeness.
   // Incomplete Education/WorkExperience/Project drafts do not by themselves fail
   // completeness when the exact minimum is otherwise met.
-  const hasRequiredPersonalInfo =
-    hasPresentString(personalInfo.fullName) &&
-    hasPresentString(personalInfo.email) &&
-    hasPresentString(personalInfo.phone);
-  const hasProfessionalSummary = hasPresentString(content.professionalSummary);
-  const hasValidEducation = educations.some(isValidGeneratedEducation);
-  const hasSkill = skills.some((skill) => hasPresentString(skill));
+  const unmetRequirements = [];
+  if (!hasPresentString(personalInfo.fullName)) {
+    unmetRequirements.push("PERSONAL_INFO_FULL_NAME_REQUIRED");
+  }
+  if (!hasPresentString(personalInfo.email)) {
+    unmetRequirements.push("PERSONAL_INFO_EMAIL_REQUIRED");
+  }
+  if (!hasPresentString(personalInfo.phone)) {
+    unmetRequirements.push("PERSONAL_INFO_PHONE_REQUIRED");
+  }
+  if (!hasPresentString(content.professionalSummary)) {
+    unmetRequirements.push("PROFESSIONAL_SUMMARY_REQUIRED");
+  }
+  if (!educations.some(isValidGeneratedEducation)) {
+    unmetRequirements.push("VALID_EDUCATION_REQUIRED");
+  }
+  if (!skills.some((skill) => hasPresentString(skill))) {
+    unmetRequirements.push("SKILL_REQUIRED");
+  }
 
-  // BR-17 / BR-18 + Data 11.3: existing Certification/Language records must be
-  // well-formed for the CV to be activation-ready.
-  const hasValidCertifications = certifications.every(
-    isValidGeneratedCertification,
-  );
-  const hasValidLanguages = languages.every(isValidGeneratedLanguage);
-
-  const isComplete =
-    hasRequiredPersonalInfo &&
-    hasProfessionalSummary &&
-    hasValidEducation &&
-    hasSkill &&
-    hasValidCertifications &&
-    hasValidLanguages;
+  // BR-17 / BR-18 + Data 11.3: optional records must be valid when present.
+  if (certifications.some((item) => !hasPresentString(item?.name))) {
+    unmetRequirements.push("CERTIFICATION_NAME_REQUIRED");
+  }
+  if (languages.some((item) => !hasPresentString(item?.name))) {
+    unmetRequirements.push("LANGUAGE_NAME_REQUIRED");
+  }
+  if (
+    languages.some((item) => !LANGUAGE_PROFICIENCY_VALUES.has(item?.proficiency))
+  ) {
+    unmetRequirements.push("LANGUAGE_PROFICIENCY_REQUIRED");
+  }
 
   return {
-    isComplete,
+    isComplete: unmetRequirements.length === 0,
+    unmetRequirements,
   };
 };
 
@@ -1070,7 +1099,10 @@ const saveOwnGeneratedContent = async ({
 
   return {
     cv: toPublicCandidateCvDetail(updatedCv),
-    completeness: evaluateGeneratedCvCompleteness(updatedCv.generatedContent),
+    completeness: {
+      isComplete: evaluateGeneratedCvCompleteness(updatedCv.generatedContent)
+        .isComplete,
+    },
   };
 };
 
@@ -1166,7 +1198,10 @@ const activateOwnGeneratedCandidateCv = async ({
 
   return {
     cv: toPublicCandidateCvDetail(updatedCv),
-    completeness: evaluateGeneratedCvCompleteness(updatedCv.generatedContent),
+    completeness: {
+      isComplete: evaluateGeneratedCvCompleteness(updatedCv.generatedContent)
+        .isComplete,
+    },
   };
 };
 

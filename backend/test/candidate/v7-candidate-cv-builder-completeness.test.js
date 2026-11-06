@@ -195,6 +195,7 @@ describe("V7 Slice 04 — Generated CV Builder save + completeness (F04)", () =>
       expect(response.body.cv.status).toBe(CANDIDATE_CV_STATUS.DRAFT);
       expect(response.body.cv.isDefault).toBe(false);
       expect(response.body.completeness.isComplete).toBe(false);
+      expect(response.body.completeness).toEqual({ isComplete: false });
       expect(response.body.cv.generatedContent.personalInfo.fullName).toBe(
         "Builder Name",
       );
@@ -238,6 +239,7 @@ describe("V7 Slice 04 — Generated CV Builder save + completeness (F04)", () =>
 
       expect(response.status).toBe(200);
       expect(response.body.completeness.isComplete).toBe(true);
+      expect(response.body.completeness).toEqual({ isComplete: true });
       expect(response.body.cv.status).toBe(CANDIDATE_CV_STATUS.DRAFT);
       expect(response.body.cv.generatedContent.skills).toEqual(["Node.js"]);
       expect(response.body.cv.generatedContent.educations).toHaveLength(2);

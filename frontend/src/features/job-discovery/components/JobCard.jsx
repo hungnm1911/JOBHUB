@@ -15,9 +15,9 @@ function JobCard({ job, provinceNameByCode, action }) {
     <article className="group flex h-full flex-col rounded-xl border bg-card p-5 transition-shadow hover:shadow-md">
       <div className="flex items-start gap-3">
         <Link
-          aria-label={`Xem công ty ${job.company.name}`}
+          aria-label={`Xem việc làm ${job.title}`}
           className="shrink-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          to={`/companies/${job.company.id}`}
+          to={`/jobs/${job.id}`}
         >
           <CompanyLogo company={job.company} />
         </Link>

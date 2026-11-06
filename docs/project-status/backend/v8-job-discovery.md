@@ -7,6 +7,10 @@ baseline. The V8 Enhancement (F01 Product/API contract, F02A actor
 authorization, F02B optional `companyId` filtering, and Frontend F03A–F03B)
 is **ACCEPTED within the focused verification scope** as of 2026-11-03.
 This does not represent a new full-gate acceptance of V8 or other versions.
+The Backend Featured Ranking extension (F02/F05, BR-42/BR-43, API-V8-01 and
+Data V8 §6.7/§14.1) is **IMPLEMENTED / ACCEPTED within the focused verification
+scope** as of 2026-11-07 by Product Owner decision. The full Backend gate has
+not been rerun for this extension.
 Its Product and Data contracts are
 [V8 Product](../../product/backend/versions/v8-job-discovery.md) and
 [V8 Data](../../data/backend/versions/v8-job-discovery-data-model.md); the
@@ -20,9 +24,10 @@ BR-01–BR-41: F02A allows Guest and Candidate and rejects authenticated
 Platform Admin and Company Staff (Manager or Recruiter) with `403`; a Job is
 discoverable only while `PUBLISHED`, before its deadline, and owned by a
 publicly eligible Company. V8 adds no Job lifecycle mutation, Candidate–Job
-persistence, Saved Jobs, Apply, Application, or other deferred capability, and creates no new
-collection. Location and Salary filters on the list route are owned by V4.1 and
-V4.2, not V8.
+persistence, Saved Jobs, Apply, or Application mutation, and creates no new
+collection. Featured reads existing Application records for ranking only; no
+Application or Job count is persisted or exposed. Location and
+Salary filters on the list route are owned by V4.1 and V4.2, not V8.
 
 The V8 Product/API contract specifies an optional single-ObjectId `companyId`
 on `GET /api/job-discovery/jobs` for the public Company Detail Jobs list.
@@ -46,12 +51,26 @@ pagination metadata are unchanged and no index or schema changed.
   predicate that `resolveJobDiscoveryVisibility` applies to detail, so the two
   must be kept in sync (the V8 owner row in `docs/engineering/source-of-truth.md`
   records this).
-- **Not verified for the enhancement:** full Backend gate, MongoDB query plans
-  (`explain`), and performance on large data sets. Frontend focused evidence
-  and its remaining browser/E2E checks are recorded in the Frontend V03 leaf.
-- **Out of V8 by design:** Apply, Application, Saved Jobs, Candidate Search,
+- **Accepted coverage limit:** the MEDIUM transition regression coverage gap is
+  accepted by the Product Owner without additional tests. The full Backend
+  gate, MongoDB query plans (`explain`), and large-data performance remain
+  unverified for Featured. Frontend implementation, acceptance, and remaining
+  browser/E2E checks are recorded in the Frontend V03 leaf.
+- **Out of V8 by design:** Apply, Application mutation, Saved Jobs, Candidate Search,
   Job Invitation, Chat, Interview, Notification, Job recommendation, view
   tracking, and posted-date filtering.
+
+## Implementation record (Featured extension)
+
+- **Implemented; focused accepted:** `GET /api/job-discovery/jobs?sort=FEATURED`
+  reuses the V8 public eligibility, optional `companyId`, keyword, and filter
+  stages. The Discovery service reads `Application.jobId` inside the existing
+  Job aggregation, ranks the eligible Jobs, caps the result at 18, then pages
+  six Jobs at a time. Zero-Application Jobs remain eligible. The public
+  response envelope and projection are unchanged; no Application count is
+  stored or returned. Application lifecycle and schema remain owned by their
+  existing versions. Featured is a list-only option on API-V8-01; Job detail
+  and Company public information endpoints do not implement Featured ranking.
 
 ## Previously completed and verified baseline
 
@@ -87,6 +106,19 @@ pagination metadata are unchanged and no index or schema changed.
 
 ## Verification status
 
+- 2026-11-07 Featured acceptance closure: the Product Owner accepted Backend
+  Featured Ranking within the focused verification scope, including the MEDIUM
+  transition regression coverage gap without adding tests. This is an
+  acceptance decision on the focused evidence below, not a new Backend gate,
+  query-plan, or performance result. The V8 baseline gate evidence remains
+  historical and unchanged.
+- Featured Slice 02 focused verification: `npx vitest run` on the V8 Discovery,
+  V4.1 Location Discovery filter, and V4.2 Salary Discovery filter files passed
+  (3 files / 66 tests). The focused Featured tests passed separately
+  (1 file / 3 tests). Targeted ESLint on the sort constant, Discovery service,
+  and V8 test passed; `git diff --check` passed. The full Backend
+  `verify:agent` gate was not run per the slice instruction. MongoDB query plans
+  and large-data performance remain unverified.
 - V8 Enhancement closure: F01 Product/API contract and F02A–F02B were accepted
   by the Product Owner. Acceptance relies on the focused evidence below;
   the accumulated local code diff has not received an independent direct

@@ -88,6 +88,8 @@ function HierarchyPicker({
   parentsLoading,
   value,
   onApply,
+  onOpenChange,
+  panelClassName,
   useChildren,
   text,
 }) {
@@ -100,7 +102,10 @@ function HierarchyPicker({
   const [childQuery, setChildQuery] = useState('')
   const children = useChildren(open ? activeParentId : null)
 
-  const close = useCallback(() => setOpen(false), [])
+  const close = useCallback(() => {
+    setOpen(false)
+    onOpenChange?.(false)
+  }, [onOpenChange])
   useDismissableLayer(containerRef, open, close)
 
   const nameById = useMemo(() => new Map(parents.map((parent) => [parent.id, parent.name])), [parents])
@@ -120,6 +125,7 @@ function HierarchyPicker({
     setChildQuery('')
     setActiveParentId(value[0]?.id ?? parents[0]?.id ?? null)
     setOpen(true)
+    onOpenChange?.(true)
   }
 
   const selectParentForBrowsing = (parentId) => {
@@ -154,6 +160,7 @@ function HierarchyPicker({
           className={cn(
             'absolute top-full z-30 mt-2 flex w-[min(40rem,calc(100vw-3rem))] flex-col rounded-xl border bg-popover text-popover-foreground shadow-xl',
             align === 'end' ? 'right-0' : 'left-0',
+            panelClassName,
           )}
           id={panelId}
           role="dialog"

@@ -137,7 +137,9 @@ function toDiscoveryJobsQuery(search, limit) {
 export {
   FILTERABLE_SALARY_PERIODS,
   JOB_DISCOVERY_SORT,
+  parseBranches,
   parseJobSearch,
+  serializeBranches,
   toDiscoveryJobsQuery,
   toJobSearchParams,
 }

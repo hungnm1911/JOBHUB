@@ -8,15 +8,29 @@ PASSED` baseline as of 2026-10-31. The V8 Enhancement (F01–F03B) is
 **ACCEPTED within the focused verification scope** as of 2026-11-03, with
 Product Owner acceptance of each slice. This does not newly accept all V8 or
 V17 work. Human visual review against the provided homepage mockup is pending.
+The Homepage Featured UX consuming Backend V8 F02/F05, BR-42/BR-43 and
+API-V8-01 is **IMPLEMENTED / ACCEPTED within the focused verification scope**
+as of 2026-11-07 by Product Owner decision, with the known risks below.
+Its later Job navigation code gate passed, but browser/E2E verification of
+Featured remains unconfirmed.
+Homepage keyword, Category, Position, and Location actions now navigate to
+filtered `/jobs`; the Homepage Featured list remains `FEATURED` and no longer
+renders a filtered-results transition. The focused test and frontend code gate
+passed on 2026-11-07; browser/E2E verification remains unconfirmed.
 The [Backend V8 status](../backend/v8-job-discovery.md) records its baseline and
 focused backend evidence.
 
-- **Homepage (`/`):** hero with the two newest discoverable Jobs and the live
-  discoverable total; keyword + province search bar; Field Category panel
+- **Homepage (`/`) implemented baseline:** hero with the two newest
+  discoverable Jobs and the live discoverable total; keyword search and the
+  same Province/District-level unit multi-select picker as `/jobs`; Field Category panel
   (client-side pages of six, per-Field counts read from the discovery list
   `pagination.total`); a static JOBHUB introduction carousel describing only
-  existing capabilities; and the discovery list (six per page, backend default
-  sort). Filters live in the URL (`q`, `location`, `field`, `page`).
+  existing capabilities; and the Featured list (six per page, always
+  `FEATURED`, with "Xem tất cả" linking to default `/jobs`). Homepage
+  keyword/Category/Position/Location actions navigate to filtered `/jobs`
+  using canonical search parameters. Only Featured pagination uses `page`
+  on the Homepage; old Homepage filter query parameters no longer filter
+  the Featured list.
 - **Job detail (`/jobs/:jobId`):** API-V8-02 public projection with the
   historical read-only notice distinguishing `CLOSED` from expired Jobs;
   404/403 are shown as "not viewable" without retry.
@@ -48,11 +62,13 @@ focused backend evidence.
   are composed by pages; guests are sent to `/login`. Apply is always visible
   on Job detail. Code gate `yarn verify:agent` passed 2026-11-01. Candidate
   apply-with-CV was not browser-checked (no Candidate session).
-- **Job card navigation:** homepage, Find Jobs, and Company Jobs cards open
-  Job detail from the Job title and Company detail from the Company name or
-  logo. Other card content has no navigation action; Apply and Save keep their
-  own actions. Focused navigation tests and the frontend code gate passed on
-  2026-11-03.
+- **Job navigation:** the two newest-Job Hero previews open Job detail from
+  the whole item. Homepage, Find Jobs, and Company Jobs cards open Job detail
+  from the Job title or Company logo, while Company name opens Company detail.
+  The Company logo destination in `JobCard` and `JobResultCard` is intentional
+  UX approved by the Product Owner. Other content in those cards has no
+  navigation action; Apply and Save keep their own actions. This navigation
+  change passed focused tests and the Frontend code gate on 2026-11-07.
 
 ## Deferred / not started
 
@@ -60,12 +76,57 @@ focused backend evidence.
   selection inside a Field; multi-select filters; explicit sort selection.
 - My CVs, upload-during-apply (V9 F02 steps 4–5), and a Saved Jobs list page.
 - Browser-level visual/integration checks for the enhancement.
+- **Accepted/deferred Featured risks:** the LOW stale URL `page` case is
+  outside this closure scope and deferred. Browser/E2E checks for Featured
+  remain unverified.
 - Mockup items without Product/API authority were not implemented: event
   banner, response-rate/partner statistics, bookmark button, app download and
-  links to non-existent tools. "Featured jobs" is presented as "newest jobs"
-  because Backend V8 has no featured concept.
+  links to non-existent tools.
 
 ## Verification status
+
+- 2026-11-07 Homepage filter navigation: `cd frontend && yarn test:featured-homepage`
+  passed 9 focused tests covering unfiltered Featured rendering, ignored old
+  Homepage filter URLs, and keyword/Field/Position/Location navigation to
+  `/jobs`. `cd frontend && yarn verify:agent` passed authentication, Job card,
+  Featured Homepage, and rich-text tests, ESLint, and production build;
+  `git diff --check` passed. Browser/E2E checks were not run. The build
+  emitted the existing >500 kB chunk warning.
+
+- 2026-11-07 Featured acceptance closure: the Product Owner accepted Homepage
+  Featured UX within the focused scope and approved the JobCard/JobResultCard
+  Company logo navigation to Job detail. The MEDIUM transition regression
+  coverage gap was accepted without new tests; the LOW stale URL `page` case
+  was deferred. The focused test and subsequent code-gate evidence below
+  supports this state. No browser/E2E result is claimed for Featured.
+- 2026-11-07 Job navigation UX: `cd frontend && yarn test:job-cards`
+  passed 6 tests, `yarn test:featured-homepage` passed 5 tests, targeted
+  ESLint on the changed components and tests passed, and `git diff --check`
+  passed. The tests covered whole-item Hero navigation, logo/Company-name
+  destinations, and unchanged Apply/Save actions. The subsequent
+  `cd frontend && yarn verify:agent` passed authentication, Job card, Featured Homepage, and
+  rich-text tests, ESLint, and the production build. Browser and E2E checks
+  were not run. The parallel focused test run emitted a non-fatal Vite
+  WebSocket port-in-use warning; the build retained the existing >500 kB
+  chunk warning.
+
+- 2026-11-07 Featured Homepage slice: `cd frontend && yarn test:featured-homepage`
+  passed 4 focused tests covering the unfiltered Featured query, six cards and
+  three-page response, default `/jobs` link, and keyword/location/field searches
+  retaining unrestricted default-sort pagination. Targeted ESLint on the changed
+  Frontend source and test and `git diff --check` passed. Full
+  `yarn verify:agent`, browser, and E2E checks were not run per this slice's
+  instruction; Product Owner acceptance was recorded in the later closure
+  decision above.
+
+- 2026-11-06 Homepage Location picker: `cd frontend && yarn verify:agent`
+  passed authentication, Job card, and rich-text tests, ESLint, and production
+  build. In the running browser, `/` loaded Province and District-level unit
+  catalogs from the backend (`200`), applying Hà Nội / Ba Đình wrote
+  `?locations=1%3A1` and sent `GET /api/job-discovery/jobs?locations=1:1`
+  (`200`); a legacy `?location=1` link displayed Hà Nội and keyword search
+  carried it forward as `locations=1`. The existing >500 kB chunk warning
+  remains.
 
 - 2026-11-03 Job card navigation: `cd frontend && yarn test:job-cards`
   passed (6 tests), `node --test test/company-jobs-section.test.js` passed

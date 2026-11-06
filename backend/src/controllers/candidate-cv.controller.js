@@ -68,6 +68,8 @@ const createGeneratedDraftCandidateCvHandler = async (
       candidateUserId: request.auth.user._id,
       actorUser: request.auth.user,
       draft: request.body,
+      creationIntent: request.body.creationIntent,
+      generatedContent: request.body.generatedContent,
     });
 
     return response.status(201).json({

@@ -1,13 +1,10 @@
-import { ArrowRight, Check, RotateCw, X } from 'lucide-react'
+import { ArrowRight, RotateCw, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-
 import useFieldPositions from '../hooks/useFieldPositions'
 
-function FieldPositionPanel({ field, selectedFieldId, selectedPositionId, onSelect, onClose }) {
+function FieldPositionPanel({ field, onSelect, onClose }) {
   const { positions, loading, error, reload } = useFieldPositions(field.id)
-  const fieldSelected = field.id === selectedFieldId
 
   return (
     <section
@@ -62,28 +59,17 @@ function FieldPositionPanel({ field, selectedFieldId, selectedPositionId, onSele
 
         {!loading && !error && positions.length > 0 && (
           <ul className="flex flex-wrap gap-2">
-            {positions.map((position) => {
-              const selected = fieldSelected && position.id === selectedPositionId
-
-              return (
-                <li key={position.id}>
-                  <button
-                    aria-pressed={selected}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      selected
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-transparent bg-secondary text-secondary-foreground hover:border-primary/40 hover:text-primary',
-                    )}
-                    onClick={() => onSelect(field.id, selected ? null : position.id)}
-                    type="button"
-                  >
-                    {selected && <Check aria-hidden="true" className="size-3.5" />}
-                    {position.name}
-                  </button>
-                </li>
-              )
-            })}
+            {positions.map((position) => (
+              <li key={position.id}>
+                <button
+                  className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-secondary px-3 py-1.5 text-sm text-secondary-foreground transition-colors outline-none hover:border-primary/40 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => onSelect(field.id, position.id)}
+                  type="button"
+                >
+                  {position.name}
+                </button>
+              </li>
+            ))}
           </ul>
         )}
       </div>

@@ -17,31 +17,36 @@ function HeroJobPreview({ job, provinceNameByCode }) {
     .join(' • ')
 
   return (
-    <li className="rounded-xl border border-hero-foreground/10 bg-hero-foreground/5 p-4">
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden="true"
-          className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/30 text-sm font-semibold"
-        >
-          {job.company.name.charAt(0).toUpperCase()}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{job.title}</p>
-          <p className="truncate text-xs text-hero-muted">{meta}</p>
+    <li>
+      <Link
+        className="block rounded-xl border border-hero-foreground/10 bg-hero-foreground/5 p-4 outline-none transition-colors hover:bg-hero-foreground/10 focus-visible:ring-2 focus-visible:ring-hero-foreground"
+        to={`/jobs/${job.id}`}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden="true"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/30 text-sm font-semibold"
+          >
+            {job.company.name.charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{job.title}</p>
+            <p className="truncate text-xs text-hero-muted">{meta}</p>
+          </div>
+          <span className="shrink-0 rounded-md bg-success/15 px-2 py-1 text-xs font-semibold text-success">
+            {formatSalary(job.salary)}
+          </span>
         </div>
-        <span className="shrink-0 rounded-md bg-success/15 px-2 py-1 text-xs font-semibold text-success">
-          {formatSalary(job.salary)}
-        </span>
-      </div>
-      {getJobTags(job, 2).length > 0 && (
-        <ul aria-label="Danh mục" className="mt-3 flex flex-wrap gap-1.5">
-          {getJobTags(job, 2).map((tag) => (
-            <li className="rounded bg-hero-foreground/10 px-2 py-0.5 text-[11px] text-hero-muted" key={tag}>
-              {tag}
-            </li>
-          ))}
-        </ul>
-      )}
+        {getJobTags(job, 2).length > 0 && (
+          <ul aria-label="Danh mục" className="mt-3 flex flex-wrap gap-1.5">
+            {getJobTags(job, 2).map((tag) => (
+              <li className="rounded bg-hero-foreground/10 px-2 py-0.5 text-[11px] text-hero-muted" key={tag}>
+                {tag}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Link>
     </li>
   )
 }
@@ -121,7 +126,7 @@ function HomeHero({ fieldCount, provinceNameByCode }) {
           )}
 
           {!loading && !error && jobs.length > 0 && (
-            <ul className="mt-4 space-y-3">
+            <ul aria-label="Việc làm mới đăng" className="mt-4 space-y-3">
               {jobs.map((job) => (
                 <HeroJobPreview job={job} key={job.id} provinceNameByCode={provinceNameByCode} />
               ))}

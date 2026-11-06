@@ -636,7 +636,10 @@ Với Generated CV:
 DRAFT ⇄ ACTIVE
 ```
 
-theo Product V7.
+theo Product V7 đối với CV đã tồn tại. Khi tạo mới, `SAVE_DRAFT` (mặc định)
+persist `DRAFT`; `COMPLETE` hợp lệ persist trực tiếp `ACTIVE` trong một insert,
+không qua một Draft đã persist. Ý định tạo chỉ quyết định trạng thái được persist,
+không phải field hoặc enum của CandidateCV.
 
 Với Uploaded CV:
 
@@ -1296,11 +1299,11 @@ Quyền Recruiter và Candidate Search conditions khác không thuộc V7.
 
 # 9. Persistence Transitions
 
-## 9.1. Tạo Generated CV Draft
+## 9.1. Tạo Generated CV theo creation intent
 
 ### Trigger business
 
-`F03`, `BR-09`–`BR-11`
+`F03`, `BR-09`–`BR-11`, `BR-14`–`BR-20`
 
 ### Trước
 
@@ -1308,7 +1311,7 @@ Quyền Recruiter và Candidate Search conditions khác không thuộc V7.
 CandidateCV chưa tồn tại
 ```
 
-### Sau
+### `SAVE_DRAFT` (mặc định): sau
 
 ```text
 candidateUserId = current Candidate
@@ -1323,14 +1326,47 @@ skillTags = [...]
 employmentTypes = [...]
 workModes = [...]
 isDefault = false
-generatedContent = empty/partial structured content
+generatedContent = normalized supplied content, or empty structured content when omitted
 uploadedFile = absent
 archivedAt = null
 ```
 
 ### Invariant
 
-Không cần Generated content complete để tạo Draft.
+Với `SAVE_DRAFT`, nội dung Generated CV do Candidate cung cấp là tùy chọn. Nếu có, service
+chuẩn hóa và persist nội dung đó cùng metadata trong một insert
+`GENERATED/DRAFT`, kể cả khi content chưa complete. Nếu không có, cùng insert
+tạo Draft với empty content. Không cần Generated content complete để tạo Draft.
+
+Khi Candidate không chọn ý định tạo, hệ thống xử lý như `SAVE_DRAFT`;
+quy tắc content tùy chọn và một insert ở trên cũng áp dụng.
+AI-V06 vẫn chỉ tạo Generated `DRAFT`, kể cả khi có Generated content do server
+cung cấp trong cùng insert.
+
+### `COMPLETE`: kiểm tra trước insert và sau
+
+`COMPLETE` yêu cầu nội dung Generated CV do Candidate cung cấp. Service chuẩn hóa content
+theo canonical Generated-content normalizer, sau đó kiểm tra chính content sẽ
+được persist bằng exact Generated completeness của Product V7 (`BR-14`–`BR-18`,
+§11.3). Metadata và các reference cũng phải hợp lệ trước insert.
+
+Chỉ khi mọi kiểm tra đạt, một insert tạo CandidateCV với cùng metadata và
+ownership như Draft creation, nhưng:
+
+```text
+sourceType = GENERATED
+status = ACTIVE
+isDefault = false
+generatedContent = normalized complete content
+uploadedFile = absent
+archivedAt = null
+```
+
+Không persist ý định tạo, Generated PDF, hoặc trạng thái trung gian. Nếu
+content thiếu, chuẩn hóa thất bại, completeness fail, hay validation khác thất
+bại, không insert CandidateCV; không tạo Draft thay thế. Insert `ACTIVE` phải
+giữ invariant `ACTIVE` + current `generatedContent` complete. Đây là create mới,
+không phải `DRAFT → ACTIVE`; transition §9.3 vẫn giữ nguyên cho Draft đã tồn tại.
 
 ---
 
@@ -1810,6 +1846,11 @@ phải được thay như một current-file value thống nhất.
 
 Không được commit `ACTIVE` nếu current content được commit không complete.
 
+### Direct `COMPLETE` creation
+
+Kiểm tra normalized Generated content và exact completeness trước một insert
+`ACTIVE`; không persist Draft tạm thời hoặc CV khi validation thất bại.
+
 ---
 
 ## 10.3. External file storage boundary
@@ -1917,6 +1958,8 @@ nếu cần cross-document hoặc external context.
 | ExperienceLevel phải tồn tại nếu được chọn           | Service                 | Cross-document               |
 | Không mutate archived CV                             | Service                 | Lifecycle                    |
 | `sourceType` không được đổi                          | Service + schema        | Lifecycle                    |
+| Không chọn ý định tạo → `SAVE_DRAFT`; Draft lưu optional normalized content trong cùng insert; `COMPLETE` chỉ tạo `ACTIVE` sau khi normalized content complete | Service | Create contract |
+| `COMPLETE` validation thất bại → không insert CV     | Service                 | Create atomicity             |
 | DRAFT → ACTIVE chỉ khi exact completeness pass       | Service                 | Business transition          |
 | Candidate phải explicit activate                     | Service                 | Business ordering            |
 | ACTIVE edit incomplete → DRAFT                       | Service                 | Business lifecycle           |
@@ -2467,7 +2510,7 @@ Các invariant sau phải luôn đúng ở canonical persisted state.
 
 ### Generated lifecycle
 
-23. Generated mới bắt đầu `DRAFT`.
+23. Generated mới persist `DRAFT` theo `SAVE_DRAFT` (kể cả khi không chọn ý định tạo), hoặc trực tiếp `ACTIVE` theo `COMPLETE` hợp lệ; không persist ý định tạo hay Draft trung gian của `COMPLETE`.
 24. Generated Draft được partial content persistence.
 25. Generated Draft có thể `visibility = PUBLIC`.
 26. Generated Draft không được `isDefault = true`.
@@ -2481,7 +2524,7 @@ Các invariant sau phải luôn đúng ở canonical persisted state.
 34. Valid Education dùng cho completeness phải có institutionName + degree.
 35. Certification record đã tồn tại trong valid Active content phải có name.
 36. Language record đã tồn tại trong valid Active content phải có name + valid proficiency.
-37. Candidate explicit activation mới được `DRAFT → ACTIVE`.
+37. Candidate explicit activation mới được `DRAFT → ACTIVE` đối với Draft đã tồn tại; Candidate chọn `COMPLETE` để tạo trực tiếp `ACTIVE` chỉ khi normalized content đạt exact completeness.
 38. Complete Draft không tự động trở thành ACTIVE.
 39. ACTIVE edit thành incomplete phải commit `DRAFT`.
 40. Nếu CV đó là Default, ACTIVE→DRAFT phải đồng thời clear Default.
@@ -2564,6 +2607,7 @@ Data Contract V7 được coi là hoàn thành khi:
 * `skills[]` thay thế structure technical/tools/soft cũ;
 * Certification có structured record;
 * Language có structured record và canonical proficiency;
+* `SAVE_DRAFT` mặc định và `COMPLETE` trực tiếp insert `ACTIVE` sau validation được xác định, không persist CV khi validation thất bại;
 * exact `DRAFT → ACTIVE` completeness đã được xác định;
 * `ACTIVE → DRAFT` persistence behavior đã được xác định;
 * Uploaded file validation representation đã rõ;
