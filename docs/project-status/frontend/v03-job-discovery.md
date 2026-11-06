@@ -13,6 +13,10 @@ API-V8-01 is **IMPLEMENTED / ACCEPTED within the focused verification scope**
 as of 2026-11-07 by Product Owner decision, with the known risks below.
 Its later Job navigation code gate passed, but browser/E2E verification of
 Featured remains unconfirmed.
+Homepage keyword, Category, Position, and Location actions now navigate to
+filtered `/jobs`; the Homepage Featured list remains `FEATURED` and no longer
+renders a filtered-results transition. The focused test and frontend code gate
+passed on 2026-11-07; browser/E2E verification remains unconfirmed.
 The [Backend V8 status](../backend/v8-job-discovery.md) records its baseline and
 focused backend evidence.
 
@@ -21,10 +25,12 @@ focused backend evidence.
   same Province/District-level unit multi-select picker as `/jobs`; Field Category panel
   (client-side pages of six, per-Field counts read from the discovery list
   `pagination.total`); a static JOBHUB introduction carousel describing only
-  existing capabilities; and the discovery list (six per page, `FEATURED` on
-  the unfiltered Homepage, backend default sort when filtered, with "Xem tất cả"
-  linking to default `/jobs`). Filters live in the URL (`q`, `locations`,
-  `field`, `page`); legacy `location` links remain readable.
+  existing capabilities; and the Featured list (six per page, always
+  `FEATURED`, with "Xem tất cả" linking to default `/jobs`). Homepage
+  keyword/Category/Position/Location actions navigate to filtered `/jobs`
+  using canonical search parameters. Only Featured pagination uses `page`
+  on the Homepage; old Homepage filter query parameters no longer filter
+  the Featured list.
 - **Job detail (`/jobs/:jobId`):** API-V8-02 public projection with the
   historical read-only notice distinguishing `CLOSED` from expired Jobs;
   404/403 are shown as "not viewable" without retry.
@@ -70,15 +76,22 @@ focused backend evidence.
   selection inside a Field; multi-select filters; explicit sort selection.
 - My CVs, upload-during-apply (V9 F02 steps 4–5), and a Saved Jobs list page.
 - Browser-level visual/integration checks for the enhancement.
-- **Accepted/deferred Featured risks:** the Product Owner accepted the MEDIUM
-  transition regression coverage gap without adding tests. The LOW stale URL
-  `page` case is outside this closure scope and deferred. Browser/E2E checks
-  for Featured remain unverified.
+- **Accepted/deferred Featured risks:** the LOW stale URL `page` case is
+  outside this closure scope and deferred. Browser/E2E checks for Featured
+  remain unverified.
 - Mockup items without Product/API authority were not implemented: event
   banner, response-rate/partner statistics, bookmark button, app download and
   links to non-existent tools.
 
 ## Verification status
+
+- 2026-11-07 Homepage filter navigation: `cd frontend && yarn test:featured-homepage`
+  passed 9 focused tests covering unfiltered Featured rendering, ignored old
+  Homepage filter URLs, and keyword/Field/Position/Location navigation to
+  `/jobs`. `cd frontend && yarn verify:agent` passed authentication, Job card,
+  Featured Homepage, and rich-text tests, ESLint, and production build;
+  `git diff --check` passed. Browser/E2E checks were not run. The build
+  emitted the existing >500 kB chunk warning.
 
 - 2026-11-07 Featured acceptance closure: the Product Owner accepted Homepage
   Featured UX within the focused scope and approved the JobCard/JobResultCard

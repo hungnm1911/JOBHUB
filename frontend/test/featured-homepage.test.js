@@ -36,7 +36,8 @@ const jobs = Array.from({ length: 6 }, (_, index) => ({
 }))
 
 function CurrentPath() {
-  return createElement('output', { 'data-current-path': true }, useLocation().pathname)
+  const location = useLocation()
+  return createElement('output', { 'data-current-path': true }, location.pathname + location.search)
 }
 
 async function click(element) {
@@ -51,8 +52,10 @@ async function mount(path) {
   const requests = []
   apiClient.get = async (url, options = {}) => {
     requests.push({ url, params: options.params })
-    if (url === '/categories/fields') return { data: { fields: [] } }
-    if (url === '/locations/provinces') return { data: { provinces: [] } }
+    if (url === '/categories/fields') return { data: { fields: [{ id: 'field-1', name: 'Marketing' }] } }
+    if (url === '/categories/fields/field-1/positions') return { data: { positions: [{ id: 'position-1', name: 'Designer' }] } }
+    if (url === '/locations/provinces') return { data: { provinces: [{ code: '01', name: 'Hà Nội' }] } }
+    if (url === '/locations/provinces/01/district-level-units') return { data: { districtLevelUnits: [] } }
     if (url === '/job-discovery/jobs') {
       const featured = options.params.sort === 'FEATURED'
       const limit = options.params.limit
@@ -121,13 +124,64 @@ test('default homepage requests six Featured jobs per page and links to default 
 })
 
 for (const path of ['/?q=engineer', '/?locations=01', '/?field=field-1']) {
-  test(`${path} keeps discovery default sort and unrestricted pagination`, async () => {
+  test(`${path} keeps the homepage Featured list unchanged`, async () => {
     const view = await mount(path)
     const list = view.requests.find((request) => request.params?.limit === 6)
-    assert.equal(list.params.sort, undefined)
-    assert.equal(view.container.querySelector('#jobs-heading').textContent, 'Kết quả tìm kiếm')
-    assert.ok([...view.container.querySelectorAll('#jobs nav button')]
-      .some((button) => button.textContent === '4'))
+    assert.equal(list.params.sort, 'FEATURED')
+    assert.equal(list.params.keyword, undefined)
+    assert.equal(list.params.categories, undefined)
+    assert.equal(list.params.locations, undefined)
+    assert.equal(view.container.querySelector('#jobs-heading').textContent, 'Việc làm nổi bật')
+    assert.equal(view.container.querySelector('#jobs').textContent.includes('Xóa bộ lọc'), false)
+    assert.deepEqual([...view.container.querySelectorAll('#jobs nav button')]
+      .filter((button) => /^\d+$/.test(button.textContent))
+      .map((button) => button.textContent), ['1', '2', '3'])
     await view.unmount()
   })
 }
+
+test('choosing a homepage field opens filtered /jobs while Featured stays unchanged', async () => {
+  const view = await mount('/')
+  await click([...view.container.querySelector('#field-category-heading').closest('section').querySelectorAll('li button')]
+    .find((button) => button.textContent.includes('Marketing')))
+  assert.equal(view.path(), '/jobs?categories=field-1')
+  assert.equal(view.requests.find((request) => request.params?.sort === 'FEATURED').params.categories, undefined)
+  await view.unmount()
+})
+
+test('submitting a homepage keyword opens the /jobs search', async () => {
+  const view = await mount('/')
+  const input = view.container.querySelector('form[role="search"] input[type="search"]')
+  const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+  await act(async () => {
+    setValue.call(input, 'engineer')
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+  })
+  await act(async () => input.closest('form').dispatchEvent(new window.Event('submit', {
+    bubbles: true,
+    cancelable: true,
+  })))
+  assert.equal(view.path(), '/jobs?q=engineer')
+  await view.unmount()
+})
+
+test('choosing a homepage position opens /jobs with its field branch', async () => {
+  const view = await mount('/')
+  const field = [...view.container.querySelector('#field-category-heading').closest('section').querySelectorAll('li button')]
+    .find((button) => button.textContent.includes('Marketing'))
+  await act(async () => field.dispatchEvent(new window.MouseEvent('mouseover', { bubbles: true })))
+  await click([...view.container.querySelectorAll('#field-position-panel button')]
+    .find((button) => button.textContent.trim() === 'Designer'))
+  assert.equal(view.path(), '/jobs?categories=field-1%3Aposition-1')
+  await view.unmount()
+})
+
+test('applying a homepage location opens filtered /jobs', async () => {
+  const view = await mount('/')
+  await click([...view.container.querySelectorAll('button')].find((button) => button.textContent.includes('Tất cả địa điểm')))
+  const checkbox = view.container.querySelector('input[type="checkbox"][aria-label="Hà Nội"]')
+  await click(checkbox)
+  await click([...view.container.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Áp dụng'))
+  assert.equal(view.path(), '/jobs?locations=01')
+  await view.unmount()
+})

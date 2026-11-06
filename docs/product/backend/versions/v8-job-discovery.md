@@ -583,11 +583,11 @@ thông tin Company tiếp tục sử dụng API Company riêng.
 Salary filter hiện có trên cùng endpoint tiếp tục theo Product V4.2 F02;
 V8 không định nghĩa lại semantics của filter đó.
 
-Homepage không có keyword/filter hiển thị Featured Jobs theo `BR-42` và
-`BR-43`. Khi có keyword hoặc filter, Homepage dùng Job Discovery search
-hiện hữu và default sort tương ứng, không tự áp dụng Featured. Liên kết
-"Xem tất cả" mở `/jobs` với default Job Discovery hiện hữu. Hero "Việc
-làm mới đăng" giữ nguyên.
+Homepage luôn hiển thị Featured Jobs theo `BR-42` và `BR-43`, độc lập với
+keyword/filter. Tìm kiếm hoặc chọn Category/Location trên Homepage mở
+`/jobs` với keyword/filter tương ứng; kết quả lọc chỉ hiển thị tại đó.
+Liên kết "Xem tất cả" mở `/jobs` với default Job Discovery hiện hữu. Hero
+"Việc làm mới đăng" giữ nguyên.
 
 ### Kết quả
 
@@ -1509,11 +1509,13 @@ persist count và không trả count trong public API.
 
 ## BR-43 --- Ngữ cảnh Featured trên Homepage
 
-Homepage mặc định dùng `FEATURED` khi không có keyword hoặc filter. Khi
-có keyword hoặc filter, Homepage dùng Job Discovery search/filter và
-default sort hiện hữu; không giới hạn Top 18. "Xem tất cả" dẫn tới
-`/jobs` mặc định, không mang theo `FEATURED`. Hero "Việc làm mới đăng"
-và ba sort hiện hữu không đổi.
+Homepage luôn dùng `FEATURED` cho khối "Việc làm nổi bật", không áp dụng
+keyword hoặc filter của thao tác tìm kiếm vào khối này. Tìm kiếm hoặc
+chọn Category/Location trên Homepage chuyển actor sang `/jobs` và áp dụng
+keyword/filter ở đó theo Job Discovery search/filter hiện hữu. Homepage
+không hiển thị trạng thái kết quả lọc hoặc chip xóa bộ lọc sau thao tác.
+"Xem tất cả" dẫn tới `/jobs` mặc định, không mang theo `FEATURED`. Hero
+"Việc làm mới đăng" và ba sort hiện hữu không đổi.
 
 ------------------------------------------------------------------------
 
