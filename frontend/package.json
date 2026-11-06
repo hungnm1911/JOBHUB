@@ -9,9 +9,10 @@
     "lint": "eslint .",
     "test:auth": "node test/authentication/authentication-interceptors.test.js && node test/authentication/authentication-manager.test.js && node test/authentication/account-context-loader.test.js && node test/authentication/role-route.test.js && node test/authentication/job-discovery-route.test.js",
     "test:job-cards": "node --test test/job-card-navigation.test.js",
+    "test:featured-homepage": "node --test test/featured-homepage.test.js",
     "test:rich-text": "node --test --test-concurrency=1 test/rich-text-editor.test.js test/rich-text-viewer.test.js test/rich-text-preview.test.js test/company-rich-text-integration.test.js test/job-rich-text-integration.test.js",
     "preview": "vite preview",
-    "verify:agent": "yarn test:auth && yarn test:job-cards && yarn test:rich-text && yarn lint && yarn build"
+    "verify:agent": "yarn test:auth && yarn test:job-cards && yarn test:featured-homepage && yarn test:rich-text && yarn lint && yarn build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

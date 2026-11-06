@@ -49,7 +49,7 @@ function HomePage() {
   const previewField = fields.find((field) => field.id === previewFieldId) ?? null
 
   const activeFilterLabels = [
-    keyword && `Từ khóa: “${keyword}”`,
+    keyword.trim() && `Từ khóa: “${keyword.trim()}”`,
     ...locations.map((branch) => {
       const name = provinceNameByCode.get(branch.id) ?? 'Địa điểm đã chọn'
       return branch.childIds.length > 0 ? `${name} (${branch.childIds.length} quận/huyện)` : name
@@ -153,6 +153,7 @@ function HomePage() {
           locations={locationsQuery}
           provinceNameByCode={provinceNameByCode}
           renderJobAction={(job) => <DiscoveryJobActions job={job} revealApplyOnHover viewer={viewer} />}
+          sort={activeFilterLabels.length === 0 ? 'FEATURED' : undefined}
         />
       </div>
     </div>

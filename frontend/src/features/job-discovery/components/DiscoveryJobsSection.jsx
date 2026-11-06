@@ -1,4 +1,5 @@
 import { RotateCw, SearchX, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 
@@ -9,8 +10,6 @@ import JobListPagination from './JobListPagination'
 
 const JOBS_PER_PAGE = 6
 
-const countFormatter = new Intl.NumberFormat('vi-VN')
-
 function DiscoveryJobsSection({
   id,
   keyword,
@@ -18,6 +17,7 @@ function DiscoveryJobsSection({
   fieldId,
   positionId,
   page,
+  sort,
   activeFilterLabels,
   provinceNameByCode,
   renderJobAction,
@@ -30,6 +30,7 @@ function DiscoveryJobsSection({
     locations: locations || undefined,
     page,
     limit: JOBS_PER_PAGE,
+    sort,
   })
   const filtered = activeFilterLabels.length > 0
 
@@ -38,20 +39,17 @@ function DiscoveryJobsSection({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight sm:text-3xl" id={`${id}-heading`}>
-            {filtered ? 'Kết quả tìm kiếm' : 'Việc làm mới nhất'}
+            {filtered ? 'Kết quả tìm kiếm' : 'Việc làm nổi bật'}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {filtered
               ? 'Các vị trí đang tuyển phù hợp với bộ lọc của bạn'
-              : 'Khám phá các vị trí tuyển dụng mới được đăng trên JOBHUB'}
+              : 'Khám phá các vị trí tuyển dụng nổi bật trên JOBHUB'}
           </p>
         </div>
-        {!loading && !error && pagination.total > 0 && (
-          <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
-            <span aria-hidden="true" className="size-2 rounded-full bg-success-foreground" />
-            Hiển thị {jobs.length} trên tổng số {countFormatter.format(pagination.total)} vị trí
-          </p>
-        )}
+        <Link className="text-sm font-medium text-primary hover:underline focus-visible:underline" to="/jobs">
+          Xem tất cả
+        </Link>
       </div>
 
       {filtered && (

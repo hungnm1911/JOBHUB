@@ -71,19 +71,19 @@ async function click(element) {
 }
 
 for (const Card of [JobCard, JobResultCard]) {
-  test(`${Card.name}: only the job title opens Job detail; company name and logo open Company detail`, async () => {
+  test(`${Card.name}: job title and logo open Job detail; company name opens Company detail`, async () => {
     const mounted = await mount(Card)
     const card = mounted.container.querySelector('article')
-    const companyLogo = card.querySelector('a[aria-label="Xem công ty Minh Technology Company"]')
+    const jobLogo = card.querySelector('a[aria-label="Xem việc làm Mechanical Engineer"]')
     const companyName = [...card.querySelectorAll('a')].find((link) => link.textContent === job.company.name)
     const title = [...card.querySelectorAll('a')].find((link) => link.textContent === job.title)
 
-    assert.equal(card.querySelectorAll('a[href="/jobs/job-1"]').length, 1)
-    assert.equal(card.querySelectorAll('a[href="/companies/company-1"]').length, 2)
+    assert.equal(card.querySelectorAll('a[href="/jobs/job-1"]').length, 2)
+    assert.equal(card.querySelectorAll('a[href="/companies/company-1"]').length, 1)
     await click(card)
     assert.equal(mounted.path(), '/')
-    await click(companyLogo)
-    assert.equal(mounted.path(), '/companies/company-1')
+    await click(jobLogo)
+    assert.equal(mounted.path(), '/jobs/job-1')
     await click(companyName)
     assert.equal(mounted.path(), '/companies/company-1')
     await click(title)

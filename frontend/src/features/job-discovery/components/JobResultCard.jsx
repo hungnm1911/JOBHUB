@@ -26,9 +26,9 @@ function JobResultCard({ job, provinceNameByCode, action }) {
   return (
     <article className="group flex gap-4 rounded-xl border bg-card p-5 transition-shadow hover:shadow-md">
       <Link
-        aria-label={`Xem công ty ${job.company.name}`}
+        aria-label={`Xem việc làm ${job.title}`}
         className="h-fit shrink-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        to={`/companies/${job.company.id}`}
+        to={`/jobs/${job.id}`}
       >
         <CompanyLogo company={job.company} />
       </Link>
