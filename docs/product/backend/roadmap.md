@@ -33,7 +33,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
 | V7 | Candidate Profile và thư viện CV | IN PROGRESS |
-| V8 | Job Discovery | Baseline COMPLETED AND VERIFIED; Featured extension READY FOR IMPLEMENTATION |
+| V8 | Job Discovery | Baseline COMPLETED AND VERIFIED; Featured extension IMPLEMENTED / ACCEPTED (focused scope) |
 | V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
 | V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
 | V11 | Conversation và Chat thuộc Application | COMPLETED AND VERIFIED |
@@ -129,11 +129,16 @@ remediations and the required backend verification gate. V7 Final Acceptance /
 regression closure passed against the earlier F01–F10, BR-01–BR-46, and TX-01
 baseline after Slices 01–11 and the recorded acceptance remediations. The later
 F03/F04 `creationIntent` extension remains pending. V8's previously verified
-Job Discovery baseline remains `COMPLETED AND VERIFIED`. Its Featured extension
-(F02/F05, BR-42/BR-43, API-V8-01 and Data V8) is **APPROVED / PENDING
-IMPLEMENTATION**; the extension has no implementation or verification claim.
-The approved contract permits reading existing Application data for ranking
-only; Application mutation remains outside V8. V9 has
+Job Discovery baseline remains `COMPLETED AND VERIFIED`. Its Backend Featured
+Ranking (F02/F05, BR-42/BR-43, API-V8-01 and Data V8 §6.7/§14.1) is
+**IMPLEMENTED / ACCEPTED within the focused verification scope** as of
+2026-11-07; Frontend V03 Homepage Featured UX is also implemented and accepted
+within that scope with known risks. Featured reads existing Application data
+for ranking only on the Job list API; Application mutation remains outside V8.
+The MEDIUM transition regression coverage gap was accepted without new tests,
+and the LOW stale URL `page` case was deferred. Browser/E2E checks and Backend
+query-plan/performance checks remain unverified for the extension; the
+historical V8 baseline verification does not cover them. V9 has
 approved Product/Data contracts; Slices 01–05 and Slice 06 Final Acceptance /
 Regression Closure are complete, including the recorded Application identity
 immutability remediation and required backend verification gate. V9 is

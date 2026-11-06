@@ -8,9 +8,11 @@ PASSED` baseline as of 2026-10-31. The V8 Enhancement (F01–F03B) is
 **ACCEPTED within the focused verification scope** as of 2026-11-03, with
 Product Owner acceptance of each slice. This does not newly accept all V8 or
 V17 work. Human visual review against the provided homepage mockup is pending.
-The Featured extension of Backend V8 F02/F05, BR-42/BR-43 and API-V8-01 is
-**IMPLEMENTED; CODE GATE PASSED** on the Homepage as of 2026-11-07. Browser
-acceptance remains unconfirmed for this slice.
+The Homepage Featured UX consuming Backend V8 F02/F05, BR-42/BR-43 and
+API-V8-01 is **IMPLEMENTED / ACCEPTED within the focused verification scope**
+as of 2026-11-07 by Product Owner decision, with the known risks below.
+Its later Job navigation code gate passed, but browser/E2E verification of
+Featured remains unconfirmed.
 The [Backend V8 status](../backend/v8-job-discovery.md) records its baseline and
 focused backend evidence.
 
@@ -57,9 +59,10 @@ focused backend evidence.
 - **Job navigation:** the two newest-Job Hero previews open Job detail from
   the whole item. Homepage, Find Jobs, and Company Jobs cards open Job detail
   from the Job title or Company logo, while Company name opens Company detail.
-  Other content in those cards has no navigation action; Apply and Save keep their own
-  actions. This navigation change passed focused tests and the Frontend code
-  gate on 2026-11-07.
+  The Company logo destination in `JobCard` and `JobResultCard` is intentional
+  UX approved by the Product Owner. Other content in those cards has no
+  navigation action; Apply and Save keep their own actions. This navigation
+  change passed focused tests and the Frontend code gate on 2026-11-07.
 
 ## Deferred / not started
 
@@ -67,12 +70,22 @@ focused backend evidence.
   selection inside a Field; multi-select filters; explicit sort selection.
 - My CVs, upload-during-apply (V9 F02 steps 4–5), and a Saved Jobs list page.
 - Browser-level visual/integration checks for the enhancement.
+- **Accepted/deferred Featured risks:** the Product Owner accepted the MEDIUM
+  transition regression coverage gap without adding tests. The LOW stale URL
+  `page` case is outside this closure scope and deferred. Browser/E2E checks
+  for Featured remain unverified.
 - Mockup items without Product/API authority were not implemented: event
   banner, response-rate/partner statistics, bookmark button, app download and
   links to non-existent tools.
 
 ## Verification status
 
+- 2026-11-07 Featured acceptance closure: the Product Owner accepted Homepage
+  Featured UX within the focused scope and approved the JobCard/JobResultCard
+  Company logo navigation to Job detail. The MEDIUM transition regression
+  coverage gap was accepted without new tests; the LOW stale URL `page` case
+  was deferred. The focused test and subsequent code-gate evidence below
+  supports this state. No browser/E2E result is claimed for Featured.
 - 2026-11-07 Job navigation UX: `cd frontend && yarn test:job-cards`
   passed 6 tests, `yarn test:featured-homepage` passed 5 tests, targeted
   ESLint on the changed components and tests passed, and `git diff --check`
@@ -90,7 +103,8 @@ focused backend evidence.
   retaining unrestricted default-sort pagination. Targeted ESLint on the changed
   Frontend source and test and `git diff --check` passed. Full
   `yarn verify:agent`, browser, and E2E checks were not run per this slice's
-  instruction; Product Owner acceptance is not recorded.
+  instruction; Product Owner acceptance was recorded in the later closure
+  decision above.
 
 - 2026-11-06 Homepage Location picker: `cd frontend && yarn verify:agent`
   passed authentication, Job card, and rich-text tests, ESLint, and production
