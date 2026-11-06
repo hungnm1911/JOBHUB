@@ -14,7 +14,7 @@ const countFormatter = new Intl.NumberFormat('vi-VN')
 function DiscoveryJobsSection({
   id,
   keyword,
-  provinceCode,
+  locations,
   fieldId,
   positionId,
   page,
@@ -27,7 +27,7 @@ function DiscoveryJobsSection({
   const { jobs, pagination, loading, error, reload } = useDiscoveryJobs({
     keyword: keyword || undefined,
     categories: fieldId ? (positionId ? `${fieldId}:${positionId}` : fieldId) : undefined,
-    locations: provinceCode || undefined,
+    locations: locations || undefined,
     page,
     limit: JOBS_PER_PAGE,
   })

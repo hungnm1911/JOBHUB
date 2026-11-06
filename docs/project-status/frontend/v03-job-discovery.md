@@ -12,11 +12,13 @@ The [Backend V8 status](../backend/v8-job-discovery.md) records its baseline and
 focused backend evidence.
 
 - **Homepage (`/`):** hero with the two newest discoverable Jobs and the live
-  discoverable total; keyword + province search bar; Field Category panel
+  discoverable total; keyword search and the same Province/District-level unit
+  multi-select picker as `/jobs`; Field Category panel
   (client-side pages of six, per-Field counts read from the discovery list
   `pagination.total`); a static JOBHUB introduction carousel describing only
   existing capabilities; and the discovery list (six per page, backend default
-  sort). Filters live in the URL (`q`, `location`, `field`, `page`).
+  sort). Filters live in the URL (`q`, `locations`, `field`, `page`); legacy
+  `location` links remain readable.
 - **Job detail (`/jobs/:jobId`):** API-V8-02 public projection with the
   historical read-only notice distinguishing `CLOSED` from expired Jobs;
   404/403 are shown as "not viewable" without retry.
@@ -66,6 +68,15 @@ focused backend evidence.
   because Backend V8 has no featured concept.
 
 ## Verification status
+
+- 2026-11-06 Homepage Location picker: `cd frontend && yarn verify:agent`
+  passed authentication, Job card, and rich-text tests, ESLint, and production
+  build. In the running browser, `/` loaded Province and District-level unit
+  catalogs from the backend (`200`), applying Hà Nội / Ba Đình wrote
+  `?locations=1%3A1` and sent `GET /api/job-discovery/jobs?locations=1:1`
+  (`200`); a legacy `?location=1` link displayed Hà Nội and keyword search
+  carried it forward as `locations=1`. The existing >500 kB chunk warning
+  remains.
 
 - 2026-11-03 Job card navigation: `cd frontend && yarn test:job-cards`
   passed (6 tests), `node --test test/company-jobs-section.test.js` passed

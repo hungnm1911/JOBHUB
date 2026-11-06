@@ -9,6 +9,7 @@ import JobSearchBar from '@/features/job-discovery/components/JobSearchBar'
 import PlatformShowcaseCarousel from '@/features/job-discovery/components/PlatformShowcaseCarousel'
 import useDiscoveryCatalogs from '@/features/job-discovery/hooks/useDiscoveryCatalogs'
 import useFieldPositions from '@/features/job-discovery/hooks/useFieldPositions'
+import { parseBranches, serializeBranches } from '@/features/job-discovery/search-params'
 import useSessionViewer from '@/features/authentication/hooks/useSessionViewer'
 import DiscoveryJobActions from '@/pages/discovery-job-actions'
 
@@ -38,7 +39,8 @@ function HomePage() {
     useDiscoveryCatalogs()
 
   const keyword = searchParams.get('q') ?? ''
-  const provinceCode = searchParams.get('location') ?? ''
+  const locations = parseBranches(searchParams.get('locations') ?? searchParams.get('location'))
+  const locationsQuery = serializeBranches(locations)
   const fieldId = searchParams.get('field') ?? ''
   const positionId = fieldId ? (searchParams.get('position') ?? '') : ''
   const page = readPage(searchParams.get('page'))
@@ -48,7 +50,10 @@ function HomePage() {
 
   const activeFilterLabels = [
     keyword && `Từ khóa: “${keyword}”`,
-    provinceCode && (provinceNameByCode.get(provinceCode) ?? 'Địa điểm đã chọn'),
+    ...locations.map((branch) => {
+      const name = provinceNameByCode.get(branch.id) ?? 'Địa điểm đã chọn'
+      return branch.childIds.length > 0 ? `${name} (${branch.childIds.length} quận/huyện)` : name
+    }),
     fieldId && (fields.find((field) => field.id === fieldId)?.name ?? 'Ngành nghề đã chọn'),
     positionId &&
       (selectedFieldPositions.find((position) => position.id === positionId)?.name ??
@@ -58,7 +63,7 @@ function HomePage() {
   const updateFilters = (changes, { scroll = true } = {}) => {
     const next = {
       q: keyword,
-      location: provinceCode,
+      locations: locationsQuery,
       field: fieldId,
       position: positionId,
       page: '',
@@ -93,8 +98,9 @@ function HomePage() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
         <JobSearchBar
           keyword={keyword}
-          onSearch={(values) => updateFilters({ q: values.keyword, location: values.provinceCode })}
-          provinceCode={provinceCode}
+          locations={locations}
+          onLocationChange={(selection) => updateFilters({ locations: serializeBranches(selection) })}
+          onSearch={(nextKeyword) => updateFilters({ q: nextKeyword })}
           provinces={provinces}
         />
 
@@ -139,12 +145,12 @@ function HomePage() {
           id={JOBS_SECTION_ID}
           keyword={keyword}
           onClearFilters={() =>
-            updateFilters({ q: '', location: '', field: '', position: '' }, { scroll: false })
+            updateFilters({ q: '', locations: '', field: '', position: '' }, { scroll: false })
           }
           onPageChange={(nextPage) => updateFilters({ page: nextPage })}
           page={page}
           positionId={positionId}
-          provinceCode={provinceCode}
+          locations={locationsQuery}
           provinceNameByCode={provinceNameByCode}
           renderJobAction={(job) => <DiscoveryJobActions job={job} revealApplyOnHover viewer={viewer} />}
         />
