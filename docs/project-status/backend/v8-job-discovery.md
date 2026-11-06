@@ -7,6 +7,9 @@ baseline. The V8 Enhancement (F01 Product/API contract, F02A actor
 authorization, F02B optional `companyId` filtering, and Frontend F03A–F03B)
 is **ACCEPTED within the focused verification scope** as of 2026-11-03.
 This does not represent a new full-gate acceptance of V8 or other versions.
+The Featured extension (F02/F05, BR-42/BR-43, API-V8-01 and Data V8) is
+**APPROVED / PENDING IMPLEMENTATION**. The baseline verification below does not
+verify Featured behavior.
 Its Product and Data contracts are
 [V8 Product](../../product/backend/versions/v8-job-discovery.md) and
 [V8 Data](../../data/backend/versions/v8-job-discovery-data-model.md); the
@@ -20,9 +23,10 @@ BR-01–BR-41: F02A allows Guest and Candidate and rejects authenticated
 Platform Admin and Company Staff (Manager or Recruiter) with `403`; a Job is
 discoverable only while `PUBLISHED`, before its deadline, and owned by a
 publicly eligible Company. V8 adds no Job lifecycle mutation, Candidate–Job
-persistence, Saved Jobs, Apply, Application, or other deferred capability, and creates no new
-collection. Location and Salary filters on the list route are owned by V4.1 and
-V4.2, not V8.
+persistence, Saved Jobs, Apply, or Application mutation, and creates no new
+collection. Featured is approved to read existing Application records for
+ranking only; the implemented baseline has not added that read. Location and
+Salary filters on the list route are owned by V4.1 and V4.2, not V8.
 
 The V8 Product/API contract specifies an optional single-ObjectId `companyId`
 on `GET /api/job-discovery/jobs` for the public Company Detail Jobs list.
@@ -42,6 +46,10 @@ pagination metadata are unchanged and no index or schema changed.
 
 ## Deferred / not started
 
+- **Featured extension:** approved Product/Data contract; Backend `FEATURED`
+  ranking, Top 18 before six-per-page pagination, and focused verification are
+  pending. Existing Application may be read for ranking, but Application
+  creation, status/source changes, and other mutations remain outside V8.
 - **Non-blocking review items:** the list pipeline restates the discoverable
   predicate that `resolveJobDiscoveryVisibility` applies to detail, so the two
   must be kept in sync (the V8 owner row in `docs/engineering/source-of-truth.md`
@@ -49,7 +57,7 @@ pagination metadata are unchanged and no index or schema changed.
 - **Not verified for the enhancement:** full Backend gate, MongoDB query plans
   (`explain`), and performance on large data sets. Frontend focused evidence
   and its remaining browser/E2E checks are recorded in the Frontend V03 leaf.
-- **Out of V8 by design:** Apply, Application, Saved Jobs, Candidate Search,
+- **Out of V8 by design:** Apply, Application mutation, Saved Jobs, Candidate Search,
   Job Invitation, Chat, Interview, Notification, Job recommendation, view
   tracking, and posted-date filtering.
 

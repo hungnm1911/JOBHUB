@@ -12,6 +12,8 @@ Sau khi V8 hoàn thành, hệ thống phải hỗ trợ:
 -   tìm kiếm Job theo từ khóa;
 -   lọc Job theo các danh mục chuẩn;
 -   sắp xếp kết quả;
+-   hiển thị Featured Jobs dựa trên số Application của Job đủ điều kiện
+    Discovery;
 -   xem chi tiết Job công khai;
 -   tiếp tục xem Job đã đóng hoặc hết hạn ở chế độ chỉ đọc khi Job vẫn
     đủ điều kiện public historical access;
@@ -57,7 +59,8 @@ Candidate Profile hoặc Candidate CV.
 
     -   Mới nhất;
     -   Liên quan nhất;
-    -   Sắp hết hạn.
+    -   Sắp hết hạn;
+    -   Featured.
 
 -   Xem chi tiết Job công khai.
 
@@ -80,6 +83,7 @@ V8 không triển khai:
 -   Chọn CV để Apply.
 -   Upload CV trong quá trình Apply.
 -   Tạo Application.
+-   Thay đổi Application lifecycle; Featured chỉ đọc Application hiện hữu.
 -   Application snapshot.
 -   Submitted CV snapshot.
 -   Replace Submitted CV.
@@ -274,6 +278,12 @@ và Company sở hữu Job vẫn `ACTIVE`.
 
 Job này không còn thuộc tập Job Discovery nhưng vẫn có thể được xem trực
 tiếp ở chế độ chỉ đọc.
+
+### 4.8. Featured Job
+
+Job `DISCOVERABLE` nằm trong Top 18 theo tổng số Application hiện hữu
+của Job, bất kể source hoặc current status của Application. Đây là thứ
+tự đọc tại thời điểm request, không phải trạng thái persisted của Job.
 
 ------------------------------------------------------------------------
 
@@ -573,6 +583,12 @@ thông tin Company tiếp tục sử dụng API Company riêng.
 Salary filter hiện có trên cùng endpoint tiếp tục theo Product V4.2 F02;
 V8 không định nghĩa lại semantics của filter đó.
 
+Homepage không có keyword/filter hiển thị Featured Jobs theo `BR-42` và
+`BR-43`. Khi có keyword hoặc filter, Homepage dùng Job Discovery search
+hiện hữu và default sort tương ứng, không tự áp dụng Featured. Liên kết
+"Xem tất cả" mở `/jobs` với default Job Discovery hiện hữu. Hero "Việc
+làm mới đăng" giữ nguyên.
+
 ### Kết quả
 
 Danh sách có thể hiển thị các thông tin tuyển dụng công khai hiện hữu,
@@ -612,6 +628,8 @@ Không đưa vào danh sách:
 -   `BR-11`
 -   `BR-14`
 -   `BR-15`
+-   `BR-42`
+-   `BR-43`
 
 ### Không thuộc chức năng này
 
@@ -780,7 +798,8 @@ Actor có thể chọn:
 
 -   `NEWEST`;
 -   `RELEVANCE`;
--   `EXPIRING_SOON`.
+-   `EXPIRING_SOON`;
+-   `FEATURED`.
 
 Quy tắc mặc định:
 
@@ -795,6 +814,9 @@ Quy tắc mặc định:
     deadline nhất.
 -   `RELEVANCE` ưu tiên mức độ khớp keyword theo business priority đã
     chốt.
+-   `FEATURED` xếp Job `DISCOVERABLE` theo tổng số Application DESC,
+    `publishedAt` DESC, `_id` DESC; lấy Top 18 trước khi phân trang 6
+    Job/trang.
 
 ### Trường hợp từ chối
 
@@ -809,12 +831,13 @@ Quy tắc mặc định:
 -   `BR-32`
 -   `BR-33`
 -   `BR-34`
+-   `BR-42`
+-   `BR-43`
 
 ### Không thuộc chức năng này
 
 -   Công thức tính điểm relevance cụ thể.
--   Quy tắc technical tie-break khi hai kết quả có mức ưu tiên tương
-    đương.
+-   Quy tắc technical tie-break của ba sort hiện hữu.
 
 ------------------------------------------------------------------------
 
@@ -1294,11 +1317,12 @@ V8 không coi `REMOTE` là một Location.
 
 ## BR-28 --- Các cách sắp xếp
 
-V8 hỗ trợ ba business sort:
+V8 hỗ trợ bốn business sort:
 
 -   `NEWEST`;
 -   `RELEVANCE`;
--   `EXPIRING_SOON`.
+-   `EXPIRING_SOON`;
+-   `FEATURED`.
 
 ------------------------------------------------------------------------
 
@@ -1460,6 +1484,36 @@ V8 không tạo business state cho:
 -   saved Job;
 -   search history;
 -   applied Job.
+
+Featured đọc Application đã tồn tại theo contract V9/V10/V15; việc
+đọc này không tạo Application hay quan hệ Candidate--Job mới.
+
+------------------------------------------------------------------------
+
+## BR-42 --- Featured ranking và giới hạn kết quả
+
+`FEATURED` chỉ xét các Job `DISCOVERABLE` sau khi áp dụng `companyId`,
+keyword và các filter được yêu cầu. Với mỗi Job, đếm toàn bộ Application
+hiện hữu có `Application.jobId` bằng Job đó, không phân biệt `source`,
+current `status` (kể cả `WITHDRAWN`, `REJECTED`, `HIRED`) hoặc trạng thái
+hiện tại của Candidate. Unique Candidate--Job của Application bảo đảm
+mỗi Candidate được tính tối đa một lần cho mỗi Job. Job có 0 Application
+vẫn tham gia xếp hạng.
+
+Thứ tự là Application count DESC, `Job.publishedAt` DESC, `Job._id`
+DESC. Lấy tối đa 18 Job đầu tiên theo thứ tự này, rồi phân trang cố định
+6 Job/trang. Pagination total là số Job trong Top 18, không phải số Job
+trong toàn bộ tập `DISCOVERABLE`; trang ngoài phạm vi trả danh sách rỗng.
+Application count chỉ dùng để xếp hạng tại thời điểm request: không
+persist count và không trả count trong public API.
+
+## BR-43 --- Ngữ cảnh Featured trên Homepage
+
+Homepage mặc định dùng `FEATURED` khi không có keyword hoặc filter. Khi
+có keyword hoặc filter, Homepage dùng Job Discovery search/filter và
+default sort hiện hữu; không giới hạn Top 18. "Xem tất cả" dẫn tới
+`/jobs` mặc định, không mang theo `FEATURED`. Hero "Việc làm mới đăng"
+và ba sort hiện hữu không đổi.
 
 ------------------------------------------------------------------------
 
@@ -1885,7 +1939,7 @@ Query contract ở mức thiết kế:
   `workModes`          No         Work mode filter
   `employmentTypes`    No         Employment type filter
   `experienceLevels`   No         Experience filter
-  `sort`               No         `NEWEST`, `RELEVANCE`, `EXPIRING_SOON`
+  `sort`               No         `NEWEST`, `RELEVANCE`, `EXPIRING_SOON`, `FEATURED`
   `page`               No         Pagination page
   `limit`              No         Pagination page size
 
@@ -1967,6 +2021,7 @@ với `companyId` bằng `AND` khi được sử dụng.
 NEWEST
 RELEVANCE
 EXPIRING_SOON
+FEATURED
 ```
 
 Default:
@@ -1981,13 +2036,22 @@ RELEVANCE + không keyword → NEWEST
 deadline của Job còn nhận hồ sơ. Exact relevance scoring formula không
 thuộc Product Specification.
 
+`FEATURED` áp dụng `BR-42`: sau public eligibility, `companyId`, keyword
+và filter, đếm Application theo Job từ dữ liệu hiện hữu, sort theo count
+DESC → `publishedAt` DESC → `_id` DESC, lấy Top 18 rồi mới phân trang.
+Không lọc theo Application source/status hoặc current Candidate status.
+Các sort còn lại giữ nguyên semantics và default hiện hữu.
+
 **5. Pagination**
 
-Pagination là technical concern. Default page size, maximum page size và
-cơ chế page/cursor phải được chốt trong Engineering/API contract trước
-implementation; không tự coi các giá trị này là business rule.
+Pagination mechanism là technical concern. Default page size và maximum
+page size của ba sort hiện hữu thuộc Engineering/API contract; riêng
+`FEATURED` cố định 6 Job/trang theo `BR-42`.
 Khi có `companyId`, pagination và tổng số kết quả tính trên tập Job đã
 giới hạn theo Company cùng mọi điều kiện public, keyword và filter.
+Riêng `FEATURED` có effective page size cố định là 6; `limit` không
+thay đổi kích thước trang này. Pagination total phản ánh Top 18 sau
+ranking, kể cả khi số Job hợp lệ dưới 18.
 
 ### Success
 
@@ -2001,6 +2065,8 @@ pagination được áp dụng.
 Giữ nguyên response envelope hiện hữu `{ jobs, pagination, sort }` cho
 cả request có hoặc không có `companyId`; không thêm Company detail vào
 response danh sách.
+Với `FEATURED`, `sort` trong envelope là `FEATURED`; không thêm
+Application count hoặc Application data vào Job hay response envelope.
 
 Public list projection có thể chứa các field đã được Product
 Specification cho phép:
@@ -2035,6 +2101,7 @@ Empty result là request thành công với danh sách rỗng.
 -   Recruitment Team;
 -   recruiter assignment;
 -   Application;
+-   Application count;
 -   pipeline;
 -   internal notes.
 
@@ -2259,10 +2326,12 @@ Các điểm sau không được suy diễn thành business requirement:
 
 1.  Exact serialization của Category Field--Position trong query string.
 2.  Exact pagination mechanism.
-3.  Default page size và maximum page size.
+3.  Default page size và maximum page size của ba sort hiện hữu;
+    `FEATURED` cố định 6 Job/trang theo `BR-42`.
 4.  Exact public JSON projection theo Data Contract.
 5.  Exact relevance scoring algorithm.
-6.  Exact deterministic tie-break khi sort bằng nhau.
+6.  Exact deterministic tie-break của ba sort hiện hữu; `FEATURED`
+    dùng `publishedAt` DESC rồi `_id` DESC theo `BR-42`.
 7.  Database query/index strategy.
 8.  Search implementation hoặc search engine.
 9.  Cache strategy.
@@ -2283,7 +2352,7 @@ V8 — Job Discovery
 │   ├── List
 │   ├── Search
 │   ├── Filter
-│   └── Sort
+│   └── Sort (gồm Featured)
 │
 ├── Public Job Detail
 │   ├── Discoverable Job
@@ -2312,6 +2381,9 @@ Notification
 Job lifecycle mutation
 Recruitment Team mutation
 ```
+
+Featured chỉ đọc Application do V9/V10/V15 sở hữu để xếp hạng Job;
+V8 không sở hữu Application lifecycle hoặc public Application data.
 
 
 Implementation chỉ phù hợp V8 khi API behavior không làm thay đổi

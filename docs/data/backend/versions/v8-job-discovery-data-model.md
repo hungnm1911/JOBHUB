@@ -21,6 +21,7 @@ Data Contract V8 xác định:
 
 * entity hiện hữu nào được Job Discovery sử dụng;
 * field nào tham gia trực tiếp vào visibility, search, filter, sort và public detail;
+* cách `FEATURED` đọc Application hiện hữu để xếp hạng Job mà không persist count;
 * relationship và data ownership;
 * index cần bổ sung cho các access pattern của V8;
 * cách persisted state hiện hữu được ánh xạ thành effective visibility;
@@ -47,6 +48,9 @@ Nếu Data Contract mâu thuẫn với Product Specification, Product Specificat
 
 V8 chủ yếu **đọc lại dữ liệu đã tồn tại**.
 
+Extension Featured đọc `Application` do V9/V10/V15 sở hữu; Data V8 không
+thay đổi schema, lifecycle hoặc uniqueness của Application.
+
 V8 không bổ sung business entity, business field hoặc relationship mới.
 
 | Entity           | Trạng thái  | Thay đổi trong V8                                                                    |
@@ -58,6 +62,7 @@ V8 không bổ sung business entity, business field hoặc relationship mới.
 | `WorkMode`       | `UNCHANGED` | Được sử dụng cho display/filter                                                      |
 | `EmploymentType` | `UNCHANGED` | Được sử dụng cho display/filter                                                      |
 | `ExperienceLevel`| `UNCHANGED` | Được sử dụng cho display/filter                                                      |
+| `Application`    | `UNCHANGED` | Đọc `jobId` để tính Featured ranking; không thêm field/index/count                    |
 
 ### 2.1. Entity mới
 
@@ -93,7 +98,8 @@ V8 đọc lại:
 * `Location`;
 * `WorkMode`;
 * `EmploymentType`;
-* `ExperienceLevel`.
+* `ExperienceLevel`;
+* `Application` (chỉ cho Featured ranking).
 
 Các entity từ version trước như:
 
@@ -117,6 +123,7 @@ Job
 Company
 Category
 ExperienceLevel
+Application
 ```
 
 Các fixed vocabulary V8 sử dụng trực tiếp:
@@ -142,10 +149,11 @@ V8 không rename hoặc tạo collection song song.
 | `WorkMode`       | Fixed vocabulary cho Work mode của Job và filter                       |
 | `EmploymentType` | Fixed vocabulary cho Employment type của Job và filter                 |
 | `ExperienceLevel`| Cung cấp Experience requirement của Job và filter                      |
+| `Application`    | Nguồn canonical của số Application theo Job cho Featured ranking       |
 
 Location, EmploymentType và WorkMode không phải collection. Không tạo thêm
 collection ngoài persisted entities trên chỉ để hỗ trợ search, filtering,
-relevance hoặc public projection.
+relevance, Featured hoặc public projection.
 
 ---
 
@@ -375,6 +383,11 @@ V8 không bổ sung trường số năm kinh nghiệm trực tiếp vào Job.
 ### 4.9. Candidate → Job
 
 V8 **không tạo relationship persistence** giữa Candidate và Job.
+Featured chỉ đọc quan hệ Candidate--Job đã được `Application` của V9/V15
+persist; unique `{ candidateUserId: 1, jobId: 1 }` của V9 bảo đảm tối đa
+một Application cho mỗi Candidate--Job, không phụ thuộc source/status.
+V10 sở hữu các pipeline status, V15 sở hữu source Invitation; Data V8
+không định nghĩa lại các lifecycle này.
 
 Không tạo:
 
@@ -504,6 +517,11 @@ REJECTED
 ### 5.1.4. Indexes
 
 V8 bổ sung các index phục vụ các access pattern đã xuất hiện trong Product Specification.
+
+Featured sử dụng `Application.jobId` và index `{ jobId: 1, status: 1 }`
+hiện hữu do V10 sở hữu; unique Candidate--Job thuộc V9. Extension này
+không yêu cầu index, field hoặc count persisted mới trên Job hay
+Application.
 
 #### Discovery + Newest
 
@@ -913,6 +931,17 @@ index mới ngoài canonical V4 index `{ code: 1 }` unique.
 
 ---
 
+### 6.7. `Application` (Featured read source)
+
+`Application.jobId` là reference canonical đến `Job`. Mỗi Application
+hiện hữu được tính một lần cho Job tương ứng, bất kể `source`, current
+`status` (gồm `WITHDRAWN`, `REJECTED`, `HIRED`) hoặc current Candidate
+status. Job không có Application có count hiệu lực bằng 0. Unique
+Candidate--Job, source và status tiếp tục do Data V9/V10/V15 sở hữu.
+V8 không thêm Application field, index, relationship hoặc mutation.
+
+---
+
 # 7. State Matrix
 
 V8 có nhiều state dimension ảnh hưởng effective public visibility nhưng **không persist effective state riêng**.
@@ -1296,6 +1325,8 @@ Các constraint cần cross-document, actor, current time hoặc business contex
 | Search không bypass visibility                                          | Service                 | Business ordering                |
 | Filter không bypass visibility                                          | Service                 | Business ordering                |
 | Sort không bypass visibility                                            | Service                 | Business ordering                |
+| Featured chỉ đếm Application cho Job `DISCOVERABLE` sau các điều kiện list | Service              | Public pool + read-time ranking  |
+| Featured Top 18 trước pagination 6 Job/trang                            | Service                 | Ranking + bounded list           |
 | Relevance priority `title > skills > Company > jobDescription`          | Service                 | Business relevance rule          |
 | Guest/Candidate được cross-Company public read                           | Service / authorization | Actor + public scope             |
 | Platform Admin/Company Staff không có V8 discovery capability            | Authorization layer     | Product authorization            |
@@ -1431,6 +1462,8 @@ internal metrics
 ```
 
 Tenant ownership của dữ liệu này tiếp tục theo version sở hữu chúng.
+Featured chỉ dùng Application count nội bộ để quyết định thứ tự; không
+trả Application, current status/source hoặc count qua public V8 API.
 
 ---
 
@@ -1526,6 +1559,7 @@ isDiscoverable
 effectiveStatus
 publicStatus
 relevanceScore
+featuredApplicationCount
 companyName
 postedDate
 searchText
@@ -1606,6 +1640,16 @@ Không persist:
 relevanceScore
 ```
 
+### Featured Application count
+
+Đếm Application hiện hữu theo `Application.jobId` tại thời điểm đọc,
+không phân biệt source/status hay current Candidate status. Dùng count
+để sort DESC, tiếp theo `Job.publishedAt` DESC và `Job._id` DESC;
+lấy Top 18 trước khi phân trang 6 Job/trang. Job không có Application
+vẫn có count hiệu lực bằng 0. Không persist count trên Job, Application
+hay collection khác và không đưa count vào public projection/response.
+`pagination.total` là số Job của Top 18, không phải Application count.
+
 ### Company name của Job
 
 Canonical source:
@@ -1651,7 +1695,9 @@ V8 phải tiếp tục giữ:
 * đúng một Primary Recruiter theo Recruitment Team contract;
 * Supporting Recruiter relationships;
 * responsibility transfer invariants;
-* Candidate Profile và CV invariants.
+* Candidate Profile và CV invariants;
+* Application Candidate--Job uniqueness của V9, pipeline status của V10
+  và source Invitation của V15.
 
 ---
 
@@ -1668,7 +1714,8 @@ V8 không thay đổi:
 * Company approval persistence;
 * Company operational lifecycle;
 * Recruiter responsibility fields;
-* CandidateCV persistence.
+* CandidateCV persistence;
+* Application creation, source, status, withdrawal và pipeline persistence.
 
 ---
 
@@ -1681,7 +1728,9 @@ V8 được phép:
 * derive effective visibility từ persisted data;
 * sử dụng `publishedAt` cho sort `NEWEST`;
 * sử dụng `applicationDeadline` cho eligibility và `EXPIRING_SOON`;
-* sử dụng Company `operationalStatus` làm public visibility gate.
+* sử dụng Company `operationalStatus` làm public visibility gate;
+* đọc `Application.jobId` hiện hữu để derive Featured ranking cho Job
+  `DISCOVERABLE`, lấy Top 18 rồi phân trang 6 Job/trang.
 
 ---
 
@@ -1700,7 +1749,9 @@ V8 không được:
 * mutate Job khi Company bị lock/inactive chỉ vì Job Discovery cần chặn public access;
 * tạo Candidate–Job relationship;
 * sửa Recruitment Team fields;
-* sửa Candidate CV schema.
+* sửa Candidate CV schema;
+* thêm hoặc sửa Application schema/lifecycle, hoặc persist/public
+  Application count chỉ để phục vụ Featured.
 
 ---
 
@@ -1922,6 +1973,8 @@ V8 Data Contract được coi là hoàn thành khi:
 * xác định rõ không có business field mới;
 * xác định rõ không có relationship mới;
 * `Job`, `Company` và catalog responsibilities đã rõ;
+* `Application` là read source của Featured, giữ ownership và unique
+  Candidate--Job canonical V9/V10/V15;
 * Job → Company ownership đã rõ;
 * Category hierarchy đã rõ;
 * Job → catalog reference rules đã rõ;
@@ -1935,6 +1988,7 @@ V8 Data Contract được coi là hoàn thành khi:
   * Company operational status;
 * index phục vụ discovery/filter/sort đã được xác định;
 * search-specific persistence chủ động không được thêm;
+* Featured count không persist hoặc xuất hiện trong public response;
 * persistence transitions của V8 đã được xác định là read-only/no new writes;
 * xác định rõ deadline pass không yêu cầu V8 persistence transition;
 * xác định rõ Company rời `ACTIVE` không cascade Job status;
