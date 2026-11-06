@@ -3,7 +3,8 @@
 ## Current project state
 
 **V7 — Candidate Profile và thư viện CV** has implemented the approved F03/F04
-`creationIntent` extension with focused verification. The previously approved
+`creationIntent` extension and Slice 03 `COMPLETE` rejection feedback with
+focused verification. The previously approved
 Slices 01–11 are implemented and verified
 (Candidate Profile / F01; CandidateCV foundation + My CVs read / F02; Generated
 CV Draft create / F03; Generated Builder save + completeness feedback / F04
@@ -24,6 +25,10 @@ persists optional normalized content in a single `DRAFT` insert, and validates
 normalized content plus exact completeness before a single direct `ACTIVE`
 insert for `COMPLETE`. Focused create, Builder, activation, and AI-V06 Draft
 regressions passed; the common backend gate was not run by request.
+Incomplete `COMPLETE` content now returns stable unmet-requirement codes in
+`error.details.unmetRequirements` from the canonical completeness evaluator;
+the existing status, error envelope, successful response shapes, and failure
+non-persistence remain intact.
 
 ## Deferred / not started
 
@@ -74,6 +79,8 @@ regressions passed; the common backend gate was not run by request.
 - **Implemented; verified:** V7 Slice 01 — Candidate Profile (F01; BR-01–BR-03): authenticated Candidate reads and updates own Profile via `GET/PATCH /api/candidate/profile` reusing existing `users` persistence only; F01 exposes read/write `fullName`, `avatarUrl`, `dateOfBirth`, `phoneNumber` and read-only `email`; updates mutate the existing User document (no `CandidateProfile` collection/model, no User schema migration/index/multi-document transaction); `email`, `role`, `status`, `passwordHash`, `emailVerifiedAt`, `mustChangePassword`, sessions, and tokens are unchanged; Profile mutation does not touch CandidateCV and the Profile service boundary does not import CV workflows. Focused coverage in `test/candidate/v7-candidate-profile.test.js` (7 tests).
 
 ## Verification status
+
+- V7 Extension Slice 03 `COMPLETE` rejection feedback: focused Vitest create-intent, Builder, activation, and AI-V06 Draft regressions passed (4 files / 28 tests). Targeted ESLint and `git diff --check` passed. The common backend `verify:agent` gate was not run by explicit request.
 
 - V7 F03/F04 `creationIntent` extension: focused Vitest create/Builder/activation/AI-V06 Draft regressions passed (5 files / 32 tests); after the final rejection-case adjustment, the new create-intent suite passed (1 file / 5 tests). Targeted ESLint and `git diff --check` passed. The common backend `verify:agent` gate was not run by explicit request.
 

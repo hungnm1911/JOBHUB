@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import CATEGORY_LEVEL from "../../src/constants/category-level.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
 import Category from "../../src/models/category.model.js";
+import { evaluateGeneratedCvCompleteness } from "../../src/services/candidate-cv.service.js";
 import { createVerifiedUser, loginAndGetAccessToken } from "../helpers/auth-fixtures.js";
 import {
   clearDatabase,
@@ -179,35 +180,89 @@ describe("V7 extension — Generated CV creation intent", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error.details?.field).toBe("generatedContent");
+    expect(response.body.error.details?.unmetRequirements).toEqual([
+      "PROFESSIONAL_SUMMARY_REQUIRED",
+    ]);
     expect(insert).not.toHaveBeenCalled();
     expect(await CandidateCV.countDocuments()).toBe(0);
   });
 
-  it("rejects missing and incomplete COMPLETE content without inserting a CV", async () => {
+  it("returns stable unmet requirements for incomplete COMPLETE content without inserting a CV", async () => {
     const { metadata, create } = await setup();
     const insert = vi.spyOn(CandidateCV, "create");
     const missing = await create({ ...metadata, creationIntent: "COMPLETE" });
     const incompleteCases = [
-      { ...completeContent(), skills: [] },
-      { ...completeContent(), educations: [{ institutionName: "School" }] },
-      { ...completeContent(), certifications: [{}] },
-      { ...completeContent(), languages: [{ name: "English" }] },
+      [
+        { ...completeContent(), personalInfo: { ...completeContent().personalInfo, fullName: " " } },
+        ["PERSONAL_INFO_FULL_NAME_REQUIRED"],
+      ],
+      [
+        { ...completeContent(), personalInfo: { ...completeContent().personalInfo, email: null } },
+        ["PERSONAL_INFO_EMAIL_REQUIRED"],
+      ],
+      [
+        { ...completeContent(), personalInfo: { ...completeContent().personalInfo, phone: " " } },
+        ["PERSONAL_INFO_PHONE_REQUIRED"],
+      ],
+      [{ ...completeContent(), professionalSummary: null }, ["PROFESSIONAL_SUMMARY_REQUIRED"]],
+      [
+        { ...completeContent(), educations: [{ institutionName: "School" }] },
+        ["VALID_EDUCATION_REQUIRED"],
+      ],
+      [{ ...completeContent(), skills: [] }, ["SKILL_REQUIRED"]],
+      [{ ...completeContent(), certifications: [{}] }, ["CERTIFICATION_NAME_REQUIRED"]],
+      [{ ...completeContent(), languages: [{ proficiency: "FLUENT" }] }, ["LANGUAGE_NAME_REQUIRED"]],
+      [{ ...completeContent(), languages: [{ name: "English" }] }, ["LANGUAGE_PROFICIENCY_REQUIRED"]],
+      [
+        { ...completeContent(), skills: [], certifications: [{}] },
+        ["SKILL_REQUIRED", "CERTIFICATION_NAME_REQUIRED"],
+      ],
     ];
-    const rejected = [];
-    for (const generatedContent of incompleteCases) {
-      rejected.push(await create({
+    expect(missing.status).toBe(400);
+    expect(missing.body.error.details).toEqual({ field: "generatedContent" });
+
+    for (const [generatedContent, unmetRequirements] of incompleteCases) {
+      const response = await create({
         ...metadata,
         creationIntent: "COMPLETE",
         generatedContent,
-      }));
+      });
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).toBe(
+        "Generated CV must satisfy completeness",
+      );
+      expect(response.body.error.details).toEqual({
+        field: "generatedContent",
+        unmetRequirements,
+      });
     }
 
-    expect(missing.status).toBe(400);
-    for (const response of rejected) {
-      expect(response.status).toBe(400);
-    }
     expect(insert).not.toHaveBeenCalled();
     expect(await CandidateCV.countDocuments()).toBe(0);
+  });
+
+  it("keeps evaluator completeness semantics and reports all unmet conditions", () => {
+    expect(evaluateGeneratedCvCompleteness(completeContent())).toEqual({
+      isComplete: true,
+      unmetRequirements: [],
+    });
+    expect(evaluateGeneratedCvCompleteness({
+      certifications: [{}],
+      languages: [{}],
+    })).toEqual({
+      isComplete: false,
+      unmetRequirements: [
+        "PERSONAL_INFO_FULL_NAME_REQUIRED",
+        "PERSONAL_INFO_EMAIL_REQUIRED",
+        "PERSONAL_INFO_PHONE_REQUIRED",
+        "PROFESSIONAL_SUMMARY_REQUIRED",
+        "VALID_EDUCATION_REQUIRED",
+        "SKILL_REQUIRED",
+        "CERTIFICATION_NAME_REQUIRED",
+        "LANGUAGE_NAME_REQUIRED",
+        "LANGUAGE_PROFICIENCY_REQUIRED",
+      ],
+    });
   });
 
   it("rejects invalid intent, Harvard shape, and lifecycle overrides", async () => {
@@ -224,6 +279,7 @@ describe("V7 extension — Generated CV creation intent", () => {
     for (const body of cases) {
       const response = await create({ ...metadata, ...body });
       expect(response.status).toBe(400);
+      expect(response.body.error.details).not.toHaveProperty("unmetRequirements");
     }
     expect(await CandidateCV.countDocuments()).toBe(0);
   });
