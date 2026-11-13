@@ -296,8 +296,10 @@ describe("V5 Slice 02 — Edit DRAFT + content immutability (F02)", () => {
       const response = await agent
         .patch(`/api/jobs/${job._id.toString()}`)
         .set("Authorization", `Bearer ${accessToken}`)
+        .set("X-Request-Id", `v5-edit-immutable-${status}`)
         .send({ title: "Mutated Title" });
 
+      expect(response.headers["x-request-id"]).toBe(`v5-edit-immutable-${status}`);
       expect(response.status).toBe(409);
       expect(response.body.error.message).toMatch(/only be edited while.*DRAFT/i);
 

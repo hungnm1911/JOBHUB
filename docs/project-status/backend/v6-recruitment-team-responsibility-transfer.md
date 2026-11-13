@@ -5,7 +5,18 @@
 V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33,
 and TX-01–TX-03. No known V6 business-blocking finding remains.
 
+The 2026-11-13 Job-read amendment is implemented and passed automated
+verification: four explicit Recruiter scopes on `GET /api/jobs` have database
+pagination; current Supporting can read Job content at every status, including
+CLOSED/EXPIRED. Private read follows current team fields and current business
+access. Unscoped V5 listing, Manager policy, team mutation and V10 `/managed`
+retain their existing contracts.
+
 ## Deferred / not started
+
+- Recruiter UI consumption of the scoped listing and production-scale query
+  performance/explain checks remain follow-up work. No Frontend, schema/index,
+  migration or `/managed` expansion was included in the Job-read amendment.
 
 - V6 Final Acceptance / regression closure is complete: F01–F05, BR-01–BR-33, and TX-01–TX-03 were rerun with the Slices 01–06 suites, S07 acceptance suite, and the five remediation suites. The focused baseline passed 12 files / 155 tests and the official backend gate passed. No known V6 business-blocking finding remains.
 
@@ -42,6 +53,8 @@ and TX-01–TX-03. No known V6 business-blocking finding remains.
 - **Implemented; verified:** V6 Slice 02 — Add Supporting Recruiter (F02; BR-04, BR-08–BR-10, BR-12–BR-17, BR-30, BR-32) + TX-02 boundary. Adds `POST /api/jobs/:jobId/team/supporting` with validator + service-side canonical eligibility checks; constrains operation to effectively `PUBLISHED` at mutation boundary (deadline via `$$NOW` semantics); enforces operational eligibility for target Recruiter (active membership, recruiter role, active User, `mustChangePassword=false`, same Company, Company `APPROVED + ACTIVE`); preserves job invariants (Primary/createdBy/company ownership/status/content unchanged) while atomically updating only `supportingRecruiterCompanyMemberIds`; extends lock/terminate completion guard to block LOCKED/TERMINATED recruiters that still hold active Supporting responsibilities on un-ended jobs (TX-02); regression ensures generic Job read does not expose `supportingRecruiterCompanyMemberIds`. Focused coverage in `test/job/v6-recruitment-team-add-supporting.test.js`.
 
 ## Verification status
+
+- 2026-11-13 Job-read amendment: `cd backend && npm test -- test/job/v6-recruiter-job-scopes.test.js test/job/v5-job-internal-visibility.test.js test/job/v6-recruitment-team-read.test.js test/application/v10-managed-jobs-pipeline-workspace.test.js` passed **4 files / 93 tests**, including 46 scoped-read tests. `cd backend && npm run verify:agent` passed ESLint (**0 errors / 2 existing warnings** in `v6-acceptance.test.js`), **ARCH-001–ARCH-019**, and **208 files / 2,181 tests**. Tests used the isolated MongoDB replica-set/HTTP harness with local server permissions; no production runtime/load verification or new Final Acceptance review was performed.
 
 - Focused automated tests cover `test/job/v6-recruitment-team-read.test.js`, `test/job/v6-recruitment-team-add-supporting.test.js`, `test/job/v6-recruitment-team-remove-supporting.test.js`, `test/job/v6-recruitment-team-replace-primary.test.js`, `test/job/v6-forced-transfer-lock.test.js`, `test/job/v6-forced-transfer-terminate.test.js`, `test/job/v6-acceptance.test.js`, `test/job/v6-tx02-lifecycle-assignment-concurrency.test.js`, `test/job/v6-forced-transfer-atomicity.test.js`, `test/job/v6-forced-transfer-unfinished-mutation-boundary.test.js`, `test/job/v6-stale-primary-mutation-authority.test.js`, and `test/job/v6-recruitment-team-query-update-invariants.test.js`.
 

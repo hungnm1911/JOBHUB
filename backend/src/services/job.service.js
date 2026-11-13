@@ -12,6 +12,7 @@ import JOB_STATUS, {
   PRE_PUBLICATION_DELETABLE_JOB_STATUSES,
 } from "../constants/job-status.js";
 import JOB_DISCOVERY_VISIBILITY from "../constants/job-discovery-visibility.js";
+import JOB_LIST_SCOPE from "../constants/job-list-scope.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import WORK_MODE from "../constants/work-mode.js";
@@ -36,6 +37,7 @@ import { synchronizeJobEmbeddingText } from "./job-embedding.service.js";
 import { normalizeRichText } from "./rich-text.service.js";
 import AppError from "../utils/app-error.js";
 import logger from "../utils/logger.js";
+import { paginationMetadata } from "../utils/list-query.js";
 
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
@@ -1794,12 +1796,40 @@ const assertNoOutstandingRecruiterTeamResponsibility = async ({
 
 // BR-36 / BR-37: canonical Company-scoped internal visibility filter. Creator
 // / historical Primary are intentionally absent (BR-43). Not for public
-// discovery. DRAFT remains private to the current Primary Recruiter.
+// discovery. Legacy listing keeps V5 visibility; scoped listing and detail
+// explicitly include current Supporting under the V6 Job-read amendment.
 const buildInternalJobVisibilityFilter = ({
   companyId,
   companyRole,
   membershipId,
+  scope,
+  includeSupporting = false,
 } = {}) => {
+  if (scope !== undefined) {
+    if (!Object.values(JOB_LIST_SCOPE).includes(scope)) {
+      throw new AppError(400, "Invalid scope query", { field: "scope" });
+    }
+    if (companyRole !== COMPANY_MEMBER_ROLE.RECRUITER) {
+      throw new AppError(403, "Recruiter access required", { field: "role" });
+    }
+    switch (scope) {
+      case JOB_LIST_SCOPE.MY_TEAM:
+        return {
+          companyId,
+          $or: [
+            { primaryRecruiterCompanyMemberId: membershipId },
+            { supportingRecruiterCompanyMemberIds: membershipId },
+          ],
+        };
+      case JOB_LIST_SCOPE.MY_PRIMARY:
+        return { companyId, primaryRecruiterCompanyMemberId: membershipId };
+      case JOB_LIST_SCOPE.MY_SUPPORTING:
+        return { companyId, supportingRecruiterCompanyMemberIds: membershipId };
+      case JOB_LIST_SCOPE.COMPANY_PUBLISHED:
+        return { companyId, status: JOB_STATUS.PUBLISHED };
+    }
+  }
+
   if (companyRole === COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
     return {
       companyId,
@@ -1816,6 +1846,9 @@ const buildInternalJobVisibilityFilter = ({
         {
           primaryRecruiterCompanyMemberId: membershipId,
         },
+        ...(includeSupporting
+          ? [{ supportingRecruiterCompanyMemberIds: membershipId }]
+          : []),
         {
           status: JOB_STATUS.PUBLISHED,
         },
@@ -1840,7 +1873,10 @@ const isJobInternallyVisible = ({
   if (companyRole === COMPANY_MEMBER_ROLE.RECRUITER) {
     if (
       job.primaryRecruiterCompanyMemberId.toString() ===
-      membershipId.toString()
+      membershipId.toString() ||
+      (job.supportingRecruiterCompanyMemberIds ?? []).some(
+        (id) => id.toString() === membershipId.toString(),
+      )
     ) {
       return true;
     }
@@ -1866,8 +1902,8 @@ const assertJobInternallyVisible = ({
     return;
   }
 
-  // BR-36 / BR-43: same-Company peer DRAFT/PENDING/CLOSED/EXPIRED and
-  // historical creator/old-Primary association do not authorize visibility.
+  // Only current team or Company PUBLISHED visibility authorizes Recruiters;
+  // creator and removed team associations do not authorize private reads.
   throw new AppError(403, "Job is not visible to the current actor", {
     field: "jobId",
   });
@@ -2448,8 +2484,8 @@ const closePublishedJob = async ({
 };
 
 // V6 F01: Recruitment Team read — dedicated authorization separate from
-// generic V5 internal Job visibility. Does not grant Supporting broader
-// Job-content access.
+// Job-content visibility. The Job-read amendment does not change this
+// endpoint's ended-Job or team-management policy.
 const getJobRecruitmentTeam = async ({
   actorUser,
   jobId,
@@ -3255,7 +3291,7 @@ const replacePrimaryRecruiter = async ({
   };
 };
 
-const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
+const listInternalJobs = async ({ actorUser, clientCompanyId, options = {} } = {}) => {
   const context = await resolveCompanyStaffBusinessContext({
     user: actorUser,
     clientCompanyId,
@@ -3265,14 +3301,28 @@ const listInternalJobs = async ({ actorUser, clientCompanyId } = {}) => {
     companyId: context.companyId,
     companyRole: context.companyRole,
     membershipId: context.membership._id,
+    scope: options.scope,
   });
 
-  const jobs = await Job.find(filter).sort({
+  const query = Job.find(filter).sort({
     createdAt: 1,
     _id: 1,
   });
 
-  return jobs.map((job) => toPublicJob(job));
+  if (options.scope === undefined) {
+    return { jobs: (await query).map(toPublicJob) };
+  }
+
+  const { page = 1, limit = 20 } = options;
+  const [jobs, total] = await Promise.all([
+    query.skip((page - 1) * limit).limit(limit),
+    Job.countDocuments(filter),
+  ]);
+
+  return {
+    jobs: jobs.map(toPublicJob),
+    pagination: paginationMetadata({ page, limit }, total),
+  };
 };
 
 // Returns the authorized Job document used by `getInternalJob`. Lossless
@@ -3320,6 +3370,7 @@ const loadInternalJob = async (
         companyId: context.companyId,
         companyRole: context.companyRole,
         membershipId: context.membership._id,
+        includeSupporting: true,
       }),
     }).lean();
 

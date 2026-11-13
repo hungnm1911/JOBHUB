@@ -490,7 +490,7 @@ describe("V6 Slice 01 — Recruitment Team persistence + read (F01)", () => {
       }
     });
 
-    it("does not expand Supporting into V5 internal Job visibility", async () => {
+    it("allows current Supporting Job detail under the V6 read amendment", async () => {
       const agent = createTestAgent();
       const manager = await createActiveCompanyManagerContext({
         email: "cm.v6.noexpand@example.com",
@@ -526,12 +526,14 @@ describe("V6 Slice 01 — Recruitment Team persistence + read (F01)", () => {
 
       expect(teamResponse.status).toBe(200);
 
-      // ...but cannot read the Job content via generic visibility
+      // The Job-read amendment grants content read without changing team writes.
       const jobResponse = await agent
         .get(`/api/jobs/${draftJob._id}`)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      expect(jobResponse.status).toBe(403);
+      expect(jobResponse.status).toBe(200);
+      expect(jobResponse.body.job.id).toBe(draftJob.id);
+      expect(jobResponse.body.job).not.toHaveProperty("supportingRecruiterCompanyMemberIds");
     });
   });
 

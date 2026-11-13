@@ -462,6 +462,73 @@ Ký hiệu quyền:
 
 ### Job, Recruitment Team và Pipeline
 
+#### Recruiter Job scopes
+
+`GET /api/jobs` yêu cầu authentication và Company Staff business access hiện có.
+Recruiter có thể chọn một scope (không nhận Company Manager):
+
+| Ví dụ request | Job trả về trong Company hiện tại |
+| --- | --- |
+| `/api/jobs?scope=MY_TEAM&page=1&limit=20` | Current Primary hoặc current Supporting; mọi trạng thái |
+| `/api/jobs?scope=MY_PRIMARY&page=1&limit=20` | Chỉ current Primary; mọi trạng thái |
+| `/api/jobs?scope=MY_SUPPORTING&page=1&limit=20` | Chỉ current Supporting; mọi trạng thái |
+| `/api/jobs?scope=COMPANY_PUBLISHED&page=1&limit=20` | Chỉ persisted `PUBLISHED`, dù không tham gia team |
+
+Mọi trạng thái: `DRAFT`, `PENDING_APPROVAL`, `PUBLISHED`, `CLOSED`, `EXPIRED`.
+Các scope có mặc định `page=1`, `limit=20`; `limit` tối đa 100. Số nguyên dương
+phải ở dạng thập phân chuẩn, không dấu, không phần lẻ; giá trị sai, overflow,
+tham số lặp lại hoặc scope không hợp lệ trả `400` theo error contract hiện có:
+`{ "error": { "message": "Invalid scope query", "details": { "field": "scope" } } }`
+(môi trường ngoài production có thể kèm error stack).
+
+Scoped reads chỉ nhận `scope`, `page`, `limit` và optional `companyId` làm tenant
+guard. `companyId` phải khớp Company được resolve từ caller; giá trị khác bị
+`403`, không thay tenant. Endpoint này trước đây không có search/status/sort
+filter; phần bổ sung không tạo các filter đó. Tham số khác trên scoped reads
+trả `400`. Không có `scope`, các query search/status/sort trước đây bị bỏ qua
+vẫn giữ hành vi cũ. `page`/`limit` nếu gửi phải hợp lệ, nhưng không phân trang
+khi thiếu `scope`.
+
+Ví dụ kết quả rỗng cho bốn scope (Job có dữ liệu vẫn dùng nguyên DTO hiện có):
+
+```json
+{
+  "message": "Jobs retrieved.",
+  "jobs": [],
+  "pagination": { "page": 1, "limit": 20, "total": 0, "totalPages": 0 }
+}
+```
+
+Sort cố định `createdAt ASC, _id ASC`. Database lọc/count/skip/limit trước khi
+serialize DTO; `total` là toàn bộ số Job khớp scope, `totalPages=ceil(total/limit)`.
+Trang vượt phạm vi trả `jobs: []` cùng metadata của tổng thực tế.
+
+Không có `scope`, giữ payload `{ message, jobs }`, toàn bộ kết quả và thứ tự V5:
+Recruiter thấy current Primary mọi trạng thái hoặc Company `PUBLISHED`;
+Manager thấy Company Jobs ở `PENDING_APPROVAL`, `PUBLISHED`, `CLOSED`, `EXPIRED`.
+
+`GET /api/jobs/:jobId` cho current Primary/Supporting đọc nội dung cùng Company,
+kể cả `CLOSED`/`EXPIRED`. Bị gỡ khỏi Primary/Supporting mất private Job visibility
+ngay ở lần đọc kế tiếp; creator/history không cấp quyền. Recruiter còn đủ quyền
+trong Company vẫn đọc được Company `PUBLISHED`. Cross-company và private Job
+ngoài quyền trả `403` không chứa DTO; Job không tồn tại trả `404`.
+Quyền read không mở quyền mutation, approval, assignment hoặc pipeline.
+Policy riêng của `/:jobId/team` giữ nguyên, kể cả hạn chế đọc team của Recruiter
+trên Job đã kết thúc. Scope nội bộ dùng persisted status, không đổi public Job
+Discovery hay Guest/Candidate/Platform Admin policy.
+
+`GET /api/jobs/managed` giữ nguyên: chỉ Primary, không phân trang, trả
+`{ message, managedJobs, currentWorkloadByAssignee }`; mỗi item gồm `job`,
+`supportingRecruiterCount`, `applicationCount`, `unassignedCount`,
+`countsByStatus`, `currentWorkloadByAssignee`. Đây là projection V10 dành cho
+pipeline, khác danh sách Job thông thường ở `/api/jobs`.
+
+Frontend hiện chỉ tiêu thụ `/api/job-discovery/jobs`, chưa có consumer cho
+`/api/jobs` hoặc `/api/jobs/managed`. Follow-up UI Recruiter cần truyền scope
+và đọc pagination khi xây dựng màn hình; không có thay đổi Frontend trong task này.
+
+#### Endpoint Job hiện có
+
 | Method | Endpoint | Quyền | Mô tả |
 | --- | --- | --- | --- |
 | `GET` | `/api/jobs` | Company Staff | Danh sách Job nội bộ |

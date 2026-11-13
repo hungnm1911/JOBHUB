@@ -319,6 +319,14 @@ Field được giữ trên Job `CLOSED` hoặc `EXPIRED` để bảo toàn histo
 
 Historical reference không tự cấp active authorization.
 
+Bổ sung Job-read ngày 2026-11-13: current Primary/Supporting fields là nguồn
+xác định team scopes và quyền đọc nội dung Job, kể cả `CLOSED`/`EXPIRED`, **sau**
+khi đã xác minh User/membership/Company business access hiện tại và cùng tenant.
+Quyền đọc này không cấp active responsibility hoặc thay đổi policy team mutation.
+Reference đã bị remove, creator và lịch sử phân công không cấp private Job read.
+Xem [Product V6, bổ sung F01](../../../product/backend/versions/v6-recruitment-team-responsibility-transfer.md#bổ-sung-f01--recruiter-job-scopes-và-quyền-đọc-nội-dung).
+Không thêm field, collection, state hoặc migration cho phần bổ sung này.
+
 ---
 
 ## 5. `jobs`
@@ -422,6 +430,13 @@ supportingRecruiterCompanyMemberIds
 Uniqueness nội bộ của Supporting list là local-document constraint, không phải collection-level uniqueness.
 
 Các index V5 khác tiếp tục giữ nguyên.
+
+Job-read scopes dùng các index đang có trên `{ companyId, status }`,
+`{ companyId, primaryRecruiterCompanyMemberId }` và
+`{ companyId, supportingRecruiterCompanyMemberIds }` để giới hạn tenant/team.
+Pagination sort dùng `createdAt ASC, _id ASC` tại database; chưa thêm index
+chuyên cho sort khi chưa có production explain/load evidence để cân đối chi
+phí ghi và số index. Không thay đổi các index phục vụ forced transfer.
 
 ---
 
