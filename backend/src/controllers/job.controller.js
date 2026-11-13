@@ -1,3 +1,6 @@
+import JOB_LIST_SCOPE from "../constants/job-list-scope.js";
+import AppError from "../utils/app-error.js";
+import { parseListQuery } from "../utils/list-query.js";
 import {
   approveAndPublishJob,
   addSupportingRecruiter,
@@ -61,14 +64,33 @@ const updateDraftJobHandler = async (request, response, next) => {
 
 const listInternalJobsHandler = async (request, response, next) => {
   try {
-    const jobs = await listInternalJobs({
+    const { scope, page, limit } = request.query;
+    // Legacy reads did not consume search/status/sort parameters. Keep that
+    // contract; scoped reads accept only the new parameters and tenant guard.
+    if (scope !== undefined) {
+      for (const key of Object.keys(request.query)) {
+        if (!["scope", "page", "limit", "companyId"].includes(key)) {
+          throw new AppError(400, `Invalid ${key} query`, { field: key });
+        }
+      }
+    }
+    const options = parseListQuery({
+      ...(scope !== undefined ? { scope } : {}),
+      ...(page !== undefined ? { page } : {}),
+      ...(limit !== undefined ? { limit } : {}),
+    }, {
+      filters: { scope: Object.values(JOB_LIST_SCOPE) },
+      defaultSort: "createdAt",
+    });
+    const result = await listInternalJobs({
       actorUser: request.auth.user,
       clientCompanyId: readClientCompanyId(request),
+      options,
     });
 
     return response.status(200).json({
       message: "Jobs retrieved.",
-      jobs,
+      ...result,
     });
   } catch (error) {
     return next(error);

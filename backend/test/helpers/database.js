@@ -73,7 +73,23 @@ const clearDatabase = async () => {
 };
 
 const createTestAgent = () => {
-  return request(app);
+  const agent = request(app);
+
+  for (const method of Object.keys(agent)) {
+    const createRequest = agent[method];
+    agent[method] = (path) => {
+      const test = createRequest(path);
+      // Supertest always targets 127.0.0.1 even when its listener binds IPv6.
+      // On macOS an unrelated IPv4 listener can own that same port. Connect
+      // to the test listener's family instead of sending requests to it.
+      if (test.app.address().family === "IPv6") {
+        test.connect({ "127.0.0.1": "::1" });
+      }
+      return test;
+    };
+  }
+
+  return agent;
 };
 
 export {

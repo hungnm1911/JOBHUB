@@ -134,6 +134,10 @@ V6 giữ nguyên:
 
 V6 không được làm thay đổi các invariant của V5 trừ những phần V5 đã chủ động dành cho Recruitment Team và chuyển giao trách nhiệm.
 
+Bổ sung Job-read scopes được yêu cầu ngày 2026-11-13 mở rộng riêng F03/BR-36
+của V5 cho Supporting hiện tại theo phần bổ sung F01 bên dưới. Baseline V5,
+quyền Company Manager (BR-37), Job lifecycle và các quyền mutation giữ nguyên.
+
 ---
 
 ## 4. Thuật ngữ và chủ thể
@@ -462,6 +466,55 @@ V6 không cấp quyền xem Recruitment Team dựa chỉ trên identifier do cli
 * quyền xem Chat;
 * quyền xem Interview;
 * quyền chỉnh sửa Recruitment Team.
+
+---
+
+## Bổ sung F01 — Recruiter Job scopes và quyền đọc nội dung
+
+Yêu cầu bổ sung ngày 2026-11-13, thuộc V6 hiện có; không tạo version mới.
+
+Recruiter có User, CompanyMember và Company thỏa business-access gate hiện có
+được dùng `GET /api/jobs` với đúng một trong bốn scope:
+
+| Scope | Điều kiện Job trong Company hiện tại | Trạng thái |
+| --- | --- | --- |
+| `MY_TEAM` | CompanyMember hiện tại là Primary hoặc có trong Supporting hiện tại | Mọi trạng thái Job hợp lệ |
+| `MY_PRIMARY` | CompanyMember hiện tại bằng `primaryRecruiterCompanyMemberId` | Mọi trạng thái Job hợp lệ |
+| `MY_SUPPORTING` | CompanyMember hiện tại có trong `supportingRecruiterCompanyMemberIds` | Mọi trạng thái Job hợp lệ |
+| `COMPANY_PUBLISHED` | Cùng Company, không yêu cầu tham gia team | Chỉ persisted `PUBLISHED` |
+
+Mọi trạng thái gồm `DRAFT`, `PENDING_APPROVAL`, `PUBLISHED`, `CLOSED`, `EXPIRED`.
+Đây là danh sách nội bộ; `COMPANY_PUBLISHED` không thay thế điều kiện public
+discovery/effective expiration của V5/V8.
+
+Các scope luôn phân trang; mặc định `page=1`, `limit=20`, giới hạn `limit=100`.
+`page`/`limit` là số nguyên dương, không nhận giá trị malformed hoặc lặp lại.
+Scope sai trả lỗi validation chuẩn. Thứ tự `createdAt ASC, _id ASC` ổn định;
+count và phân trang áp dụng trên toàn bộ tập đã lọc, ở database.
+
+Không có `scope`: giữ danh sách V5 không phân trang (Primary mọi trạng thái
+hoặc Company `PUBLISHED`), payload và thứ tự cũ. Các scope mới chỉ dành cho
+Recruiter; Company Manager tiếp tục dùng policy V5, không được chọn các scope này.
+
+`GET /api/jobs/:jobId` cho phép current Primary hoặc current Supporting đọc
+nội dung Job cùng Company ở mọi trạng thái, kể cả `CLOSED`/`EXPIRED` và Job
+effectively expired. Job kết thúc không tự xóa team references. Quyền read này
+vẫn đòi hỏi business-access gate hiện tại; không suy diễn active responsibility
+hay quyền mutation từ reference trên Job đã kết thúc.
+
+Khi CompanyMember không còn trong Primary/Supporting hiện tại, quyền đọc Job
+riêng tư và xuất hiện trong team scopes mất ngay ở lần đọc kế tiếp. Creator,
+former Primary, former Supporting hoặc dữ liệu lịch sử không cấp quyền độc lập.
+Recruiter còn đủ quyền trong Company vẫn được đọc Job `PUBLISHED` cùng Company.
+Company/member/role/recruiter ID do client gửi không xác định actor hoặc tenant.
+
+Quyền đọc Supporting không mở thêm chỉnh sửa, submit, approve, close, delete,
+quản lý team, assign Application hoặc Pipeline Workspace. Policy của endpoint
+`/:jobId/team`, Guest, Candidate, Platform Admin và Company Manager giữ nguyên.
+
+`GET /api/jobs/managed` vẫn chỉ dành cho Primary, không phân trang, giữ projection
+Application/pipeline/workload của V10; không dùng Job listing DTO thay thế.
+Hợp đồng HTTP và ví dụ: [Backend API](../../../../backend/README.md#recruiter-job-scopes).
 
 ---
 

@@ -20,6 +20,11 @@ applications.
 - The error handler now maps body-parser http-errors marked `expose` to their
   4xx status. Previously, malformed JSON and oversized bodies returned `500`.
 - `AppError` accepts an optional `{ cause }`.
+- The shared HTTP integration-test agent connects using its Supertest
+  listener's address family. On this macOS host, an IPv6 wildcard listener
+  could share a port with an unrelated IPv4 loopback service, causing random
+  non-JOBHUB responses when Supertest connected to `127.0.0.1`. The harness
+  now targets `::1` for IPv6 listeners and retains IPv4 for IPv4 listeners.
 - Bootstrap, MongoDB, Cloudinary, workers, realtime fan-out, and Notification
   recovery log through the logger. The previously silent fan-out and
   recovery-item failures are logged at `warn`.
@@ -41,7 +46,7 @@ applications.
   changed.
 
 **Verification:**
-- Latest backend gate (2026-10-21): `VITEST_MAX_WORKERS=2 npm run verify:agent` passed: 178 files / 1,823 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 pre-existing warnings. The AI Kit integration suite is included. Details and earlier failed attempts are in Verification status below.
+- Latest backend gate (2026-11-13): `npm run verify:agent` passed: 209 files / 2,182 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 pre-existing warnings. This includes the HTTP transport regression and the V5 DRAFT-edit immutability tests. Details and earlier verification evidence are in Verification status below.
 - 2026-10-18 clean-install check on temporary `ai-kit/` + `backend/` copies
   without `node_modules`/`.env` (Node 20.19.1, npm 10.8.2): after the
   canonical two-step install, `npm ls @jobhub/ai-kit --depth=0` passed,
@@ -83,6 +88,18 @@ applications.
 - **Documented only:** repository-level and backend-specific agent contracts exist.
 
 ## Verification status
+
+- 2026-11-13 HTTP test transport fix: a probe reproduced a foreign-service
+  `401` without JOBHUB's request-id header while the pending Job still existed;
+  binding the observed port confirmed an IPv6 test listener and an unrelated
+  IPv4 VS Code listener could coexist. The new transport regression failed
+  before the fix (`IPv4` connection versus `IPv6` listener), then passed.
+  `cd backend && npm test -- test/http/test-agent-transport.test.js test/job/v5-job-edit-draft.test.js test/job/v5-job-submit-draft.test.js test/job/v6-recruiter-job-scopes.test.js test/catalog/v41-location-catalog.test.js`
+  passed **5 files / 89 tests**. A post-fix isolated MongoDB/HTTP probe performed
+  **2,000 consecutive PENDING_APPROVAL PATCH requests**, all `409` with matching
+  request ids and unchanged content/status. `cd backend && npm run verify:agent`
+  passed **209 files / 2,182 tests**, **ARCH-001–ARCH-019**, and ESLint with
+  **0 errors / 2 pre-existing warnings**. No Job business rule changed.
 
 - 2026-10-21 V1–V4 API completion final gate passed with `VITEST_MAX_WORKERS=2 npm run verify:agent`: ESLint 0 errors / 2 pre-existing V6 test warnings; ARCH-001–ARCH-019; 178/178 files and 1,823/1,823 tests. Worker concurrency was limited to two; no tests were excluded and timeout values were unchanged. Focused completion run passed 5 files / 39 tests; the two affected suites passed again after regex-helper reuse (16/16). Diff and new-file whitespace checks passed.
 - Verification history for this completion: the first gate failed because the declared `@jobhub/ai-kit` workspace dependency was not installed and one old test excluded Company Manager self forgot-password. That expectation was updated for the approved V1 extension and passed in focused tests. After explicit user approval, `npm ci` succeeded in ai-kit and backend using existing lockfiles; manifests/lockfiles and AI Kit source stayed unchanged. The next default-worker gate passed 177/178 files and 1,822/1,823 tests, with one unrelated V15 concurrency test timing out at 30 seconds. Its entire suite passed alone (33/33), followed by the clean two-worker common gate above. No V5–V17 source or rules were changed.
