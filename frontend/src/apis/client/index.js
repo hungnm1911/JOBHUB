@@ -2,7 +2,7 @@ import axios from 'axios'
 
 import { API_CONFIG, DEVELOPMENT_ENV, RUNTIME_ENV } from '@/utils/constant'
 
-import { normalizeApiError } from './api-error'
+import { normalizeApiErrorAsync } from './api-error'
 import { installAuthenticationInterceptors } from './authentication-interceptors'
 
 const apiClient = axios.create({
@@ -48,10 +48,10 @@ function configureHttpAuthentication(adapter) {
 installAuthenticationInterceptors(apiClient, {
   getAccessToken: () => authenticationAdapter.getAccessToken(),
   refreshAuthentication: () => authenticationAdapter.refreshAuthentication(),
-  normalizeError: normalizeApiError,
+  normalizeError: normalizeApiErrorAsync,
   reportError: logApiErrorInDevelopment,
 })
 
-export { ApiError, normalizeApiError } from './api-error'
+export { ApiError, normalizeApiError, normalizeApiErrorAsync } from './api-error'
 export { configureHttpAuthentication }
 export default apiClient

@@ -14,6 +14,7 @@ import { USER_ROLE_LABEL, getInitials, toLoginNavigationState, toPostLoginDestin
 const WORKSPACE_LINK_LABEL = Object.freeze({
   [USER_ROLE.PLATFORM_ADMIN]: 'Trang quản trị',
   [USER_ROLE.COMPANY_STAFF]: 'Hồ sơ doanh nghiệp',
+  [USER_ROLE.CANDIDATE]: 'Bảng điều khiển',
 })
 
 function GuestLinks() {
@@ -100,24 +101,34 @@ function AccountMenu({ user }) {
     navigate('/', { replace: true })
   }
 
+  const displayName = user.fullName || user.email
+
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative shrink-0" ref={containerRef}>
       <button
         aria-expanded={open}
         aria-haspopup="true"
-        className="inline-flex items-center gap-2 rounded-full py-0.5 pr-1 pl-0.5 font-semibold text-foreground transition-colors outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`Tài khoản: ${displayName}`}
+        className="inline-flex max-w-full items-center gap-2 rounded-full py-0.5 pr-1.5 pl-0.5 font-semibold text-foreground transition-colors outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
-        <span className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
           {getInitials(user.fullName) || <UserRound aria-hidden="true" className="size-4" />}
         </span>
-        <span className="hidden max-w-40 truncate lg:inline">{user.fullName || user.email}</span>
+        <span
+          className="hidden min-w-0 max-w-[9rem] truncate xl:max-w-[14rem] lg:inline"
+          title={displayName}
+        >
+          {displayName}
+        </span>
         <ChevronDown
           aria-hidden="true"
-          className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-180')}
+          className={cn(
+            'size-4 shrink-0 text-muted-foreground transition-transform',
+            open && 'rotate-180',
+          )}
         />
-        <span className="sr-only">Mở menu tài khoản</span>
       </button>
 
       {open && (

@@ -27,3 +27,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Cursor AI Skills - Local only
+frontend/.agents/skills/
+frontend/skills-lock.json
+# Local AI Skills - Do not push to GitHub
+/.agents/
+/skills-lock.json

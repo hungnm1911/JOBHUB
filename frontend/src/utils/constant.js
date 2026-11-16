@@ -168,6 +168,32 @@ const COMPANY_IMAGE_KIND = Object.freeze({
 const COMPANY_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
 
 // Must stay aligned with backend/src/constants/user-status.js.
+// Must stay aligned with backend/src/constants/application-status.js.
+const APPLICATION_STATUS = Object.freeze({
+  APPLIED: 'APPLIED',
+  SCREENING: 'SCREENING',
+  CONTACTED: 'CONTACTED',
+  INTERVIEW_SCHEDULED: 'INTERVIEW_SCHEDULED',
+  INTERVIEW_COMPLETED: 'INTERVIEW_COMPLETED',
+  HIRED: 'HIRED',
+  REJECTED: 'REJECTED',
+  WITHDRAWN: 'WITHDRAWN',
+})
+
+// Must stay aligned with backend/src/constants/interview-schedule-status.js.
+const INTERVIEW_SCHEDULE_STATUS = Object.freeze({
+  PROPOSED: 'PROPOSED',
+  CONFIRMED: 'CONFIRMED',
+  DECLINED: 'DECLINED',
+  CANCELLED: 'CANCELLED',
+})
+
+// Must stay aligned with backend/src/constants/availability-day-part.js.
+const AVAILABILITY_DAY_PART = Object.freeze({
+  MORNING: 'MORNING',
+  AFTERNOON: 'AFTERNOON',
+})
+
 // Must stay aligned with backend/src/constants/candidate-cv-status.js.
 const CANDIDATE_CV_STATUS = Object.freeze({
   DRAFT: 'DRAFT',
@@ -178,6 +204,35 @@ const CANDIDATE_CV_STATUS = Object.freeze({
 const CANDIDATE_CV_SOURCE_TYPE = Object.freeze({
   GENERATED: 'GENERATED',
   UPLOADED: 'UPLOADED',
+})
+
+// Must stay aligned with backend/src/constants/candidate-cv-visibility.js.
+const CANDIDATE_CV_VISIBILITY = Object.freeze({
+  PRIVATE: 'PRIVATE',
+  PUBLIC: 'PUBLIC',
+})
+
+// Must stay aligned with backend/src/constants/candidate-cv-uploaded-pdf.js.
+const CANDIDATE_CV_UPLOADED_PDF = Object.freeze({
+  MAX_SIZE_MB: 10,
+  MAX_SIZE_BYTES: 10 * 1024 * 1024,
+  MAX_PAGE_COUNT: 20,
+  MIME_TYPE: 'application/pdf',
+})
+
+// Must stay aligned with backend/src/constants/candidate-cv-creation-intent.js.
+const CANDIDATE_CV_CREATION_INTENT = Object.freeze({
+  SAVE_DRAFT: 'SAVE_DRAFT',
+  COMPLETE: 'COMPLETE',
+})
+
+// Must stay aligned with backend/src/constants/cv-language-proficiency.js.
+const CV_LANGUAGE_PROFICIENCY = Object.freeze({
+  BEGINNER: 'BEGINNER',
+  INTERMEDIATE: 'INTERMEDIATE',
+  ADVANCED: 'ADVANCED',
+  FLUENT: 'FLUENT',
+  NATIVE: 'NATIVE',
 })
 
 const USER_STATUS = Object.freeze({
@@ -241,8 +296,14 @@ const TOASTER_CONFIG = Object.freeze({
 
 export {
   ACCOUNT_FIELD_LIMIT,
+  APPLICATION_STATUS,
+  AVAILABILITY_DAY_PART,
+  CANDIDATE_CV_CREATION_INTENT,
   CANDIDATE_CV_SOURCE_TYPE,
   CANDIDATE_CV_STATUS,
+  CANDIDATE_CV_UPLOADED_PDF,
+  CANDIDATE_CV_VISIBILITY,
+  CV_LANGUAGE_PROFICIENCY,
   API_CONFIG,
   API_ERROR_MESSAGE,
   AUTH_STORAGE_KEY,
@@ -259,6 +320,7 @@ export {
   FLASH_MESSAGE_TYPE,
   HTTP_HEADER,
   DEVELOPMENT_ENV,
+  INTERVIEW_SCHEDULE_STATUS,
   JOB_STATUS,
   REALTIME_EVENT,
   RUNTIME_ENV,
