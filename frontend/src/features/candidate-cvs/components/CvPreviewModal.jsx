@@ -62,11 +62,11 @@ function CvPreviewModal({ cv, onClose, onDownload }) {
         </>
       }
       onClose={onClose}
-      panelClassName="max-w-4xl"
+      panelClassName="h-[min(56rem,94svh)] max-h-[min(56rem,94svh)] max-w-6xl"
       title="Xem trước CV"
     >
       {state.loading ? (
-        <div className="flex min-h-72 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+        <div className="flex min-h-[min(40rem,70svh)] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
           <LoaderCircle aria-hidden="true" className="size-6 animate-spin text-primary" />
           Đang tải bản xem trước…
         </div>
@@ -80,7 +80,7 @@ function CvPreviewModal({ cv, onClose, onDownload }) {
 
       {state.objectUrl ? (
         <iframe
-          className="min-h-[28rem] w-full rounded-lg border bg-secondary/30"
+          className="h-[min(42rem,72svh)] min-h-[32rem] w-full rounded-lg border bg-secondary/30"
           src={state.objectUrl}
           title={`Xem trước ${cv.name}`}
         />

@@ -21,6 +21,7 @@ import {
   accessRefreshed,
   AUTHENTICATION_STATUS,
   authenticated,
+  authenticatedUserUpdated,
   authenticationUnavailable,
   restorationStarted,
   selectAuthenticatedUser,
@@ -113,4 +114,40 @@ export async function endSessionAfterPasswordReset() {
   } catch {
     // Logout clears local authentication even if the reset revoked its session.
   }
+}
+
+// Keep header/session avatar in sync with Candidate profile without forcing re-login.
+export function syncAuthenticatedUserProfile(profile) {
+  if (!profile || typeof profile !== 'object') {
+    return false
+  }
+
+  const currentUser = selectAuthenticatedUser(store.getState())
+  if (!currentUser) {
+    return false
+  }
+
+  const nextFullName =
+    typeof profile.fullName === 'string' && profile.fullName.trim()
+      ? profile.fullName.trim()
+      : currentUser.fullName
+  const nextAvatarUrl =
+    Object.hasOwn(profile, 'avatarUrl') ? profile.avatarUrl || null : currentUser.avatarUrl || null
+
+  if (
+    nextFullName === currentUser.fullName &&
+    (nextAvatarUrl || null) === (currentUser.avatarUrl || null)
+  ) {
+    return false
+  }
+
+  const nextUser = {
+    ...currentUser,
+    fullName: nextFullName,
+    avatarUrl: nextAvatarUrl,
+  }
+
+  authenticationStorage.updateUser(nextUser)
+  store.dispatch(authenticatedUserUpdated({ user: nextUser }))
+  return true
 }

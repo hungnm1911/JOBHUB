@@ -87,6 +87,23 @@ function updateAccess({ accessToken, session }) {
   return true
 }
 
+function updateUser(user) {
+  if (!isRecord(user)) {
+    throw new TypeError('A user object is required.')
+  }
+
+  const authentication = readAuthentication()
+  if (!authentication?.accessToken || !authentication?.refreshToken) {
+    return false
+  }
+
+  writeAuthentication({
+    ...authentication,
+    user,
+  })
+  return true
+}
+
 function getAccessToken() {
   return readAuthentication()?.accessToken ?? null
 }
@@ -96,6 +113,7 @@ const authenticationStorage = Object.freeze({
   getAccessToken,
   read: readAuthentication,
   updateAccess,
+  updateUser,
   write: writeAuthentication,
 })
 

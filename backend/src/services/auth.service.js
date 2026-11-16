@@ -97,6 +97,7 @@ const toPublicUser = (user) => {
     id: user._id.toString(),
     fullName: user.fullName,
     email: user.email,
+    avatarUrl: user.avatarUrl ?? null,
     role: user.role,
     status: user.status,
     emailVerifiedAt: user.emailVerifiedAt,

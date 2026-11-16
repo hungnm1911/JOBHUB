@@ -1,4 +1,5 @@
 import {
+  APPLICATION_SOURCE,
   APPLICATION_STATUS,
   AVAILABILITY_DAY_PART,
   CANDIDATE_CV_SOURCE_TYPE,
@@ -38,6 +39,11 @@ const DAY_PART_LABEL = Object.freeze({
 const CV_SOURCE_LABEL = Object.freeze({
   [CANDIDATE_CV_SOURCE_TYPE.GENERATED]: 'Tạo trên JOBHUB',
   [CANDIDATE_CV_SOURCE_TYPE.UPLOADED]: 'PDF tải lên',
+})
+
+const APPLICATION_SOURCE_LABEL = Object.freeze({
+  [APPLICATION_SOURCE.DIRECT_APPLICATION]: 'Nộp trực tiếp',
+  [APPLICATION_SOURCE.RECRUITER_INVITATION]: 'Lời mời',
 })
 
 const dateTimeFormatter = new Intl.DateTimeFormat('vi-VN', {
@@ -160,7 +166,82 @@ function sortInterviewSchedules(schedules = []) {
   })
 }
 
+const APPLICATION_LIST_STATUS_TABS = Object.freeze([
+  APPLICATION_STATUS.APPLIED,
+  APPLICATION_STATUS.SCREENING,
+  APPLICATION_STATUS.CONTACTED,
+  APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+  APPLICATION_STATUS.INTERVIEW_COMPLETED,
+  APPLICATION_STATUS.HIRED,
+  APPLICATION_STATUS.REJECTED,
+  APPLICATION_STATUS.WITHDRAWN,
+])
+
+function countApplicationsByStatus(applications, statuses) {
+  const statusSet = new Set(statuses)
+  return applications.filter((application) => statusSet.has(application.status)).length
+}
+
+function computeApplicationListStats(applications = []) {
+  return {
+    total: applications.length,
+    reviewing: countApplicationsByStatus(applications, [
+      APPLICATION_STATUS.SCREENING,
+      APPLICATION_STATUS.CONTACTED,
+    ]),
+    interviewing: countApplicationsByStatus(applications, [
+      APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+      APPLICATION_STATUS.INTERVIEW_COMPLETED,
+    ]),
+    hired: countApplicationsByStatus(applications, [APPLICATION_STATUS.HIRED]),
+  }
+}
+
+function getActiveInterviewSchedules(application) {
+  return sortInterviewSchedules(application?.interviewSchedules).filter(
+    (schedule) =>
+      schedule.status === INTERVIEW_SCHEDULE_STATUS.PROPOSED ||
+      schedule.status === INTERVIEW_SCHEDULE_STATUS.CONFIRMED,
+  )
+}
+
+function matchesApplicationSearch(application, query) {
+  const normalized = query?.trim().toLowerCase()
+  if (!normalized) {
+    return true
+  }
+  const jobTitle = application.job?.title?.toLowerCase() ?? ''
+  const companyName = application.company?.name?.toLowerCase() ?? ''
+  return jobTitle.includes(normalized) || companyName.includes(normalized)
+}
+
+// Replace/withdraw APIs return a thin application payload without hydrated job/company.
+function mergeApplicationDetailUpdate(current, next) {
+  if (!next) {
+    return current
+  }
+  if (!current) {
+    return next
+  }
+
+  return {
+    ...current,
+    ...next,
+    id: next.id ?? current.id,
+    jobId: next.jobId ?? current.jobId,
+    job: next.job ?? current.job,
+    company: next.company ?? current.company,
+    assignedRecruiter: next.assignedRecruiter ?? current.assignedRecruiter,
+    availability: next.availability ?? current.availability,
+    interviewSchedules: next.interviewSchedules ?? current.interviewSchedules,
+    isUnassigned:
+      next.isUnassigned != null ? next.isUnassigned : current.isUnassigned,
+  }
+}
+
 export {
+  APPLICATION_LIST_STATUS_TABS,
+  APPLICATION_SOURCE_LABEL,
   APPLICATION_STATUS_LABEL,
   APPLICATION_STATUS_TONE,
   CV_SOURCE_LABEL,
@@ -172,13 +253,18 @@ export {
   canRespondToInterviewProposal,
   canSubmitAvailabilityFirstTime,
   canWithdrawApplication,
+  computeApplicationListStats,
+  countApplicationsByStatus,
   fileNameFromContentDisposition,
   formatBytes,
   formatDate,
   formatDateTime,
   formatJobMeta,
+  getActiveInterviewSchedules,
   isActiveCandidateCv,
   isAvailabilitySubmitted,
+  matchesApplicationSearch,
+  mergeApplicationDetailUpdate,
   resolveDefaultTimezone,
   sortInterviewSchedules,
   triggerBlobDownload,

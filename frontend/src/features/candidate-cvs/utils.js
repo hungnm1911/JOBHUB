@@ -202,7 +202,58 @@ function sortCvsForDisplay(cvs) {
   })
 }
 
+const CV_LIST_FILTER = Object.freeze({
+  ALL: 'all',
+  ACTIVE: 'active',
+  DRAFT: 'draft',
+  UPLOADED: 'uploaded',
+  GENERATED: 'generated',
+})
+
+const CV_LIST_FILTER_LABEL = Object.freeze({
+  [CV_LIST_FILTER.ALL]: 'Tất cả',
+  [CV_LIST_FILTER.ACTIVE]: 'Đang dùng',
+  [CV_LIST_FILTER.DRAFT]: 'Bản nháp',
+  [CV_LIST_FILTER.UPLOADED]: 'PDF tải lên',
+  [CV_LIST_FILTER.GENERATED]: 'Tạo trên JOBHUB',
+})
+
+function matchesCvFilter(cv, filter) {
+  if (filter === CV_LIST_FILTER.ACTIVE) {
+    return cv?.status === CANDIDATE_CV_STATUS.ACTIVE
+  }
+  if (filter === CV_LIST_FILTER.DRAFT) {
+    return cv?.status === CANDIDATE_CV_STATUS.DRAFT
+  }
+  if (filter === CV_LIST_FILTER.UPLOADED) {
+    return cv?.sourceType === CANDIDATE_CV_SOURCE_TYPE.UPLOADED
+  }
+  if (filter === CV_LIST_FILTER.GENERATED) {
+    return cv?.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED
+  }
+  return true
+}
+
+function matchesCvSearch(cv, query) {
+  const normalized = query?.trim().toLowerCase()
+  if (!normalized) {
+    return true
+  }
+  return (cv?.name ?? '').toLowerCase().includes(normalized)
+}
+
+function computeCvLibraryStats(cvs = []) {
+  return {
+    total: cvs.length,
+    active: cvs.filter((cv) => cv.status === CANDIDATE_CV_STATUS.ACTIVE).length,
+    draft: cvs.filter((cv) => cv.status === CANDIDATE_CV_STATUS.DRAFT).length,
+    defaultCv: cvs.find((cv) => cv.isDefault) ?? null,
+  }
+}
+
 export {
+  CV_LIST_FILTER,
+  CV_LIST_FILTER_LABEL,
   CV_SOURCE_LABEL,
   CV_STATUS_LABEL,
   CV_VISIBILITY_LABEL,
@@ -210,9 +261,12 @@ export {
   canDownloadCv,
   canReplaceUploadedFile,
   canSetDefaultCv,
+  computeCvLibraryStats,
   fileNameFromContentDisposition,
   formatCvDateTime,
   formatFileSize,
+  matchesCvFilter,
+  matchesCvSearch,
   prepareUploadedPdfFile,
   sortCvsForDisplay,
   toUploadedCvErrorMessage,

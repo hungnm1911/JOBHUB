@@ -27,6 +27,7 @@ import { useAppSelector } from '@/store/hooks'
 
 import useCandidateApplicationDetail from '../hooks/useCandidateApplicationDetail'
 import {
+  APPLICATION_SOURCE_LABEL,
   CV_SOURCE_LABEL,
   canReplaceSubmittedCv,
   canWithdrawApplication,
@@ -35,6 +36,7 @@ import {
   formatDate,
   formatDateTime,
   formatJobMeta,
+  mergeApplicationDetailUpdate,
   triggerBlobDownload,
 } from '../utils'
 import ApplicationAvailabilitySection from './ApplicationAvailabilitySection'
@@ -147,12 +149,20 @@ function CandidateApplicationDetail({ applicationId }) {
                   Rút đơn ứng tuyển
                 </Button>
               ) : null}
+              <Button asChild type="button">
+                <Link
+                  to={`/candidate/messages?applicationId=${encodeURIComponent(application.id)}`}
+                >
+                  <MessageSquare aria-hidden="true" className="size-4" />
+                  Tin nhắn
+                </Link>
+              </Button>
               <Button
-                onClick={() => setConversationOpen(true)}
+                onClick={() => setConversationOpen((current) => !current)}
                 type="button"
+                variant="outline"
               >
-                <MessageSquare aria-hidden="true" className="size-4" />
-                Tin nhắn HR
+                {conversationOpen ? 'Thu gọn chat' : 'Chat nhanh'}
               </Button>
             </div>
           }
@@ -395,7 +405,9 @@ function CandidateApplicationDetail({ applicationId }) {
               {application.source ? (
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted-foreground">Nguồn</dt>
-                  <dd className="text-right">{application.source}</dd>
+                  <dd className="text-right">
+                    {APPLICATION_SOURCE_LABEL[application.source] ?? application.source}
+                  </dd>
                 </div>
               ) : null}
               {application.isUnassigned ? (
@@ -413,7 +425,9 @@ function CandidateApplicationDetail({ applicationId }) {
         <WithdrawApplicationModal
           application={application}
           onClose={() => setDialog(null)}
-          onWithdrawn={(next) => setApplication(next)}
+          onWithdrawn={(next) =>
+            setApplication((current) => mergeApplicationDetailUpdate(current, next))
+          }
         />
       ) : null}
 
@@ -421,7 +435,9 @@ function CandidateApplicationDetail({ applicationId }) {
         <ReplaceSubmittedCvModal
           application={application}
           onClose={() => setDialog(null)}
-          onReplaced={(next) => setApplication(next)}
+          onReplaced={(next) =>
+            setApplication((current) => mergeApplicationDetailUpdate(current, next))
+          }
         />
       ) : null}
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { getOwnCandidateCvApi, listOwnCandidateCvsApi } from '@/apis/candidate-cv.api'
 import { getOwnCandidateProfileApi } from '@/apis/candidate-profile.api'
+import { syncAuthenticatedUserProfile } from '@/features/authentication/services/authentication.service'
 import { CANDIDATE_CV_SOURCE_TYPE } from '@/utils/constant'
 
 import { computeProfilePageCompletion, emptyGeneratedContent } from '../utils'
@@ -44,9 +45,13 @@ function useCandidateProfile() {
         }
 
         if (active) {
+          const profile = profileResponse.profile ?? null
+          if (profile) {
+            syncAuthenticatedUserProfile(profile)
+          }
           setView({
             key,
-            profile: profileResponse.profile ?? null,
+            profile,
             cvs,
             contentCv,
             content,
@@ -95,11 +100,15 @@ function useCandidateProfile() {
         ...current,
         content,
       })),
-    setLocalProfile: (profile) =>
+    setLocalProfile: (profile) => {
+      if (profile) {
+        syncAuthenticatedUserProfile(profile)
+      }
       setView((current) => ({
         ...current,
         profile,
-      })),
+      }))
+    },
   }
 }
 

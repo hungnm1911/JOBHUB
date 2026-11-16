@@ -53,6 +53,28 @@ function GuestLinks() {
   )
 }
 
+function AccountAvatar({ user }) {
+  const [failedUrl, setFailedUrl] = useState(null)
+  const avatarUrl = user?.avatarUrl || null
+  const showImage = Boolean(avatarUrl) && failedUrl !== avatarUrl
+  const initials = getInitials(user?.fullName)
+
+  return (
+    <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground">
+      {showImage ? (
+        <img
+          alt=""
+          className="size-full object-cover"
+          onError={() => setFailedUrl(avatarUrl)}
+          src={avatarUrl}
+        />
+      ) : (
+        initials || <UserRound aria-hidden="true" className="size-4" />
+      )}
+    </span>
+  )
+}
+
 function AccountMenu({ user }) {
   const navigate = useNavigate()
   const containerRef = useRef(null)
@@ -113,9 +135,7 @@ function AccountMenu({ user }) {
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-          {getInitials(user.fullName) || <UserRound aria-hidden="true" className="size-4" />}
-        </span>
+        <AccountAvatar user={user} />
         <span
           className="hidden min-w-0 max-w-[9rem] truncate xl:max-w-[14rem] lg:inline"
           title={displayName}

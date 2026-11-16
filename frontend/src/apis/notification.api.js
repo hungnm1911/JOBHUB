@@ -12,4 +12,17 @@ async function getOwnUnreadNotificationCountApi() {
   return response.data
 }
 
-export { getOwnUnreadNotificationCountApi, listOwnNotificationsApi }
+async function openOwnNotificationApi(notificationId) {
+  const response = await apiClient.post(
+    `/notifications/${encodeURIComponent(notificationId)}/open`,
+    null,
+    AUTHENTICATED_REQUEST,
+  )
+  return response.data
+}
+
+export {
+  getOwnUnreadNotificationCountApi,
+  listOwnNotificationsApi,
+  openOwnNotificationApi,
+}

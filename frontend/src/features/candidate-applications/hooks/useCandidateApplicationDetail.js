@@ -49,8 +49,14 @@ function useCandidateApplicationDetail(applicationId) {
     setLoadAttempt((current) => current + 1)
   }, [])
 
-  const setApplication = useCallback((application) => {
-    setView((current) => ({ ...current, application }))
+  const setApplication = useCallback((nextApplication) => {
+    setView((current) => ({
+      ...current,
+      application:
+        typeof nextApplication === 'function'
+          ? nextApplication(current.application)
+          : nextApplication,
+    }))
   }, [])
 
   return {
