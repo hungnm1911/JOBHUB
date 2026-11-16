@@ -7,6 +7,7 @@ import { listOwnJobInvitationsApi } from '@/apis/job-invitation.api'
 import { listDiscoveryJobsApi } from '@/apis/job-discovery.api'
 import { listOwnNotificationsApi } from '@/apis/notification.api'
 import { listSavedJobsApi } from '@/apis/saved-job.api'
+import { syncAuthenticatedUserProfile } from '@/features/authentication/services/authentication.service'
 import { JOB_DISCOVERY_SORT } from '@/features/job-discovery/search-params'
 
 import { computeProfileCompletion, normalizeNotification } from '../utils'
@@ -65,6 +66,9 @@ function useCandidateDashboardData() {
       }
 
       const profile = profileResult.status === 'fulfilled' ? (profileResult.value.profile ?? null) : null
+      if (profile) {
+        syncAuthenticatedUserProfile(profile)
+      }
       const cvs = cvsResult.status === 'fulfilled' ? (cvsResult.value.cvs ?? []) : []
       const applications =
         applicationsResult.status === 'fulfilled' ? (applicationsResult.value.applications ?? []) : []

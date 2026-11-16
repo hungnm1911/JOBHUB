@@ -71,6 +71,12 @@ const authenticationSlice = createSlice({
       state.membership = null
       state.accountContextStatus = ACCOUNT_CONTEXT_STATUS.UNAVAILABLE
     },
+    authenticatedUserUpdated(state, action) {
+      if (!state.user || !action.payload?.user) {
+        return
+      }
+      state.user = action.payload.user
+    },
   },
 })
 
@@ -94,6 +100,7 @@ export const {
   accountContextUnavailable,
   accessRefreshed,
   authenticated,
+  authenticatedUserUpdated,
   authenticationUnavailable,
   restorationStarted,
   unauthenticated,

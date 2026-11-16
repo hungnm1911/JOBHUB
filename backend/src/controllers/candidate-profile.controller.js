@@ -1,6 +1,7 @@
 import {
   getOwnCandidateProfile,
   updateOwnCandidateProfile,
+  uploadOwnCandidateAvatar,
 } from "../services/candidate-profile.service.js";
 
 const getOwnCandidateProfileHandler = async (request, response, next) => {
@@ -33,7 +34,25 @@ const updateOwnCandidateProfileHandler = async (request, response, next) => {
   }
 };
 
+const uploadOwnCandidateAvatarHandler = async (request, response, next) => {
+  try {
+    const result = await uploadOwnCandidateAvatar({
+      candidateUserId: request.auth.user._id,
+      file: request.file,
+    });
+
+    return response.status(201).json({
+      message: "Candidate avatar uploaded.",
+      profile: result.profile,
+      avatar: result.avatar,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   getOwnCandidateProfileHandler,
   updateOwnCandidateProfileHandler,
+  uploadOwnCandidateAvatarHandler,
 };

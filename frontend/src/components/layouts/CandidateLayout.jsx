@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { useState } from 'react'
-import { Link, NavLink, Outlet, ScrollRestoration, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router-dom'
 
 import FlashMessage from '@/components/common/FlashMessage'
 import { Button } from '@/components/ui/button'
@@ -39,8 +39,12 @@ const candidateNavigation = [
 
 function CandidateLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
+  const isFullBleedWorkspace =
+    location.pathname.startsWith('/candidate/messages') ||
+    location.pathname.startsWith('/candidate/saved-jobs')
 
   const handleSearch = (event) => {
     event.preventDefault()
@@ -59,7 +63,12 @@ function CandidateLayout() {
     )
 
   return (
-    <div className="flex min-h-svh flex-col bg-background lg:flex-row">
+    <div
+      className={cn(
+        'flex flex-col bg-background lg:flex-row',
+        isFullBleedWorkspace ? 'h-svh overflow-hidden' : 'min-h-svh',
+      )}
+    >
       <ScrollRestoration />
 
       <aside
@@ -118,8 +127,8 @@ function CandidateLayout() {
         </Link>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-40 shrink-0 border-b bg-card/95 backdrop-blur">
           <div className="flex items-center gap-2 px-4 py-3 sm:gap-3 sm:px-6">
             <button
               aria-label="Mở menu điều hướng"
@@ -188,7 +197,14 @@ function CandidateLayout() {
         </header>
 
         <FlashMessage />
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <main
+          className={cn(
+            'flex w-full min-w-0 flex-1 flex-col',
+            isFullBleedWorkspace
+              ? 'min-h-0 overflow-hidden p-0'
+              : 'mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8',
+          )}
+        >
           <Outlet />
         </main>
       </div>

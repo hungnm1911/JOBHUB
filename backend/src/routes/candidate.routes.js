@@ -39,6 +39,7 @@ import {
 import {
   getOwnCandidateProfileHandler,
   updateOwnCandidateProfileHandler,
+  uploadOwnCandidateAvatarHandler,
 } from "../controllers/candidate-profile.controller.js";
 import { matchOwnCandidateCvToJobHandler } from "../controllers/candidate-job-match.controller.js";
 import { evaluateOwnCandidateCvForJobHandler } from "../controllers/candidate-cv-evaluation.controller.js";
@@ -49,14 +50,17 @@ import {
   saveJobHandler,
   unsaveJobHandler,
 } from "../controllers/saved-job.controller.js";
+import FILE_TYPE from "../constants/file-type.js";
 import authenticateAccess from "../middlewares/authenticate-access.js";
 import authorizeCandidate from "../middlewares/authorize-candidate.js";
+import fileUpload from "../middlewares/file-upload.js";
 import uploadCandidateCvPdf from "../middlewares/upload-candidate-cv-pdf.js";
 import validateCandidateProfileUpdate from "../middlewares/validate-candidate-profile-update.js";
 import validateCreateGeneratedDraftCv from "../middlewares/validate-create-generated-draft-cv.js";
 import validateDirectApply from "../middlewares/validate-direct-apply.js";
 import validateEditCandidateAvailability from "../middlewares/validate-edit-candidate-availability.js";
 import validateCreateUploadedCv from "../middlewares/validate-create-uploaded-cv.js";
+import validateFileType from "../middlewares/validate-file-type.js";
 import validateReplaceSubmittedCv from "../middlewares/validate-replace-submitted-cv.js";
 import validateSendConversationNormalMessage from "../middlewares/validate-send-conversation-normal-message.js";
 import validateSubmitCandidateAvailability from "../middlewares/validate-submit-candidate-availability.js";
@@ -80,6 +84,15 @@ router.patch(
   authorizeCandidate,
   validateCandidateProfileUpdate,
   updateOwnCandidateProfileHandler,
+);
+
+router.post(
+  "/profile/avatar",
+  authenticateAccess,
+  authorizeCandidate,
+  fileUpload.single("file"),
+  validateFileType(FILE_TYPE.IMAGE),
+  uploadOwnCandidateAvatarHandler,
 );
 
 router.post(

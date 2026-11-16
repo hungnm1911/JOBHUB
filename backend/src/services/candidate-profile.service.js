@@ -1,7 +1,9 @@
+import CLOUDINARY_FOLDER from "../constants/cloudinary-folder.js";
 import USER_ROLE from "../constants/user-role.js";
 import USER_STATUS from "../constants/user-status.js";
 import User from "../models/user.model.js";
 import AppError from "../utils/app-error.js";
+import { uploadFileBuffer } from "./file.service.js";
 
 const PROFILE_READABLE_FIELDS = Object.freeze([
   "fullName",
@@ -119,10 +121,60 @@ const updateOwnCandidateProfile = async ({ candidateUserId, profile }) => {
   return toPublicCandidateProfile(updatedUser);
 };
 
+const uploadOwnCandidateAvatar = async ({ candidateUserId, file }) => {
+  const user = await resolveOwnCandidateUser({ candidateUserId });
+
+  if (!file?.buffer) {
+    throw new AppError(400, "File is required", {
+      field: "file",
+    });
+  }
+
+  const uploadedFile = await uploadFileBuffer({
+    buffer: file.buffer,
+    assetFolder: CLOUDINARY_FOLDER.USER_AVATARS,
+    resourceType: "image",
+  });
+
+  const updatedUser = await User.findOneAndUpdate(
+    {
+      _id: user._id,
+      role: USER_ROLE.CANDIDATE,
+      status: USER_STATUS.ACTIVE,
+    },
+    {
+      $set: {
+        avatarUrl: uploadedFile.secureUrl,
+      },
+    },
+    {
+      returnDocument: "after",
+      runValidators: true,
+    },
+  );
+
+  if (!updatedUser) {
+    throw new AppError(409, "Candidate avatar could not be updated");
+  }
+
+  return {
+    profile: toPublicCandidateProfile(updatedUser),
+    avatar: {
+      url: uploadedFile.secureUrl,
+      publicId: uploadedFile.publicId,
+      bytes: uploadedFile.bytes,
+      width: uploadedFile.width,
+      height: uploadedFile.height,
+      format: uploadedFile.format,
+    },
+  };
+};
+
 export {
   PROFILE_READABLE_FIELDS,
   PROFILE_WRITABLE_FIELDS,
   getOwnCandidateProfile,
   toPublicCandidateProfile,
   updateOwnCandidateProfile,
+  uploadOwnCandidateAvatar,
 };

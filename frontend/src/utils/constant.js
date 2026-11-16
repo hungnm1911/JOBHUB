@@ -180,12 +180,28 @@ const APPLICATION_STATUS = Object.freeze({
   WITHDRAWN: 'WITHDRAWN',
 })
 
+// Must stay aligned with backend/src/constants/application-source.js.
+const APPLICATION_SOURCE = Object.freeze({
+  DIRECT_APPLICATION: 'DIRECT_APPLICATION',
+  RECRUITER_INVITATION: 'RECRUITER_INVITATION',
+})
+
 // Must stay aligned with backend/src/constants/interview-schedule-status.js.
 const INTERVIEW_SCHEDULE_STATUS = Object.freeze({
   PROPOSED: 'PROPOSED',
   CONFIRMED: 'CONFIRMED',
   DECLINED: 'DECLINED',
   CANCELLED: 'CANCELLED',
+})
+
+// Must stay aligned with backend/src/constants/job-invitation-status.js.
+const JOB_INVITATION_STATUS = Object.freeze({
+  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  REVOKED: 'REVOKED',
+  EXPIRED: 'EXPIRED',
+  INVALIDATED: 'INVALIDATED',
 })
 
 // Must stay aligned with backend/src/constants/availability-day-part.js.
@@ -296,6 +312,7 @@ const TOASTER_CONFIG = Object.freeze({
 
 export {
   ACCOUNT_FIELD_LIMIT,
+  APPLICATION_SOURCE,
   APPLICATION_STATUS,
   AVAILABILITY_DAY_PART,
   CANDIDATE_CV_CREATION_INTENT,
@@ -321,6 +338,7 @@ export {
   HTTP_HEADER,
   DEVELOPMENT_ENV,
   INTERVIEW_SCHEDULE_STATUS,
+  JOB_INVITATION_STATUS,
   JOB_STATUS,
   REALTIME_EVENT,
   RUNTIME_ENV,

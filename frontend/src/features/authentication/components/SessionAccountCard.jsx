@@ -1,4 +1,4 @@
-import { LoaderCircle, LogOut } from 'lucide-react'
+import { LoaderCircle, LogOut, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -15,6 +15,10 @@ function SessionAccountCard({ roleLabel, logoutMessage }) {
   const user = useAppSelector(selectAuthenticatedUser)
   const navigate = useNavigate()
   const [loggingOut, setLoggingOut] = useState(false)
+  const [failedUrl, setFailedUrl] = useState(null)
+  const avatarUrl = user?.avatarUrl || null
+  const showImage = Boolean(avatarUrl) && failedUrl !== avatarUrl
+  const initials = getInitials(user?.fullName)
 
   const handleLogout = async () => {
     setLoggingOut(true)
@@ -40,8 +44,17 @@ function SessionAccountCard({ roleLabel, logoutMessage }) {
 
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-hero text-sm font-semibold text-hero-foreground">
-        {getInitials(user?.fullName)}
+      <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-hero text-sm font-semibold text-hero-foreground">
+        {showImage ? (
+          <img
+            alt=""
+            className="size-full object-cover"
+            onError={() => setFailedUrl(avatarUrl)}
+            src={avatarUrl}
+          />
+        ) : (
+          initials || <UserRound aria-hidden="true" className="size-5" />
+        )}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-xs text-muted-foreground">{roleLabel}</span>
