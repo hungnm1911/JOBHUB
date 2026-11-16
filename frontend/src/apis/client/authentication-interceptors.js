@@ -24,6 +24,17 @@ function installAuthenticationInterceptors(
   client.interceptors.request.use((config) => {
     setHeader(config, 'Accept', 'application/json')
 
+    // Let the browser set multipart boundary. A stale Content-Type breaks multer
+    // and can deliver a corrupted buffer that fails PDF magic-byte checks.
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      if (typeof config.headers?.delete === 'function') {
+        config.headers.delete('Content-Type')
+      } else if (config.headers) {
+        delete config.headers['Content-Type']
+        delete config.headers['content-type']
+      }
+    }
+
     if (config.requiresAuthentication === true) {
       const accessToken = getAccessToken()
 
@@ -51,11 +62,12 @@ function installAuthenticationInterceptors(
 
           return client.request(error.config)
         } catch (refreshError) {
-          return Promise.reject(normalizeError(refreshError))
+          const normalizedRefreshError = await normalizeError(refreshError)
+          return Promise.reject(normalizedRefreshError)
         }
       }
 
-      const normalizedError = normalizeError(error)
+      const normalizedError = await normalizeError(error)
       reportError(normalizedError)
       return Promise.reject(normalizedError)
     },

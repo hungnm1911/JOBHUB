@@ -55,11 +55,13 @@ import {
   resolveRecruiterChatHistoryContext,
 } from "./company.service.js";
 import { downloadFileBuffer } from "./file.service.js";
+import { renderHarvardCandidateCvPdf } from "./candidate-cv-harvard-pdf.service.js";
 import { evaluateApplicationConversationChatAuthority } from "./application-chat-authority.service.js";
 import {
   createNotificationEvent,
   materializeNotificationEvent,
 } from "./notification.service.js";
+import logger from "../utils/logger.js";
 import {
   acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
@@ -5732,45 +5734,92 @@ const sanitizeSubmittedCvSnapshotFileName = (
     : `${sanitized}.pdf`;
 };
 
+/** Render frozen GENERATED snapshot content when stored PDF bytes are unavailable. */
+const buildGeneratedSubmittedCvSnapshotPdfFallback = async (snapshot) => {
+  if (
+    snapshot?.sourceType !== CANDIDATE_CV_SOURCE_TYPE.GENERATED ||
+    snapshot.generatedContent == null
+  ) {
+    return null;
+  }
+
+  const pdfBuffer = await renderHarvardCandidateCvPdf(
+    deepCopyGeneratedContent(snapshot.generatedContent),
+  );
+
+  return {
+    buffer: pdfBuffer,
+    mimeType: "application/pdf",
+    fileName: sanitizeSubmittedCvSnapshotFileName(
+      snapshot.pdfFile?.originalFileName,
+      sanitizeSubmittedCvSnapshotFileName(snapshot.name),
+    ),
+    sourceType: snapshot.sourceType,
+  };
+};
+
 /**
  * Application-scoped snapshot PDF delivery (V10 H1 / F06–F08; BR-31).
- * Reads only Application.submittedCvSnapshot.pdfFile — never live CandidateCV.
- * Read-only: does not mutate Application, snapshot, CandidateCV, Job, or version.
+ * Prefers frozen pdfFile bytes from storage. For GENERATED snapshots, falls back
+ * to rendering the frozen generatedContent when storage retrieval fails (e.g.
+ * seed placeholders or orphaned Cloudinary objects) — never reads live CandidateCV.
  */
 const buildSubmittedCvSnapshotPdfDelivery = async (application) => {
   const snapshot = application.submittedCvSnapshot;
+  const hasStoredPdf =
+    snapshot?.pdfFile != null &&
+    typeof snapshot.pdfFile.storageKey === "string" &&
+    snapshot.pdfFile.storageKey.trim() !== "";
 
-  if (
-    snapshot?.pdfFile == null ||
-    typeof snapshot.pdfFile.storageKey !== "string" ||
-    snapshot.pdfFile.storageKey.trim() === ""
-  ) {
+  if (!hasStoredPdf) {
+    const generatedFallback =
+      await buildGeneratedSubmittedCvSnapshotPdfFallback(snapshot);
+
+    if (generatedFallback) {
+      return generatedFallback;
+    }
+
     throw new AppError(409, "Application submitted CV snapshot is missing PDF", {
       field: "submittedCvSnapshot",
     });
   }
 
-  let pdfBuffer;
-
   try {
-    pdfBuffer = await downloadSubmittedCvSnapshotFile(
+    const pdfBuffer = await downloadSubmittedCvSnapshotFile(
       snapshot.pdfFile.storageKey,
     );
-  } catch {
+
+    return {
+      buffer: pdfBuffer,
+      mimeType: snapshot.pdfFile.mimeType || "application/pdf",
+      fileName: sanitizeSubmittedCvSnapshotFileName(
+        snapshot.pdfFile.originalFileName,
+        sanitizeSubmittedCvSnapshotFileName(snapshot.name),
+      ),
+      sourceType: snapshot.sourceType,
+    };
+  } catch (storageError) {
+    logger.warn(
+      "Submitted CV snapshot storage retrieval failed; trying GENERATED fallback",
+      {
+        applicationId: application._id?.toString?.() ?? application.id,
+        storageKey: snapshot.pdfFile.storageKey,
+        sourceType: snapshot.sourceType,
+        cause: storageError?.message ?? String(storageError),
+      },
+    );
+
+    const generatedFallback =
+      await buildGeneratedSubmittedCvSnapshotPdfFallback(snapshot);
+
+    if (generatedFallback) {
+      return generatedFallback;
+    }
+
     throw new AppError(502, "Failed to retrieve submitted CV snapshot PDF", {
       field: "submittedCvSnapshot",
     });
   }
-
-  return {
-    buffer: pdfBuffer,
-    mimeType: snapshot.pdfFile.mimeType || "application/pdf",
-    fileName: sanitizeSubmittedCvSnapshotFileName(
-      snapshot.pdfFile.originalFileName,
-      sanitizeSubmittedCvSnapshotFileName(snapshot.name),
-    ),
-    sourceType: snapshot.sourceType,
-  };
 };
 
 const loadCandidateOwnedApplicationForSnapshotDelivery = async ({

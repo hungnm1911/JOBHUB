@@ -19,4 +19,9 @@ async function unsaveJobApi(jobId) {
   return response.data
 }
 
-export { saveJobApi, unsaveJobApi }
+async function listSavedJobsApi() {
+  const response = await apiClient.get('/candidate/saved-jobs', AUTHENTICATED_REQUEST)
+  return response.data
+}
+
+export { listSavedJobsApi, saveJobApi, unsaveJobApi }

@@ -30,6 +30,10 @@ function toPostLoginDestination(user) {
     return '/admin'
   }
 
+  if (user?.role === USER_ROLE.CANDIDATE) {
+    return '/candidate'
+  }
+
   return '/'
 }
 
@@ -73,16 +77,19 @@ function toLoginNavigationState(location, intent) {
 }
 
 function toPostLoginLocation(user, navigationState) {
-  const pathname = toPostLoginDestination(user)
-  const requiredDestination = { pathname }
-
-  if (pathname !== '/') {
-    return requiredDestination
+  // Onboarding and Platform Admin destinations are mandatory session landings.
+  if (user?.status === USER_STATUS.PENDING_ACTIVATION) {
+    return { pathname: '/onboarding/company' }
   }
 
+  if (user?.role === USER_ROLE.PLATFORM_ADMIN) {
+    return { pathname: '/admin' }
+  }
+
+  const defaultPath = user?.role === USER_ROLE.CANDIDATE ? '/candidate' : '/'
   const from = readReturnLocation(navigationState?.from)
   if (!from) {
-    return requiredDestination
+    return { pathname: defaultPath }
   }
 
   const intent =

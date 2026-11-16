@@ -29,3 +29,7 @@ yarn-error.log*
 
 # personal
 /personal
+
+# local package manifests (do not track local dependency drift)
+/package.json
+/yarn.lock
