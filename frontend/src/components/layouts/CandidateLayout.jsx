@@ -33,7 +33,6 @@ const candidateNavigation = [
   { to: '/candidate/saved-jobs', label: 'Việc làm đã lưu', icon: Bookmark },
   { to: '/candidate/messages', label: 'Tin nhắn', icon: MessageSquare },
   { to: '/candidate/notifications', label: 'Thông báo', icon: Bell },
-  { to: '/candidate/ai-jobs', label: 'Việc làm phù hợp với AI', icon: Sparkles },
   { to: '/candidate/ai-center', label: 'Trung tâm AI', icon: Bot },
 ]
 
@@ -44,7 +43,9 @@ function CandidateLayout() {
   const [keyword, setKeyword] = useState('')
   const isFullBleedWorkspace =
     location.pathname.startsWith('/candidate/messages') ||
-    location.pathname.startsWith('/candidate/saved-jobs')
+    location.pathname.startsWith('/candidate/saved-jobs') ||
+    location.pathname.startsWith('/candidate/ai-center/evaluate') ||
+    location.pathname.startsWith('/candidate/ai-center/optimize')
 
   const handleSearch = (event) => {
     event.preventDefault()
@@ -160,7 +161,7 @@ function CandidateLayout() {
                 <Link to="/candidate/cvs/create">Tạo CV nhanh</Link>
               </Button>
               <Button asChild className="hidden lg:inline-flex" size="sm">
-                <Link to="/candidate/ai-jobs">
+                <Link to="/candidate/ai-center">
                   <Sparkles aria-hidden="true" className="size-4" />
                   Khám phá AI
                 </Link>

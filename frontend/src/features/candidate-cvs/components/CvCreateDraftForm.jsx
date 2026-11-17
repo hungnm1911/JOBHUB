@@ -55,12 +55,7 @@ function CvCreateDraftForm({
   }
 
   return (
-    <form className={cn('space-y-5', className)} id={formId} onSubmit={handleSubmit}>
-      <p className="text-sm text-muted-foreground">
-        Tạo CV Generated dạng bản nháp trên JOBHUB. Sau khi tạo, bạn có thể bổ sung nội dung
-        và kích hoạt khi đủ điều kiện.
-      </p>
-
+    <form className={cn('space-y-6', className)} id={formId} onSubmit={handleSubmit}>
       <CvMetadataFields
         catalogsError={catalogs.error}
         catalogsLoading={catalogs.loading}
@@ -71,15 +66,21 @@ function CvCreateDraftForm({
         values={values}
       />
 
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-end">
         {onCancel ? (
-          <Button disabled={busy} onClick={onCancel} type="button" variant="outline">
+          <Button
+            className="w-full sm:w-auto"
+            disabled={busy}
+            onClick={onCancel}
+            type="button"
+            variant="outline"
+          >
             Hủy
           </Button>
         ) : null}
-        <Button disabled={busy} type="submit">
+        <Button aria-busy={busy} className="w-full sm:min-w-36 sm:w-auto" disabled={busy} type="submit">
           {busy ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
-          Tạo bản nháp
+          {busy ? 'Đang tạo…' : 'Tạo bản nháp'}
         </Button>
       </div>
     </form>
