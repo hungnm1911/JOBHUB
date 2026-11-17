@@ -1,4 +1,4 @@
-import { Input } from '@/components/ui/input'
+import { Input } from '@/components/ui/Input'
 import { EXPERIENCE_LEVEL_LABEL } from '@/features/job-discovery/utils'
 import { CANDIDATE_CV_VISIBILITY } from '@/utils/constant'
 
