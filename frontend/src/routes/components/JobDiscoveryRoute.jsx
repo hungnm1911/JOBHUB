@@ -9,7 +9,7 @@ import {
   selectAuthenticationStatus,
 } from '@/features/authentication/slice'
 import { useAppSelector } from '@/store/hooks'
-import { API_ERROR_MESSAGE, USER_ROLE, USER_STATUS } from '@/utils/constant'
+import { USER_STATUS } from '@/utils/constant'
 
 function AccessState({ title, description, loading = false, retry = false }) {
   return (
@@ -53,11 +53,7 @@ function JobDiscoveryRoute() {
     return <Navigate replace to="/onboarding/company" />
   }
 
-  if (user?.role === USER_ROLE.CANDIDATE) {
-    return <Outlet />
-  }
-
-  return <AccessState description={API_ERROR_MESSAGE.JOB_DISCOVERY_NOT_AVAILABLE} title="Không thể truy cập Job Discovery" />
+  return <Outlet />
 }
 
 export default JobDiscoveryRoute
