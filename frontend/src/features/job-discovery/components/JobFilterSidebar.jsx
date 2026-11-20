@@ -2,6 +2,7 @@ import { SlidersHorizontal, X } from 'lucide-react'
 import { useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { SelectDropdown } from '@/components/ui/select-dropdown'
 import { EMPLOYMENT_TYPE, WORK_MODE } from '@/utils/constant'
 
 import { FILTERABLE_SALARY_PERIODS } from '../search-params'
@@ -11,6 +12,11 @@ import {
   SALARY_PERIOD_SUFFIX,
   WORK_MODE_LABEL,
 } from '../utils'
+
+const SALARY_PERIOD_OPTIONS = FILTERABLE_SALARY_PERIODS.map((period) => ({
+  value: period,
+  label: `Theo ${SALARY_PERIOD_SUFFIX[period]}`,
+}))
 
 const COLLAPSED_OPTION_COUNT = 4
 const amountFormatter = new Intl.NumberFormat('vi-VN')
@@ -147,20 +153,18 @@ function SalaryFilter({ salary, onApply }) {
           </label>
         ))}
       </div>
-      <label className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
-        Đơn vị
-        <select
-          className="h-9 rounded-md border bg-secondary/40 px-2 text-sm text-foreground outline-none focus-visible:border-ring"
-          onChange={(event) => setDraft((current) => ({ ...current, period: event.target.value }))}
+      <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
+        <span>Đơn vị</span>
+        <SelectDropdown
+          ariaLabel="Đơn vị lương"
+          onChange={(nextPeriod) =>
+            setDraft((current) => ({ ...current, period: nextPeriod }))
+          }
+          options={SALARY_PERIOD_OPTIONS}
+          size="sm"
           value={draft.period}
-        >
-          {FILTERABLE_SALARY_PERIODS.map((period) => (
-            <option key={period} value={period}>
-              Theo {SALARY_PERIOD_SUFFIX[period]}
-            </option>
-          ))}
-        </select>
-      </label>
+        />
+      </div>
       {error && (
         <p className="mt-2 text-xs text-destructive" id={errorId} role="alert">
           {error}

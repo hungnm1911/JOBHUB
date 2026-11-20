@@ -3,10 +3,18 @@ import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/Input'
+import { SelectDropdown } from '@/components/ui/select-dropdown'
 import { CV_LANGUAGE_PROFICIENCY } from '@/utils/constant'
 
 import { LANGUAGE_PROFICIENCY_LABEL } from '../utils'
 import ProfileModal from './ProfileModal'
+
+const LANGUAGE_PROFICIENCY_OPTIONS = Object.values(CV_LANGUAGE_PROFICIENCY).map(
+  (value) => ({
+    value,
+    label: LANGUAGE_PROFICIENCY_LABEL[value] ?? value,
+  }),
+)
 
 function toDateInput(value) {
   if (!value) {
@@ -385,17 +393,11 @@ function LanguageEditor({ initialValue, busy, error, onClose, onSave }) {
         <Input onChange={(event) => setName(event.target.value)} value={name} />
       </Field>
       <Field label="Mức độ">
-        <select
-          className="flex h-11 w-full rounded-md border border-input bg-secondary/60 px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-          onChange={(event) => setProficiency(event.target.value)}
+        <SelectDropdown
+          onChange={setProficiency}
+          options={LANGUAGE_PROFICIENCY_OPTIONS}
           value={proficiency}
-        >
-          {Object.values(CV_LANGUAGE_PROFICIENCY).map((value) => (
-            <option key={value} value={value}>
-              {LANGUAGE_PROFICIENCY_LABEL[value]}
-            </option>
-          ))}
-        </select>
+        />
       </Field>
     </EditorShell>
   )

@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import CenteredState from '@/components/common/CenteredState'
-import PageHeader from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import useDiscoveryCatalogs from '@/features/job-discovery/hooks/useDiscoveryCatalogs'
 
@@ -18,7 +17,6 @@ import {
 } from '../utils'
 import AcceptInvitationModal from './AcceptInvitationModal'
 import InvitationCard from './InvitationCard'
-import InvitationListStats from './InvitationListStats'
 import InvitationListToolbar from './InvitationListToolbar'
 import RejectInvitationModal from './RejectInvitationModal'
 
@@ -52,7 +50,6 @@ function CandidateInvitationList() {
     return counts
   }, [invitations])
 
-  // Drop empty status tabs after accept/reject without an effect reset.
   const activeStatus =
     !loading && status && (countsByStatus[status] ?? 0) === 0 ? null : status
 
@@ -78,33 +75,46 @@ function CandidateInvitationList() {
       ? 'Bộ lọc đang hoạt động. Chọn “Tất cả” hoặc tab khác có số lượng > 0 để xem lời mời.'
       : 'Khi nhà tuyển dụng gửi lời mời ứng tuyển, bạn sẽ thấy chúng tại đây.'
 
-  const pendingHint =
-    !loading && !error && stats.pending > 0
-      ? ` · ${stats.pending} chờ phản hồi`
-      : ''
-
   return (
     <div className="space-y-6">
-      <PageHeader
-        actions={
-          <Button asChild variant="outline">
-            <Link to="/candidate/applications">Đơn ứng tuyển</Link>
-          </Button>
-        }
-        description={
-          loading
-            ? 'Đang tải danh sách lời mời ứng tuyển…'
-            : error
-              ? 'Không tải được lời mời ứng tuyển.'
-              : `Các lời mời từ nhà tuyển dụng qua JOBHUB.${pendingHint}`
-        }
-        eyebrow="Ứng viên"
-        title="Lời mời ứng tuyển"
-      />
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 max-w-2xl">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Lời mời ứng tuyển</h1>
+            {!loading && !error && (
+              <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                {stats.total} lời mời
+              </span>
+            )}
+          </div>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Các lời mời trực tiếp từ nhà tuyển dụng qua JOBHUB. Xem chi tiết JD và phản hồi trước
+            khi hết hạn.
+          </p>
 
-      {!loading && !error ? <InvitationListStats stats={stats} /> : null}
+          {!loading && !error && invitations.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className="size-2 rounded-full bg-amber-500" />
+                Chờ phản hồi:{' '}
+                <strong className="font-semibold text-foreground">{stats.pending}</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className="size-2 rounded-full bg-emerald-500" />
+                Đã chấp nhận:{' '}
+                <strong className="font-semibold text-foreground">{stats.accepted}</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className="size-2 rounded-full bg-rose-500" />
+                Đã từ chối:{' '}
+                <strong className="font-semibold text-foreground">{stats.rejected}</strong>
+              </span>
+            </div>
+          )}
+        </div>
+      </header>
 
-      {!error ? (
+      {!error && !loading && invitations.length > 0 ? (
         <InvitationListToolbar
           countsByStatus={countsByStatus}
           onClearSearch={() => setSearchInput('')}
@@ -169,24 +179,18 @@ function CandidateInvitationList() {
       ) : null}
 
       {!loading && !error && visibleInvitations.length > 0 ? (
-        <section className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Hiển thị {visibleInvitations.length} lời mời
-            {activeStatus || debouncedQuery ? ' theo bộ lọc hiện tại' : null}
-          </p>
-          <ul className="space-y-3">
-            {visibleInvitations.map((invitation) => (
-              <li key={invitation.id}>
-                <InvitationCard
-                  invitation={invitation}
-                  onAccept={setAcceptTarget}
-                  onReject={setRejectTarget}
-                  provinceNameByCode={provinceNameByCode}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
+        <ul className="flex flex-col gap-3">
+          {visibleInvitations.map((invitation) => (
+            <li key={invitation.id}>
+              <InvitationCard
+                invitation={invitation}
+                onAccept={setAcceptTarget}
+                onReject={setRejectTarget}
+                provinceNameByCode={provinceNameByCode}
+              />
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       {acceptTarget ? (

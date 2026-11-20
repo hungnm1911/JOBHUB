@@ -17,6 +17,7 @@ import {
   fieldReviewLabel,
   formatMatchScore,
   scoreTone,
+  toCvEvaluationErrorMessage,
 } from '../utils'
 
 function ScoreBadge({ score }) {
@@ -120,7 +121,7 @@ function EvaluationResultPanel({
                 Thử lại
               </Button>
             }
-            description={error?.message || 'Không đánh giá được CV với việc làm này.'}
+            description={toCvEvaluationErrorMessage(error)}
             icon={CircleAlert}
             title="Đánh giá thất bại"
             tone="bg-secondary text-muted-foreground"

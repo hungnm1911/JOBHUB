@@ -15,6 +15,7 @@ import {
   fieldReviewLabel,
   formatMatchScore,
   scoreTone,
+  toCvEvaluationErrorMessage,
 } from '@/features/candidate-cv-evaluation/utils'
 import { cn } from '@/lib/utils'
 
@@ -131,9 +132,7 @@ function OptimizationPanel({
                 Thử lại phân tích
               </Button>
             }
-            description={
-              evaluationError?.message || 'Không phân tích được CV với việc làm này.'
-            }
+            description={toCvEvaluationErrorMessage(evaluationError)}
             icon={CircleAlert}
             title="Phân tích thất bại"
             tone="bg-secondary text-muted-foreground"

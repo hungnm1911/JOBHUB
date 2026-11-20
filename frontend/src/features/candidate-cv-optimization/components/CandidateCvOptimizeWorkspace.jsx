@@ -4,8 +4,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { SelectDropdown } from '@/components/ui/select-dropdown'
 import JobPickList from '@/features/candidate-cv-evaluation/components/JobPickList'
 import useCvJobEvaluation from '@/features/candidate-cv-evaluation/hooks/useCvJobEvaluation'
+import { toCvEvaluationErrorMessage } from '@/features/candidate-cv-evaluation/utils'
 import useCandidateCvs from '@/features/candidate-cvs/hooks/useCandidateCvs'
 import useDiscoveryJobs from '@/features/job-discovery/hooks/useDiscoveryJobs'
 import { JOB_DISCOVERY_SORT } from '@/features/job-discovery/search-params'
@@ -116,7 +118,7 @@ function CandidateCvOptimizeWorkspace() {
       })
       toast.success('Đã phân tích CV. Bạn có thể tạo bản nháp tối ưu.')
     } catch (error) {
-      toast.error(error.message || 'Không phân tích được CV.')
+      toast.error(toCvEvaluationErrorMessage(error))
     }
   }
 
@@ -159,31 +161,24 @@ function CandidateCvOptimizeWorkspace() {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="flex min-w-[16rem] flex-1 items-center gap-2 rounded-xl border bg-background px-3 py-2">
-            <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-            <span className="sr-only">Chọn CV nguồn</span>
-            <select
-              className="h-8 w-full min-w-0 bg-transparent text-sm outline-none"
-              disabled={cvsLoading || selectableCvs.length === 0}
-              onChange={(event) => {
-                setCvOverrideId(event.target.value || null)
-                resetFlow()
-              }}
-              value={selectedCvId ?? ''}
-            >
-              {cvsLoading ? <option value="">Đang tải CV…</option> : null}
-              {!cvsLoading && selectableCvs.length === 0 ? (
-                <option value="">Chưa có CV để tối ưu</option>
-              ) : null}
-              {selectableCvs.map((cv) => (
-                <option key={cv.id} value={cv.id}>
-                  {cv.isDefault ? '★ ' : ''}
-                  {cv.name}
-                  {cv.status === CANDIDATE_CV_STATUS.DRAFT ? ' (nháp)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectDropdown
+            ariaLabel="Chọn CV nguồn"
+            className="min-w-64 flex-1"
+            disabled={cvsLoading || selectableCvs.length === 0}
+            icon={FileText}
+            onChange={(nextId) => {
+              setCvOverrideId(nextId || null)
+              resetFlow()
+            }}
+            options={selectableCvs.map((cv) => ({
+              value: cv.id,
+              label: `${cv.isDefault ? '★ ' : ''}${cv.name}${cv.status === CANDIDATE_CV_STATUS.DRAFT ? ' (nháp)' : ''}`,
+            }))}
+            placeholder={
+              cvsLoading ? 'Đang tải CV…' : 'Chưa có CV để tối ưu'
+            }
+            value={selectedCvId ?? ''}
+          />
 
           {selectedCv?.isDefault ? (
             <span className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary">

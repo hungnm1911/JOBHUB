@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { SelectDropdown } from '@/components/ui/select-dropdown'
 import useCandidateCvs from '@/features/candidate-cvs/hooks/useCandidateCvs'
 import useDiscoveryJobs from '@/features/job-discovery/hooks/useDiscoveryJobs'
 import { JOB_DISCOVERY_SORT } from '@/features/job-discovery/search-params'
@@ -11,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { CANDIDATE_CV_STATUS } from '@/utils/constant'
 
 import useCvJobEvaluation from '../hooks/useCvJobEvaluation'
+import { toCvEvaluationErrorMessage } from '../utils'
 import EvaluationResultPanel from './EvaluationResultPanel'
 import JobPickList from './JobPickList'
 
@@ -107,7 +109,7 @@ function CandidateCvEvaluateWorkspace() {
         candidateCvId: selectedCv.id,
       })
     } catch (error) {
-      toast.error(error.message || 'Không đánh giá được CV.')
+      toast.error(toCvEvaluationErrorMessage(error))
     }
   }
 
@@ -132,31 +134,24 @@ function CandidateCvEvaluateWorkspace() {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="flex min-w-[16rem] flex-1 items-center gap-2 rounded-xl border bg-background px-3 py-2">
-            <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-            <span className="sr-only">Chọn CV để đánh giá</span>
-            <select
-              className="h-8 w-full min-w-0 bg-transparent text-sm outline-none"
-              disabled={cvsLoading || selectableCvs.length === 0}
-              onChange={(event) => {
-                setCvOverrideId(event.target.value || null)
-                evaluation.reset()
-              }}
-              value={selectedCvId ?? ''}
-            >
-              {cvsLoading ? <option value="">Đang tải CV…</option> : null}
-              {!cvsLoading && selectableCvs.length === 0 ? (
-                <option value="">Chưa có CV để đánh giá</option>
-              ) : null}
-              {selectableCvs.map((cv) => (
-                <option key={cv.id} value={cv.id}>
-                  {cv.isDefault ? '★ ' : ''}
-                  {cv.name}
-                  {cv.status === CANDIDATE_CV_STATUS.DRAFT ? ' (nháp)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectDropdown
+            ariaLabel="Chọn CV để đánh giá"
+            className="min-w-64 flex-1"
+            disabled={cvsLoading || selectableCvs.length === 0}
+            icon={FileText}
+            onChange={(nextId) => {
+              setCvOverrideId(nextId || null)
+              evaluation.reset()
+            }}
+            options={selectableCvs.map((cv) => ({
+              value: cv.id,
+              label: `${cv.isDefault ? '★ ' : ''}${cv.name}${cv.status === CANDIDATE_CV_STATUS.DRAFT ? ' (nháp)' : ''}`,
+            }))}
+            placeholder={
+              cvsLoading ? 'Đang tải CV…' : 'Chưa có CV để đánh giá'
+            }
+            value={selectedCvId ?? ''}
+          />
 
           {selectedCv?.isDefault ? (
             <span className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary">

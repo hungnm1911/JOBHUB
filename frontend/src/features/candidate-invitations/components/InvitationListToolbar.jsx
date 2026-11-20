@@ -1,6 +1,7 @@
 import { Search, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { SelectDropdown } from '@/components/ui/select-dropdown'
 import { cn } from '@/lib/utils'
 
 import {
@@ -9,6 +10,11 @@ import {
   INVITATION_SORT_LABEL,
   JOB_INVITATION_STATUS_LABEL,
 } from '../utils'
+
+const INVITATION_SORT_OPTIONS = Object.values(INVITATION_SORT).map((option) => ({
+  value: option,
+  label: INVITATION_SORT_LABEL[option],
+}))
 
 function InvitationListToolbar({
   status,
@@ -88,20 +94,17 @@ function InvitationListToolbar({
           ) : null}
         </label>
 
-        <label className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <span className="whitespace-nowrap">Sắp xếp</span>
-          <select
-            className="rounded-lg border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onChange={(event) => onSortChange(event.target.value)}
+          <SelectDropdown
+            align="end"
+            ariaLabel="Sắp xếp lời mời"
+            className="w-44"
+            onChange={onSortChange}
+            options={INVITATION_SORT_OPTIONS}
             value={sort}
-          >
-            {Object.values(INVITATION_SORT).map((option) => (
-              <option key={option} value={option}>
-                {INVITATION_SORT_LABEL[option]}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
       </div>
     </section>
   )

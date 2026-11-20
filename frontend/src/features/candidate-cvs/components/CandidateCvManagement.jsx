@@ -1,4 +1,5 @@
 import {
+  CircleAlert,
   CircleX,
   FilePlus2,
   FileText,
@@ -18,10 +19,14 @@ import {
   archiveOwnCandidateCvApi,
   downloadOwnCandidateCvApi,
   setOwnCandidateCvAsDefaultApi,
+  unsetOwnCandidateCvDefaultApi,
+  updateOwnCandidateCvMetadataApi,
 } from '@/apis/candidate-cv.api'
 import CenteredState from '@/components/common/CenteredState'
 import { Button } from '@/components/ui/button'
+import ProfileModal from '@/features/candidate-profile/components/ProfileModal'
 import { cn } from '@/lib/utils'
+import { CANDIDATE_CV_VISIBILITY } from '@/utils/constant'
 
 import useCandidateCvs from '../hooks/useCandidateCvs'
 import {
@@ -37,20 +42,6 @@ import CvCard from './CvCard'
 import CvEditMetadataModal from './CvEditMetadataModal'
 import CvPreviewModal from './CvPreviewModal'
 import CvReplaceFileModal from './CvReplaceFileModal'
-
-function StatPill({ label, value, tone = 'default' }) {
-  return (
-    <div
-      className={cn(
-        'rounded-2xl border px-4 py-3',
-        tone === 'primary' ? 'border-primary/20 bg-primary/5' : 'bg-card',
-      )}
-    >
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-semibold tracking-tight">{value}</p>
-    </div>
-  )
-}
 
 function CandidateCvManagement() {
   const { loading, cvs, error, reload, upsertCv, removeCv } = useCandidateCvs()
@@ -121,9 +112,43 @@ function CandidateCvManagement() {
         })
         upsertCv(nextDefault)
         toast.success('Đã đặt CV mặc định')
-        reload()
       } catch (setDefaultError) {
         toast.error(setDefaultError.message || 'Không đặt được CV mặc định')
+      }
+    })
+  }
+
+  const handleUnsetDefault = async (cv) => {
+    await withBusy(cv.id, async () => {
+      try {
+        const response = await unsetOwnCandidateCvDefaultApi(cv.id)
+        upsertCv(response.cv ?? { ...cv, isDefault: false })
+        toast.success('Đã bỏ đặt CV mặc định')
+      } catch (unsetError) {
+        toast.error(unsetError.message || 'Không bỏ được CV mặc định')
+      }
+    })
+  }
+
+  const handleToggleVisibility = async (cv) => {
+    const nextVisibility =
+      cv.visibility === CANDIDATE_CV_VISIBILITY.PUBLIC
+        ? CANDIDATE_CV_VISIBILITY.PRIVATE
+        : CANDIDATE_CV_VISIBILITY.PUBLIC
+
+    await withBusy(cv.id, async () => {
+      try {
+        const response = await updateOwnCandidateCvMetadataApi(cv.id, {
+          visibility: nextVisibility,
+        })
+        upsertCv(response.cv ?? { ...cv, visibility: nextVisibility })
+        toast.success(
+          nextVisibility === CANDIDATE_CV_VISIBILITY.PUBLIC
+            ? 'Đã chuyển CV sang Công khai'
+            : 'Đã chuyển CV sang Riêng tư',
+        )
+      } catch (visibilityError) {
+        toast.error(visibilityError.message || 'Không đổi được chế độ hiển thị CV')
       }
     })
   }
@@ -143,19 +168,12 @@ function CandidateCvManagement() {
     })
   }
 
-  const handleArchive = async (cv) => {
-    if (
-      !window.confirm(
-        `Bạn chắc chắn muốn xóa “${cv.name}” khỏi thư viện CV? Thao tác này lưu trữ (archive) CV, không khôi phục từ giao diện hiện tại.`,
-      )
-    ) {
-      return
-    }
-
+  const handleConfirmArchive = async (cv) => {
     await withBusy(cv.id, async () => {
       try {
         await archiveOwnCandidateCvApi(cv.id)
         removeCv(cv.id)
+        setDialog(null)
         toast.success('Đã xóa CV khỏi thư viện')
       } catch (archiveError) {
         toast.error(archiveError.message || 'Không xóa được CV')
@@ -165,60 +183,60 @@ function CandidateCvManagement() {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-3xl border bg-card">
-        <div className="bg-[linear-gradient(135deg,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_55%)] px-5 py-6 sm:px-7 sm:py-7">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0 max-w-2xl">
-              <div className="flex items-center gap-3">
-                <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-                  <FileText aria-hidden="true" className="size-5" />
-                </span>
-                <div>
-                  <p className="text-xs font-semibold tracking-wide text-primary uppercase">
-                    Thư viện CV
-                  </p>
-                  <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">CV của tôi</h1>
-                </div>
-              </div>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Quản lý CV đang dùng: tải PDF, tạo bản nháp trên JOBHUB, xem trước và đặt CV mặc định
-                cho ứng tuyển.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline">
-                <Link to="/candidate/cvs/create?method=upload">
-                  <Upload aria-hidden="true" className="size-4" />
-                  Upload CV
-                </Link>
-              </Button>
-              <Button asChild>
-                <Link to="/candidate/cvs/create">
-                  <FilePlus2 aria-hidden="true" className="size-4" />
-                  Tạo CV mới
-                </Link>
-              </Button>
-            </div>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 max-w-2xl">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">CV của tôi</h1>
+            {!loading && !error && (
+              <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                {stats.total} CV
+              </span>
+            )}
           </div>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Quản lý thư viện CV của bạn: tải lên PDF, tạo CV trên JOBHUB và đặt CV mặc định để ứng
+            tuyển hoặc nhận gợi ý việc làm AI.
+          </p>
 
-          {!loading && !error ? (
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <StatPill label="Tổng CV" value={stats.total} />
-              <StatPill label="Đang dùng" tone="primary" value={stats.active} />
-              <StatPill label="Bản nháp" value={stats.draft} />
+          {!loading && !error && cvs.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+              <span>
+                Đang dùng: <strong className="font-semibold text-foreground">{stats.active}</strong>
+              </span>
+              <span>
+                Bản nháp: <strong className="font-semibold text-foreground">{stats.draft}</strong>
+              </span>
+              {stats.defaultCv ? (
+                <span className="inline-flex items-center gap-1 text-primary">
+                  <Star aria-hidden="true" className="size-3.5 fill-current" />
+                  Mặc định:{' '}
+                  <strong className="font-semibold text-foreground">{stats.defaultCv.name}</strong>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-warning-foreground">
+                  <CircleAlert aria-hidden="true" className="size-3.5" />
+                  Chưa chọn CV mặc định cho Gợi ý việc làm AI
+                </span>
+              )}
             </div>
-          ) : null}
-
-          {!loading && !error && stats.defaultCv ? (
-            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/15 bg-background/80 px-4 py-3 text-sm">
-              <Star aria-hidden="true" className="size-4 text-primary" />
-              <span className="text-muted-foreground">CV mặc định:</span>
-              <span className="font-medium">{stats.defaultCv.name}</span>
-            </div>
-          ) : null}
+          )}
         </div>
-      </section>
+
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link to="/candidate/cvs/create?method=upload">
+              <Upload aria-hidden="true" className="size-4" />
+              Upload CV
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to="/candidate/cvs/create">
+              <FilePlus2 aria-hidden="true" className="size-4" />
+              Tạo CV mới
+            </Link>
+          </Button>
+        </div>
+      </header>
 
       {loading ? (
         <CenteredState
@@ -271,34 +289,8 @@ function CandidateCvManagement() {
 
       {!loading && !error && cvs.length > 0 ? (
         <section className="space-y-4">
-          <div className="rounded-2xl border bg-card p-3 sm:p-4">
-            <label className="relative block">
-              <span className="sr-only">Tìm CV</span>
-              <Search
-                aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              />
-              <input
-                className="h-11 w-full rounded-xl border-0 bg-secondary/80 pr-10 pl-9 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-ring"
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Tìm theo tên CV…"
-                value={searchInput}
-              />
-              {searchInput ? (
-                <Button
-                  aria-label="Xóa tìm kiếm"
-                  className="absolute top-1/2 right-1 size-8 -translate-y-1/2"
-                  onClick={() => setSearchInput('')}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                >
-                  <X aria-hidden="true" className="size-4" />
-                </Button>
-              ) : null}
-            </label>
-
-            <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lọc danh sách CV">
               {Object.values(CV_LIST_FILTER).map((option) => {
                 const active = filter === option
                 const count = filterCounts[option] ?? 0
@@ -309,7 +301,7 @@ function CandidateCvManagement() {
                   <button
                     aria-pressed={active}
                     className={cn(
-                      'inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition-colors',
+                      'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors',
                       active
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-secondary text-muted-foreground hover:text-foreground',
@@ -333,6 +325,32 @@ function CandidateCvManagement() {
                 )
               })}
             </div>
+
+            <label className="relative block sm:w-64 md:w-72">
+              <span className="sr-only">Tìm CV</span>
+              <Search
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              />
+              <input
+                className="h-9 w-full rounded-xl border bg-background pr-9 pl-9 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Tìm theo tên CV…"
+                value={searchInput}
+              />
+              {searchInput ? (
+                <Button
+                  aria-label="Xóa tìm kiếm"
+                  className="absolute top-1/2 right-1 size-7 -translate-y-1/2"
+                  onClick={() => setSearchInput('')}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <X aria-hidden="true" className="size-3.5" />
+                </Button>
+              ) : null}
+            </label>
           </div>
 
           {visibleCvs.length === 0 ? (
@@ -354,22 +372,25 @@ function CandidateCvManagement() {
               tone="bg-secondary text-muted-foreground"
             />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="flex flex-col gap-3">
               {visibleCvs.map((cv) => (
-                <CvCard
-                  busy={busyId === cv.id}
-                  cv={cv}
-                  key={cv.id}
-                  onActivate={handleActivate}
-                  onArchive={handleArchive}
-                  onDownload={handleDownload}
-                  onEditMetadata={(item) => setDialog({ type: 'edit', cv: item })}
-                  onPreview={(item) => setDialog({ type: 'preview', cv: item })}
-                  onReplaceFile={(item) => setDialog({ type: 'replace', cv: item })}
-                  onSetDefault={handleSetDefault}
-                />
+                <li key={cv.id}>
+                  <CvCard
+                    busy={busyId === cv.id}
+                    cv={cv}
+                    onActivate={handleActivate}
+                    onArchive={(item) => setDialog({ type: 'archive', cv: item })}
+                    onDownload={handleDownload}
+                    onEditMetadata={(item) => setDialog({ type: 'edit', cv: item })}
+                    onPreview={(item) => setDialog({ type: 'preview', cv: item })}
+                    onReplaceFile={(item) => setDialog({ type: 'replace', cv: item })}
+                    onSetDefault={handleSetDefault}
+                    onToggleVisibility={handleToggleVisibility}
+                    onUnsetDefault={handleUnsetDefault}
+                  />
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </section>
       ) : null}
@@ -380,7 +401,6 @@ function CandidateCvManagement() {
           onClose={() => setDialog(null)}
           onUpdated={(cv) => {
             upsertCv(cv)
-            reload()
           }}
         />
       ) : null}
@@ -391,7 +411,6 @@ function CandidateCvManagement() {
           onClose={() => setDialog(null)}
           onUpdated={(cv) => {
             upsertCv(cv)
-            reload()
           }}
         />
       ) : null}
@@ -403,6 +422,44 @@ function CandidateCvManagement() {
           onClose={() => setDialog(null)}
           onDownload={handleDownload}
         />
+      ) : null}
+
+      {dialog?.type === 'archive' ? (
+        <ProfileModal
+          busy={busyId === dialog.cv.id}
+          description="Thao tác này sẽ lưu trữ (archive) CV khỏi thư viện của bạn và không thể hoàn tác từ giao diện hiện tại."
+          footer={
+            <>
+              <Button
+                disabled={busyId === dialog.cv.id}
+                onClick={() => setDialog(null)}
+                type="button"
+                variant="outline"
+              >
+                Hủy
+              </Button>
+              <Button
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={busyId === dialog.cv.id}
+                onClick={() => handleConfirmArchive(dialog.cv)}
+                type="button"
+              >
+                {busyId === dialog.cv.id ? (
+                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                ) : null}
+                Xóa khỏi thư viện
+              </Button>
+            </>
+          }
+          onClose={() => setDialog(null)}
+          title="Xóa CV khỏi thư viện?"
+        >
+          <p className="text-sm text-muted-foreground">
+            Bạn có chắc chắn muốn xóa CV{' '}
+            <strong className="font-semibold text-foreground">“{dialog.cv.name}”</strong> khỏi thư
+            viện?
+          </p>
+        </ProfileModal>
       ) : null}
     </div>
   )

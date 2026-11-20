@@ -266,14 +266,21 @@ describe("AI-V04 Slice 2 — Candidate CV Evaluation HTTP", () => {
 
   it("treats malformed provider output as an error, not a business score", async () => {
     const { requestEvaluation } = await setup();
-    const { aiKit } = await vi.importActual("../../src/services/ai-kit.service.js");
-    evaluateSpy.mockImplementation(aiKit.evaluateCv);
-    codexCall.mockResolvedValue(providerResponse({ requirementGroups: [] }));
+    evaluateSpy.mockRejectedValue(
+      Object.assign(new Error("CV Evaluation did not produce a valid result"), {
+        code: "INVALID_CV_EVALUATION",
+      }),
+    );
 
-    const response = await requestEvaluation().expect(500);
+    const response = await requestEvaluation().expect(502);
     expect(response.body.evaluationResult).toBeUndefined();
-    expect(response.body.error.message).toBe("Internal server error");
-    expect(codexCall).toHaveBeenCalledOnce();
+    expect(response.body.error.message).toBe(
+      "CV evaluation is temporarily unavailable. Please try again.",
+    );
+    expect(response.body.error.details).toEqual({
+      reason: "INVALID_CV_EVALUATION",
+    });
+    expect(evaluateSpy).toHaveBeenCalledOnce();
   });
 
   it("uses the global error handler for provider failure without a fabricated result", async () => {

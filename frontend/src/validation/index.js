@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
 import { accountRegistrationSchema } from './account-registration.schema'
+import { changePasswordSchema } from './authentication-change-password.schema'
 import { forgotPasswordSchema } from './authentication-forgot-password.schema'
 import { loginSchema } from './authentication-login.schema'
 import { resetPasswordSchema } from './authentication-reset-password.schema'
@@ -10,6 +11,7 @@ import { companyDraftSchema, companySubmissionSchema } from './company-profile.s
 
 export {
   accountRegistrationSchema,
+  changePasswordSchema,
   companyDraftSchema,
   companySubmissionSchema,
   forgotPasswordSchema,
