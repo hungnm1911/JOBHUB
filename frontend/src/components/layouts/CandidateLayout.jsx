@@ -5,7 +5,6 @@ import {
   BriefcaseBusiness,
   FileText,
   House,
-  LayoutDashboard,
   Mail,
   MailOpen,
   Menu,
@@ -25,7 +24,6 @@ import { SEARCH_PARAM } from '@/features/job-discovery/search-params'
 import { cn } from '@/lib/utils'
 
 const candidateNavigation = [
-  { to: '/candidate', label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: '/candidate/profile', label: 'Hồ sơ cá nhân', icon: UserRound },
   { to: '/candidate/cvs', label: 'Quản lý CV', icon: FileText },
   { to: '/candidate/applications', label: 'Đơn ứng tuyển', icon: Mail },
@@ -79,7 +77,7 @@ function CandidateLayout() {
         )}
       >
         <div className="flex items-center justify-between gap-3">
-          <Link className="inline-flex items-center gap-2 font-semibold tracking-tight" to="/candidate">
+          <Link className="inline-flex items-center gap-2 font-semibold tracking-tight" to="/">
             <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <BriefcaseBusiness aria-hidden="true" className="size-5" />
             </span>

@@ -1,4 +1,11 @@
-import { ChevronDown, LayoutDashboard, LoaderCircle, LogOut, UserRound } from 'lucide-react'
+import {
+  Bookmark,
+  ChevronDown,
+  LayoutDashboard,
+  LoaderCircle,
+  LogOut,
+  UserRound,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -14,8 +21,12 @@ import { USER_ROLE_LABEL, getInitials, toLoginNavigationState, toPostLoginDestin
 const WORKSPACE_LINK_LABEL = Object.freeze({
   [USER_ROLE.PLATFORM_ADMIN]: 'Trang quản trị',
   [USER_ROLE.COMPANY_STAFF]: 'Hồ sơ doanh nghiệp',
-  [USER_ROLE.CANDIDATE]: 'Bảng điều khiển',
 })
+
+const CANDIDATE_MENU_LINKS = Object.freeze([
+  { to: '/candidate/profile', label: 'Hồ sơ cá nhân', icon: UserRound },
+  { to: '/candidate/saved-jobs', label: 'Việc làm đã lưu', icon: Bookmark },
+])
 
 function GuestLinks() {
   const location = useLocation()
@@ -152,18 +163,34 @@ function AccountMenu({ user }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border bg-popover p-2 text-popover-foreground shadow-lg">
-          <div className="border-b px-3 pt-2 pb-3">
+        <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg ring-1 ring-border/40">
+          <div className="rounded-lg bg-secondary/40 px-3 py-2.5">
             <p className="truncate text-sm font-semibold">{user.fullName || user.email}</p>
             <p className="truncate text-xs text-muted-foreground">{user.email}</p>
             {USER_ROLE_LABEL[user.role] && (
-              <span className="mt-2 inline-flex rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+              <span className="mt-1.5 inline-flex rounded-md bg-background px-2 py-0.5 text-[11px] font-medium text-secondary-foreground ring-1 ring-border">
                 {USER_ROLE_LABEL[user.role]}
               </span>
             )}
           </div>
 
-          <ul className="pt-1">
+          <ul className="mt-1 space-y-0.5">
+            {user.role === USER_ROLE.CANDIDATE &&
+              CANDIDATE_MENU_LINKS.map((item) => {
+                const Icon = item.icon
+                return (
+                  <li key={item.to}>
+                    <Link
+                      className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors outline-none hover:bg-secondary focus-visible:bg-secondary"
+                      onClick={() => setOpen(false)}
+                      to={item.to}
+                    >
+                      <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
+                      {item.label}
+                    </Link>
+                  </li>
+                )
+              })}
             {workspaceLabel && (
               <li>
                 <Link

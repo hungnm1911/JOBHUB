@@ -96,7 +96,17 @@ async function logoutApi() {
   return response.data
 }
 
+async function changePasswordApi({ currentPassword, password }) {
+  const response = await apiClient.post(
+    '/auth/change-password',
+    { currentPassword, password },
+    { requiresAuthentication: true },
+  )
+  return response.data
+}
+
 export {
+  changePasswordApi,
   confirmCompanyApprovalApi,
   forgotPasswordApi,
   getCurrentAccountApi,

@@ -1,12 +1,8 @@
-import CandidateLayout from '@/components/layouts/CandidateLayout'
 import CandidateAiCenterPage from '@/pages/CandidateAiCenterPage'
-import CandidateCvEvaluatePage from '@/pages/CandidateCvEvaluatePage'
-import CandidateCvOptimizePage from '@/pages/CandidateCvOptimizePage'
 import CandidateApplicationDetailPage from '@/pages/CandidateApplicationDetailPage'
 import CandidateApplicationsPage from '@/pages/CandidateApplicationsPage'
 import CandidateCvCreatePage from '@/pages/CandidateCvCreatePage'
 import CandidateCvsPage from '@/pages/CandidateCvsPage'
-import CandidateDashboardPage from '@/pages/CandidateDashboardPage'
 import CandidateInvitationsPage from '@/pages/CandidateInvitationsPage'
 import CandidateMessagesPage from '@/pages/CandidateMessagesPage'
 import CandidateNotificationsPage from '@/pages/CandidateNotificationsPage'
@@ -20,7 +16,7 @@ import RoleRoute from './components/RoleRoute'
 
 const candidateRoutes = [
   {
-    path: '/candidate',
+    path: 'candidate',
     element: <ProtectedRoute redirectTo="/login" />,
     children: [
       {
@@ -31,36 +27,31 @@ const candidateRoutes = [
           />
         ),
         children: [
+          { index: true, element: <Navigate replace to="/" /> },
+          { path: 'profile', element: <CandidateProfilePage /> },
+          { path: 'cvs', element: <CandidateCvsPage /> },
+          { path: 'cvs/create', element: <CandidateCvCreatePage /> },
+          { path: 'applications', element: <CandidateApplicationsPage /> },
           {
-            element: <CandidateLayout />,
-            children: [
-              { index: true, element: <CandidateDashboardPage /> },
-              { path: 'profile', element: <CandidateProfilePage /> },
-              { path: 'cvs', element: <CandidateCvsPage /> },
-              { path: 'cvs/create', element: <CandidateCvCreatePage /> },
-              { path: 'applications', element: <CandidateApplicationsPage /> },
-              {
-                path: 'applications/:applicationId',
-                element: <CandidateApplicationDetailPage />,
-              },
-              { path: 'invitations', element: <CandidateInvitationsPage /> },
-              { path: 'saved-jobs', element: <CandidateSavedJobsPage /> },
-              { path: 'messages', element: <CandidateMessagesPage /> },
-              { path: 'notifications', element: <CandidateNotificationsPage /> },
-              {
-                path: 'ai-jobs',
-                element: <Navigate replace to="/candidate/ai-center" />,
-              },
-              { path: 'ai-center', element: <CandidateAiCenterPage /> },
-              {
-                path: 'ai-center/evaluate',
-                element: <CandidateCvEvaluatePage />,
-              },
-              {
-                path: 'ai-center/optimize',
-                element: <CandidateCvOptimizePage />,
-              },
-            ],
+            path: 'applications/:applicationId',
+            element: <CandidateApplicationDetailPage />,
+          },
+          { path: 'invitations', element: <CandidateInvitationsPage /> },
+          { path: 'saved-jobs', element: <CandidateSavedJobsPage /> },
+          { path: 'messages', element: <CandidateMessagesPage /> },
+          { path: 'notifications', element: <CandidateNotificationsPage /> },
+          { path: 'ai-jobs', element: <CandidateAiCenterPage /> },
+          {
+            path: 'ai-center',
+            element: <Navigate replace to="/candidate/ai-jobs" />,
+          },
+          {
+            path: 'ai-center/evaluate',
+            element: <Navigate replace to="/jobs" />,
+          },
+          {
+            path: 'ai-center/optimize',
+            element: <Navigate replace to="/jobs" />,
           },
         ],
       },

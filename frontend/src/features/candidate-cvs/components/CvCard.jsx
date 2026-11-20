@@ -1,7 +1,11 @@
 import {
+  CircleCheck,
   Download,
   Eye,
   FileText,
+  Globe,
+  LoaderCircle,
+  Lock,
   MoreHorizontal,
   Pencil,
   Sparkles,
@@ -12,12 +16,17 @@ import {
 import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { CANDIDATE_CV_SOURCE_TYPE, CANDIDATE_CV_STATUS } from '@/utils/constant'
+import {
+  CANDIDATE_CV_SOURCE_TYPE,
+  CANDIDATE_CV_STATUS,
+  CANDIDATE_CV_VISIBILITY,
+} from '@/utils/constant'
 import { cn } from '@/lib/utils'
 
 import {
   CV_SOURCE_LABEL,
   CV_STATUS_LABEL,
+  CV_VISIBILITY_LABEL,
   canActivateCv,
   canDownloadCv,
   canReplaceUploadedFile,
@@ -29,10 +38,12 @@ function ActionMenuItem({ onClick, icon: Icon, children, tone = 'default' }) {
   return (
     <button
       className={cn(
-        'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-secondary',
-        tone === 'danger' && 'text-destructive hover:bg-destructive/10',
+        'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors outline-none hover:bg-secondary focus-visible:bg-secondary',
+        tone === 'danger' &&
+          'text-destructive hover:bg-destructive/10 focus-visible:bg-destructive/10',
       )}
       onClick={onClick}
+      role="menuitem"
       type="button"
     >
       <Icon aria-hidden="true" className="size-4 shrink-0" />
@@ -49,6 +60,8 @@ function CvCard({
   onEditMetadata,
   onReplaceFile,
   onSetDefault,
+  onUnsetDefault,
+  onToggleVisibility,
   onActivate,
   onArchive,
 }) {
@@ -57,6 +70,9 @@ function CvCard({
   const updatedLabel = formatCvDateTime(cv.updatedAt)
   const isUploaded = cv.sourceType === CANDIDATE_CV_SOURCE_TYPE.UPLOADED
   const isDraft = cv.status === CANDIDATE_CV_STATUS.DRAFT
+  const isPublic = cv.visibility === CANDIDATE_CV_VISIBILITY.PUBLIC
+  const showActivate = canActivateCv(cv)
+  const showSetDefault = canSetDefaultCv(cv)
 
   useEffect(() => {
     if (!menuOpen) {
@@ -87,165 +103,241 @@ function CvCard({
 
   return (
     <article
+      aria-busy={busy}
       className={cn(
-        'group relative flex h-full flex-col overflow-hidden rounded-2xl border bg-card transition-shadow hover:shadow-md',
-        cv.isDefault && 'border-primary/30 ring-1 ring-primary/15',
+        'group relative flex flex-col gap-4 rounded-xl border border-l-4 bg-card p-4 transition-shadow hover:shadow-md sm:flex-row sm:items-center sm:justify-between sm:p-5',
+        isUploaded
+          ? 'border-sky-500/25 border-l-sky-500 bg-sky-500/[0.015]'
+          : 'border-violet-500/25 border-l-violet-500 bg-violet-500/[0.015]',
+        isDraft &&
+          'border-dashed border-amber-500/50 border-l-solid border-l-amber-500 bg-amber-500/[0.03]',
+        cv.isDefault &&
+          'border-solid border-primary/50 border-l-primary bg-primary/[0.03] ring-2 ring-primary/15',
+        menuOpen && 'z-30',
       )}
     >
-      <div
-        className={cn(
-          'h-1.5 w-full',
-          cv.isDefault
-            ? 'bg-primary'
-            : isDraft
-              ? 'bg-warning'
+      <div className="flex min-w-0 flex-1 items-start gap-4">
+        <button
+          aria-label={`Xem trước ${cv.name}`}
+          className={cn(
+            'relative flex size-12 shrink-0 flex-col items-center justify-center rounded-2xl border transition-opacity outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring',
+            isDraft
+              ? 'border-amber-500/30 bg-amber-500/10 text-amber-700'
               : isUploaded
-                ? 'bg-secondary-foreground/20'
-                : 'bg-primary/40',
-        )}
-      />
-
-      <div className="flex flex-1 flex-col p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          <span
-            className={cn(
-              'flex size-12 shrink-0 items-center justify-center rounded-2xl',
-              isUploaded ? 'bg-secondary text-secondary-foreground' : 'bg-primary/10 text-primary',
-            )}
-          >
-            {isUploaded ? (
-              <FileText aria-hidden="true" className="size-5" />
-            ) : (
-              <Sparkles aria-hidden="true" className="size-5" />
-            )}
-          </span>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {cv.isDefault ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                  <Star aria-hidden="true" className="size-3 fill-current" />
-                  Mặc định
-                </span>
-              ) : null}
-              <span
-                className={cn(
-                  'rounded-full px-2 py-0.5 text-[11px] font-medium',
-                  isDraft
-                    ? 'bg-warning/15 text-warning-foreground'
-                    : 'bg-secondary text-secondary-foreground',
-                )}
-              >
-                {CV_STATUS_LABEL[cv.status] ?? cv.status}
+                ? 'border-sky-500/25 bg-sky-500/10 text-sky-700'
+                : 'border-violet-500/25 bg-violet-500/10 text-violet-700',
+          )}
+          disabled={busy}
+          onClick={() => onPreview(cv)}
+          type="button"
+        >
+          {busy ? (
+            <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
+          ) : isUploaded ? (
+            <>
+              <FileText aria-hidden="true" className="size-4" />
+              <span className="mt-0.5 text-[9px] leading-none font-extrabold tracking-wider">
+                PDF
               </span>
-            </div>
-            <h3 className="mt-2 line-clamp-2 text-base font-semibold tracking-tight">
-              {cv.name}
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {CV_SOURCE_LABEL[cv.sourceType] ?? cv.sourceType}
-              {updatedLabel ? ` · Cập nhật ${updatedLabel}` : null}
-            </p>
-          </div>
+            </>
+          ) : (
+            <>
+              <Sparkles aria-hidden="true" className="size-4" />
+              <span className="mt-0.5 text-[9px] leading-none font-extrabold tracking-wider">
+                WEB
+              </span>
+            </>
+          )}
+        </button>
 
-          <div className="relative shrink-0" ref={menuRef}>
-            <Button
-              aria-expanded={menuOpen}
-              aria-haspopup="true"
-              aria-label="Thao tác CV"
-              disabled={busy}
-              onClick={() => setMenuOpen((open) => !open)}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <MoreHorizontal aria-hidden="true" className="size-4" />
-            </Button>
-            {menuOpen ? (
-              <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border bg-popover p-1 shadow-lg">
-                <ActionMenuItem icon={Eye} onClick={() => run(() => onPreview(cv))}>
-                  Xem trước
-                </ActionMenuItem>
-                {canDownloadCv(cv) ? (
-                  <ActionMenuItem icon={Download} onClick={() => run(() => onDownload(cv))}>
-                    Tải xuống
-                  </ActionMenuItem>
-                ) : null}
-                <ActionMenuItem icon={Pencil} onClick={() => run(() => onEditMetadata(cv))}>
-                  Sửa thông tin
-                </ActionMenuItem>
-                {canReplaceUploadedFile(cv) ? (
-                  <ActionMenuItem icon={Upload} onClick={() => run(() => onReplaceFile(cv))}>
-                    Thay file PDF
-                  </ActionMenuItem>
-                ) : null}
-                {canSetDefaultCv(cv) ? (
-                  <ActionMenuItem icon={Star} onClick={() => run(() => onSetDefault(cv))}>
-                    Đặt làm mặc định
-                  </ActionMenuItem>
-                ) : null}
-                {canActivateCv(cv) ? (
-                  <ActionMenuItem icon={FileText} onClick={() => run(() => onActivate(cv))}>
-                    Kích hoạt CV
-                  </ActionMenuItem>
-                ) : null}
-                <ActionMenuItem
-                  icon={Trash2}
-                  onClick={() => run(() => onArchive(cv))}
-                  tone="danger"
-                >
-                  Xóa khỏi thư viện
-                </ActionMenuItem>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-auto flex flex-wrap gap-2 border-t pt-4">
-          <Button
-            className="flex-1 sm:flex-none"
+        <div className="min-w-0 flex-1">
+          <button
+            className="block max-w-full truncate rounded-sm text-left text-base font-semibold tracking-tight outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring"
             disabled={busy}
             onClick={() => onPreview(cv)}
-            size="sm"
+            title={cv.name}
             type="button"
           >
-            <Eye aria-hidden="true" className="size-3.5" />
-            Xem trước
+            {cv.name}
+          </button>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {cv.isDefault ? (
+              <button
+                aria-label="Đang là CV mặc định. Nhấn để bỏ đặt mặc định"
+                className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-semibold text-primary-foreground shadow-2xs transition-opacity outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                disabled={busy}
+                onClick={() => onUnsetDefault?.(cv)}
+                title="Đang là CV mặc định — Nhấn để bỏ mặc định"
+                type="button"
+              >
+                <Star aria-hidden="true" className="size-3 fill-current" />
+                Mặc định
+              </button>
+            ) : showSetDefault ? (
+              <button
+                aria-label={`Đặt ${cv.name} làm CV mặc định`}
+                className="inline-flex items-center gap-1 rounded-full border border-dashed border-primary/40 bg-primary/5 px-2.5 py-0.5 text-[11px] font-medium text-primary transition-colors outline-none hover:border-primary hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                disabled={busy}
+                onClick={() => onSetDefault?.(cv)}
+                title="Nhấn để đặt làm CV mặc định"
+                type="button"
+              >
+                <Star aria-hidden="true" className="size-3" />
+                Đặt mặc định
+              </button>
+            ) : null}
+
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+                isUploaded
+                  ? 'border-sky-500/30 bg-sky-500/10 text-sky-700'
+                  : 'border-violet-500/30 bg-violet-500/10 text-violet-700',
+              )}
+            >
+              {isUploaded ? (
+                <Upload aria-hidden="true" className="size-3" />
+              ) : (
+                <Sparkles aria-hidden="true" className="size-3" />
+              )}
+              {CV_SOURCE_LABEL[cv.sourceType] ?? cv.sourceType}
+            </span>
+
+            {showActivate ? (
+              <button
+                aria-label={`Bản nháp — Nhấn để kích hoạt ${cv.name}`}
+                className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 transition-colors outline-none hover:bg-amber-500/25 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                disabled={busy}
+                onClick={() => onActivate?.(cv)}
+                title="Đang là Bản nháp — Nhấn để kích hoạt sang Đang dùng"
+                type="button"
+              >
+                {CV_STATUS_LABEL[cv.status] ?? cv.status}
+                <span aria-hidden="true" className="underline">
+                  · Kích hoạt
+                </span>
+              </button>
+            ) : (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium',
+                  isDraft
+                    ? 'border-amber-500/35 bg-amber-500/15 font-semibold text-amber-800'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
+                )}
+              >
+                {isDraft ? null : <CircleCheck aria-hidden="true" className="size-3" />}
+                {CV_STATUS_LABEL[cv.status] ?? cv.status}
+              </span>
+            )}
+
+            {cv.visibility ? (
+              <button
+                aria-label={`Chế độ hiển thị: ${CV_VISIBILITY_LABEL[cv.visibility] ?? cv.visibility}. Nhấn để đổi`}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60',
+                  isPublic
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20'
+                    : 'border-border bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground',
+                )}
+                disabled={busy}
+                onClick={() => onToggleVisibility?.(cv)}
+                title={
+                  isPublic
+                    ? 'Đang Công khai (nhà tuyển dụng có thể tìm thấy) — Nhấn để chuyển sang Riêng tư'
+                    : 'Đang Riêng tư — Nhấn để chuyển sang Công khai'
+                }
+                type="button"
+              >
+                {isPublic ? (
+                  <Globe aria-hidden="true" className="size-3" />
+                ) : (
+                  <Lock aria-hidden="true" className="size-3" />
+                )}
+                {CV_VISIBILITY_LABEL[cv.visibility] ?? cv.visibility}
+              </button>
+            ) : null}
+          </div>
+
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {isDraft && showActivate
+              ? 'Bản nháp chưa dùng để ứng tuyển — kích hoạt khi nội dung đã hoàn chỉnh.'
+              : updatedLabel
+                ? `Cập nhật ${updatedLabel}`
+                : null}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+        {showActivate ? (
+          <Button disabled={busy} onClick={() => onActivate(cv)} size="sm" type="button">
+            <CircleCheck aria-hidden="true" className="size-3.5" />
+            Kích hoạt
           </Button>
-          {canDownloadCv(cv) ? (
-            <Button
-              disabled={busy}
-              onClick={() => onDownload(cv)}
-              size="sm"
-              type="button"
-              variant="outline"
+        ) : null}
+
+        <Button
+          disabled={busy}
+          onClick={() => onPreview(cv)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Eye aria-hidden="true" className="size-3.5" />
+          Xem trước
+        </Button>
+
+        {canDownloadCv(cv) ? (
+          <Button
+            aria-label={`Tải xuống ${cv.name}`}
+            disabled={busy}
+            onClick={() => onDownload(cv)}
+            size="icon"
+            title="Tải xuống PDF"
+            type="button"
+            variant="outline"
+          >
+            <Download aria-hidden="true" className="size-4" />
+          </Button>
+        ) : null}
+
+        <div className="relative shrink-0" ref={menuRef}>
+          <Button
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            aria-label="Thao tác khác"
+            disabled={busy}
+            onClick={() => setMenuOpen((open) => !open)}
+            size="icon"
+            title="Thao tác khác"
+            type="button"
+            variant="ghost"
+          >
+            <MoreHorizontal aria-hidden="true" className="size-4" />
+          </Button>
+          {menuOpen ? (
+            <div
+              className="absolute right-0 z-50 mt-1.5 w-52 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg ring-1 ring-border/40"
+              role="menu"
             >
-              <Download aria-hidden="true" className="size-3.5" />
-              Tải xuống
-            </Button>
-          ) : null}
-          {canActivateCv(cv) ? (
-            <Button
-              disabled={busy}
-              onClick={() => onActivate(cv)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Kích hoạt
-            </Button>
-          ) : null}
-          {canSetDefaultCv(cv) ? (
-            <Button
-              disabled={busy}
-              onClick={() => onSetDefault(cv)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <Star aria-hidden="true" className="size-3.5" />
-              Mặc định
-            </Button>
+              <ActionMenuItem icon={Pencil} onClick={() => run(() => onEditMetadata(cv))}>
+                Sửa thông tin
+              </ActionMenuItem>
+              {canReplaceUploadedFile(cv) ? (
+                <ActionMenuItem icon={Upload} onClick={() => run(() => onReplaceFile(cv))}>
+                  Thay file PDF
+                </ActionMenuItem>
+              ) : null}
+              <ActionMenuItem
+                icon={Trash2}
+                onClick={() => run(() => onArchive(cv))}
+                tone="danger"
+              >
+                Xóa khỏi thư viện
+              </ActionMenuItem>
+            </div>
           ) : null}
         </div>
       </div>

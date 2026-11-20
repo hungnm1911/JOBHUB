@@ -6,6 +6,7 @@ import CenteredState from '@/components/common/CenteredState'
 import PageHeader from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import useDiscoveryCatalogs from '@/features/job-discovery/hooks/useDiscoveryCatalogs'
+import { APPLICATION_STATUS } from '@/utils/constant'
 
 import useCandidateApplications from '../hooks/useCandidateApplications'
 import {
@@ -18,9 +19,20 @@ import ApplicationListStats from './ApplicationListStats'
 import ApplicationListToolbar from './ApplicationListToolbar'
 import WithdrawApplicationModal from './WithdrawApplicationModal'
 
+const QUICK_FILTER_STATUSES = Object.freeze({
+  all: null,
+  reviewing: [APPLICATION_STATUS.SCREENING, APPLICATION_STATUS.CONTACTED],
+  interviewing: [
+    APPLICATION_STATUS.INTERVIEW_SCHEDULED,
+    APPLICATION_STATUS.INTERVIEW_COMPLETED,
+  ],
+  hired: [APPLICATION_STATUS.HIRED],
+})
+
 function CandidateApplicationList() {
   const { provinceNameByCode } = useDiscoveryCatalogs()
   const [status, setStatus] = useState(null)
+  const [quickFilter, setQuickFilter] = useState('all')
   const [searchInput, setSearchInput] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [withdrawTarget, setWithdrawTarget] = useState(null)
@@ -55,15 +67,37 @@ function CandidateApplicationList() {
     return counts
   }, [allApplications])
 
-  // If current status tab becomes empty after data refresh, return to "Tất cả".
-  useEffect(() => {
-    if (loading || !status) {
-      return
+  const effectiveStatus =
+    !loading && status && (countsByStatus[status] ?? 0) === 0 ? null : status
+
+  const visibleApplications = useMemo(() => {
+    const allowedStatuses = QUICK_FILTER_STATUSES[quickFilter]
+    if (!allowedStatuses || effectiveStatus) {
+      return applications
     }
-    if ((countsByStatus[status] ?? 0) === 0) {
+    const allowedSet = new Set(allowedStatuses)
+    return applications.filter((item) => allowedSet.has(item.status))
+  }, [applications, quickFilter, effectiveStatus])
+
+  const handleStatusChange = (nextStatus) => {
+    setStatus(nextStatus)
+    setQuickFilter('all')
+  }
+
+  const handleQuickFilter = (nextQuickFilter) => {
+    setQuickFilter(nextQuickFilter)
+    if (nextQuickFilter === 'hired') {
+      setStatus(APPLICATION_STATUS.HIRED)
+    } else {
       setStatus(null)
     }
-  }, [loading, status, countsByStatus])
+  }
+
+  const activeQuickFilter = effectiveStatus
+    ? effectiveStatus === APPLICATION_STATUS.HIRED
+      ? 'hired'
+      : null
+    : quickFilter
 
   const handleInterviewUpdated = (applicationId, interviewSchedule) => {
     const current =
@@ -81,20 +115,24 @@ function CandidateApplicationList() {
     })
   }
 
+  const hasFilter = Boolean(debouncedQuery || effectiveStatus || quickFilter !== 'all')
+
   const emptyTitle = debouncedQuery
     ? 'Không tìm thấy đơn phù hợp'
-    : status
-      ? `Không có đơn ở trạng thái “${APPLICATION_STATUS_LABEL[status] ?? status}”`
-      : 'Chưa có đơn ứng tuyển'
+    : effectiveStatus
+      ? `Không có đơn ở trạng thái “${APPLICATION_STATUS_LABEL[effectiveStatus] ?? effectiveStatus}”`
+      : quickFilter !== 'all'
+        ? 'Không có đơn trong nhóm này'
+        : 'Chưa có đơn ứng tuyển'
 
   const emptyDescription = debouncedQuery
     ? 'Thử đổi từ khóa hoặc xóa bộ lọc tìm kiếm.'
-    : status
-      ? 'Bộ lọc đang hoạt động. Chọn “Tất cả” hoặc tab khác có số lượng > 0 để xem đơn.'
+    : effectiveStatus || quickFilter !== 'all'
+      ? 'Chọn “Tất cả” hoặc bộ lọc khác để xem các đơn còn lại.'
       : 'Khi bạn nộp hồ sơ cho một việc làm, đơn sẽ xuất hiện tại đây.'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         actions={
           <Button asChild>
@@ -110,16 +148,22 @@ function CandidateApplicationList() {
         title="Đơn ứng tuyển của tôi"
       />
 
-      {!loading && !error ? <ApplicationListStats stats={stats} /> : null}
+      {!loading && !error ? (
+        <ApplicationListStats
+          activeQuickFilter={activeQuickFilter}
+          onQuickFilter={handleQuickFilter}
+          stats={stats}
+        />
+      ) : null}
 
       {!error ? (
         <ApplicationListToolbar
           countsByStatus={countsByStatus}
           onClearSearch={() => setSearchInput('')}
           onSearchInputChange={setSearchInput}
-          onStatusChange={setStatus}
+          onStatusChange={handleStatusChange}
           searchInput={searchInput}
-          status={status}
+          status={effectiveStatus}
           totalCount={stats.total}
         />
       ) : null}
@@ -148,13 +192,14 @@ function CandidateApplicationList() {
         />
       ) : null}
 
-      {!loading && !error && applications.length === 0 ? (
+      {!loading && !error && visibleApplications.length === 0 ? (
         <CenteredState
           action={
-            debouncedQuery || status ? (
+            hasFilter ? (
               <Button
                 onClick={() => {
                   setStatus(null)
+                  setQuickFilter('all')
                   setSearchInput('')
                 }}
                 variant="outline"
@@ -174,14 +219,14 @@ function CandidateApplicationList() {
         />
       ) : null}
 
-      {!loading && !error && applications.length > 0 ? (
+      {!loading && !error && visibleApplications.length > 0 ? (
         <section className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Hiển thị {applications.length} đơn
-            {status || debouncedQuery ? ' theo bộ lọc hiện tại' : null}
+          <p className="text-xs font-medium text-muted-foreground">
+            Hiển thị {visibleApplications.length} đơn
+            {hasFilter ? ' theo bộ lọc hiện tại' : null}
           </p>
           <ul className="space-y-3">
-            {applications.map((application) => (
+            {visibleApplications.map((application) => (
               <li key={application.id}>
                 <ApplicationListCard
                   application={application}

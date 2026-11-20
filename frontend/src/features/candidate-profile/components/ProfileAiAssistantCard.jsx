@@ -18,7 +18,7 @@ function ProfileAiAssistantCard({ completion, canEditContent }) {
       </h2>
       <p className="mt-2 text-sm text-hero-muted">
         {isComplete
-          ? 'Bạn đã hoàn thành các mục cơ bản. Có thể dùng Trung tâm AI để khám phá việc làm phù hợp.'
+          ? 'Bạn đã hoàn thành các mục cơ bản. Có thể dùng Gợi ý việc làm AI để khám phá việc làm phù hợp.'
           : 'Dựa trên dữ liệu hồ sơ hiện có, bạn nên bổ sung các mục sau để tăng khả năng được liên hệ.'}
       </p>
       <ul className="mt-3 space-y-1.5 text-sm text-hero-muted">
@@ -33,9 +33,9 @@ function ProfileAiAssistantCard({ completion, canEditContent }) {
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90" size="sm">
-          <Link to="/candidate/ai-center">
+          <Link to="/candidate/ai-jobs">
             <Sparkles aria-hidden="true" className="size-4" />
-            Trung tâm AI
+            Gợi ý việc làm
           </Link>
         </Button>
         {canEditContent && (

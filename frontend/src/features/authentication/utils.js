@@ -30,10 +30,6 @@ function toPostLoginDestination(user) {
     return '/admin'
   }
 
-  if (user?.role === USER_ROLE.CANDIDATE) {
-    return '/candidate'
-  }
-
   return '/'
 }
 
@@ -86,7 +82,7 @@ function toPostLoginLocation(user, navigationState) {
     return { pathname: '/admin' }
   }
 
-  const defaultPath = user?.role === USER_ROLE.CANDIDATE ? '/candidate' : '/'
+  const defaultPath = '/'
   const from = readReturnLocation(navigationState?.from)
   if (!from) {
     return { pathname: defaultPath }

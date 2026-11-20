@@ -1,23 +1,57 @@
 import { BriefcaseBusiness, CheckCircle2, ClipboardList, MessagesSquare } from 'lucide-react'
 
-function StatCard({ icon: Icon, label, value, hint }) {
+import { cn } from '@/lib/utils'
+
+const STAT_TONES = Object.freeze({
+  total: {
+    iconWrap: 'bg-primary/10 text-primary',
+    activeRing: 'border-primary/40 ring-2 ring-primary/20 bg-primary/[0.03]',
+  },
+  reviewing: {
+    iconWrap: 'bg-indigo-500/15 text-indigo-700',
+    activeRing: 'border-indigo-500/40 ring-2 ring-indigo-500/20 bg-indigo-500/[0.03]',
+  },
+  interviewing: {
+    iconWrap: 'bg-amber-500/15 text-amber-700',
+    activeRing: 'border-amber-500/40 ring-2 ring-amber-500/20 bg-amber-500/[0.04]',
+  },
+  hired: {
+    iconWrap: 'bg-emerald-500/15 text-emerald-700',
+    activeRing: 'border-emerald-500/40 ring-2 ring-emerald-500/20 bg-emerald-500/[0.04]',
+  },
+})
+
+function StatCard({ icon: Icon, label, value, toneKey, active = false, onClick }) {
+  const tone = STAT_TONES[toneKey] ?? STAT_TONES.total
+
   return (
-    <article className="rounded-xl border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
-          {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
-        </div>
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon aria-hidden="true" className="size-5" />
-        </span>
+    <button
+      aria-pressed={active}
+      className={cn(
+        'flex w-full items-center justify-between gap-3 rounded-2xl border bg-card px-4 py-3.5 text-left transition-all',
+        'hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+        active && tone.activeRing,
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className="mt-1 text-2xl font-bold tracking-tight tabular-nums">{value}</p>
       </div>
-    </article>
+      <span
+        className={cn(
+          'flex size-10 shrink-0 items-center justify-center rounded-xl',
+          tone.iconWrap,
+        )}
+      >
+        <Icon aria-hidden="true" className="size-5" />
+      </span>
+    </button>
   )
 }
 
-function ApplicationListStats({ stats }) {
+function ApplicationListStats({ stats, activeQuickFilter = 'all', onQuickFilter }) {
   if (!stats) {
     return null
   }
@@ -25,27 +59,35 @@ function ApplicationListStats({ stats }) {
   return (
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
-        hint="Tất cả đơn bạn đã nộp"
+        active={activeQuickFilter === 'all'}
         icon={BriefcaseBusiness}
         label="Tổng đơn đã gửi"
+        onClick={() => onQuickFilter?.('all')}
+        toneKey="total"
         value={stats.total}
       />
       <StatCard
-        hint="Đang sàng lọc hoặc đã liên hệ"
+        active={activeQuickFilter === 'reviewing'}
         icon={ClipboardList}
-        label="Đang xét duyệt"
+        label="Đang xét duyệt & Liên hệ"
+        onClick={() => onQuickFilter?.('reviewing')}
+        toneKey="reviewing"
         value={stats.reviewing}
       />
       <StatCard
-        hint="Đã lên lịch hoặc đã phỏng vấn"
+        active={activeQuickFilter === 'interviewing'}
         icon={MessagesSquare}
         label="Phỏng vấn"
+        onClick={() => onQuickFilter?.('interviewing')}
+        toneKey="interviewing"
         value={stats.interviewing}
       />
       <StatCard
-        hint="Đơn ở trạng thái Được nhận"
+        active={activeQuickFilter === 'hired'}
         icon={CheckCircle2}
         label="Được nhận"
+        onClick={() => onQuickFilter?.('hired')}
+        toneKey="hired"
         value={stats.hired}
       />
     </section>

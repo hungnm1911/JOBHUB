@@ -1,161 +1,71 @@
 import {
+  ArrowRight,
+  Cake,
   CircleX,
-  Download,
+  FileText,
+  KeyRound,
   LoaderCircle,
+  Mail,
   Pencil,
+  Phone,
   RotateCw,
-  Share2,
+  ShieldCheck,
+  UserRound,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { toast } from 'sonner'
 
-import {
-  downloadOwnCandidateCvApi,
-  saveOwnGeneratedContentApi,
-} from '@/apis/candidate-cv.api'
 import CenteredState from '@/components/common/CenteredState'
 import { Button } from '@/components/ui/button'
-import { CANDIDATE_CV_SOURCE_TYPE, CANDIDATE_CV_STATUS } from '@/utils/constant'
+import { getInitials } from '@/features/authentication/utils'
+import { formatDate } from '@/features/candidate-dashboard/utils'
 
 import useCandidateProfile from '../hooks/useCandidateProfile'
-import { toContentPayload } from '../utils'
-import AboutSection from './AboutSection'
-import CertificationsLanguagesSection from './CertificationsLanguagesSection'
-import {
-  AboutEditor,
-  CertificationEditor,
-  EducationEditor,
-  ExperienceEditor,
-  LanguageEditor,
-  ProjectEditor,
-  SkillsEditor,
-} from './ContentEditors'
-import EducationSection from './EducationSection'
-import ExperienceSection from './ExperienceSection'
-import ProfileAiAssistantCard from './ProfileAiAssistantCard'
+import ChangePasswordModal from './ChangePasswordModal'
 import ProfileBasicEditModal from './ProfileBasicEditModal'
-import ProfileHeroCard from './ProfileHeroCard'
-import ProjectsSection from './ProjectsSection'
-import SkillsSection from './SkillsSection'
+
+function isUsableAvatarUrl(url) {
+  if (!url || typeof url !== 'string') {
+    return false
+  }
+  return !/dicebear\.com|ui-avatars\.com|robohash\.org/i.test(url)
+}
+
+function ProfileFieldRow({ icon: Icon, label, value, muted = false, note = null }) {
+  return (
+    <div className="flex items-start gap-3.5 rounded-xl border bg-background/60 p-4">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icon aria-hidden="true" className="size-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+        <dd
+          className={
+            muted
+              ? 'mt-0.5 text-sm text-muted-foreground italic'
+              : 'mt-0.5 text-sm font-semibold break-words text-foreground'
+          }
+        >
+          {value}
+        </dd>
+        {note && <p className="mt-1 text-xs text-muted-foreground">{note}</p>}
+      </div>
+    </div>
+  )
+}
 
 function CandidateProfile() {
-  const profileState = useCandidateProfile()
-  const [editor, setEditor] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState(null)
-  const [exporting, setExporting] = useState(false)
+  const { loading, error, profile, reload, setLocalProfile } = useCandidateProfile()
   const [editProfileOpen, setEditProfileOpen] = useState(false)
-
-  const {
-    loading,
-    error,
-    profile,
-    content,
-    contentCv,
-    completion,
-    canEditContent,
-    reload,
-    setLocalContent,
-    setLocalProfile,
-  } = profileState
-
-  const persistContent = async (nextContent) => {
-    if (!contentCv?.id) {
-      toast.error('Cần CV Generated để lưu nội dung hồ sơ chi tiết.')
-      return false
-    }
-
-    setSaving(true)
-    setSaveError(null)
-    try {
-      const response = await saveOwnGeneratedContentApi(
-        contentCv.id,
-        toContentPayload(nextContent),
-      )
-      const savedContent = response.cv?.generatedContent ?? nextContent
-      setLocalContent(savedContent)
-      toast.success('Đã lưu nội dung hồ sơ')
-      if (response.cv?.status === CANDIDATE_CV_STATUS.DRAFT) {
-        toast.warning('CV có thể đã chuyển về bản nháp nếu nội dung chưa đủ điều kiện ACTIVE.')
-      }
-      setEditor(null)
-      return true
-    } catch (persistError) {
-      setSaveError(persistError)
-      toast.error(persistError.message || 'Không lưu được nội dung')
-      return false
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const updateListItem = async (key, index, item) => {
-    const current = [...(content[key] ?? [])]
-    if (index == null) {
-      current.push(item)
-    } else {
-      current[index] = item
-    }
-    await persistContent({ ...content, [key]: current })
-  }
-
-  const deleteListItem = async (key, index) => {
-    const label = {
-      workExperiences: 'kinh nghiệm',
-      projects: 'dự án',
-      educations: 'học vấn',
-      certifications: 'chứng chỉ',
-      languages: 'ngoại ngữ',
-    }[key]
-    if (!window.confirm(`Bạn chắc chắn muốn xóa ${label} này?`)) {
-      return
-    }
-    const current = [...(content[key] ?? [])]
-    current.splice(index, 1)
-    await persistContent({ ...content, [key]: current })
-  }
-
-  const handleShare = async () => {
-    toast.info('Chia sẻ hồ sơ công khai chưa khả dụng trên JOBHUB.')
-  }
-
-  const handleExportPdf = async () => {
-    if (
-      !contentCv ||
-      contentCv.sourceType !== CANDIDATE_CV_SOURCE_TYPE.GENERATED ||
-      contentCv.status !== CANDIDATE_CV_STATUS.ACTIVE
-    ) {
-      toast.info('Xuất PDF cần CV Generated đang ACTIVE. Hãy kích hoạt CV trong Quản lý CV.')
-      return
-    }
-
-    setExporting(true)
-    try {
-      const response = await downloadOwnCandidateCvApi(contentCv.id)
-      const blob = response.data
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      const disposition = response.headers?.['content-disposition']
-      const matched = disposition?.match(/filename="?([^"]+)"?/i)
-      anchor.href = url
-      anchor.download = matched?.[1] || `${contentCv.name || 'cv'}.pdf`
-      anchor.click()
-      URL.revokeObjectURL(url)
-      toast.success('Đã tải PDF CV')
-    } catch (exportError) {
-      toast.error(exportError.message || 'Không xuất được PDF')
-    } finally {
-      setExporting(false)
-    }
-  }
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [avatarFailed, setAvatarFailed] = useState(false)
 
   if (loading) {
     return (
       <CenteredState
         icon={LoaderCircle}
         spinning
-        title="Đang tải hồ sơ…"
+        title="Đang tải hồ sơ cá nhân…"
         tone="bg-primary/10 text-primary"
       />
     )
@@ -172,212 +82,174 @@ function CandidateProfile() {
         }
         description={error.message}
         icon={CircleX}
-        title="Không tải được hồ sơ"
+        title="Không tải được hồ sơ cá nhân"
         tone="bg-secondary text-muted-foreground"
       />
     )
   }
 
+  const avatarUrl = profile?.avatarUrl
+  const showAvatar = isUsableAvatarUrl(avatarUrl) && !avatarFailed
+  const initials = getInitials(profile?.fullName)
+  const formattedDob = formatDate(profile?.dateOfBirth)
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
-            <Link className="hover:text-foreground hover:underline" to="/candidate">
+            <Link className="hover:text-foreground hover:underline" to="/">
               Trang chủ
             </Link>
             <span aria-hidden="true"> › </span>
             <span className="text-foreground">Hồ sơ cá nhân</span>
           </nav>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">Hồ sơ cá nhân</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Quản lý thông tin cá nhân, kinh nghiệm và hồ sơ nghề nghiệp của bạn.
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Hồ sơ cá nhân</h1>
+          <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
+            Quản lý thông tin định danh tài khoản ứng viên và bảo mật đăng nhập của bạn.
           </p>
         </div>
+
         <div className="flex flex-wrap gap-2">
           <Button
-            onClick={handleShare}
-            size="sm"
-            title="Chia sẻ công khai chưa được hỗ trợ"
-            type="button"
-            variant="outline"
-          >
-            <Share2 aria-hidden="true" className="size-4" />
-            Chia sẻ hồ sơ
-          </Button>
-          <Button
-            disabled={exporting}
-            onClick={handleExportPdf}
+            onClick={() => setChangePasswordOpen(true)}
             size="sm"
             type="button"
             variant="outline"
           >
-            {exporting ? (
-              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-            ) : (
-              <Download aria-hidden="true" className="size-4" />
-            )}
-            Xuất PDF
+            <KeyRound aria-hidden="true" className="size-4" />
+            Đổi mật khẩu
           </Button>
           <Button onClick={() => setEditProfileOpen(true)} size="sm" type="button">
             <Pencil aria-hidden="true" className="size-4" />
-            Chỉnh sửa hồ sơ
+            Chỉnh sửa thông tin
           </Button>
         </div>
-      </div>
+      </header>
 
-      {!canEditContent && (
-        <p className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
-          Chưa có CV Generated để chỉnh kinh nghiệm/học vấn/kỹ năng. Các mục đó nằm trong nội dung CV,
-          không thuộc User Profile API.{' '}
-          <Link className="font-medium underline" to="/candidate/cvs">
-            Đi tới Quản lý CV
-          </Link>
-        </p>
-      )}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+        <section
+          aria-labelledby="candidate-identity-heading"
+          className="rounded-2xl border bg-card p-5 sm:p-6"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <span className="relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-primary text-lg font-bold text-primary-foreground sm:size-24">
+              {showAvatar ? (
+                <img
+                  alt=""
+                  className="size-full object-cover"
+                  onError={() => setAvatarFailed(true)}
+                  src={avatarUrl}
+                />
+              ) : (
+                initials || <UserRound aria-hidden="true" className="size-8" />
+              )}
+            </span>
 
-      <ProfileHeroCard completion={completion} content={content} profile={profile} />
+            <div className="min-w-0 flex-1">
+              <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                Tài khoản Ứng viên
+              </span>
+              <h2 className="mt-1.5 truncate text-xl font-bold tracking-tight sm:text-2xl" id="candidate-identity-heading">
+                {profile?.fullName || 'Ứng viên'}
+              </h2>
+              <p className="mt-0.5 truncate text-sm text-muted-foreground">{profile?.email}</p>
+            </div>
+          </div>
 
-      <div className="grid gap-5 lg:grid-cols-12 lg:items-start">
-        <div className="min-w-0 space-y-5 lg:col-span-7 xl:col-span-8">
-          <AboutSection
-            canEdit={canEditContent}
-            content={content}
-            onEdit={() => setEditor({ type: 'about' })}
-          />
-          <ExperienceSection
-            canEdit={canEditContent}
-            content={content}
-            onAdd={() => setEditor({ type: 'experience', index: null })}
-            onDelete={(index) => deleteListItem('workExperiences', index)}
-            onEdit={(index) => setEditor({ type: 'experience', index })}
-          />
-          <ProjectsSection
-            canEdit={canEditContent}
-            content={content}
-            onAdd={() => setEditor({ type: 'project', index: null })}
-            onDelete={(index) => deleteListItem('projects', index)}
-            onEdit={(index) => setEditor({ type: 'project', index })}
-          />
-        </div>
+          <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+            <ProfileFieldRow
+              icon={UserRound}
+              label="Họ và tên"
+              muted={!profile?.fullName}
+              value={profile?.fullName || 'Chưa cập nhật'}
+            />
+            <ProfileFieldRow
+              icon={Mail}
+              label="Email đăng nhập"
+              note="Email định danh tài khoản (chỉ đọc)"
+              value={profile?.email || '—'}
+            />
+            <ProfileFieldRow
+              icon={Phone}
+              label="Số điện thoại"
+              muted={!profile?.phoneNumber}
+              value={profile?.phoneNumber || 'Chưa cập nhật số điện thoại'}
+            />
+            <ProfileFieldRow
+              icon={Cake}
+              label="Ngày sinh"
+              muted={!formattedDob}
+              value={formattedDob || 'Chưa cập nhật ngày sinh'}
+            />
+          </dl>
+        </section>
 
-        <aside className="min-w-0 space-y-5 lg:col-span-5 xl:col-span-4">
-          <SkillsSection
-            canEdit={canEditContent}
-            content={content}
-            onEdit={() => setEditor({ type: 'skills' })}
-            skillTags={contentCv?.skillTags ?? []}
-          />
-          <EducationSection
-            canEdit={canEditContent}
-            content={content}
-            onAdd={() => setEditor({ type: 'education', index: null })}
-            onDelete={(index) => deleteListItem('educations', index)}
-            onEdit={(index) => setEditor({ type: 'education', index })}
-          />
-          <CertificationsLanguagesSection
-            canEdit={canEditContent}
-            content={content}
-            onAddCertification={() => setEditor({ type: 'certification', index: null })}
-            onAddLanguage={() => setEditor({ type: 'language', index: null })}
-            onDeleteCertification={(index) => deleteListItem('certifications', index)}
-            onDeleteLanguage={(index) => deleteListItem('languages', index)}
-            onEditCertification={(index) => setEditor({ type: 'certification', index })}
-            onEditLanguage={(index) => setEditor({ type: 'language', index })}
-          />
+        <aside className="space-y-4">
+          <section className="rounded-2xl border bg-card p-5">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ShieldCheck aria-hidden="true" className="size-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold">Bảo mật tài khoản</h2>
+                <p className="text-xs text-muted-foreground">Mật khẩu &amp; phiên đăng nhập</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              Đổi mật khẩu định kỳ để bảo vệ tài khoản. Khi đổi mật khẩu, tất cả các thiết bị đang
+              đăng nhập sẽ tự động đăng xuất.
+            </p>
+            <Button
+              className="mt-4 w-full"
+              onClick={() => setChangePasswordOpen(true)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <KeyRound aria-hidden="true" className="size-4" />
+              Đổi mật khẩu
+            </Button>
+          </section>
+
+          <section className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                <FileText aria-hidden="true" className="size-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold">Hồ sơ nghề nghiệp &amp; CV</h2>
+                <p className="text-xs text-muted-foreground">Tách biệt với thông tin tài khoản</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              Theo thiết kế của JOBHUB, kinh nghiệm làm việc, học vấn, kỹ năng, dự án và chứng chỉ
+              được quản lý riêng trong từng CV tại <strong>Quản lý CV</strong> (để bạn có thể tạo
+              nhiều CV cho các vị trí khác nhau).
+            </p>
+            <Button asChild className="mt-4 w-full" size="sm">
+              <Link to="/candidate/cvs">
+                Đi tới Quản lý CV
+                <ArrowRight aria-hidden="true" className="size-4" />
+              </Link>
+            </Button>
+          </section>
         </aside>
       </div>
-
-      <ProfileAiAssistantCard canEditContent={canEditContent} completion={completion} />
 
       {editProfileOpen && (
         <ProfileBasicEditModal
           onClose={() => setEditProfileOpen(false)}
-          onSaved={setLocalProfile}
+          onSaved={(nextProfile) => {
+            setAvatarFailed(false)
+            setLocalProfile(nextProfile)
+          }}
           profile={profile}
         />
       )}
 
-      {editor?.type === 'about' && (
-        <AboutEditor
-          busy={saving}
-          error={saveError}
-          initialValue={content.professionalSummary}
-          onClose={() => setEditor(null)}
-          onSave={async (summary) => {
-            await persistContent({
-              ...content,
-              professionalSummary: summary,
-              professionalSummaryHtml: null,
-            })
-          }}
-        />
-      )}
-
-      {editor?.type === 'skills' && (
-        <SkillsEditor
-          busy={saving}
-          error={saveError}
-          initialValue={content.skills}
-          onClose={() => setEditor(null)}
-          onSave={async (skills) => {
-            await persistContent({ ...content, skills })
-          }}
-        />
-      )}
-
-      {editor?.type === 'experience' && (
-        <ExperienceEditor
-          busy={saving}
-          error={saveError}
-          initialValue={
-            editor.index == null ? null : content.workExperiences?.[editor.index] ?? null
-          }
-          onClose={() => setEditor(null)}
-          onSave={(item) => updateListItem('workExperiences', editor.index, item)}
-        />
-      )}
-
-      {editor?.type === 'project' && (
-        <ProjectEditor
-          busy={saving}
-          error={saveError}
-          initialValue={editor.index == null ? null : content.projects?.[editor.index] ?? null}
-          onClose={() => setEditor(null)}
-          onSave={(item) => updateListItem('projects', editor.index, item)}
-        />
-      )}
-
-      {editor?.type === 'education' && (
-        <EducationEditor
-          busy={saving}
-          error={saveError}
-          initialValue={editor.index == null ? null : content.educations?.[editor.index] ?? null}
-          onClose={() => setEditor(null)}
-          onSave={(item) => updateListItem('educations', editor.index, item)}
-        />
-      )}
-
-      {editor?.type === 'certification' && (
-        <CertificationEditor
-          busy={saving}
-          error={saveError}
-          initialValue={
-            editor.index == null ? null : content.certifications?.[editor.index] ?? null
-          }
-          onClose={() => setEditor(null)}
-          onSave={(item) => updateListItem('certifications', editor.index, item)}
-        />
-      )}
-
-      {editor?.type === 'language' && (
-        <LanguageEditor
-          busy={saving}
-          error={saveError}
-          initialValue={editor.index == null ? null : content.languages?.[editor.index] ?? null}
-          onClose={() => setEditor(null)}
-          onSave={(item) => updateListItem('languages', editor.index, item)}
-        />
+      {changePasswordOpen && (
+        <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
       )}
     </div>
   )

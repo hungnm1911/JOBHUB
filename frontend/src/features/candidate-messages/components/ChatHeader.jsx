@@ -97,10 +97,10 @@ function ChatHeader({ application, mode, onBack = null }) {
             <MoreHorizontal aria-hidden="true" className="size-4" />
           </Button>
           {menuOpen ? (
-            <div className="absolute top-full right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-lg border bg-popover p-1 shadow-lg">
+            <div className="absolute top-full right-0 z-50 mt-1.5 w-52 overflow-hidden rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg ring-1 ring-border/40">
               {application?.id ? (
                 <Link
-                  className="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-sm hover:bg-secondary"
+                  className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors hover:bg-secondary/80 sm:text-sm"
                   onClick={() => setMenuOpen(false)}
                   to={`/candidate/applications/${encodeURIComponent(application.id)}`}
                 >
@@ -110,7 +110,7 @@ function ChatHeader({ application, mode, onBack = null }) {
               ) : null}
               {jobId ? (
                 <Link
-                  className="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-sm hover:bg-secondary"
+                  className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors hover:bg-secondary/80 sm:text-sm"
                   onClick={() => setMenuOpen(false)}
                   to={`/jobs/${encodeURIComponent(jobId)}`}
                 >

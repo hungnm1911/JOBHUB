@@ -55,6 +55,8 @@ const API_ERROR_MESSAGE = Object.freeze({
   JOB_DISCOVERY_NOT_AVAILABLE: 'Tài khoản hiện tại không sử dụng được chức năng tìm việc làm.',
   APPLICATION_ALREADY_EXISTS: 'Bạn đã ứng tuyển việc làm này.',
   JOB_NOT_ACCEPTING_APPLICATIONS: 'Việc làm này không còn nhận hồ sơ.',
+  CV_EVALUATION_UNAVAILABLE:
+    'AI chưa đánh giá được CV lúc này. Vui lòng thử lại sau ít phút.',
 })
 
 // Must stay aligned with backend/src/constants/job-status.js.
@@ -251,6 +253,17 @@ const CV_LANGUAGE_PROFICIENCY = Object.freeze({
   NATIVE: 'NATIVE',
 })
 
+// Must stay aligned with backend/src/constants/harvard-cv-section.js.
+const HARVARD_CV_SECTION = Object.freeze({
+  PROFESSIONAL_SUMMARY: 'professionalSummary',
+  EDUCATIONS: 'educations',
+  SKILLS: 'skills',
+  WORK_EXPERIENCES: 'workExperiences',
+  PROJECTS: 'projects',
+  CERTIFICATIONS: 'certifications',
+  LANGUAGES: 'languages',
+})
+
 const USER_STATUS = Object.freeze({
   PENDING_ACTIVATION: 'PENDING_ACTIVATION',
   ACTIVE: 'ACTIVE',
@@ -321,6 +334,7 @@ export {
   CANDIDATE_CV_UPLOADED_PDF,
   CANDIDATE_CV_VISIBILITY,
   CV_LANGUAGE_PROFICIENCY,
+  HARVARD_CV_SECTION,
   API_CONFIG,
   API_ERROR_MESSAGE,
   AUTH_STORAGE_KEY,

@@ -1,3 +1,5 @@
+import { API_ERROR_MESSAGE } from '@/utils/constant'
+
 const FIELD_REVIEW_LABEL = Object.freeze({
   skills: 'Kỹ năng',
   category: 'Lĩnh vực',
@@ -58,10 +60,24 @@ function normalizeEvaluationResult(payload) {
   }
 }
 
+function toCvEvaluationErrorMessage(error) {
+  if (
+    error?.details?.reason === 'INVALID_CV_EVALUATION' ||
+    error?.status === 502 ||
+    error?.message === 'Internal server error' ||
+    /CV evaluation is temporarily unavailable/i.test(error?.message ?? '')
+  ) {
+    return API_ERROR_MESSAGE.CV_EVALUATION_UNAVAILABLE
+  }
+
+  return error?.message || API_ERROR_MESSAGE.CV_EVALUATION_UNAVAILABLE
+}
+
 export {
   cvSectionLabel,
   fieldReviewLabel,
   formatMatchScore,
   normalizeEvaluationResult,
   scoreTone,
+  toCvEvaluationErrorMessage,
 }
