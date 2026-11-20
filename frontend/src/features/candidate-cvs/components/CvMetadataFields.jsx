@@ -57,8 +57,7 @@ function CvMetadataFields({
   catalogsLoading = false,
   catalogsError = null,
 }) {
-  const [selectedFieldId, setSelectedFieldId] = useState('')
-  const [positionsView, setPositionsView] = useState({ fieldId: null, positions: [] })
+  const [positionsByField, setPositionsByField] = useState({})
 
   const [skillInput, setSkillInput] = useState('')
   const [locProvinceCode, setLocProvinceCode] = useState('')
@@ -66,43 +65,46 @@ function CvMetadataFields({
   const [districtsByProvince, setDistrictsByProvince] = useState({})
 
   const activeFieldId = useMemo(() => {
-    if (selectedFieldId && fields.some((f) => f.id === selectedFieldId)) {
-      return selectedFieldId
-    }
     if (values.categoryId && fields.some((f) => f.id === values.categoryId)) {
       return values.categoryId
     }
-    return ''
-  }, [selectedFieldId, values.categoryId, fields])
+    // CandidateCV stores one Category ID. For a saved POSITION, recover its
+    // FIELD from the canonical catalog when this form mounts again.
+    return fields.find((field) => positionsByField[field.id]?.some(
+      (position) => position.id === values.categoryId,
+    ))?.id ?? ''
+  }, [values.categoryId, fields, positionsByField])
 
-  const positionsLoading = Boolean(activeFieldId) && positionsView.fieldId !== activeFieldId
+  const positionsLoading = Boolean(activeFieldId) && !positionsByField[activeFieldId]
   const positions = useMemo(
-    () => (positionsView.fieldId === activeFieldId ? positionsView.positions : []),
-    [positionsView, activeFieldId],
+    () => positionsByField[activeFieldId] ?? [],
+    [positionsByField, activeFieldId],
   )
   const districtsLoading = Boolean(locProvinceCode) && !districtsByProvince[locProvinceCode]
 
   useEffect(() => {
-    if (!activeFieldId) {
+    const fieldIds = activeFieldId ? [activeFieldId] : values.categoryId ? fields.map((field) => field.id) : []
+    const missingFieldIds = fieldIds.filter((fieldId) => !positionsByField[fieldId])
+    if (missingFieldIds.length === 0) {
       return undefined
     }
     let active = true
-    listPositionCategoriesApi(activeFieldId).then(
-      (res) => {
-        if (active) {
-          setPositionsView({ fieldId: activeFieldId, positions: res.positions ?? [] })
-        }
-      },
-      () => {
-        if (active) {
-          setPositionsView({ fieldId: activeFieldId, positions: [] })
-        }
-      },
-    )
+    Promise.all(missingFieldIds.map(async (fieldId) => {
+      try {
+        const { positions } = await listPositionCategoriesApi(fieldId)
+        return [fieldId, positions ?? []]
+      } catch {
+        return [fieldId, []]
+      }
+    })).then((entries) => {
+      if (active) {
+        setPositionsByField((current) => ({ ...current, ...Object.fromEntries(entries) }))
+      }
+    })
     return () => {
       active = false
     }
-  }, [activeFieldId])
+  }, [activeFieldId, values.categoryId, fields, positionsByField])
 
   useEffect(() => {
     if (!locProvinceCode || districtsByProvince[locProvinceCode]) {
@@ -136,7 +138,6 @@ function CvMetadataFields({
     values.categoryId && values.categoryId !== activeFieldId ? values.categoryId : ''
 
   const handleFieldSelect = (nextFieldId) => {
-    setSelectedFieldId(nextFieldId)
     onChange({
       ...values,
       categoryId: nextFieldId,
