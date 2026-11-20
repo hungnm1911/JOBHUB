@@ -485,8 +485,8 @@ function CvGeneratedContentFields({ content, onChange, metadataSkillTags = [] })
                       institutionName: '',
                       degree: '',
                       fieldOfStudy: '',
-                      startDate: '',
-                      endDate: '',
+                      startDate: null,
+                      endDate: null,
                     },
                   ])
                 }
@@ -614,8 +614,8 @@ function CvGeneratedContentFields({ content, onChange, metadataSkillTags = [] })
                     {
                       companyName: '',
                       position: '',
-                      startDate: '',
-                      endDate: '',
+                      startDate: null,
+                      endDate: null,
                       description: '',
                       achievements: [],
                     },
@@ -728,10 +728,7 @@ function CvGeneratedContentFields({ content, onChange, metadataSkillTags = [] })
                         className={textareaClassName}
                         onChange={(e) =>
                           patchListItem('workExperiences', workExperiences, index, {
-                            achievements: e.target.value
-                              .split('\n')
-                              .map((s) => s.trim())
-                              .filter(Boolean),
+                            achievements: e.target.value.split('\n'),
                           })
                         }
                         placeholder="Giảm 30% thời gian tải trang..."
@@ -819,14 +816,11 @@ function CvGeneratedContentFields({ content, onChange, metadataSkillTags = [] })
                           className="h-9"
                           onChange={(e) =>
                             patchListItem('projects', projects, index, {
-                              technologies: e.target.value
-                                .split(',')
-                                .map((s) => s.trim())
-                                .filter(Boolean),
+                              technologies: e.target.value.split(','),
                             })
                           }
                           placeholder="React, Node.js, MongoDB"
-                          value={(proj.technologies ?? []).join(', ')}
+                          value={(proj.technologies ?? []).join(',')}
                         />
                       </label>
                       <label className="block space-y-1">
@@ -872,8 +866,8 @@ function CvGeneratedContentFields({ content, onChange, metadataSkillTags = [] })
                     {
                       name: '',
                       issuer: '',
-                      issueDate: '',
-                      expirationDate: '',
+                      issueDate: null,
+                      expirationDate: null,
                       credentialId: '',
                       credentialUrl: '',
                     },

@@ -37,6 +37,8 @@ function emptyGeneratedContent() {
 
 function toContentPayload(content) {
   const source = content ?? emptyGeneratedContent()
+  // The form keeps trailing list separators while typing; remove blank entries
+  // only when preparing the request for the backend's string-array contract.
   return {
     personalInfo: {
       fullName: source.personalInfo?.fullName ?? null,
@@ -50,8 +52,14 @@ function toContentPayload(content) {
     professionalSummaryHtml: source.professionalSummaryHtml ?? null,
     educations: [...(source.educations ?? [])],
     skills: [...(source.skills ?? [])],
-    workExperiences: [...(source.workExperiences ?? [])],
-    projects: [...(source.projects ?? [])],
+    workExperiences: (source.workExperiences ?? []).map((experience) => ({
+      ...experience,
+      achievements: (experience.achievements ?? []).map((item) => item.trim()).filter(Boolean),
+    })),
+    projects: (source.projects ?? []).map((project) => ({
+      ...project,
+      technologies: (project.technologies ?? []).map((item) => item.trim()).filter(Boolean),
+    })),
     certifications: [...(source.certifications ?? [])],
     languages: [...(source.languages ?? [])],
     hiddenSections: [...(source.hiddenSections ?? [])],

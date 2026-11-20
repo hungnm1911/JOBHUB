@@ -29,6 +29,8 @@ function CvEditMetadataModal({ cv, onClose, onUpdated }) {
   const [activeTab, setActiveTab] = useState('metadata')
   const [busy, setBusy] = useState(false)
   const [loadedDetailCvId, setLoadedDetailCvId] = useState(null)
+  const [detailError, setDetailError] = useState(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const loadingDetail = isGenerated && loadedDetailCvId !== cv.id
 
   const [values, setValues] = useState({
@@ -56,23 +58,29 @@ function CvEditMetadataModal({ cv, onClose, onUpdated }) {
         if (active) {
           if (detail) {
             setGeneratedContent(detail.generatedContent ?? emptyGeneratedContent())
+            setLoadedDetailCvId(cv.id)
+            setDetailError(null)
+          } else {
+            setDetailError('Không tải được nội dung CV.')
           }
-          setLoadedDetailCvId(cv.id)
         }
       },
-      () => {
+      (error) => {
         if (active) {
-          setLoadedDetailCvId(cv.id)
+          setDetailError(error.message || 'Không tải được nội dung CV.')
         }
       },
     )
     return () => {
       active = false
     }
-  }, [cv.id, isGenerated])
+  }, [cv.id, isGenerated, loadAttempt])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    if (busy || loadingDetail) {
+      return
+    }
     if (!values.name.trim() || !values.categoryId) {
       toast.error('Vui lòng nhập tên CV và chọn ngành nghề.')
       return
@@ -164,6 +172,17 @@ function CvEditMetadataModal({ cv, onClose, onUpdated }) {
       )}
 
       <form className="space-y-4" id="cv-edit-form" onSubmit={handleSubmit}>
+        {detailError && (
+          <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm" role="alert">
+            <p>{detailError} Vui lòng tải lại trước khi lưu thay đổi.</p>
+            <Button onClick={() => {
+              setDetailError(null)
+              setLoadAttempt((attempt) => attempt + 1)
+            }} type="button" variant="outline">
+              Thử lại
+            </Button>
+          </div>
+        )}
         {(!isGenerated || activeTab === 'metadata') && (
           <CvMetadataFields
             catalogsError={catalogs.error}
@@ -178,7 +197,7 @@ function CvEditMetadataModal({ cv, onClose, onUpdated }) {
         )}
 
         {isGenerated && activeTab === 'content' && (
-          loadingDetail ? (
+          detailError ? null : loadingDetail ? (
             <p className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
               <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               Đang tải nội dung CV…

@@ -24,11 +24,25 @@ V7's approved business specification is at `docs/product/backend/versions/v7-can
 persists optional normalized content in a single `DRAFT` insert, and validates
 normalized content plus exact completeness before a single direct `ACTIVE`
 insert for `COMPLETE`. Focused create, Builder, activation, and AI-V06 Draft
-regressions passed; the common backend gate was not run by request.
+regressions passed initially; the common backend gate was not run at that time
+by request. Current web Builder repair verification below includes the full gate.
 Incomplete `COMPLETE` content now returns stable unmet-requirement codes in
 `error.details.unmetRequirements` from the canonical completeness evaluator;
 the existing status, error envelope, successful response shapes, and failure
 non-persistence remain intact.
+
+The 2026-11-20 web Builder repair has focused regression coverage for restoring
+saved POSITION Categories in the frontend, preserving all four optional content
+sections across create/edit, optional dates, and blocking content saves after a
+failed detail read. Multi-item achievements and technologies preserve typed
+separators and are normalized only for submission. Harvard PDF dates now use
+stable day/month/year formatting.
+Database/API metadata and PDF content remain independent under BR-31.
+The common backend gate passes (210 files / 2,189 tests), including direct
+`COMPLETE` creation and existing CV lifecycle coverage. The frontend build and
+scoped lint pass; the common frontend gate remains
+blocked by existing Job Discovery authorization tests and application-area lint
+errors outside the CV changes. This repair has no live-browser acceptance claim.
 
 ## Deferred / not started
 
@@ -79,6 +93,27 @@ non-persistence remain intact.
 - **Implemented; verified:** V7 Slice 01 — Candidate Profile (F01; BR-01–BR-03): authenticated Candidate reads and updates own Profile via `GET/PATCH /api/candidate/profile` reusing existing `users` persistence only; F01 exposes read/write `fullName`, `avatarUrl`, `dateOfBirth`, `phoneNumber` and read-only `email`; updates mutate the existing User document (no `CandidateProfile` collection/model, no User schema migration/index/multi-document transaction); `email`, `role`, `status`, `passwordHash`, `emailVerifiedAt`, `mustChangePassword`, sessions, and tokens are unchanged; Profile mutation does not touch CandidateCV and the Profile service boundary does not import CV workflows. Focused coverage in `test/candidate/v7-candidate-profile.test.js` (7 tests).
 
 ## Verification status
+
+- 2026-11-20 Builder round-trip repair: focused backend command
+  `npm test -- test/candidate/v7-candidate-cv-builder-roundtrip.test.js test/candidate/v7-candidate-cv-preview-download.test.js test/candidate/v7-candidate-cv-harvard-unicode.test.js test/candidate/v7-candidate-cv-create-intent.test.js test/candidate/v7-candidate-cv-update-metadata.test.js`
+  passed (5 files / 29 tests), including decoded PDF text for optional content,
+  pagination, explicit hidden sections, and formatted dates. The new frontend
+  `test:candidate-cvs` command passed (3 tests), including separate red/green
+  reproduction of lost achievement newlines and technology commas; scoped ESLint, `yarn build`,
+  `test:job-cards`, `test:featured-homepage`, and `test:rich-text` passed.
+  `yarn verify:agent` failed first on the existing JSDOM global `navigator`
+  assignment under Node 22; with
+  `NODE_OPTIONS=--no-experimental-global-navigator`, it reached 3 failing
+  Job Discovery authorization assertions. Separate full `yarn lint` reported
+  existing `react-hooks/set-state-in-effect` errors in
+  `ApplicationConversationPanel.jsx` and `useCandidateApplicationDetail.js`.
+  The CV regression command is included in the frontend verification gate.
+  Full backend `npm run verify:agent` passed: ESLint (0 errors / 2 existing
+  unused-variable warnings in `test/job/v6-acceptance.test.js`), architecture
+  verification (ARCH-001 through ARCH-019), and Vitest (210 files / 2,189 tests).
+  Final `git diff --check` passed. Runtime MongoDB was queried read-only to
+  distinguish persisted metadata from empty optional content; no live CandidateCV
+  writes or browser end-to-end acceptance were performed.
 
 - V7 Extension Slice 03 `COMPLETE` rejection feedback: focused Vitest create-intent, Builder, activation, and AI-V06 Draft regressions passed (4 files / 28 tests). Targeted ESLint and `git diff --check` passed. The common backend `verify:agent` gate was not run by explicit request.
 

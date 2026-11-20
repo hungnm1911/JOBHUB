@@ -123,6 +123,24 @@ const joinPresent = (parts, separator = " | ") => {
     .join(separator);
 };
 
+const cvDateFormatter = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+const toDisplayDate = (value) => {
+  if (value == null || value === "") return "";
+  // Preserve legacy year/month precision without inventing a specific day.
+  if (typeof value === "string" && /^\d{4}$/u.test(value)) return value;
+  if (typeof value === "string" && /^\d{4}-\d{2}$/u.test(value)) {
+    return `${value.slice(5)}/${value.slice(0, 4)}`;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : cvDateFormatter.format(date);
+};
+
 const wrapText = (text, font, fontSize, maxWidth) => {
   const normalized = toDisplayText(text);
 
@@ -575,7 +593,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
           [education.institutionName, education.degree, education.fieldOfStudy],
           ", ",
         );
-        const dates = joinPresent([education.startDate, education.endDate], " - ");
+        const dates = joinPresent([education.startDate, education.endDate].map(toDisplayDate), " - ");
 
         if (headline !== "") {
           drawLines({
@@ -617,7 +635,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
           " — ",
         );
         const dates = joinPresent(
-          [experience.startDate, experience.endDate],
+          [experience.startDate, experience.endDate].map(toDisplayDate),
           " - ",
         );
 
@@ -743,7 +761,7 @@ const renderHarvardCandidateCvPdf = async (generatedContent = {}) => {
           " — ",
         );
         const dates = joinPresent(
-          [certification.issueDate, certification.expirationDate],
+          [certification.issueDate, certification.expirationDate].map(toDisplayDate),
           " - ",
         );
         const credential = joinPresent([
