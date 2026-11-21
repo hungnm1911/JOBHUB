@@ -276,15 +276,17 @@ backend, không có service riêng.
    thường. Kiểm tra `docker compose version`.
 2. Tạo `backend/.env` từ `backend/.env.example` nếu chưa có và điền cấu hình thật.
    Compose đặt `NODE_ENV=development`, `PORT=8000`, URL callback và CORS cho hai
-   cổng mặc định. Không cần cài Node/Yarn trên host hay tạo `frontend/.env`.
+   cổng mặc định. Không cần cài Node/Yarn trên host hay tạo `frontend/.env` hoặc
+   root `.env`.
 3. Từ thư mục gốc, chạy:
 
    ```bash
-   docker compose up --build
+   docker compose up -d --build
    ```
 
 Mở `http://localhost:5173` và kiểm tra API ở `http://localhost:8000/api/`.
-`docker compose down` dừng stack. Sau khi đổi lockfile, dùng
+Những lần chạy sau chỉ cần `docker compose up -d`. `docker compose down` dừng
+stack. Sau khi đổi lockfile, dùng
 `docker compose down -v` rồi build lại để tạo mới các volume dependency.
 
 Backend dev dùng DNS `1.1.1.1` và `8.8.8.8` để tra SRV của Atlas, tránh DNS
@@ -306,13 +308,13 @@ HTTPS cho API và Socket.IO, không phụ thuộc Docker network hay Nginx proxy
 Để kiểm tra cấu hình production trên máy cá nhân:
 
 ```bash
-cp .env.example .env
 docker compose -f compose.prod.yaml up --build -d
 ```
 
-Mặc định `.env.example` dùng `http://localhost:8080` cho frontend và
-`http://localhost:8000` cho backend. Compose đọc `backend/.env` chỉ để chạy
-local; khi triển khai trên cloud, đặt secret bằng Environment/Secret Manager.
+Compose mặc định dùng `http://localhost:8080` cho frontend và
+`http://localhost:8000` cho backend; không cần env ở root. Compose đọc
+`backend/.env` chỉ để chạy local; khi triển khai trên cloud, đặt secret bằng
+Environment/Secret Manager.
 Đổi public origin không cần sửa source, nhưng Vite đóng `VITE_*` vào JavaScript
 lúc **build**, nên đổi backend URL cần build/deploy lại frontend.
 Compose production dùng DNS `1.1.1.1`/`8.8.8.8` khi chạy local; có thể đổi bằng
