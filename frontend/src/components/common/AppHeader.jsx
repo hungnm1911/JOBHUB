@@ -1,7 +1,8 @@
-import { Bell, MessageSquare } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
+import HeaderNotificationsMenu from '@/features/candidate-notifications/components/HeaderNotificationsMenu'
 import { cn } from '@/lib/utils'
 
 const CANDIDATE_PRIMARY_NAV_LINKS = Object.freeze([
@@ -9,11 +10,6 @@ const CANDIDATE_PRIMARY_NAV_LINKS = Object.freeze([
   { to: '/candidate/applications', label: 'Đơn ứng tuyển' },
   { to: '/candidate/invitations', label: 'Lời mời ứng tuyển' },
   { to: '/candidate/ai-jobs', label: 'Gợi ý việc làm' },
-])
-
-const CANDIDATE_QUICK_ACTIONS = Object.freeze([
-  { to: '/candidate/messages', label: 'Tin nhắn', icon: MessageSquare },
-  { to: '/candidate/notifications', label: 'Thông báo', icon: Bell },
 ])
 
 function AppHeader({ accountArea, isCandidate = false }) {
@@ -59,20 +55,15 @@ function AppHeader({ accountArea, isCandidate = false }) {
 
           {isCandidate && (
             <div className="flex shrink-0 items-center gap-1 border-l pl-2 sm:pl-3">
-              {CANDIDATE_QUICK_ACTIONS.map((item) => {
-                const Icon = item.icon
-                return (
-                  <NavLink
-                    aria-label={item.label}
-                    className={iconLinkClass}
-                    key={item.to}
-                    title={item.label}
-                    to={item.to}
-                  >
-                    <Icon aria-hidden="true" className="size-[18px]" />
-                  </NavLink>
-                )
-              })}
+              <NavLink
+                aria-label="Tin nhắn"
+                className={iconLinkClass}
+                title="Tin nhắn"
+                to="/candidate/messages"
+              >
+                <MessageSquare aria-hidden="true" className="size-[18px]" />
+              </NavLink>
+              <HeaderNotificationsMenu />
             </div>
           )}
         </nav>

@@ -223,13 +223,20 @@ function CandidateCvManagement() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
+          <Button
+            asChild
+            className="border-sky-500/40 bg-sky-500/10 text-sky-700 shadow-none hover:bg-sky-500/15 hover:text-sky-800"
+            variant="outline"
+          >
             <Link to="/candidate/cvs/create?method=upload">
               <Upload aria-hidden="true" className="size-4" />
               Upload CV
             </Link>
           </Button>
-          <Button asChild>
+          <Button
+            asChild
+            className="bg-violet-600 text-white shadow-sm hover:bg-violet-600/90"
+          >
             <Link to="/candidate/cvs/create">
               <FilePlus2 aria-hidden="true" className="size-4" />
               Tạo CV mới
@@ -266,13 +273,20 @@ function CandidateCvManagement() {
         <CenteredState
           action={
             <div className="flex flex-wrap justify-center gap-2">
-              <Button asChild variant="outline">
+              <Button
+                asChild
+                className="border-sky-500/40 bg-sky-500/10 text-sky-700 shadow-none hover:bg-sky-500/15 hover:text-sky-800"
+                variant="outline"
+              >
                 <Link to="/candidate/cvs/create?method=upload">
                   <Upload aria-hidden="true" className="size-4" />
                   Upload CV
                 </Link>
               </Button>
-              <Button asChild>
+              <Button
+                asChild
+                className="bg-violet-600 text-white shadow-sm hover:bg-violet-600/90"
+              >
                 <Link to="/candidate/cvs/create">
                   <FilePlus2 aria-hidden="true" className="size-4" />
                   Tạo CV mới

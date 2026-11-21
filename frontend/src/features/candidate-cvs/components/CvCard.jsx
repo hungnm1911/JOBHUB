@@ -6,14 +6,12 @@ import {
   Globe,
   LoaderCircle,
   Lock,
-  MoreHorizontal,
   Pencil,
   Sparkles,
   Star,
   Trash2,
   Upload,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -34,24 +32,6 @@ import {
   formatCvDateTime,
 } from '../utils'
 
-function ActionMenuItem({ onClick, icon: Icon, children, tone = 'default' }) {
-  return (
-    <button
-      className={cn(
-        'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors outline-none hover:bg-secondary focus-visible:bg-secondary',
-        tone === 'danger' &&
-          'text-destructive hover:bg-destructive/10 focus-visible:bg-destructive/10',
-      )}
-      onClick={onClick}
-      role="menuitem"
-      type="button"
-    >
-      <Icon aria-hidden="true" className="size-4 shrink-0" />
-      {children}
-    </button>
-  )
-}
-
 function CvCard({
   cv,
   busy,
@@ -65,41 +45,12 @@ function CvCard({
   onActivate,
   onArchive,
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef(null)
   const updatedLabel = formatCvDateTime(cv.updatedAt)
   const isUploaded = cv.sourceType === CANDIDATE_CV_SOURCE_TYPE.UPLOADED
   const isDraft = cv.status === CANDIDATE_CV_STATUS.DRAFT
   const isPublic = cv.visibility === CANDIDATE_CV_VISIBILITY.PUBLIC
   const showActivate = canActivateCv(cv)
   const showSetDefault = canSetDefaultCv(cv)
-
-  useEffect(() => {
-    if (!menuOpen) {
-      return undefined
-    }
-    const onPointerDown = (event) => {
-      if (!menuRef.current?.contains(event.target)) {
-        setMenuOpen(false)
-      }
-    }
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [menuOpen])
-
-  const run = (action) => {
-    setMenuOpen(false)
-    action?.()
-  }
 
   return (
     <article
@@ -113,7 +64,6 @@ function CvCard({
           'border-dashed border-amber-500/50 border-l-solid border-l-amber-500 bg-amber-500/[0.03]',
         cv.isDefault &&
           'border-solid border-primary/50 border-l-primary bg-primary/[0.03] ring-2 ring-primary/15',
-        menuOpen && 'z-30',
       )}
     >
       <div className="flex min-w-0 flex-1 items-start gap-4">
@@ -270,23 +220,30 @@ function CvCard({
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 sm:justify-end">
         {showActivate ? (
-          <Button disabled={busy} onClick={() => onActivate(cv)} size="sm" type="button">
-            <CircleCheck aria-hidden="true" className="size-3.5" />
-            Kích hoạt
+          <Button
+            aria-label={`Kích hoạt ${cv.name}`}
+            disabled={busy}
+            onClick={() => onActivate(cv)}
+            size="icon"
+            title="Kích hoạt"
+            type="button"
+          >
+            <CircleCheck aria-hidden="true" className="size-4" />
           </Button>
         ) : null}
 
         <Button
+          aria-label={`Xem trước ${cv.name}`}
           disabled={busy}
           onClick={() => onPreview(cv)}
-          size="sm"
+          size="icon"
+          title="Xem trước"
           type="button"
           variant="outline"
         >
-          <Eye aria-hidden="true" className="size-3.5" />
-          Xem trước
+          <Eye aria-hidden="true" className="size-4" />
         </Button>
 
         {canDownloadCv(cv) ? (
@@ -303,43 +260,44 @@ function CvCard({
           </Button>
         ) : null}
 
-        <div className="relative shrink-0" ref={menuRef}>
+        <Button
+          aria-label={`Sửa thông tin ${cv.name}`}
+          disabled={busy}
+          onClick={() => onEditMetadata(cv)}
+          size="icon"
+          title="Sửa thông tin"
+          type="button"
+          variant="outline"
+        >
+          <Pencil aria-hidden="true" className="size-4" />
+        </Button>
+
+        {canReplaceUploadedFile(cv) ? (
           <Button
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            aria-label="Thao tác khác"
+            aria-label={`Thay file PDF ${cv.name}`}
             disabled={busy}
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={() => onReplaceFile(cv)}
             size="icon"
-            title="Thao tác khác"
+            title="Thay file PDF"
             type="button"
-            variant="ghost"
+            variant="outline"
           >
-            <MoreHorizontal aria-hidden="true" className="size-4" />
+            <Upload aria-hidden="true" className="size-4" />
           </Button>
-          {menuOpen ? (
-            <div
-              className="absolute right-0 z-50 mt-1.5 w-52 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg ring-1 ring-border/40"
-              role="menu"
-            >
-              <ActionMenuItem icon={Pencil} onClick={() => run(() => onEditMetadata(cv))}>
-                Sửa thông tin
-              </ActionMenuItem>
-              {canReplaceUploadedFile(cv) ? (
-                <ActionMenuItem icon={Upload} onClick={() => run(() => onReplaceFile(cv))}>
-                  Thay file PDF
-                </ActionMenuItem>
-              ) : null}
-              <ActionMenuItem
-                icon={Trash2}
-                onClick={() => run(() => onArchive(cv))}
-                tone="danger"
-              >
-                Xóa khỏi thư viện
-              </ActionMenuItem>
-            </div>
-          ) : null}
-        </div>
+        ) : null}
+
+        <Button
+          aria-label={`Xóa ${cv.name} khỏi thư viện`}
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          disabled={busy}
+          onClick={() => onArchive(cv)}
+          size="icon"
+          title="Xóa khỏi thư viện"
+          type="button"
+          variant="ghost"
+        >
+          <Trash2 aria-hidden="true" className="size-4" />
+        </Button>
       </div>
     </article>
   )
