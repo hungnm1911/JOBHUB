@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { listPositionCategoriesApi } from '@/apis/category.api'
 import { listDistrictLevelUnitsApi } from '@/apis/location.api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Input } from '@/components/ui/Input'
 import { SelectDropdown } from '@/components/ui/select-dropdown'
 import {
   EMPLOYMENT_TYPE_LABEL,

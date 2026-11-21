@@ -1,6 +1,7 @@
 /stitch-skills
 /.stitch
 /tmp
+/.env
 /ai-kit/.smoke-output/
 .agents/skills/impeccable/
 

@@ -594,7 +594,7 @@ Khi triển khai:
 
 - Đặt `VITE_APP_ENV=production`, `VITE_API_BASE_URL` và `VITE_SOCKET_URL` đúng tại thời điểm build.
 - Serve `dist/` bằng static hosting/CDN hoặc web server production; không dùng `yarn preview` làm production server.
-- Cấu hình SPA fallback về `index.html` cho browser routes trong tương lai.
+- Khi dùng Vercel, đặt Root Directory là `frontend/`, build `yarn build`, Output Directory `dist`; `vercel.json` trong thư mục này rewrite browser routes về `index.html`.
 - Dùng HTTPS cho frontend, backend HTTP API và Socket.IO.
 - Thêm frontend production origin vào backend `CORS_ALLOWED_ORIGINS`.
 - Đảm bảo reverse proxy/CDN không làm mất WebSocket/Socket.IO upgrade khi dùng cùng domain gateway.

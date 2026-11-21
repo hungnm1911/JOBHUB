@@ -18,7 +18,7 @@ import {
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Input } from '@/components/ui/Input'
 import { SelectDropdown } from '@/components/ui/select-dropdown'
 import { LANGUAGE_PROFICIENCY_LABEL } from '@/features/candidate-profile/utils'
 import { cn } from '@/lib/utils'

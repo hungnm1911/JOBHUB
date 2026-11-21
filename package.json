@@ -5,7 +5,9 @@
     "client": "yarn --cwd frontend",
     "server": "yarn --cwd backend",
     "ai-kit": "yarn --cwd ai-kit",
-    "build": "yarn client build"
+    "build": "yarn client build",
+    "logs:backend": "docker compose logs --tail=100 -f backend",
+    "logs:frontend": "docker compose logs --tail=100 -f frontend"
   },
   "packageManager": "yarn@1.22.22"
 }
