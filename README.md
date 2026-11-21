@@ -263,36 +263,73 @@ JOBHUB/
 
 ## Quick start
 
-### Docker Compose trên máy cá nhân
+### Docker cho development
 
-Docker Compose chạy backend và frontend qua `http://localhost:8080`. Nginx chuyển
-`/api` và Socket.IO về backend, nên trình duyệt dùng cùng một origin. Backend vẫn
-kết nối MongoDB Atlas và các dịch vụ ngoài theo `backend/.env`; Compose không tạo
-MongoDB local hay tự chạy migration.
+`compose.yaml` chạy Vite tại `http://localhost:5173` và backend/nodemon tại
+`http://localhost:8000`. Mã nguồn được mount vào container để sửa code và reload
+trên WSL Ubuntu, macOS hoặc Windows; dependency Node nằm trong Docker volume,
+không dùng `node_modules` của hệ điều hành host. AI Kit vẫn là package local của
+backend, không có service riêng.
 
-1. Cài Docker Desktop, bật **Settings → Resources → WSL Integration → Ubuntu**
-   rồi mở terminal WSL mới. Kiểm tra `docker compose version`.
+1. Cài Docker Desktop. Trên Windows dùng WSL, bật **Settings → Resources → WSL
+   Integration → Ubuntu**. Trên macOS/Windows terminal dùng Docker Desktop thông
+   thường. Kiểm tra `docker compose version`.
 2. Tạo `backend/.env` từ `backend/.env.example` nếu chưa có và điền cấu hình thật.
-   Giữ `PORT=8000`. Không cần tạo `frontend/.env` cho Compose.
+   Compose đặt `NODE_ENV=development`, `PORT=8000`, URL callback và CORS cho hai
+   cổng mặc định. Không cần cài Node/Yarn trên host hay tạo `frontend/.env`.
 3. Từ thư mục gốc, chạy:
 
    ```bash
-   docker compose up --build -d
-   docker compose logs -f backend
+   docker compose up --build
    ```
 
-4. Mở `http://localhost:8080`; kiểm tra API ở `http://localhost:8080/api/`.
-   Dừng bằng `docker compose down`.
+Mở `http://localhost:5173` và kiểm tra API ở `http://localhost:8000/api/`.
+`docker compose down` dừng stack. Sau khi đổi lockfile, dùng
+`docker compose down -v` rồi build lại để tạo mới các volume dependency.
 
-Compose đưa `backend/.env` vào biến môi trường lúc chạy, không sao chép nó vào
-image. Container backend dùng DNS `1.1.1.1` và `8.8.8.8` để tra bản ghi SRV của
-Atlas, tránh DNS router/WSL đã trả `ENODATA` trên máy phát triển này. Nếu mạng
-không cho truy cập hai DNS đó, cần dùng một DNS khác hỗ trợ SRV. Compose đặt
-`APP_BASE_URL`, `FRONTEND_BASE_URL` và `CORS_ALLOWED_ORIGINS` về
-`http://localhost:8080` cho luồng chạy này.
+Backend dev dùng DNS `1.1.1.1` và `8.8.8.8` để tra SRV của Atlas, tránh DNS
+router/WSL đã trả `ENODATA` trên máy phát triển này. Có thể đổi bằng
+`DEV_DNS_PRIMARY`/`DEV_DNS_SECONDARY` nếu mạng chặn các DNS đó. Khi đổi cổng
+hoặc truy cập từ máy khác, đặt đồng bộ `DEV_BACKEND_ORIGIN`,
+`DEV_FRONTEND_ORIGIN`, `DEV_BACKEND_PORT` và `DEV_FRONTEND_PORT` trước khi chạy.
+Nếu editor trên Windows không kích hoạt reload qua WSL/Docker, chạy với
+`DEV_POLLING=true docker compose up --build`; polling tăng mức dùng CPU.
 
-Đối với database mới, đọc hướng dẫn migration bên dưới trước khi khởi động
-backend; Compose không thay thế các bước chuẩn bị dữ liệu.
+### Production dự kiến: frontend Vercel, backend Render
+
+`compose.prod.yaml` dùng để kiểm tra production image trên máy cá nhân. Image
+frontend Nginx là phương án host độc lập; đường triển khai dự kiến là Vercel
+build Vite trực tiếp từ `frontend/` và Render build image backend từ
+`backend/Dockerfile`. Hai domain độc lập; frontend gọi trực tiếp backend qua
+HTTPS cho API và Socket.IO, không phụ thuộc Docker network hay Nginx proxy.
+
+Để kiểm tra cấu hình production trên máy cá nhân:
+
+```bash
+cp .env.example .env
+docker compose -f compose.prod.yaml up --build -d
+```
+
+Mặc định `.env.example` dùng `http://localhost:8080` cho frontend và
+`http://localhost:8000` cho backend. Compose đọc `backend/.env` chỉ để chạy
+local; khi triển khai trên cloud, đặt secret bằng Environment/Secret Manager.
+Đổi public origin không cần sửa source, nhưng Vite đóng `VITE_*` vào JavaScript
+lúc **build**, nên đổi backend URL cần build/deploy lại frontend.
+Compose production dùng DNS `1.1.1.1`/`8.8.8.8` khi chạy local; có thể đổi bằng
+`PROD_DNS_PRIMARY`/`PROD_DNS_SECONDARY` theo mạng triển khai.
+
+Thiết lập deployment khi chọn domain (origin HTTPS không có dấu `/` cuối):
+
+| Nền tảng | Thiết lập |
+| --- | --- |
+| Vercel frontend | Root Directory `frontend`; Vite build `yarn build`, Output Directory `dist`. Đặt `VITE_APP_ENV=production`, `VITE_API_BASE_URL=https://<backend-domain>/api`, `VITE_SOCKET_URL=https://<backend-domain>`. `frontend/vercel.json` rewrite browser routes về `index.html`. |
+| Render backend | Docker Web Service; để Root Directory là repo root, Dockerfile Path `backend/Dockerfile`, Docker Build Context `.` để build được `ai-kit/`. Đặt `NODE_ENV=production`, `APP_BASE_URL=https://<backend-domain>`, `FRONTEND_BASE_URL=https://<frontend-domain>`, `CORS_ALLOWED_ORIGINS=https://<frontend-domain>` và toàn bộ secret bắt buộc trong `backend/.env.example`. Dùng `PORT` do Render cung cấp và Health Check Path `/api/`. |
+
+Compose không tạo MongoDB local hoặc tự chạy migration. Với database mới, đọc
+hướng dẫn migration bên dưới trước khi khởi động backend. Image backend cần
+process luôn chạy cho Socket.IO và các worker hiện có. Render Free spin down khi
+không có traffic và chặn outbound SMTP port `465`/`587`; cần gói phù hợp khi
+triển khai chức năng email và worker production.
 
 ### 1. Clone repository
 

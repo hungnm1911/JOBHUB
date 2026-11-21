@@ -10,4 +10,9 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    watch: {
+      usePolling: process.env.DOCKER_DEV_POLLING === 'true',
+    },
+  },
 })
