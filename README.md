@@ -263,6 +263,37 @@ JOBHUB/
 
 ## Quick start
 
+### Docker Compose trên máy cá nhân
+
+Docker Compose chạy backend và frontend qua `http://localhost:8080`. Nginx chuyển
+`/api` và Socket.IO về backend, nên trình duyệt dùng cùng một origin. Backend vẫn
+kết nối MongoDB Atlas và các dịch vụ ngoài theo `backend/.env`; Compose không tạo
+MongoDB local hay tự chạy migration.
+
+1. Cài Docker Desktop, bật **Settings → Resources → WSL Integration → Ubuntu**
+   rồi mở terminal WSL mới. Kiểm tra `docker compose version`.
+2. Tạo `backend/.env` từ `backend/.env.example` nếu chưa có và điền cấu hình thật.
+   Giữ `PORT=8000`. Không cần tạo `frontend/.env` cho Compose.
+3. Từ thư mục gốc, chạy:
+
+   ```bash
+   docker compose up --build -d
+   docker compose logs -f backend
+   ```
+
+4. Mở `http://localhost:8080`; kiểm tra API ở `http://localhost:8080/api/`.
+   Dừng bằng `docker compose down`.
+
+Compose đưa `backend/.env` vào biến môi trường lúc chạy, không sao chép nó vào
+image. Container backend dùng DNS `1.1.1.1` và `8.8.8.8` để tra bản ghi SRV của
+Atlas, tránh DNS router/WSL đã trả `ENODATA` trên máy phát triển này. Nếu mạng
+không cho truy cập hai DNS đó, cần dùng một DNS khác hỗ trợ SRV. Compose đặt
+`APP_BASE_URL`, `FRONTEND_BASE_URL` và `CORS_ALLOWED_ORIGINS` về
+`http://localhost:8080` cho luồng chạy này.
+
+Đối với database mới, đọc hướng dẫn migration bên dưới trước khi khởi động
+backend; Compose không thay thế các bước chuẩn bị dữ liệu.
+
 ### 1. Clone repository
 
 ```bash
