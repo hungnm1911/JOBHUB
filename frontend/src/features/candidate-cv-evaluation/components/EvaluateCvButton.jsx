@@ -35,7 +35,9 @@ function EvaluateCvButton({ jobId, jobTitle, viewer }) {
   return (
     <>
       <Button
-        aria-label={isGuest ? 'Đăng nhập để đánh giá CV' : `Đánh giá CV cho ${jobTitle}`}
+        aria-label={
+          isGuest ? 'Đăng nhập để đánh giá CV với AI' : `Đánh giá CV với AI cho ${jobTitle}`
+        }
         className="relative z-10 h-9 px-3 text-xs font-semibold"
         onClick={handleClick}
         size="sm"
@@ -44,7 +46,7 @@ function EvaluateCvButton({ jobId, jobTitle, viewer }) {
         variant="outline"
       >
         <FileSearch aria-hidden="true" className="size-4" />
-        Đánh giá CV
+        Đánh giá CV với AI
       </Button>
 
       {open && (
