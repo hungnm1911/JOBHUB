@@ -34,6 +34,9 @@ function createGroqClient({ apiKey, model, logger }) {
         model: configuredModel,
         messages,
       });
+      logger.development?.("AI provider response", {
+        provider: "groq", model: configuredModel, response,
+      });
 
       logProviderUsage({
         logger,
@@ -53,6 +56,9 @@ function createGroqClient({ apiKey, model, logger }) {
         provider: "groq",
         model: configuredModel,
         ...getProviderErrorMetadata(error),
+      });
+      logger.development?.("AI provider request failed", {
+        provider: "groq", model: configuredModel, error,
       });
 
       throw error;

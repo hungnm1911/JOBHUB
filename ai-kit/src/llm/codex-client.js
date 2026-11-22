@@ -123,6 +123,9 @@ function createCodexClient({ apiKey, baseURL, model, logger }) {
       diagnostic?.({ gate: "http_sdk", status: "PASS", code: "HTTP_RESPONSE",
         httpStatus: httpResponse.status, sdkRequestCount: 1 });
       diagnostic?.(summarizeResponse(response, options.max_output_tokens));
+      logger.development?.("AI provider response", {
+        provider: "codex", model: configuredModel, response,
+      });
 
       logProviderUsage({
         logger,
@@ -150,6 +153,9 @@ function createCodexClient({ apiKey, baseURL, model, logger }) {
         provider: "codex",
         model: configuredModel,
         ...getProviderErrorMetadata(error),
+      });
+      logger.development?.("AI provider request failed", {
+        provider: "codex", model: configuredModel, error,
       });
 
       throw error;

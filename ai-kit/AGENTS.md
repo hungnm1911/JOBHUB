@@ -52,7 +52,7 @@ Do not read every long document when a focused lookup is sufficient. If canonica
 - Do not pre-create future AI #1/#2/#3 folders or abstractions, or change architecture/ownership without approval.
 - When an approved change introduces or moves an owner, update `ai-kit-source-of-truth.md` and affected Engineering contracts.
 - Update the mapped status leaf after successful verification only when “Where is the project currently?” changes.
-- Never log secrets, credentials, CV/JD content, business prompts, private tool arguments, or sensitive raw provider payloads.
+- Production logs keep provider failures to bounded metadata. Development may log complete provider responses and exceptions through the injected Backend logger's development-only method for local debugging.
 - Cross-boundary work must also follow [`backend/AGENTS.md`](../backend/AGENTS.md) and both scopes' verification.
 - Do not commit or push unless explicitly requested.
 
@@ -104,8 +104,8 @@ not add Product Rules, acceptance gates, or required process steps.
 - Offline tests cover contracts and formulas; representative live evaluation
   examines semantic quality.
 - When investigating an LLM failure, capture the output before validation to
-  identify the cause. Keep sensitive payloads in approved local diagnostic
-  artifacts, not tracked files or logs.
+  identify the cause. Development-only logs and approved local diagnostic
+  artifacts may contain sensitive payloads; production logs remain bounded.
 - In reviews, distinguish changes made for the current finding from changes
   already approved earlier.
 - Avoid repeating provider calls or full verification without a concrete

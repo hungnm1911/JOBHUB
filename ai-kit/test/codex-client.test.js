@@ -17,6 +17,7 @@ import { normalizeTokenCount } from "../src/llm/provider-usage.js";
 const logger = Object.freeze({
   error: vi.fn(),
   info: vi.fn(),
+  development: vi.fn(),
 });
 
 describe("Codex client adapter", () => {
@@ -72,6 +73,9 @@ describe("Codex client adapter", () => {
       total_tokens: 23,
       cached_tokens: 8,
     });
+    expect(logger.development).toHaveBeenCalledWith("AI provider response", {
+      provider: "codex", model: "test-codex-model", response,
+    });
   });
 
   it("logs failures without swallowing or replacing them", async () => {
@@ -98,6 +102,9 @@ describe("Codex client adapter", () => {
       errorCode: "server_error",
     });
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain(marker);
+    expect(logger.development).toHaveBeenCalledWith("AI provider request failed", {
+      provider: "codex", model: "test-codex-model", error: providerError,
+    });
   });
 
   it("reports a bounded cause chain without private error text", async () => {
