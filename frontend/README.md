@@ -308,7 +308,7 @@ Route guards và client state chỉ cải thiện trải nghiệm điều hướ
 Axios client dùng chung nằm tại `src/apis/client/index.js`:
 
 - Base URL: `API_CONFIG.BASE_URL`.
-- Timeout: 15 giây. Riêng các request mà backend gửi email trước khi phản hồi (đăng ký ứng viên, quên mật khẩu) dùng `API_CONFIG.EMAIL_DELIVERY_TIMEOUT_MS` (60 giây).
+- Timeout mặc định: 15 giây. Request gửi email đồng bộ dùng `API_CONFIG.EMAIL_DELIVERY_TIMEOUT_MS` (60 giây). Request gợi ý việc làm AI dùng `API_CONFIG.AI_RECOMMENDATION_TIMEOUT_MS` (210 giây) để chờ chuẩn hóa Uploaded CV và đánh giá Job theo batch.
 - Tự thêm `Accept: application/json`.
 - Chỉ thêm Bearer token khi API call opt in bằng `requiresAuthentication: true`.
 - Điều phối refresh/retry qua authentication adapter.

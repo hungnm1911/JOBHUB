@@ -16,7 +16,10 @@ Final Scoring, Ranking & Candidate HTTP delivery (F04) is implemented and
 focused offline verified. Live end-to-end checkpoints of
 `POST /api/candidate/job-recommendations` passed for both a Generated and an
 Uploaded Default CV. Actual Atlas Automated Embedding token usage has not been
-captured. AI-V05 Final Acceptance is **PENDING**.
+captured. The frontend transport timeout for recommendation now allows both
+sequential AI calls; the change passed a focused request-config regression test,
+but has not been rerun against a live provider. AI-V05 Final Acceptance is
+**PENDING**.
 
 ## Deferred / not started
 
@@ -31,7 +34,9 @@ captured. AI-V05 Final Acceptance is **PENDING**.
   batch call hit the 90-second CCPro client timeout
   (`APIConnectionTimeoutError`, stage `batch_inference`); the passing rerun's
   batch completed in about 48 seconds. The cause of the earlier timeout is
-  unproven. No timeout, model, or batch-size change is required.
+  unproven. No provider timeout, model, or batch-size change is required by
+  that checkpoint; the separate 60-second frontend transport cutoff was fixed
+  after a later browser request aborted during batch inference.
 
 ## Implementation record (slice detail)
 
@@ -87,6 +92,11 @@ captured. AI-V05 Final Acceptance is **PENDING**.
   are runtime only; Vector Score is not returned or used for final ranking.
 
 ## Verification status
+
+- Frontend recommendation transport regression on 2026-11-22: the focused
+  Node test reproduced the former 60-second cutoff, then passed after the
+  dedicated 210-second request timeout was applied (1 test). Targeted ESLint
+  passed. No live provider rerun or full frontend gate was run for this fix.
 
 - Focused AI Kit tests passed: `npx vitest run test/job-embedding-text.test.js
   test/job-normalization.test.js` (68 tests). Focused Backend tests passed:
