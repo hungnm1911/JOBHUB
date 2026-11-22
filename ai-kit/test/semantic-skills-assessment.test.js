@@ -76,6 +76,9 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
     expect(request.text.format).toMatchObject({ type: "json_schema", strict: true });
     expect(request.instructions).toContain("REQUIRED wins conflicts");
     expect(request.instructions).toContain("0,10,...,100");
+    expect(request.instructions).toContain("Prefer Vietnamese for human-readable requirement labels");
+    expect(request.instructions).toContain("only when the Job explicitly requires English");
+    expect(request.instructions).toContain("English source wording alone does not establish that requirement");
     const input = JSON.parse(request.input);
     expect(input.job).toHaveLength(3);
     expect(input.cv).toHaveLength(3);

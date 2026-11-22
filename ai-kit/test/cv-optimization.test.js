@@ -145,6 +145,8 @@ describe("AI-V06 optimization and provider fallback", () => {
       .includes("Built search"))).toBe(true);
     expect(JSON.stringify(context)).not.toMatch(/personalInfo|private@example|hiddenSections|Private CV name|status/);
     expect(codexCall.mock.calls[0][0].instructions).toMatch(/baseline.*CV source.*advisory/i);
+    expect(codexCall.mock.calls[0][0].instructions).toContain("prefer Vietnamese for prose and descriptive fields");
+    expect(codexCall.mock.calls[0][0].instructions).toContain("only when the target Job explicitly requires English");
   });
 
   it("keeps resolved career category names for a sparse Job", () => {

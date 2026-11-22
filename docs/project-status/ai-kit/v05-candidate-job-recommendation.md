@@ -2,6 +2,9 @@
 
 ## Current project state
 
+The batch assessment prompt now selects Vietnamese or English independently
+for each Job's reason and requirement labels, using explicit English requirements.
+
 AI-V05 Product Specification and Data Contract are **APPROVED**. Slice 01 — Job
 Embedding Foundation (F02 support) is implemented and verified with focused
 offline tests: READY JobMatchProfile formatting, optional Job `embeddingText`,
@@ -111,6 +114,10 @@ AI-V05 Final Acceptance is
   are runtime only; Vector Score is not returned or used for final ranking.
 
 ## Verification status
+
+- 2026-11-22 language prompt guidance: focused AI Kit prompt suites passed
+  (5 files, 152 tests). No full gate or live provider call was run per the
+  user's test-suite-only instruction.
 
 - 2026-11-22 structured priority regression: focused V03 and V05 tests first
   failed at the exact priority guard seen in the new Uploaded CV log. After the

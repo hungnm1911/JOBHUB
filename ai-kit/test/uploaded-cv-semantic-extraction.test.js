@@ -131,6 +131,7 @@ describe("AI-V02 one-pass PDF semantic extraction", () => {
     expect(request.instructions).toContain("name, value, and stated unit or scale together");
     expect(request.instructions).toContain("use otherCareerClaims when no specific group fits");
     expect(request.instructions).toContain("does not establish an awarded certification or a stated proficiency");
+    expect(request.instructions).toContain("do not translate source facts during extraction");
     expect(JSON.stringify(request)).not.toContain("cv-1");
     expect(JSON.stringify(request)).not.toContain("Java");
     expect(result.status).toBe("READY");

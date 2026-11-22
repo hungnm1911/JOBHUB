@@ -2,6 +2,9 @@
 
 ## Current project state
 
+The extraction prompt now explicitly keeps PDF claims and evidence in their
+source language for downstream AI use cases.
+
 AI-V02 Final Acceptance is **`ACCEPTED`** (2026-10-23). Slice 1
 (uploaded PDF Buffer → free text),
 Slice 2 (Uploaded CV output contract and composition), Slice 3 (one-pass
@@ -173,6 +176,10 @@ tracked in the [AI Kit foundation](foundation.md).
 - OCR is out of scope for AI-V02.
 
 ## Verification status
+
+- **2026-11-22 — Language prompt guidance:** The focused AI Kit prompt suites
+  passed (5 files, 152 tests). No full gate or live provider call was run per
+  the user's test-suite-only instruction.
 
 - **2026-10-23 — Final Acceptance closure:** Product Owner accepted the known
   semantic/evidence limitations in the [three-PDF report](../../evaluation/ai-kit/ai-v02-br-ai-22-evaluation-report.md),
