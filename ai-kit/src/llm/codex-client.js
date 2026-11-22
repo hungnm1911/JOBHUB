@@ -101,7 +101,11 @@ function createCodexClient({ apiKey, baseURL, model, logger }) {
   });
 
   // Retries and provider recovery belong to llm-fallback.js.
-  const createResponse = async ({ input, diagnostic, ...options } = {}) => {
+  const createResponse = async ({ input, diagnostic, requestTimeoutMs, ...options } = {}) => {
+    if (requestTimeoutMs !== undefined
+      && (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs <= 0)) {
+      throw new TypeError("requestTimeoutMs must be a positive safe integer");
+    }
     try {
       logger.info("AI provider API request started", {
         provider: "codex",
@@ -111,11 +115,14 @@ function createCodexClient({ apiKey, baseURL, model, logger }) {
       diagnostic?.({ gate: "request", status: "STARTED", provider: "codex",
         model: configuredModel });
 
-      const request = sdkClient.responses.create({
+      const body = {
         ...options,
         model: configuredModel,
         input,
-      });
+      };
+      const request = requestTimeoutMs === undefined
+        ? sdkClient.responses.create(body)
+        : sdkClient.responses.create(body, { timeout: requestTimeoutMs });
       // withResponse resolves the same SDK promise and exposes its HTTP response.
       const { data: response, response: httpResponse } = diagnostic
         ? await request.withResponse()

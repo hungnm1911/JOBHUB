@@ -9,8 +9,7 @@ async function evaluateOwnCandidateCvForJobApi({ jobId, candidateCvId }) {
     { candidateCvId },
     {
       ...AUTHENTICATED_REQUEST,
-      // AI evaluation can exceed the default transport timeout.
-      timeout: API_CONFIG.EMAIL_DELIVERY_TIMEOUT_MS,
+      timeout: API_CONFIG.AI_CV_EVALUATION_TIMEOUT_MS,
     },
   )
   return response.data

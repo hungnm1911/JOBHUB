@@ -107,6 +107,24 @@ describe("Codex client adapter", () => {
     });
   });
 
+  it("uses a request-specific timeout without sending it in the Responses body", async () => {
+    const response = { status: "completed" };
+    createResponseMock.mockReturnValue({ withResponse: () => Promise.resolve({
+      data: response, response: { status: 200 },
+    }) });
+    const client = createCodexClient({
+      apiKey: "test-codex-api-key", baseURL: "https://codex.example.test/v1",
+      model: "test-codex-model", logger,
+    });
+
+    await expect(client.createResponse({ input: "batch", requestTimeoutMs: 120_000,
+      diagnostic: vi.fn() })).resolves.toBe(response);
+
+    expect(createResponseMock).toHaveBeenCalledWith({
+      model: "test-codex-model", input: "batch",
+    }, { timeout: 120_000 });
+  });
+
   it("reports a bounded cause chain without private error text", async () => {
     const marker = "PRIVATE_CV_PROMPT_MARKER";
     const networkCause = Object.assign(new Error(`fetch failed ${marker}`), {

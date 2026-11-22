@@ -143,6 +143,7 @@ describe("AI-V04 F01 CV Evaluation", () => {
     expect(result.cvImprovements[1].sourceReference).toBeNull();
     expect(cv).toEqual(before);
     const request = codexCall.mock.calls[0][0];
+    expect(request.requestTimeoutMs).toBe(cv.source.type === "UPLOADED_CV" ? 120_000 : undefined);
     expect(request.text.format).toMatchObject({ type: "json_schema", name: "cv_evaluation", strict: true });
     expect(request.instructions).toContain("0,10,...,100");
     expect(request.instructions).toContain("Rewrite is advisory, never applied automatically.");

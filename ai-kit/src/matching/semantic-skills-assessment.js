@@ -73,7 +73,7 @@ const relevantValue = (value) => {
   return undefined;
 };
 
-const buildSources = (jobMatchProfile, cvMatchProfile) => {
+const buildSources = (jobMatchProfile, cvMatchProfile, jobSourcePrefix = "") => {
   if (jobMatchProfile?.source?.type !== "JOB"
     || !jobMatchProfile.source.jobId
     || !["GENERATED_CV", "UPLOADED_CV"].includes(cvMatchProfile?.source?.type)
@@ -84,14 +84,14 @@ const buildSources = (jobMatchProfile, cvMatchProfile) => {
   }
 
   const jobSources = jobMatchProfile.metadata.requiredSkills.map((item, index) => ({
-    id: `J${index}`,
+    id: `${jobSourcePrefix}J${index}`,
     kind: "requiredSkill",
     value: item.value,
     sourcePath: item.sourcePath,
   }));
   if (jobMatchProfile.freeText?.jobDescription?.value?.trim()) {
     jobSources.push({
-      id: SOURCE_IDS.jobDescription,
+      id: `${jobSourcePrefix}${SOURCE_IDS.jobDescription}`,
       kind: "jobDescription",
       value: jobMatchProfile.freeText.jobDescription.value,
       sourcePath: jobMatchProfile.freeText.jobDescription.sourcePath,
@@ -178,11 +178,13 @@ const readGroqText = (response) => {
   return choice.message.content;
 };
 
-const infer = async ({ provider, config, logger, input, diagnostic, instruction = INSTRUCTION,
+const infer = async ({ provider, config, logger, input, diagnostic, requestTimeoutMs,
+  instruction = INSTRUCTION,
   schema = SEMANTIC_SKILLS_SCHEMA, schemaName = "semantic_skills_assessment" }) => {
   if (provider === "codex") {
     const response = await createCodexClient({ ...config, logger }).createResponse({
       ...(diagnostic ? { diagnostic } : {}),
+      ...(requestTimeoutMs === undefined ? {} : { requestTimeoutMs }),
       instructions: instruction,
       input,
       text: { format: { type: "json_schema", name: schemaName,
@@ -247,13 +249,12 @@ const resolveRequirementGroups = (groups, jobSources, cvSources) => {
         coveredStructured.add(source.id);
       }
     }
-    if (jobAssociations.some((source) => source.kind === "requiredSkill")
-      && group.priority !== "REQUIRED") {
-      throw new SemanticSkillsAssessmentError();
-    }
+    // Structured requiredSkills own their priority even when the model mislabels it.
+    const priority = jobAssociations.some((source) => source.kind === "requiredSkill")
+      ? "REQUIRED" : group.priority;
     return {
       requirement: group.requirement,
-      priority: group.priority,
+      priority,
       semanticScore: group.semanticScore,
       evidenceState: group.cvSourceIds.length ? group.evidenceState : "NO_EVIDENCE",
       jobSources: jobAssociations,
