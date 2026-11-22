@@ -37,6 +37,9 @@ function createGeminiClient({ apiKey, model, logger }) {
         contents,
         config: { ...config, automaticContinuation: false },
       });
+      logger.development?.("AI provider response", {
+        provider: "gemini", model: configuredModel, response,
+      });
 
       logProviderUsage({
         logger,
@@ -56,6 +59,9 @@ function createGeminiClient({ apiKey, model, logger }) {
         provider: "gemini",
         model: configuredModel,
         ...getProviderErrorMetadata(error),
+      });
+      logger.development?.("AI provider request failed", {
+        provider: "gemini", model: configuredModel, error,
       });
 
       throw error;

@@ -76,6 +76,9 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
     expect(request.text.format).toMatchObject({ type: "json_schema", strict: true });
     expect(request.instructions).toContain("REQUIRED wins conflicts");
     expect(request.instructions).toContain("0,10,...,100");
+    expect(request.instructions).toContain("Prefer Vietnamese for human-readable requirement labels");
+    expect(request.instructions).toContain("only when the Job explicitly requires English");
+    expect(request.instructions).toContain("English source wording alone does not establish that requirement");
     const input = JSON.parse(request.input);
     expect(input.job).toHaveLength(3);
     expect(input.cv).toHaveLength(3);
@@ -101,6 +104,15 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
     expect(result).toEqual({ requirementGroups: [] });
     expect(codexCall).toHaveBeenCalledOnce();
     expect(calculateWeightedMatchScore(result, fields).skillsScore).toBe(0);
+  });
+
+  it("takes REQUIRED priority from a structured Job skill when the model labels it preferred", async () => {
+    codexCall.mockResolvedValue(codexResponse({ requirementGroups: [
+      { ...groups[0], priority: "PREFERRED" }, groups[1], groups[2], groups[3],
+    ] }));
+    const result = await assess({ jobMatchProfile: job, cvMatchProfile: generatedCv });
+    expect(result.requirementGroups[0].priority).toBe("REQUIRED");
+    expect(result.requirementGroups[2].priority).toBe("PREFERRED");
   });
 
   it("preserves uploaded CV excerpt evidence and unresolved conflict claims", async () => {
@@ -200,7 +212,6 @@ describe("AI-V03 F02 Semantic Skills Assessment", () => {
 
   it.each([
     ["missing structured skill", [groups[0]]],
-    ["priority override", [group("Node.js", "PREFERRED", 100, "SUPPORTED", ["J0"], ["C0"]), groups[1]]],
     ["duplicate requirement", [groups[0], { ...groups[0], requirement: " node.JS " }, groups[1]]],
     ["same structured skill counted twice", [groups[0], { ...groups[1], jobSourceIds: ["J0", "J1"] }]],
     ["unapproved score", [{ ...groups[0], semanticScore: 95 }, groups[1]]],

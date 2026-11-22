@@ -30,7 +30,9 @@
   and SDK operation before sending a request, including smoke calls and each
   retry/fallback attempt. Successful provider calls log normalized
   `input_tokens`, `output_tokens`, `total_tokens`, and `cached_tokens` without
-  prompt or response content. No capability
+  prompt or response content in production; the injected Backend logger's
+  optional development-only method records full provider responses and
+  exceptions. No capability
   currently composes the adapters or the fallback orchestrator, and
   `createAiKit` does not construct them, so startup remains valid with any
   provider combination configurations. ESLint and Vitest remain aligned with the backend tooling,
@@ -88,6 +90,14 @@
   addressed.
 
 ## Verification status
+
+- 2026-11-22 provider diagnostics: Codex, Gemini, and Groq adapters now send
+  full provider responses and exceptions to the injected logger's optional
+  development-only method. Focused provider suites passed **4 files / 33
+  tests**; the Backend development/production logging and integration suites
+  passed **5 files / 22 tests** after the conditional-response trace follow-up.
+  No live provider call or full AI Kit/Backend
+  gate was run for this extension.
 
 - 2026-10-20: Added `AI provider API request started` metadata to the Codex,
   Gemini, and Groq adapters. Focused offline checks passed (5 files / 43 tests),

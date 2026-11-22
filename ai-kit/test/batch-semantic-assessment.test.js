@@ -27,13 +27,13 @@ const jobs = ["private-job-1", "private-job-2"].map((jobId, index) => ({
     freeText: { jobDescription: null },
   } },
 }));
-const group = (score = 100) => ({ requirement: "Skill", priority: "REQUIRED",
+const group = (score = 100, jobIndex = 1) => ({ requirement: "Skill", priority: "REQUIRED",
   semanticScore: score, evidenceState: score ? "SUPPORTED" : "NO_EVIDENCE",
-  jobSourceIds: ["J0"], cvSourceIds: score ? ["C0"] : [] });
-const output = { jobs: [
-  { jobKey: "J1", requirementGroups: [group()], reason: "Node.js experience fits." },
-  { jobKey: "J2", requirementGroups: [group(0)], reason: "React evidence is absent." },
-] };
+  jobSourceIds: [`B${jobIndex}:J0`], cvSourceIds: score ? ["C0"] : [] });
+const output = { jobs: {
+  J1: { requirementGroups: [group()], reason: "Node.js experience fits." },
+  J2: { requirementGroups: [group(0, 2)], reason: "React evidence is absent." },
+} };
 const response = (value) => ({ status: "completed", incomplete_details: null, error: null,
   output: [{ type: "message", role: "assistant", status: "completed",
     content: [{ type: "output_text", text: JSON.stringify(value) }] }] });
@@ -41,15 +41,72 @@ const response = (value) => ({ status: "completed", incomplete_details: null, er
 beforeEach(() => { vi.clearAllMocks(); codexCall.mockResolvedValue(response(output)); });
 
 describe("AI-V05 F03 batch semantic assessment", () => {
+  it("gives every Job distinct source IDs and constrains its output references", async () => {
+    await assess({ cvNormalizationResult, jobs });
+    const request = codexCall.mock.calls[0][0];
+    const input = JSON.parse(request.input);
+    const [firstId, secondId] = input.jobs.map((job) => job.sources[0].id);
+    expect(firstId).not.toBe(secondId);
+    const perJob = request.text.format.schema.properties.jobs.properties;
+    expect(perJob.J1.properties.requirementGroups.items.properties.jobSourceIds.items.enum)
+      .toEqual([firstId]);
+    expect(perJob.J2.properties.requirementGroups.items.properties.jobSourceIds.items.enum)
+      .toEqual([secondId]);
+  });
+
+  it("keeps Uploaded PDF evidence addressable across a multi-Job batch", async () => {
+    const excerpt = "Built a Node.js service";
+    const uploadedCv = { status: "READY", profile: {
+      source: { type: "UPLOADED_CV", candidateCvId: "private-pdf" },
+      metadata: { skillTags: [] },
+      pdfContent: {
+        careerPositioning: [], professionalSummary: [],
+        skills: Array.from({ length: 22 }, (_, index) => ({
+          value: index === 21 ? "Node.js" : `Skill ${index}`,
+          evidence: [index === 21 ? excerpt : `Skill ${index}`],
+        })),
+        workExperiences: [], projects: [], educations: [], certifications: [],
+        languages: [], otherCareerClaims: [], unresolvedContent: [],
+      },
+    } };
+    codexCall.mockResolvedValue(response({ jobs: {
+      J1: { requirementGroups: [{ ...group(), cvSourceIds: ["C21"] }],
+        reason: "Node.js evidence supports the job." },
+      J2: output.jobs.J2,
+    } }));
+
+    const result = await assess({ cvNormalizationResult: uploadedCv, jobs });
+    const request = codexCall.mock.calls[0][0];
+    expect(request.text.format.schema.properties.jobs.properties.J1.properties
+      .requirementGroups.items.properties.cvSourceIds.items.enum).toContain("C21");
+    expect(result[0].requirementGroups[0].cvSources[0].provenance.evidence)
+      .toEqual([excerpt]);
+    expect(codexCall).toHaveBeenCalledOnce();
+  });
+
+  it("uses canonical REQUIRED priority in a batch when the model says preferred", async () => {
+    const conflicting = { ...output.jobs.J1, requirementGroups: [
+      { ...group(), priority: "PREFERRED" },
+    ] };
+    codexCall.mockResolvedValue(response({ jobs: { ...output.jobs, J1: conflicting } }));
+    const result = await assess({ cvNormalizationResult, jobs });
+    expect(result[0].requirementGroups[0].priority).toBe("REQUIRED");
+    expect(codexCall).toHaveBeenCalledOnce();
+  });
+
   it("uses one strict inference and resolves each Job's own sources", async () => {
     const result = await assess({ cvNormalizationResult, jobs });
     expect(codexCall).toHaveBeenCalledOnce();
     const request = codexCall.mock.calls[0][0];
     expect(request.text.format).toMatchObject({ type: "json_schema", strict: true });
-    expect(request.text.format.schema.properties.jobs.items.required)
-      .toEqual(["jobKey", "requirementGroups", "reason"]);
+    expect(request.text.format.schema.properties.jobs.required).toEqual(["J1", "J2"]);
+    expect(request.text.format.schema.properties.jobs.properties.J1.required)
+      .toEqual(["requirementGroups", "reason"]);
     expect(request.instructions).toContain("REQUIRED wins conflicts");
     expect(request.instructions).toContain("reason for each Job");
+    expect(request.instructions).toContain("For each jobKey independently, prefer Vietnamese for the reason");
+    expect(request.instructions).toContain("only when its own requirements explicitly require English");
+    expect(request.requestTimeoutMs).toBe(120_000);
     const input = JSON.parse(request.input);
     expect(input.jobs.map((item) => item.jobKey)).toEqual(["J1", "J2"]);
     expect(request.input).not.toContain("private-job");
@@ -63,7 +120,7 @@ describe("AI-V05 F03 batch semantic assessment", () => {
   });
 
   it("maps results by jobKey when the provider reverses their order", async () => {
-    codexCall.mockResolvedValue(response({ jobs: [...output.jobs].reverse() }));
+    codexCall.mockResolvedValue(response({ jobs: { J2: output.jobs.J2, J1: output.jobs.J1 } }));
     const result = await assess({ cvNormalizationResult, jobs });
     expect(result.map(({ jobKey, jobId }) => [jobKey, jobId])).toEqual([
       ["J1", "private-job-1"], ["J2", "private-job-2"],
@@ -71,14 +128,14 @@ describe("AI-V05 F03 batch semantic assessment", () => {
   });
 
   it.each([
-    [{ jobs: output.jobs.slice(0, 1) }, "missing"],
-    [{ jobs: [output.jobs[0], output.jobs[0]] }, "duplicate"],
-    [{ jobs: [output.jobs[0], { ...output.jobs[1], jobKey: "other" }] }, "unknown"],
-    [{ jobs: [output.jobs[0], { ...output.jobs[1], reason: " " }] }, "blank reason"],
-    [{ jobs: [output.jobs[0], { ...output.jobs[1], requirementGroups: [] }] }, "missing group"],
-    [{ jobs: [output.jobs[0], { ...output.jobs[1], requirementGroups: [
-      { ...group(), jobSourceIds: ["J1"] },
-    ] }] }, "foreign source"],
+    [{ jobs: { J1: output.jobs.J1 } }, "missing"],
+    [{ jobs: [output.jobs.J1, output.jobs.J1] }, "array instead of keyed jobs"],
+    [{ jobs: { ...output.jobs, other: output.jobs.J2 } }, "unknown"],
+    [{ jobs: { ...output.jobs, J2: { ...output.jobs.J2, reason: " " } } }, "blank reason"],
+    [{ jobs: { ...output.jobs, J2: { ...output.jobs.J2, requirementGroups: [] } } }, "missing group"],
+    [{ jobs: { ...output.jobs, J2: { ...output.jobs.J2, requirementGroups: [
+      { ...group(100, 2), jobSourceIds: ["B1:J0"] },
+    ] } } }, "foreign source"],
   ])("rejects %s for the whole batch (%s)", async (invalid) => {
     codexCall.mockResolvedValue(response(invalid));
     await expect(assess({ cvNormalizationResult, jobs })).rejects
@@ -119,9 +176,9 @@ describe("AI-V05 F03 batch semantic assessment", () => {
       code: "INVALID_JSON" });
 
     diagnostic.mockClear();
-    codexCall.mockResolvedValue(response({ jobs: [output.jobs[0], {
-      ...output.jobs[1], requirementGroups: [{ ...group(), jobSourceIds: ["J1"] }],
-    }] }));
+    codexCall.mockResolvedValue(response({ jobs: { ...output.jobs, J2: {
+      ...output.jobs.J2, requirementGroups: [{ ...group(100, 2), jobSourceIds: ["B1:J0"] }],
+    } } }));
     await expect(assess({ cvNormalizationResult, jobs, diagnostic })).rejects
       .toMatchObject({ diagnosticStage: "evidence_resolution",
         diagnosticCode: "EVIDENCE_INVALID" });

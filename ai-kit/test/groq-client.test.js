@@ -16,6 +16,7 @@ import { createGroqClient } from "../src/llm/groq-client.js";
 const logger = Object.freeze({
   error: vi.fn(),
   info: vi.fn(),
+  development: vi.fn(),
 });
 
 describe("Groq client adapter", () => {
@@ -76,6 +77,9 @@ describe("Groq client adapter", () => {
       total_tokens: 18,
       cached_tokens: 4,
     });
+    expect(logger.development).toHaveBeenCalledWith("AI provider response", {
+      provider: "groq", model: "openai/gpt-oss-120b", response,
+    });
   });
 
   it("logs minimal metadata and propagates provider failures", async () => {
@@ -107,6 +111,9 @@ describe("Groq client adapter", () => {
       },
     );
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain(marker);
+    expect(logger.development).toHaveBeenCalledWith("AI provider request failed", {
+      provider: "groq", model: "openai/gpt-oss-120b", error: providerError,
+    });
     expect(logger.error.mock.calls.flat().join(" ")).not.toContain(apiKey);
     expect(logger.error.mock.calls.flat().join(" ")).not.toContain(
       "private prompt",

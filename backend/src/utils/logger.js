@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { inspect } from "node:util";
 
 import config from "../config/index.js";
@@ -18,6 +19,9 @@ const LEVEL_ANSI_COLOR = Object.freeze({
 });
 
 const MAX_CAUSE_DEPTH = 5;
+const requestIds = new AsyncLocalStorage();
+
+const runWithRequestId = (requestId, callback) => requestIds.run(requestId, callback);
 
 const serializeError = (error, depth = 0) => {
   if (!(error instanceof Error)) {
@@ -58,7 +62,8 @@ const colorize = (text, ansiColor, useColors) => {
   return useColors ? `\u001b[${ansiColor}m${text}\u001b[0m` : text;
 };
 
-const formatPretty = ({ timestamp, level, message, requestId, meta, useColors }) => {
+const formatPretty = ({ timestamp, level, message, requestId, meta, useColors,
+  fullDetails }) => {
   const label = colorize(
     level.toUpperCase().padEnd(5),
     LEVEL_ANSI_COLOR[level],
@@ -66,7 +71,9 @@ const formatPretty = ({ timestamp, level, message, requestId, meta, useColors })
   );
   const scope = requestId ? ` [${requestId}]` : "";
   const details = Object.keys(meta).length > 0
-    ? `\n${inspect(meta, { colors: useColors, depth: 6, breakLength: 100 })}`
+    ? `\n${inspect(meta, { colors: useColors, depth: fullDetails ? null : 6,
+      maxArrayLength: fullDetails ? null : 100,
+      maxStringLength: fullDetails ? null : 10_000, breakLength: 100 })}`
     : "";
 
   return `${timestamp} ${label}${scope} ${message}${details}`;
@@ -81,17 +88,21 @@ const write = (level, message, { requestId, ...meta } = {}) => {
     ? process.stderr
     : process.stdout;
   const timestamp = new Date().toISOString();
+  const activeRequestId = requestId ?? requestIds.getStore();
+  const logSite = config.env === "development"
+    ? new Error().stack?.split("\n")[3]?.trim() : undefined;
+  const outputMeta = logSite ? { ...meta, logSite } : meta;
 
   if (config.logging.format === "json") {
     const serializedMeta = Object.fromEntries(
-      Object.entries(meta).map(([key, value]) => [key, serializeError(value)]),
+      Object.entries(outputMeta).map(([key, value]) => [key, serializeError(value)]),
     );
 
     stream.write(`${toJsonLine({
       timestamp,
       level,
       message,
-      requestId,
+      requestId: activeRequestId,
       ...serializedMeta,
     })}\n`);
 
@@ -102,9 +113,10 @@ const write = (level, message, { requestId, ...meta } = {}) => {
     timestamp,
     level,
     message,
-    requestId,
-    meta,
+    requestId: activeRequestId,
+    meta: outputMeta,
     useColors: Boolean(stream.isTTY),
+    fullDetails: config.env === "development",
   })}\n`);
 };
 
@@ -113,6 +125,10 @@ const logger = Object.freeze({
   warn: (message, meta) => write("warn", message, meta),
   info: (message, meta) => write("info", message, meta),
   debug: (message, meta) => write("debug", message, meta),
+  development: (message, meta) => {
+    if (config.env === "development") write("debug", message, meta);
+  },
 });
 
 export default logger;
+export { runWithRequestId };

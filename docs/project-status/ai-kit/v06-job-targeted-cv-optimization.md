@@ -2,6 +2,9 @@
 
 ## Current project state
 
+The optimization prompt now prefers Vietnamese replacement career content,
+with English only when the target Job explicitly requires it.
+
 The AI-V06 [Product Specification](../../product/ai-kit/versions/v06-job-targeted-cv-optimization.md)
 and [Data Contract](../../data/ai-kit/versions/v06-job-targeted-cv-optimization.md)
 are **APPROVED** by direct Product Owner decision, including fallback decision
@@ -45,6 +48,10 @@ Optimization phase. The ignored local captures remain the detailed evidence;
 this leaf records the current state without copying CV content or credentials.
 
 ## Verification status
+
+- 2026-11-22 language prompt guidance: focused AI Kit prompt suites passed
+  (5 files, 152 tests). No full gate or live provider call was run per the
+  user's test-suite-only instruction.
 
 - Slice 00 documentation references, consistency, and whitespace were checked
   on 2026-10-26. This verifies documentation alignment only.

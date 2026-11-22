@@ -2,8 +2,8 @@
 
 ## Current project state
 
-Error handling and development logging are standardized across both
-applications.
+Error handling and runtime request logging are standardized across Backend
+and its injected AI Kit logger.
 
 **Backend:**
 - `src/utils/logger.js` is the single dependency-free application logger.
@@ -14,9 +14,20 @@ applications.
   - It prints error stacks, own properties, and `cause` chains.
 - `src/middlewares/request-logger.js` runs first in `app.js`. It assigns a
   request id, returns it in a CORS-exposed `X-Request-Id` header, and logs one
-  query-free access line per request.
-- The final error handler logs 5xx at `error` and rejected 4xx at `debug`, with
-  request id, method, and path.
+  query-free structured access record for every completed (`info`) or aborted
+  (`warn`) request, including method, status, duration, and abort flag. The canonical
+  logger carries the id through concurrent asynchronous Backend/AI Kit work.
+  Development also logs emitted JSON/text response bodies, response-producer
+  call sites, and distinct logger call sites. Express-generated conditional 304
+  logs retain the prepared representation and its original status while showing
+  that the actual response had no body. Aborted requests include any existing
+  route diagnostic checkpoint and record
+  later response attempts separately.
+- The final error handler logs 5xx at `error` and rejected 4xx at `warn`, with
+  request id, actual HTTP status, safe error type/code/upstream status, and
+  bounded throw-site locations from the exception and its causes. Development
+  also logs the complete exception and cause stack; production keeps normalized
+  metadata only.
 - The error handler now maps body-parser http-errors marked `expose` to their
   4xx status. Previously, malformed JSON and oversized bodies returned `500`.
 - `AppError` accepts an optional `{ cause }`.
@@ -88,6 +99,43 @@ applications.
 - **Documented only:** repository-level and backend-specific agent contracts exist.
 
 ## Verification status
+
+- 2026-11-22 conditional-response trace: a focused Express ETag regression
+  reproduced a `200` representation converted into `304` by `If-None-Match`.
+  Before the fix, the development log showed only the logger's own source and
+  `body: null`. After the fix, it records the response producer, original
+  representation status/body, and the actual 304 with no body. The focused
+  development suite passed **1 file / 6 tests**; all affected Backend logging
+  and integration suites passed **5 files / 22 tests**. Scoped ESLint and diff
+  whitespace checks passed. The full backend gate was not run for this
+  follow-up, per user request.
+
+- 2026-11-22 development diagnostics: the user-supplied recommendation log
+  showed a client disconnect after about 60 seconds during a second Codex
+  request, before a Backend exception or HTTP response. Code inspection found
+  the frontend recommendation call uses a 60,000 ms Axios timeout; this is a
+  likely explanation for that disconnect, not proof of the provider's eventual
+  outcome. Before the fix, new development HTTP tests failed for missing
+  response bodies, full error stacks, and abort checkpoints; provider-adapter
+  tests failed for missing response/exception records. After the fix, focused
+  Backend suites passed **5 files / 21 tests** and focused AI Kit provider
+  suites passed **4 files / 33 tests**. The full backend gate and live provider
+  behavior were not verified for this development-logging extension.
+
+- 2026-11-22 logging regression: before the fix, focused HTTP tests failed on
+  invisible `debug` access logs, a `null`/upstream-only HTTP status, and missing
+  4xx throw-site logs; the asynchronous AI Kit request-id test also failed with
+  two missing ids. After the fix, focused Backend suites passed **4 files / 15
+  tests** (`test/http/error-logging.test.js`,
+  `test/http/production-error-logging.test.js`,
+  `test/services/ai-kit-logging-boundary.test.js`,
+  `test/infrastructure/ai-kit-integration.test.js`); focused AI Kit provider
+  suites passed **4 files / 33 tests** (Codex, Gemini, Groq, HTTP attempts).
+  Focused ESLint on the five changed Backend source/test files passed, as did
+  diff and new-file whitespace checks. Full Backend ESLint (0 errors / 2
+  pre-existing V6 test warnings) and ARCH-001–ARCH-019 passed before the final
+  request-context edit. The full Vitest run was stopped at user request; this
+  change has no completed full backend gate or live provider verification.
 
 - 2026-11-13 HTTP test transport fix: a probe reproduced a foreign-service
   `401` without JOBHUB's request-id header while the pending Job still existed;

@@ -17,6 +17,7 @@ import { normalizeTokenCount } from "../src/llm/provider-usage.js";
 const logger = Object.freeze({
   error: vi.fn(),
   info: vi.fn(),
+  development: vi.fn(),
 });
 
 describe("Codex client adapter", () => {
@@ -72,6 +73,9 @@ describe("Codex client adapter", () => {
       total_tokens: 23,
       cached_tokens: 8,
     });
+    expect(logger.development).toHaveBeenCalledWith("AI provider response", {
+      provider: "codex", model: "test-codex-model", response,
+    });
   });
 
   it("logs failures without swallowing or replacing them", async () => {
@@ -98,6 +102,27 @@ describe("Codex client adapter", () => {
       errorCode: "server_error",
     });
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain(marker);
+    expect(logger.development).toHaveBeenCalledWith("AI provider request failed", {
+      provider: "codex", model: "test-codex-model", error: providerError,
+    });
+  });
+
+  it("uses a request-specific timeout without sending it in the Responses body", async () => {
+    const response = { status: "completed" };
+    createResponseMock.mockReturnValue({ withResponse: () => Promise.resolve({
+      data: response, response: { status: 200 },
+    }) });
+    const client = createCodexClient({
+      apiKey: "test-codex-api-key", baseURL: "https://codex.example.test/v1",
+      model: "test-codex-model", logger,
+    });
+
+    await expect(client.createResponse({ input: "batch", requestTimeoutMs: 120_000,
+      diagnostic: vi.fn() })).resolves.toBe(response);
+
+    expect(createResponseMock).toHaveBeenCalledWith({
+      model: "test-codex-model", input: "batch",
+    }, { timeout: 120_000 });
   });
 
   it("reports a bounded cause chain without private error text", async () => {

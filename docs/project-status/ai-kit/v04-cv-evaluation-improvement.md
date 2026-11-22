@@ -2,6 +2,9 @@
 
 ## Current project state
 
+The evaluation prompt now prefers Vietnamese feedback and CV rewrites, with
+English only when the Job explicitly requires it.
+
 AI-V04 F01 (BR-AI-01–07) is **implemented** in AI Kit and through the
 authenticated Candidate Backend HTTP entry. The use case prepares an authorized
 Job/CV pair, returns the total score, summary, five scored field reviews and CV
@@ -16,12 +19,16 @@ The [acceptance report](../../evaluation/ai-kit/ai-v04-final-acceptance-evaluati
 records the case outcomes and their limits. **Official Engineering Verification:
 `INCOMPLETE / NOT RUN`** for the V04 Backend full gate; no official Backend
 `PASS` or verified version `COMPLETE` is claimed.
+The Uploaded CV Codex evaluation call now has a 120-second deadline, and the
+frontend evaluation request allows 240 seconds for PDF normalization followed
+by evaluation. Focused offline regression passed; these limits have not been
+checked against a live provider.
 
 ## Deferred / not started
 
-No approved AI-V04 functional slice remains deferred. Frontend integration is
-outside the implemented Candidate HTTP use case. The recorded live cases do not
+No approved AI-V04 functional slice remains deferred. The recorded live cases do not
 establish repeatable semantic scores across inferences or provider-wide quality.
+The revised Uploaded CV timeouts have no live end-to-end verification.
 The V04 Backend full gate remains unrun; Product/Functional phase closure does
 not establish official engineering closure.
 
@@ -36,6 +43,18 @@ not establish official engineering closure.
   preparation and calls AI Kit `evaluateCv`. Results remain runtime-only.
 
 ## Verification status
+
+- **2026-11-22 — Language prompt guidance:** The focused AI Kit prompt suites
+  passed (5 files, 152 tests). No full gate or live provider call was run per
+  the user's test-suite-only instruction.
+
+- **2026-11-22 — Uploaded CV timeout regression:** AI Kit evaluation and
+  frontend request tests failed before the fix at the missing 120-second
+  per-call deadline and the 60-second transport cutoff. After the fix, three
+  focused AI Kit suites passed (60 tests), the frontend AI timeout suite passed
+  (2 tests), and the focused Backend V04 suite passed (11 tests). The frontend
+  timeout suite is now part of `verify:agent`. Full gates and live provider
+  calls were not run per the user's test-suite-only instruction.
 
 - **2026-10-25 — Final Acceptance closure:** Product/Functional `ACCEPTED` by
   the supplied Product decision; remaining Backend full-gate verification risk

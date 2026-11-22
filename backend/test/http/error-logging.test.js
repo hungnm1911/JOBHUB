@@ -57,6 +57,35 @@ describe("request id", () => {
 });
 
 describe("centralized error handling", () => {
+  it("records every completed request with its actual status and timing", async () => {
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    const response = await request(app).get("/api/route-that-does-not-exist?token=secret");
+    const output = stdoutWrite.mock.calls.map(([chunk]) => String(chunk)).join("");
+
+    expect(response.status).toBe(404);
+    expect(output).toContain("INFO");
+    expect(output).toContain("method: 'GET'");
+    expect(output).toContain("path: '/api/route-that-does-not-exist'");
+    expect(output).toContain("statusCode: 404");
+    expect(output).toMatch(/durationMs: \d/);
+    expect(output).not.toContain("token=secret");
+  });
+
+  it("records successful requests too", async () => {
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const successfulApp = express();
+    successfulApp.use(requestLogger);
+    successfulApp.get("/ok", (_request, response) => response.status(204).end());
+
+    const response = await request(successfulApp).get("/ok");
+    const output = stdoutWrite.mock.calls.map(([chunk]) => String(chunk)).join("");
+
+    expect(response.status).toBe(204);
+    expect(output).toContain("statusCode: 204");
+    expect(output).toContain("path: '/ok'");
+  });
+
   it("rejects a malformed JSON body as a client error", async () => {
     const response = await request(app)
       .post("/api/route-that-does-not-exist")
@@ -93,10 +122,14 @@ describe("centralized error handling", () => {
     expect(output).not.toContain("token=secret");
     expect(output).toContain("503");
     expect(output).toContain("server_error");
+    expect(output).toContain("httpStatus: 500");
+    expect(output).toContain("upstreamStatus: 503");
+    expect(output).toMatch(/error-logging\.test\.js:\d+:\d+/);
+    expect(output).toContain("cause");
     expect(output).not.toContain(marker);
   });
 
-  it("keeps operational errors out of the error log at the test level", async () => {
+  it("records operational errors with their throw site", async () => {
     const stderrWrite = vi
       .spyOn(process.stderr, "write")
       .mockImplementation(() => true);
@@ -106,7 +139,10 @@ describe("centralized error handling", () => {
 
     expect(response.status).toBe(409);
     expect(response.body.error.message).toBe("Already exists");
-    expect(stderrWrite).not.toHaveBeenCalled();
+    const output = stderrWrite.mock.calls.map(([chunk]) => String(chunk)).join("");
+    expect(output).toContain("WARN");
+    expect(output).toContain("httpStatus: 409");
+    expect(output).toMatch(/error-logging\.test\.js:\d+:\d+/);
   });
 
   it("preserves the cause of an AppError", () => {
@@ -115,5 +151,24 @@ describe("centralized error handling", () => {
 
     expect(error.cause).toBe(rootCause);
     expect(new AppError(400, "No cause").cause).toBeUndefined();
+  });
+
+  it("logs a translated infrastructure cause without its private message", async () => {
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const cause = Object.assign(new Error("private database record PRIVATE_MARKER"), {
+      code: 11000,
+    });
+    const failingApp = createFailingApp(
+      new AppError(503, "Database unavailable", null, { cause }),
+    );
+
+    const response = await request(failingApp).get("/fail");
+    const output = stderrWrite.mock.calls.map(([chunk]) => String(chunk)).join("");
+
+    expect(response.status).toBe(503);
+    expect(output).toContain("errorCode: '11000'");
+    expect(output).toContain("errorType: 'Error'");
+    expect(output).toMatch(/error-logging\.test\.js:\d+:\d+/);
+    expect(output).not.toContain("PRIVATE_MARKER");
   });
 });

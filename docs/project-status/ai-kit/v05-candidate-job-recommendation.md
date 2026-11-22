@@ -2,6 +2,9 @@
 
 ## Current project state
 
+The batch assessment prompt now selects Vietnamese or English independently
+for each Job's reason and requirement labels, using explicit English requirements.
+
 AI-V05 Product Specification and Data Contract are **APPROVED**. Slice 01 — Job
 Embedding Foundation (F02 support) is implemented and verified with focused
 offline tests: READY JobMatchProfile formatting, optional Job `embeddingText`,
@@ -16,7 +19,17 @@ Final Scoring, Ranking & Candidate HTTP delivery (F04) is implemented and
 focused offline verified. Live end-to-end checkpoints of
 `POST /api/candidate/job-recommendations` passed for both a Generated and an
 Uploaded Default CV. Actual Atlas Automated Embedding token usage has not been
-captured. AI-V05 Final Acceptance is **PENDING**.
+captured. The F03 Codex batch now has a bounded 120-second request timeout;
+the frontend recommendation transport allows 240 seconds for sequential PDF
+normalization and batch calls. Focused regression checks and the AI Kit gate
+passed, but the revised limits have not been rerun against a live provider.
+F03 now gives each Job distinct source IDs and constrains each Job's output
+references through a request-specific strict schema. The shared V03 evidence
+resolver also takes REQUIRED priority from a structured requiredSkill source
+when the model labels it otherwise. Focused offline tests passed; these fixes
+have not produced a new live end-to-end pass.
+AI-V05 Final Acceptance is
+**PENDING**.
 
 ## Deferred / not started
 
@@ -26,12 +39,26 @@ captured. AI-V05 Final Acceptance is **PENDING**.
   unverified beyond the two live end-to-end checkpoints below. Uploaded CV
   acceptance requires technical correctness only; semantic quality is not an
   acceptance blocker for it.
+- Uploaded CV request `fe645b02-0fbf-46b1-b103-becf6d98421d` completed both
+  provider calls but failed F03 evidence resolution for Job index 9. The old
+  batch prompt reused Job source IDs across Jobs, while its strict schema did
+  not constrain references to the corresponding Job. The updated schema and
+  unique IDs are verified offline; live acceptance remains pending.
+- Uploaded CV request `4ec997a8-14c1-4075-ac0e-da5980452f5b` completed both
+  provider calls with the per-Job schema but failed evidence resolution at Job
+  index 0: the model labelled a structured PostgreSQL requiredSkill as
+  PREFERRED. The shared resolver now derives REQUIRED from that canonical Job
+  source. Offline regression passed; this request has not been rerun live.
 - Operational risk: an earlier Uploaded CV checkpoint (request
   `89acc87d-4b98-4031-b3a9-0af397bfae1f`) failed with HTTP 500 when the F03
   batch call hit the 90-second CCPro client timeout
   (`APIConnectionTimeoutError`, stage `batch_inference`); the passing rerun's
   batch completed in about 48 seconds. The cause of the earlier timeout is
-  unproven. No timeout, model, or batch-size change is required.
+  unproven. The batch timeout is now 120 seconds, without live confirmation
+  that the same workload completes within it. A true provider timeout still
+  fails the whole request under F03/BR-AI-17. The separate 60-second frontend
+  transport cutoff was fixed after a later browser request aborted during
+  batch inference.
 
 ## Implementation record (slice detail)
 
@@ -87,6 +114,42 @@ captured. AI-V05 Final Acceptance is **PENDING**.
   are runtime only; Vector Score is not returned or used for final ranking.
 
 ## Verification status
+
+- 2026-11-22 language prompt guidance: focused AI Kit prompt suites passed
+  (5 files, 152 tests). No full gate or live provider call was run per the
+  user's test-suite-only instruction.
+
+- 2026-11-22 structured priority regression: focused V03 and V05 tests first
+  failed at the exact priority guard seen in the new Uploaded CV log. After the
+  resolver fix, six focused AI Kit suites passed (106 tests) and four focused
+  Backend recommendation suites passed (15 tests). Full gates and live provider
+  calls were not run per the user's test-suite-only instruction.
+
+- 2026-11-22 batch evidence regression: a focused test first failed because
+  two Jobs shared `J0`. After the change, five AI Kit suites passed (103 tests),
+  including Uploaded PDF evidence provenance and per-Job schema assertions;
+  four focused Backend recommendation suites passed (15 tests). Full gates
+  were not rerun per the user's test-suite-only instruction. No live provider
+  call was made for the new schema.
+
+- 2026-11-22 timeout regression: focused AI Kit tests failed before the fix
+  because the batch had no request-specific deadline and the adapter placed
+  that option in the provider body; both passed after the fix (21 tests).
+  `cd ai-kit && npm run verify:agent` passed (531 tests and lint) before a
+  final test-only assertion adjustment; the focused suite passed again after
+  that adjustment. Four focused Backend recommendation files passed (15 tests).
+  The focused frontend timeout test failed at 210 seconds before the adjustment and passed
+  at 240 seconds. Changed frontend files passed targeted ESLint, and
+  `yarn build` passed. `cd frontend && yarn verify:agent` failed in three
+  Job Discovery authorization tests that also failed when run alone; global
+  `yarn lint` failed on three unrelated existing files. The interrupted
+  Backend full gate was stopped at the user's request to run only test suites.
+  No live provider check was run for the revised timeout.
+
+- Frontend recommendation transport regression on 2026-11-22: the focused
+  Node test reproduced the former 60-second cutoff, then passed after the
+  dedicated 210-second request timeout was applied (1 test). Targeted ESLint
+  passed. No live provider rerun or full frontend gate was run for this fix.
 
 - Focused AI Kit tests passed: `npx vitest run test/job-embedding-text.test.js
   test/job-normalization.test.js` (68 tests). Focused Backend tests passed:

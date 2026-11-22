@@ -100,6 +100,8 @@ describe("AI-V04 F01 CV Evaluation", () => {
     expect(instruction).toContain("It may clarify or remove unsupported claims.");
     expect(instruction).toContain("Return null when a useful rewrite requires inventing duties, dates, durations, outcomes, or credentials.");
     expect(instruction).toContain("Rewrite is advisory, never applied automatically.");
+    expect(instruction).toContain("Prefer Vietnamese for human-readable requirement labels, summary, reviews, comments, suggestions, and CV-ready rewrites");
+    expect(instruction).toContain("only when the Job explicitly requires English");
     expect(result.cvImprovements.map((item) => item.rewrite)).toEqual([rewrite, null]);
     expect(result.matchScore).toBe(92);
   });
@@ -143,6 +145,7 @@ describe("AI-V04 F01 CV Evaluation", () => {
     expect(result.cvImprovements[1].sourceReference).toBeNull();
     expect(cv).toEqual(before);
     const request = codexCall.mock.calls[0][0];
+    expect(request.requestTimeoutMs).toBe(cv.source.type === "UPLOADED_CV" ? 120_000 : undefined);
     expect(request.text.format).toMatchObject({ type: "json_schema", name: "cv_evaluation", strict: true });
     expect(request.instructions).toContain("0,10,...,100");
     expect(request.instructions).toContain("Rewrite is advisory, never applied automatically.");

@@ -193,7 +193,7 @@ future capability.
 - Future capabilities must depend on AI Kit-owned capability or adapter
   boundaries, not import a provider SDK directly.
 - A provider adapter owns SDK construction, provider request delegation,
-  provider-boundary validation, and minimal provider failure logging. It must
+  provider-boundary validation, and production-safe provider failure logging. It must
   not own business prompts, matching/scoring rules, authorization, or
   persistence.
 - Each adapter call sends at most one HTTP attempt. Adapters disable SDK-level
@@ -242,13 +242,14 @@ future capability.
 
 - Runtime modules use the injected logger; they must not obtain or construct a
   second application logger.
-- Logs must not include API keys, access credentials, CV or Job Description
-  content, business prompts, tool arguments containing private data, or raw
-  provider responses. Prefer minimal metadata such as provider/model and
-  normalized status.
-- Provider adapter failure logs include only provider, configured model, HTTP
-  status, and a bounded error code. Do not pass an SDK error object, its message,
-  stack, cause, or response body to the logger.
+- Production provider logs use minimal metadata such as provider/model and
+  normalized status. The injected Backend logger exposes an optional
+  `development` method; adapters use it to log complete provider responses and
+  exceptions only in development, including content needed to debug a failed
+  inference. AI Kit does not read environment variables or create another logger.
+- Provider adapter failure logs at `error` include only provider, configured
+  model, HTTP status, and a bounded error code. The separate development-only
+  record may include the SDK exception, message, stack, cause, and response.
 - Each successful provider API call logs `input_tokens`, `output_tokens`,
   `total_tokens`, and `cached_tokens` through the injected logger. An
   unavailable provider usage field is logged as `null`, not guessed.

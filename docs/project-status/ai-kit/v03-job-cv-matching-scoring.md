@@ -2,6 +2,9 @@
 
 ## Current project state
 
+The semantic assessment prompt now prefers Vietnamese requirement labels, with
+English only when the Job explicitly requires it.
+
 AI-V03 Slices 1–4 (F01 Match Result orchestration, F02 Semantic Skills
 Assessment, F03 Deterministic Field Assessment, and F04 Skills Aggregation &
 Weighted Score; BR-AI-23–34) are **implemented and verified offline** in AI Kit.
@@ -92,6 +95,10 @@ Gemini/Groq semantic evaluation are verification limits, not deviations.
   persistence, or Backend integration was added.
 
 ## Verification status
+
+- **2026-11-22 — Language prompt guidance:** The focused AI Kit prompt suites
+  passed (5 files, 152 tests). No full gate or live provider call was run per
+  the user's test-suite-only instruction.
 
 - **2026-10-24 — Final Acceptance closure:** Product Owner verdict `ACCEPTED`.
   The [evaluation report](../../evaluation/ai-kit/ai-v03-final-acceptance-evaluation.md)

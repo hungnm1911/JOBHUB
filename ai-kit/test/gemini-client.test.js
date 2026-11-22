@@ -16,6 +16,7 @@ import { createGeminiClient } from "../src/llm/gemini-client.js";
 const logger = Object.freeze({
   error: vi.fn(),
   info: vi.fn(),
+  development: vi.fn(),
 });
 
 describe("Gemini client adapter", () => {
@@ -72,6 +73,9 @@ describe("Gemini client adapter", () => {
       total_tokens: 18,
       cached_tokens: 3,
     });
+    expect(logger.development).toHaveBeenCalledWith("AI provider response", {
+      provider: "gemini", model: "test-model", response,
+    });
   });
 
   it("logs provider failures without swallowing or replacing them", async () => {
@@ -102,6 +106,9 @@ describe("Gemini client adapter", () => {
       },
     );
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain(marker);
+    expect(logger.development).toHaveBeenCalledWith("AI provider request failed", {
+      provider: "gemini", model: "test-model", error: providerError,
+    });
   });
 
   it("rejects incomplete provider configuration before SDK initialization", () => {

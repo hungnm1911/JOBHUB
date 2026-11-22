@@ -12,6 +12,43 @@ const isExposedClientHttpError = (error) => {
     && error.status < 500;
 };
 
+const MAX_CAUSE_DEPTH = 5;
+const MAX_STACK_FRAMES = 20;
+const SAFE_CODE = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
+const STACK_FRAME = /^\s*at\s+(?:.*?\()?((?:(?:file:\/\/)?\/[^()\s?#]+|node:[\w/.-]+):\d+:\d+)\)?\s*$/;
+
+// Error messages, the first stack line, and provider payloads can contain CV/JD
+// data. Keep only source locations from stack frames for runtime diagnosis.
+const safeErrorContext = (error) => {
+  const seen = new Set();
+  const chain = [];
+  let current = error;
+
+  while (current instanceof Error && chain.length < MAX_CAUSE_DEPTH && !seen.has(current)) {
+    seen.add(current);
+    const frames = typeof current.stack === "string"
+      ? current.stack.split("\n").slice(1)
+        .map((line) => line.match(STACK_FRAME)?.[1])
+        .filter(Boolean).slice(0, MAX_STACK_FRAMES)
+      : [];
+    const name = current.constructor?.name;
+    const code = typeof current.code === "string" && SAFE_CODE.test(current.code)
+      ? current.code
+      : Number.isSafeInteger(current.code) ? String(current.code) : null;
+
+    chain.push({
+      errorType: typeof name === "string" && SAFE_CODE.test(name) ? name : "Error",
+      errorCode: code,
+      upstreamStatus: Number.isInteger(current.status) && current.status >= 100
+        && current.status <= 599 ? current.status : null,
+      stack: frames,
+    });
+    current = current.cause;
+  }
+
+  return chain;
+};
+
 const errorHandler = (error, request, response, _next) => {
   const isOperrationError = error instanceof AppError;
   const isMulterError = error instanceof multer.MulterError;
@@ -36,23 +73,25 @@ const errorHandler = (error, request, response, _next) => {
   }
 
   const [requestPath] = request.originalUrl.split("?");
+  const errorChain = safeErrorContext(error);
   const logContext = {
     requestId: request.id,
     request: `${request.method} ${requestPath}`,
     statusCode,
-    httpStatus: Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599
-      ? error.status
-      : null,
-    errorCode: typeof error?.code === "string"
-      && /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(error.code)
-      ? error.code
-      : null,
+    httpStatus: statusCode,
+    upstreamStatus: errorChain.find(({ upstreamStatus }) => upstreamStatus !== null)
+      ?.upstreamStatus ?? null,
+    errorCode: errorChain.find(({ errorCode: code }) => code !== null)?.errorCode ?? null,
+    errorType: errorChain[0]?.errorType ?? "UnknownError",
+    stack: errorChain[0]?.stack ?? [],
+    causes: errorChain.slice(1),
+    ...(config.env === "development" ? { error } : {}),
   };
 
   if (statusCode >= 500) {
     logger.error("Unhandled server error", logContext);
   } else {
-    logger.debug("Request rejected", logContext);
+    logger.warn("Request rejected", logContext);
   }
 
   const responseBody = {
