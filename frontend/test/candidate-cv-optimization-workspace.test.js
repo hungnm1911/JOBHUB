@@ -92,9 +92,11 @@ const settle = () => act(async () => { await new Promise((resolve) => setTimeout
 const count = (suffix) => calls.filter((url) => url.endsWith(suffix)).length
 
 async function mountToPreview() {
-  const container = document.createElement('div')
-  document.body.append(container)
-  const root = createRoot(container)
+  // ProfileModal portals to <body>, so query the whole body.
+  const host = document.createElement('div')
+  document.body.append(host)
+  const container = document.body
+  const root = createRoot(host)
   await act(async () => root.render(createElement(Provider, { store },
     createElement(MemoryRouter, null, createElement(Workspace)))))
   await settle()
@@ -103,7 +105,7 @@ async function mountToPreview() {
   await settle()
   await click(button(container, 'Xem bản tối ưu'))
   await settle()
-  return { container, unmount: () => act(async () => { root.unmount(); container.remove() }) }
+  return { container, unmount: () => act(async () => { root.unmount(); host.remove() }) }
 }
 
 test('Optimize calls only Preview and opens the Diff; Save commits once, never re-optimizes', async () => {

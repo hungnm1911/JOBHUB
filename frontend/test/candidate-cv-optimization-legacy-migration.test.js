@@ -92,9 +92,11 @@ const settle = () => act(async () => { await new Promise((resolve) => setTimeout
 const count = (suffix) => calls.filter((url) => url.endsWith(suffix)).length
 
 test('dialog Optimize = Preview + Diff; Draft only after Save; no legacy call or extra evaluation', async () => {
-  const container = document.createElement('div')
-  document.body.append(container)
-  const root = createRoot(container)
+  // ProfileModal portals to <body>, so query the whole body.
+  const host = document.createElement('div')
+  document.body.append(host)
+  const container = document.body
+  const root = createRoot(host)
   await act(async () => root.render(createElement(Provider, { store },
     createElement(MemoryRouter, null,
       createElement(Dialog, { jobId: 'job-1', jobTitle: 'Job One', onClose: () => {} })))))
@@ -123,5 +125,5 @@ test('dialog Optimize = Preview + Diff; Draft only after Save; no legacy call or
   assert.match(container.textContent, /Đã tạo bản nháp CV tối ưu/)
   assert.match(container.textContent, /Draft CV/)
 
-  await act(async () => { root.unmount(); container.remove() })
+  await act(async () => { root.unmount(); host.remove() })
 })

@@ -86,11 +86,13 @@ test('tolerates missing or malformed content', () => {
 })
 
 async function render(props) {
-  const container = document.createElement('div')
-  document.body.append(container)
-  const root = createRoot(container)
+  // ProfileModal portals to <body>, so query the whole body.
+  const host = document.createElement('div')
+  document.body.append(host)
+  const container = document.body
+  const root = createRoot(host)
   await act(async () => root.render(createElement(OptimizationDiffModal, props)))
-  return { container, unmount: () => act(async () => { root.unmount(); container.remove() }) }
+  return { container, unmount: () => act(async () => { root.unmount(); host.remove() }) }
 }
 
 test('modal shows diff only for changed sections, toggles split view, and is review-only', async () => {
@@ -122,15 +124,41 @@ test('modal shows diff only for changed sections, toggles split view, and is rev
   await view.unmount()
 })
 
-test('long content is rendered in a scrollable block', async () => {
+test('diff table is not forced wider than the modal and long interleaved text stays fully in the DOM', async () => {
+  const token = 'superlongunbreakabletoken'.repeat(6)
+  const before = 'Frontend engineer có kinh nghiệm với React, TypeScript và hệ thống tuyển dụng SaaS, đồng thời có kỹ năng Node.js .'
+  const after = `Kỹ sư Frontend có kinh nghiệm xây dựng dashboard và hệ thống tuyển dụng SaaS. Có kỹ năng Node.js, ${token} cùng kinh nghiệm với React và TypeScript.`
+  const view = await render({ baseline: { professionalSummary: before }, proposedContent: { professionalSummary: after }, onClose() {} })
+  const section = view.container.querySelector('[data-section="professionalSummary"]')
+  const table = section.querySelector('table')
+  // Library default is min-width: 1000px, which overflowed the modal body and clipped the right column.
+  assert.notEqual(dom.window.getComputedStyle(table).minWidth, '1000px')
+  assert.equal(dom.window.getComputedStyle(table).tableLayout, 'fixed')
+  assert.equal(section.querySelector('.overflow-x-hidden'), null)
+  assert.ok(section.textContent.includes(token))
+  assert.ok(section.textContent.includes('cùng kinh nghiệm với React và TypeScript.'))
+  assert.ok(section.querySelectorAll('ins, del').length >= 2, 'word-level highlights present')
+  await view.unmount()
+})
+
+test('long content scrolls in the modal body, wraps lines, and locks background scroll', async () => {
   const long = Array.from({ length: 300 }, (_, i) => `Line ${i}`).join('\n')
+  document.body.style.overflow = 'auto'
   const view = await render({
     baseline: { professionalSummary: long },
     proposedContent: { professionalSummary: `${long}\nExtra` },
     onClose() {},
   })
-  const block = view.container.querySelector('[data-section="professionalSummary"] .overflow-auto')
-  assert.ok(block)
-  assert.match(block.textContent, /Extra/)
+  const section = view.container.querySelector('[data-section="professionalSummary"]')
+  assert.match(section.textContent, /Extra/)
+  assert.equal(section.querySelector('.overflow-auto'), null)
+  assert.ok(view.container.querySelector('[role="dialog"] .overflow-y-auto'))
+  assert.equal(document.body.style.overflow, 'hidden')
+  // Portaled to <body> so ancestor stacking contexts (navbar/workspace) cannot cover it.
+  assert.equal(document.querySelector('[role="dialog"]').closest('[class*="fixed"]').parentElement, document.body)
+  assert.match(view.container.querySelector('[role="dialog"]').className, /max-h-\[calc\(100dvh-2rem\)\]/)
+  const labels = [...view.container.querySelectorAll('[role="dialog"] button')].map((b) => b.textContent)
+  assert.ok(labels.includes('Đóng'))
   await view.unmount()
+  assert.equal(document.body.style.overflow, 'auto')
 })

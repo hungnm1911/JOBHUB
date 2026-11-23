@@ -74,9 +74,11 @@ after(async () => {
 })
 
 async function mount(Component, props) {
-  const container = document.createElement('div')
-  document.body.append(container)
-  const root = createRoot(container)
+  // ProfileModal portals to <body>, so query the whole body.
+  const host = document.createElement('div')
+  document.body.append(host)
+  const container = document.body
+  const root = createRoot(host)
   const router = createMemoryRouter([
     { path: '/', element: createElement(UnsavedChangesProvider, null, createElement(Component, props)) },
     { path: '/candidate/cvs', element: createElement('p', null, 'CV library') },
@@ -85,7 +87,7 @@ async function mount(Component, props) {
   return { container, router, async unmount() {
     await act(async () => root.unmount())
     router.dispose()
-    container.remove()
+    host.remove()
   } }
 }
 async function click(button) {

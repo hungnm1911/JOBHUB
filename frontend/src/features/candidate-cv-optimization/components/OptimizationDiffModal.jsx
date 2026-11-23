@@ -14,6 +14,20 @@ const CHANGE_LABEL = Object.freeze({
   [CHANGE.MODIFIED]: 'Đã chỉnh sửa',
 })
 
+// react-diff-viewer-continued@4.4.0 pins `diffContainer { min-width: 1000px }`
+// (only released below 768px) and `pre { width: fit-content }`, which make the
+// table wider than the modal body and push the right column out of view.
+// Release both so every column shares the available width and long lines wrap.
+const DIFF_STYLES = Object.freeze({
+  diffContainer: { minWidth: 0, width: '100%', tableLayout: 'fixed', pre: { width: 'auto' } },
+})
+
+const NARROW_QUERY = '(max-width: 639px)'
+const isNarrowViewport = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia(NARROW_QUERY).matches
+
 // Review-only Preview Diff (AI-V06 F04): no editing and no per-change
 // accept/reject. The caller decides whole-Proposal actions through `actions`
 // and surfaces results through `notice`; `busy` locks closing while saving.
@@ -25,7 +39,7 @@ function OptimizationDiffModal({
   notice,
   busy = false,
 }) {
-  const [splitView, setSplitView] = useState(true)
+  const [splitView, setSplitView] = useState(() => !isNarrowViewport())
   const sections = useMemo(
     () => buildOptimizationDiffSections(baseline, proposedContent),
     [baseline, proposedContent],
@@ -47,7 +61,7 @@ function OptimizationDiffModal({
         )
       }
       onClose={onClose}
-      panelClassName="max-w-5xl"
+      panelClassName="max-h-[calc(100dvh-2rem)] max-w-5xl"
       title="So sánh bản tối ưu"
     >
       <div className="space-y-4" data-testid="optimization-diff">
@@ -112,7 +126,7 @@ function OptimizationDiffModal({
             {(section.change === CHANGE.ADDED ||
               section.change === CHANGE.REMOVED ||
               section.change === CHANGE.MODIFIED) && (
-              <div className="max-h-96 overflow-auto rounded-md border text-sm">
+              <div className="min-w-0 overflow-x-auto rounded-md border text-sm">
                 <ReactDiffViewer
                   compareMethod={DiffMethod.WORDS}
                   extraLinesSurroundingDiff={3}
@@ -121,6 +135,7 @@ function OptimizationDiffModal({
                   oldValue={section.before}
                   rightTitle={splitView ? 'Sau' : undefined}
                   showDiffOnly
+                  styles={DIFF_STYLES}
                   splitView={splitView}
                 />
               </div>
