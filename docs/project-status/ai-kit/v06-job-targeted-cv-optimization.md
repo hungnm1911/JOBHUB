@@ -27,8 +27,24 @@ to that workflow and returns the new Draft detail for V7 read/edit/Preview.
 The Backend/AI Kit phase is closed with AI-V06 Final Acceptance **`ACCEPTED`**
 by the Product Owner on 2026-10-26, with the known LLM quality and verification
 limits in the [acceptance evaluation](../../evaluation/ai-kit/ai-v06-final-acceptance-evaluation.md).
-This is business acceptance, not an official full-gate PASS. Frontend
-integration remains **NOT STARTED**.
+This is business acceptance, not an official full-gate PASS.
+
+**Phase status: `ACCEPTED / PHASE CLOSED` (2026-11-24, Product Owner
+acceptance decision).** The amended MVP flow Preview → Signed Proposal → Diff
+Review → Commit → `GENERATED/DRAFT` is complete: Backend R0–R4, Frontend F1–F3,
+F4-A/B/C and UX-01/02/03. The legacy `/optimize-cv` route and frontend callers
+are removed (route now 404). The Diff modal renders through a React Portal with
+body scroll lock, and diff wrapping is fixed for `react-diff-viewer-continued@4.4.0`.
+Rich Text semantics: a section returned `null` keeps its baseline HTML; a
+replaced section does not inherit the old HTML (plain-only); the Source CV is
+unchanged.
+
+Accepted limitations: Commit is not idempotent; a network error after Commit may
+leave an unknown outcome (the Candidate should check the CV library before
+retrying); Uploaded PDF normalization is best-effort; plus the LLM quality
+limits in the acceptance evaluation. Not verified: official Backend/AI Kit/
+Frontend full gates, live provider (including Gemini/Groq fallback), and a full
+end-to-end browser test.
 
 ## Deferred / not started
 
@@ -36,8 +52,8 @@ integration remains **NOT STARTED**.
 
 - Frontend F1 (Preview/Commit API module and `useCvOptimizationProposal` hook, stale-Proposal reset) is implemented. F2 `OptimizationDiffModal` (react-diff-viewer-continued 4.4.0, seven readable sections, split/unified, review-only) and its `diffSections.js` formatter are implemented. F3 integrates both into `CandidateCvOptimizeWorkspace` (Optimize = Preview + Diff; Save Draft = Commit of the untouched signed Proposal; 400/403/404/409 and unknown 5xx/network Commit handling). F4-A migrated `JobCvEvaluationDialog` to Preview → Diff → Commit (reusing the F1 hook and F2/F3 review modal; no Draft before Save) and removed the legacy frontend API function/hook, so no frontend path calls legacy `/optimize-cv`. F4-B removed the Backend legacy `POST /optimize-cv` route, controller handler and `createOptimizedCandidateCvDraftForJob` (now 404); only Commit creates the `GENERATED/DRAFT`. Preview, Proposal signing, Commit and the shared authorization/baseline/merge/V7 owners are unchanged; merge and persistence regression tests were ported to Preview → Commit rather than deleted.
 
-- Frontend workflow integration has not started. Slice 08 exposes the action through
-  Candidate HTTP and reuses V7 Draft management and Preview.
+- Frontend workflow integration is complete for the MVP (F1–F3, F4-A/B/C,
+  UX-01/02/03); nothing remains open for this phase.
 - Live fallback on Gemini/Groq and the official V06 Backend/AI Kit full gates
   remain unverified. Representative live quality has the accepted limitations
   recorded in the acceptance evaluation.
@@ -53,6 +69,7 @@ this leaf records the current state without copying CV content or credentials.
 
 ## Verification status
 
+- 2026-11-24 Phase closure (documentation only): AI-V06 recorded `ACCEPTED / PHASE CLOSED` on the Product Owner's decision. Evidence relied on, executed earlier: focused Backend/Frontend tests, targeted ESLint, a Chromium component check of the Diff modal (Portal, scroll lock, diff wrapping for `react-diff-viewer-continued@4.4.0`), and Product Owner UX acceptance of UX-01/02/03. Not run: `npm run verify:agent` / `yarn verify:agent`, build, live provider verification, full end-to-end browser test. This closure ran only `git diff --check` on the edited docs.
 - 2026-11-24 Backend F4-C1 (rich text preservation, F03, BR-AI-03/06, Data §6.6/§6.7): focused `backend/test/candidate/ai-v06-c1-rich-text-preservation.test.js` (5 tests) and targeted ESLint passed with mocked AI Kit; no production code changed. Semantics recorded: HTML is preserved per top-level section — a section returned as `null` keeps its baseline HTML; a replaced section is plain-only (the AI receives and returns no HTML), including items whose text is identical, so a replacement Draft can lose formatting. This is current change semantics, not a data-loss defect, and the Source CV is unchanged and keeps its HTML. Preview `proposedContent` equals the committed Draft `generatedContent`. Per-item HTML retention would change the contract and is not implemented. No `npm run verify:agent`, build or live provider call was run per the requested scope.
 - 2026-11-24 Backend F4-B (legacy `/optimize-cv` cleanup): focused Backend tests (11 files / 77 tests across `test/candidate/ai-v06*`, with the legacy route asserted 404 and merge/persistence coverage ported to Preview → Commit) and targeted ESLint passed with mocked AI Kit. No `npm run verify:agent`, build or live provider call was run per the requested scope.
 - 2026-11-24 Frontend F3 (Workspace Preview → Diff → Save Draft): focused `test:cv-optimization-proposal` (F1 + F2 + 11 new Workspace integration tests) and targeted ESLint passed with a mocked API client. No `yarn verify:agent`, build, real-browser check or live provider call was run per the requested scope.

@@ -132,6 +132,8 @@ Acceptance. Current state and documentation alignment are recorded in the
   [`../../data/ai-kit/versions/v06-job-targeted-cv-optimization.md`](../../data/ai-kit/versions/v06-job-targeted-cv-optimization.md)
 
 The [AI-V06 project-status leaf](../../project-status/ai-kit/v06-job-targeted-cv-optimization.md)
-records the implemented slices and verification limits. Frontend integration
-remains outside this completed Backend/AI Kit phase; acceptance does not claim
-live fallback or official full-gate verification.
+records the implemented slices and verification limits. The Backend/AI Kit
+phase was accepted on 2026-10-26; the Preview → Signed Proposal → Diff Review →
+Commit flow (Backend R0–R4, Frontend F1–F4) was accepted as MVP and the phase
+closed on 2026-11-24 by Product Owner decision. Acceptance does not claim live
+fallback, live-provider, official full-gate, or full end-to-end browser verification.

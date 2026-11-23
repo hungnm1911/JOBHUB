@@ -105,8 +105,9 @@ implementation evidence only; it does not replace engineering authority.
 
 No canonical implementation owner currently exists for:
 
-- AI-V06 Frontend entry; the Backend baseline, merge, Draft persistence, HTTP
-  action, and V7 Draft management/Preview consumers have owners in the rows
+- AI-V06 Frontend (Preview → Diff → Commit) is implemented under `frontend/`
+  and is not an AI Kit owner; the Backend baseline, merge, Preview/Commit HTTP
+  actions, and V7 Draft management/Preview consumers have owners in the rows
   above;
 - AI #1 Match Result orchestration, explanation, or improvement behavior beyond AI-V03 F02/F03/F04;
 - business prompts and structured-output schemas for capabilities other than
