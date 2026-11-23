@@ -9,6 +9,8 @@ and its injected AI Kit logger.
 - `src/utils/logger.js` is the single dependency-free application logger.
   - Its level comes from `LOG_LEVEL` through `config.logging`: `debug` in
     development and `info` elsewhere.
+  - Timestamps use `LOG_TIME_ZONE` (default `Asia/Bangkok`) and display as
+    `YYYY-MM-DD HH:mm:ss` in pretty and JSON output.
   - Output is pretty and colorized outside production and JSON lines in
     production.
   - It prints error stacks, own properties, and `cause` chains.
@@ -99,6 +101,18 @@ and its injected AI Kit logger.
 - **Documented only:** repository-level and backend-specific agent contracts exist.
 
 ## Verification status
+
+- 2026-11-23 readable timestamps: the two focused logging suites failed before
+  the format change and passed afterward (**2 files / 12 tests**), covering
+  pretty output, JSON output, and local-date rollover. Scoped ESLint and
+  `git diff --check` passed. The full Backend gate was not rerun per user request.
+
+- 2026-11-23 logging time zone: focused development and production logging
+  suites reproduced the UTC-only timestamp before the fix and passed after it
+  (**2 files / 12 tests**), including a local-date rollover check. Backend
+  ESLint passed with 2 pre-existing V6 test warnings, ARCH-001–ARCH-019 passed,
+  and `git diff --check` passed. The full Backend test run was stopped at user
+  request; the full `verify:agent` gate was not completed.
 
 - 2026-11-22 conditional-response trace: a focused Express ETag regression
   reproduced a `200` representation converted into `304` by `If-None-Match`.

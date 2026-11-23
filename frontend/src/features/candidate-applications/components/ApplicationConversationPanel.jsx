@@ -7,6 +7,7 @@ import {
   sendOwnApplicationConversationMessageApi,
 } from '@/apis/application.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { cn } from '@/lib/utils'
 
 import { formatDateTime } from '../utils'
@@ -93,6 +94,11 @@ function ApplicationConversationPanel({ applicationId, open, onClose, currentUse
   const [authority, setAuthority] = useState(null)
   const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
+  const { confirmDiscard } = useUnsavedChangesPrompt(open && Boolean(content.trim()))
+  const handleClose = () => confirmDiscard(() => {
+    setContent('')
+    onClose()
+  })
   const [reloadKey, setReloadKey] = useState(0)
   const listRef = useRef(null)
 
@@ -196,7 +202,7 @@ function ApplicationConversationPanel({ applicationId, open, onClose, currentUse
             </p>
           </div>
         </div>
-        <Button onClick={onClose} size="sm" type="button" variant="ghost">
+        <Button onClick={handleClose} size="sm" type="button" variant="ghost">
           Thu gọn
         </Button>
       </div>

@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { replaceOwnApplicationSubmittedCvApi } from '@/apis/application.api'
 import { listOwnCandidateCvsApi } from '@/apis/candidate-cv.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import ProfileModal from '@/features/candidate-profile/components/ProfileModal'
 import { CANDIDATE_CV_STATUS } from '@/utils/constant'
 
@@ -16,6 +17,11 @@ function ReplaceSubmittedCvModal({ application, onClose, onReplaced }) {
   const [cvs, setCvs] = useState([])
   const [error, setError] = useState(null)
   const [selectedCvId, setSelectedCvId] = useState('')
+  const [initialCvId, setInitialCvId] = useState('')
+  const { confirmDiscard, markSaved } = useUnsavedChangesPrompt(
+    Boolean(initialCvId) && selectedCvId !== initialCvId,
+  )
+  const handleClose = () => confirmDiscard(onClose)
 
   useEffect(() => {
     let active = true
@@ -27,6 +33,7 @@ function ReplaceSubmittedCvModal({ application, onClose, onReplaced }) {
         const activeCvs = (response.cvs ?? []).filter(isActiveCandidateCv)
         setCvs(activeCvs)
         setSelectedCvId(activeCvs[0]?.id ?? '')
+        setInitialCvId(activeCvs[0]?.id ?? '')
         setLoading(false)
         setError(null)
       },
@@ -56,6 +63,7 @@ function ReplaceSubmittedCvModal({ application, onClose, onReplaced }) {
         expectedVersion: application.version,
       })
       toast.success('Đã cập nhật CV đã nộp')
+      markSaved()
       onReplaced(response.application)
       onClose()
     } catch (replaceError) {
@@ -71,7 +79,7 @@ function ReplaceSubmittedCvModal({ application, onClose, onReplaced }) {
       description="Chỉ dùng CV đang Active. Snapshot mới sẽ thay CV đã nộp cho đơn này."
       footer={
         <>
-          <Button disabled={busy} onClick={onClose} type="button" variant="outline">
+          <Button disabled={busy} onClick={handleClose} type="button" variant="outline">
             Hủy
           </Button>
           <Button
@@ -84,7 +92,7 @@ function ReplaceSubmittedCvModal({ application, onClose, onReplaced }) {
           </Button>
         </>
       }
-      onClose={onClose}
+      onClose={handleClose}
       title="Thay CV đã nộp"
     >
       {loading ? (

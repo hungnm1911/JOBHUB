@@ -7,7 +7,15 @@
     "ai-kit": "yarn --cwd ai-kit",
     "build": "yarn client build",
     "logs:backend": "docker compose logs --tail=100 -f backend",
-    "logs:frontend": "docker compose logs --tail=100 -f frontend"
+    "logs:frontend": "docker compose logs --tail=100 -f frontend",
+    "deps:add:backend": "docker compose exec -T backend npm install",
+    "deps:add:ai-kit": "docker compose exec -T -w /app/ai-kit backend npm install",
+    "deps:add:frontend": "docker compose exec -T frontend yarn add",
+    "deps:sync:backend": "docker compose exec -T backend npm ci",
+    "deps:sync:ai-kit": "docker compose exec -T -w /app/ai-kit backend npm ci",
+    "deps:sync:frontend": "docker compose exec -T frontend yarn install --frozen-lockfile",
+    "restart:backend": "docker compose restart backend",
+    "restart:frontend": "docker compose restart frontend"
   },
   "packageManager": "yarn@1.22.22"
 }

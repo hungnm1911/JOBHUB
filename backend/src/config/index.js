@@ -340,9 +340,18 @@ if (!LOG_LEVELS.includes(logLevel)) {
   throw new Error(`LOG_LEVEL must be one of: ${LOG_LEVELS.join(", ")}`);
 }
 
+const logTimeZone = process.env.LOG_TIME_ZONE?.trim() || "Asia/Bangkok";
+
+try {
+  new Intl.DateTimeFormat("en-US", { timeZone: logTimeZone });
+} catch {
+  throw new Error("LOG_TIME_ZONE must be a valid IANA time zone");
+}
+
 const logging = Object.freeze({
   level: logLevel,
   format: env === "production" ? "json" : "pretty",
+  timeZone: logTimeZone,
 });
 
 export default Object.freeze({

@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import { resetPasswordApi } from '@/apis/authentication.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { ACCOUNT_FIELD_LIMIT } from '@/utils/constant'
 import { resetPasswordSchema, zodResolver } from '@/validation'
 
@@ -17,7 +18,7 @@ function ResetPasswordForm({ token, onReset, onInvalidToken }) {
     confirmPassword: false,
   })
   const {
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
     handleSubmit,
     register,
     setError,
@@ -25,6 +26,7 @@ function ResetPasswordForm({ token, onReset, onInvalidToken }) {
     defaultValues: { password: '', confirmPassword: '' },
     resolver: zodResolver(resetPasswordSchema),
   })
+  const { markSaved } = useUnsavedChangesPrompt(isDirty)
 
   const togglePassword = (field) => {
     setVisiblePasswords((current) => ({ ...current, [field]: !current[field] }))
@@ -46,6 +48,7 @@ function ResetPasswordForm({ token, onReset, onInvalidToken }) {
       return
     }
 
+    markSaved()
     await endSessionAfterPasswordReset()
     onReset()
   }

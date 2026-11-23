@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { cn } from '@/lib/utils'
 
 import CvCreateDraftForm from './CvCreateDraftForm'
@@ -19,13 +20,24 @@ function CandidateCvCreate() {
   const initialMethod =
     searchParams.get('method') === METHODS.UPLOAD ? METHODS.UPLOAD : METHODS.DRAFT
   const [method, setMethod] = useState(initialMethod)
+  const [isDirty, setIsDirty] = useState(false)
+  const { confirmDiscard, markSaved } = useUnsavedChangesPrompt(isDirty)
 
   const handleCreated = () => {
+    markSaved()
     navigate('/candidate/cvs')
   }
 
   const handleCancel = () => {
-    navigate('/candidate/cvs')
+    confirmDiscard(() => navigate('/candidate/cvs'))
+  }
+
+  const switchMethod = (nextMethod) => {
+    if (nextMethod === method) return
+    confirmDiscard(() => {
+      setIsDirty(false)
+      setMethod(nextMethod)
+    })
   }
 
   return (
@@ -53,7 +65,7 @@ function CandidateCvCreate() {
                 ? 'bg-violet-600 text-white shadow-2xs'
                 : 'text-muted-foreground hover:text-foreground',
             )}
-            onClick={() => setMethod(METHODS.DRAFT)}
+            onClick={() => switchMethod(METHODS.DRAFT)}
             role="radio"
             type="button"
           >
@@ -69,7 +81,7 @@ function CandidateCvCreate() {
                 ? 'bg-sky-600 text-white shadow-2xs'
                 : 'text-muted-foreground hover:text-foreground',
             )}
-            onClick={() => setMethod(METHODS.UPLOAD)}
+            onClick={() => switchMethod(METHODS.UPLOAD)}
             role="radio"
             type="button"
           >
@@ -85,6 +97,7 @@ function CandidateCvCreate() {
           idPrefix="create-page"
           onCancel={handleCancel}
           onCreated={handleCreated}
+          onDirtyChange={setIsDirty}
         />
       ) : (
         <CvUploadForm
@@ -92,6 +105,7 @@ function CandidateCvCreate() {
           idPrefix="upload-page"
           onCancel={handleCancel}
           onCreated={handleCreated}
+          onDirtyChange={setIsDirty}
         />
       )}
     </div>

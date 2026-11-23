@@ -8,6 +8,7 @@ import {
 } from '@/apis/candidate-profile.api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/Input'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { COMPANY_IMAGE_ACCEPT } from '@/utils/constant'
 
 import ProfileModal from './ProfileModal'
@@ -34,6 +35,18 @@ function ProfileBasicEditModal({ profile, onClose, onSaved }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarFailed, setAvatarFailed] = useState(false)
   const [error, setError] = useState(null)
+  const [initial, setInitial] = useState(() => ({
+    fullName: profile?.fullName ?? '',
+    phoneNumber: profile?.phoneNumber ?? '',
+    avatarUrl: profile?.avatarUrl ?? '',
+    dateOfBirth: toDateInputValue(profile?.dateOfBirth),
+  }))
+  const isDirty = fullName !== initial.fullName ||
+    phoneNumber !== initial.phoneNumber ||
+    avatarUrl !== initial.avatarUrl ||
+    dateOfBirth !== initial.dateOfBirth
+  const { confirmDiscard, markSaved } = useUnsavedChangesPrompt(isDirty)
+  const handleClose = () => confirmDiscard(onClose)
 
   const busy = submitting || uploadingAvatar
   const showAvatar = Boolean(avatarUrl) && !avatarFailed
@@ -50,6 +63,7 @@ function ProfileBasicEditModal({ profile, onClose, onSaved }) {
     try {
       const response = await uploadOwnCandidateAvatarApi(file)
       const nextUrl = response.avatar?.url || response.profile?.avatarUrl || ''
+      setInitial((current) => ({ ...current, avatarUrl: nextUrl }))
       setAvatarUrl(nextUrl)
       setAvatarFailed(false)
       if (response.profile) {
@@ -82,6 +96,7 @@ function ProfileBasicEditModal({ profile, onClose, onSaved }) {
         dateOfBirth: dateOfBirth || null,
       })
       toast.success('Đã cập nhật hồ sơ')
+      markSaved()
       onSaved(response.profile)
       onClose()
     } catch (saveError) {
@@ -98,7 +113,7 @@ function ProfileBasicEditModal({ profile, onClose, onSaved }) {
       description="Cập nhật thông tin tài khoản Candidate."
       footer={
         <>
-          <Button disabled={busy} onClick={onClose} type="button" variant="outline">
+          <Button disabled={busy} onClick={handleClose} type="button" variant="outline">
             Hủy
           </Button>
           <Button disabled={busy || !fullName.trim()} form="profile-basic-form" type="submit">
@@ -107,7 +122,7 @@ function ProfileBasicEditModal({ profile, onClose, onSaved }) {
           </Button>
         </>
       }
-      onClose={onClose}
+      onClose={handleClose}
       title="Chỉnh sửa hồ sơ"
     >
       <form className="space-y-4" id="profile-basic-form" onSubmit={handleSubmit}>

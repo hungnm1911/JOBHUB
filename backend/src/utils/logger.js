@@ -20,6 +20,24 @@ const LEVEL_ANSI_COLOR = Object.freeze({
 
 const MAX_CAUSE_DEPTH = 5;
 const requestIds = new AsyncLocalStorage();
+const timestampFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: config.logging.timeZone,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+const formatTimestamp = (date) => {
+  const parts = Object.fromEntries(
+    timestampFormatter.formatToParts(date).map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`
+    + ` ${parts.hour}:${parts.minute}:${parts.second}`;
+};
 
 const runWithRequestId = (requestId, callback) => requestIds.run(requestId, callback);
 
@@ -87,7 +105,7 @@ const write = (level, message, { requestId, ...meta } = {}) => {
   const stream = LEVEL_PRIORITY[level] <= LEVEL_PRIORITY.warn
     ? process.stderr
     : process.stdout;
-  const timestamp = new Date().toISOString();
+  const timestamp = formatTimestamp(new Date());
   const activeRequestId = requestId ?? requestIds.getStore();
   const logSite = config.env === "development"
     ? new Error().stack?.split("\n")[3]?.trim() : undefined;

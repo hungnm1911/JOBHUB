@@ -32,3 +32,4 @@ yarn-error.log*
 
 # local package manifests (do not track local dependency drift)
 /yarn.lock
+package-lock.json

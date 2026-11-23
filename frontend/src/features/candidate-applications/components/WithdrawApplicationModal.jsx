@@ -4,11 +4,14 @@ import { toast } from 'sonner'
 
 import { withdrawOwnApplicationApi } from '@/apis/application.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import ProfileModal from '@/features/candidate-profile/components/ProfileModal'
 
 function WithdrawApplicationModal({ application, onClose, onWithdrawn }) {
   const [busy, setBusy] = useState(false)
   const [reason, setReason] = useState('')
+  const { confirmDiscard, markSaved } = useUnsavedChangesPrompt(Boolean(reason))
+  const handleClose = () => confirmDiscard(onClose)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -19,6 +22,7 @@ function WithdrawApplicationModal({ application, onClose, onWithdrawn }) {
         withdrawReason: reason.trim() || null,
       })
       toast.success('Đã rút đơn ứng tuyển')
+      markSaved()
       onWithdrawn(response.application)
       onClose()
     } catch (error) {
@@ -34,7 +38,7 @@ function WithdrawApplicationModal({ application, onClose, onWithdrawn }) {
       description="Bạn chỉ có thể rút đơn khi trạng thái còn là Đã nộp. Thao tác không hoàn tác."
       footer={
         <>
-          <Button disabled={busy} onClick={onClose} type="button" variant="outline">
+          <Button disabled={busy} onClick={handleClose} type="button" variant="outline">
             Hủy
           </Button>
           <Button
@@ -48,7 +52,7 @@ function WithdrawApplicationModal({ application, onClose, onWithdrawn }) {
           </Button>
         </>
       }
-      onClose={onClose}
+      onClose={handleClose}
       title="Rút đơn ứng tuyển"
     >
       <form className="space-y-4" id="withdraw-application-form" onSubmit={handleSubmit}>

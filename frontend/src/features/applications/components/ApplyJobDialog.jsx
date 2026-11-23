@@ -1,8 +1,9 @@
 import { LoaderCircle, X } from 'lucide-react'
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 
 import { listOwnCandidateCvsApi } from '@/apis/candidate-cv.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { CANDIDATE_CV_SOURCE_TYPE, CANDIDATE_CV_STATUS } from '@/utils/constant'
 
 const SOURCE_LABEL = Object.freeze({
@@ -18,6 +19,11 @@ function ApplyJobDialog({ jobTitle, submitting, error, onConfirm, onClose }) {
   const titleId = useId()
   const [view, setView] = useState({ loading: true, cvs: [], loadError: null })
   const [selectedCvId, setSelectedCvId] = useState(null)
+  const [initialCvId, setInitialCvId] = useState(null)
+  const { confirmDiscard } = useUnsavedChangesPrompt(
+    Boolean(initialCvId) && selectedCvId !== initialCvId,
+  )
+  const handleClose = useCallback(() => confirmDiscard(onClose), [confirmDiscard, onClose])
 
   useEffect(() => {
     let active = true
@@ -32,6 +38,7 @@ function ApplyJobDialog({ jobTitle, submitting, error, onConfirm, onClose }) {
         const defaultCv = options.find((cv) => cv.isDefault)
         setView({ loading: false, cvs: options, loadError: null })
         setSelectedCvId(defaultCv?.id ?? options[0]?.id ?? null)
+        setInitialCvId(defaultCv?.id ?? options[0]?.id ?? null)
       },
       (loadError) => {
         if (active) {
@@ -47,21 +54,21 @@ function ApplyJobDialog({ jobTitle, submitting, error, onConfirm, onClose }) {
 
   useEffect(() => {
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape' && !submitting) {
-        onClose()
+      if (event.key === 'Escape' && !submitting && !document.querySelector('[data-slot="alert-dialog-content"]')) {
+        handleClose()
       }
     }
 
     document.addEventListener('keydown', closeOnEscape)
     return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [onClose, submitting])
+  }, [handleClose, submitting])
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-hero/50 p-4 sm:items-center"
       onClick={() => {
         if (!submitting) {
-          onClose()
+          handleClose()
         }
       }}
     >
@@ -83,7 +90,7 @@ function ApplyJobDialog({ jobTitle, submitting, error, onConfirm, onClose }) {
             aria-label="Đóng"
             className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
             disabled={submitting}
-            onClick={onClose}
+            onClick={handleClose}
             type="button"
           >
             <X aria-hidden="true" className="size-4" />
@@ -153,7 +160,7 @@ function ApplyJobDialog({ jobTitle, submitting, error, onConfirm, onClose }) {
         </div>
 
         <div className="flex justify-end gap-2 border-t px-5 py-3">
-          <Button disabled={submitting} onClick={onClose} type="button" variant="outline">
+          <Button disabled={submitting} onClick={handleClose} type="button" variant="outline">
             Hủy
           </Button>
           <Button

@@ -270,6 +270,7 @@ Các biến dưới đây đang được `src/config/index.js` yêu cầu phải
 | `GROQ_API_KEY` | Không đặt | Groq credential tùy chọn; cần cho Groq live smoke hoặc capability được phê duyệt sử dụng Groq |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model do Backend chuẩn hóa và inject vào AI Kit |
 | `LOG_LEVEL` | `debug` ở development, `info` ở môi trường khác | `silent`, `error`, `warn`, `info` hoặc `debug` |
+| `LOG_TIME_ZONE` | `Asia/Bangkok` | Múi giờ IANA cho timestamp log dạng `YYYY-MM-DD HH:mm:ss` |
 
 AI Kit không đọc `process.env`; Backend sở hữu bốn biến provider trên và inject cấu hình đã chuẩn hóa. Xem [AI Kit README](../ai-kit/README.md#configuration) cho setup và smoke checks.
 

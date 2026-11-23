@@ -8,6 +8,7 @@ import {
   updateOwnCandidateCvMetadataApi,
 } from '@/apis/candidate-cv.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import ProfileModal from '@/features/candidate-profile/components/ProfileModal'
 import {
   emptyGeneratedContent,
@@ -47,6 +48,12 @@ function CvEditMetadataModal({ cv, onClose, onUpdated }) {
   const [generatedContent, setGeneratedContent] = useState(() =>
     cv.generatedContent ?? emptyGeneratedContent(),
   )
+  const [initialValues] = useState(() => JSON.stringify(values))
+  const [initialContent, setInitialContent] = useState(() => JSON.stringify(generatedContent))
+  const isDirty = JSON.stringify(values) !== initialValues ||
+    JSON.stringify(generatedContent) !== initialContent
+  const { confirmDiscard, markSaved } = useUnsavedChangesPrompt(isDirty)
+  const handleClose = () => confirmDiscard(onClose)
 
   useEffect(() => {
     if (!isGenerated) {
@@ -57,6 +64,7 @@ function CvEditMetadataModal({ cv, onClose, onUpdated }) {
       ({ cv: detail }) => {
         if (active) {
           if (detail) {
+            setInitialContent(JSON.stringify(detail.generatedContent ?? emptyGeneratedContent()))
             setGeneratedContent(detail.generatedContent ?? emptyGeneratedContent())
             setLoadedDetailCvId(cv.id)
             setDetailError(null)
@@ -110,6 +118,7 @@ function CvEditMetadataModal({ cv, onClose, onUpdated }) {
       }
 
       toast.success('Đã cập nhật thông tin CV')
+      markSaved()
       onUpdated(latestCv)
       onClose()
     } catch (error) {
@@ -129,7 +138,7 @@ function CvEditMetadataModal({ cv, onClose, onUpdated }) {
       }
       footer={
         <>
-          <Button disabled={busy} onClick={onClose} type="button" variant="outline">
+          <Button disabled={busy} onClick={handleClose} type="button" variant="outline">
             Hủy
           </Button>
           <Button disabled={busy || loadingDetail} form="cv-edit-form" type="submit">
@@ -138,7 +147,7 @@ function CvEditMetadataModal({ cv, onClose, onUpdated }) {
           </Button>
         </>
       }
-      onClose={onClose}
+      onClose={handleClose}
       panelClassName="max-w-3xl"
       title={`Chỉnh sửa CV · ${cv.name}`}
     >

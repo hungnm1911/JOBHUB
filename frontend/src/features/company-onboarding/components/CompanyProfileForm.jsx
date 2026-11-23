@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 
 import { updateOwnedCompanyApi } from '@/apis/company.api'
 import RichTextEditor from '@/components/common/RichTextEditor'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { Button } from '@/components/ui/button'
 import { API_ERROR_MESSAGE, COMPANY_IMAGE_KIND, COMPANY_PROFILE_LIMIT } from '@/utils/constant'
 import { companyDraftSchema, companySubmissionSchema, zodResolver } from '@/validation'
@@ -73,6 +74,7 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
     control,
     name: ['logoUrl', 'bannerUrl', 'description', 'descriptionHtml'],
   })
+  const { markSaved } = useUnsavedChangesPrompt(isDirty)
 
   const assignImageUrl = (field, url) => {
     setValue(field, url, { shouldDirty: true, shouldValidate: true })
@@ -112,6 +114,7 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
       return
     }
 
+    markSaved()
     reset(toCompanyProfileFormValues(result.company))
 
     if (intentRef.current === SAVE_INTENT.CONTINUE) {

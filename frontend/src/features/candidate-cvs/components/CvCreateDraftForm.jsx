@@ -34,11 +34,36 @@ const WORKSPACE_VIEW = Object.freeze({
   ALL: 'all',
 })
 
+const INITIAL_VALUES = {
+  name: '',
+  visibility: CANDIDATE_CV_VISIBILITY.PRIVATE,
+  categoryId: '',
+  experienceLevelId: '',
+  skillTags: [],
+  employmentTypes: [],
+  workModes: [],
+  preferredLocations: [],
+}
+
+function withProfilePersonalInfo(content, profile) {
+  return {
+    ...content,
+    personalInfo: {
+      ...content.personalInfo,
+      fullName: content.personalInfo?.fullName || profile.fullName || null,
+      email: content.personalInfo?.email || profile.email || null,
+      phone: content.personalInfo?.phone || profile.phoneNumber || null,
+      avatarUrl: content.personalInfo?.avatarUrl || profile.avatarUrl || null,
+    },
+  }
+}
+
 function CvCreateDraftForm({
   formId = 'cv-create-form',
   idPrefix = 'create',
   onCreated,
   onCancel,
+  onDirtyChange,
   className,
 }) {
   const catalogs = useCvCatalogOptions()
@@ -47,19 +72,18 @@ function CvCreateDraftForm({
   const [creationIntent, setCreationIntent] = useState(
     CANDIDATE_CV_CREATION_INTENT.SAVE_DRAFT,
   )
-  const [values, setValues] = useState({
-    name: '',
-    visibility: CANDIDATE_CV_VISIBILITY.PRIVATE,
-    categoryId: '',
-    experienceLevelId: '',
-    skillTags: [],
-    employmentTypes: [],
-    workModes: [],
-    preferredLocations: [],
-  })
+  const [values, setValues] = useState(INITIAL_VALUES)
   const [generatedContent, setGeneratedContent] = useState(() =>
     emptyGeneratedContent(),
   )
+  const [initialContent, setInitialContent] = useState(() => emptyGeneratedContent())
+
+  useEffect(() => {
+    onDirtyChange?.(
+      JSON.stringify(values) !== JSON.stringify(INITIAL_VALUES) ||
+      JSON.stringify(generatedContent) !== JSON.stringify(initialContent),
+    )
+  }, [values, generatedContent, initialContent, onDirtyChange])
 
   useEffect(() => {
     let active = true
@@ -68,16 +92,8 @@ function CvCreateDraftForm({
         if (!active || !profile) {
           return
         }
-        setGeneratedContent((current) => ({
-          ...current,
-          personalInfo: {
-            ...current.personalInfo,
-            fullName: current.personalInfo?.fullName || profile.fullName || null,
-            email: current.personalInfo?.email || profile.email || null,
-            phone: current.personalInfo?.phone || profile.phoneNumber || null,
-            avatarUrl: current.personalInfo?.avatarUrl || profile.avatarUrl || null,
-          },
-        }))
+        setGeneratedContent((current) => withProfilePersonalInfo(current, profile))
+        setInitialContent((current) => withProfilePersonalInfo(current, profile))
       },
       () => {},
     )

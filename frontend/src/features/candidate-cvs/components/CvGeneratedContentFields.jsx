@@ -17,10 +17,12 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 
+import RichTextEditor from '@/components/common/RichTextEditor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/Input'
 import { SelectDropdown } from '@/components/ui/select-dropdown'
 import { LANGUAGE_PROFICIENCY_LABEL } from '@/features/candidate-profile/utils'
+import { toRichTextEditorValue, toRichTextPlainText } from '@/lib/rich-text-content'
 import { cn } from '@/lib/utils'
 import { CV_LANGUAGE_PROFICIENCY, HARVARD_CV_SECTION } from '@/utils/constant'
 
@@ -397,19 +399,23 @@ function CvGeneratedContentFields({ content, onChange, metadataSkillTags = [] })
             sectionKey={HARVARD_CV_SECTION.PROFESSIONAL_SUMMARY}
             title="2. Tóm tắt chuyên môn"
           >
-            <textarea
-              className={textareaClassName}
-              maxLength={5000}
-              onChange={(e) =>
-                onChange({
-                  ...content,
-                  professionalSummary: e.target.value,
-                  professionalSummaryHtml: null,
-                })
-              }
-              placeholder="Tóm tắt mục tiêu nghề nghiệp, kinh nghiệm và thế mạnh cốt lõi..."
-              value={content.professionalSummary ?? ''}
-            />
+            <div aria-label="Tóm tắt chuyên môn" role="group">
+              <RichTextEditor
+                onChange={(html) =>
+                  onChange({
+                    ...content,
+                    professionalSummary: toRichTextPlainText(html) || null,
+                    professionalSummaryHtml: html || null,
+                  })
+                }
+                placeholder="Tóm tắt mục tiêu nghề nghiệp, kinh nghiệm và thế mạnh cốt lõi..."
+                preset="minimal"
+                value={toRichTextEditorValue({
+                  html: content.professionalSummaryHtml,
+                  plainText: content.professionalSummary,
+                })}
+              />
+            </div>
           </SectionCard>
 
           <SectionCard
@@ -708,20 +714,20 @@ function CvGeneratedContentFields({ content, onChange, metadataSkillTags = [] })
                         />
                       </label>
                     </div>
-                    <label className="mt-2.5 block space-y-1">
+                    <div className="mt-2.5 space-y-1" role="group" aria-label={`Mô tả kinh nghiệm #${index + 1}`}>
                       <span className="text-xs font-medium">Mô tả</span>
-                      <textarea
-                        className={textareaClassName}
-                        onChange={(e) =>
+                      <RichTextEditor
+                        onChange={(html) =>
                           patchListItem('workExperiences', workExperiences, index, {
-                            description: e.target.value,
-                            descriptionHtml: null,
+                            description: toRichTextPlainText(html) || null,
+                            descriptionHtml: html || null,
                           })
                         }
                         placeholder="Trách nhiệm chính..."
-                        value={exp.description ?? ''}
+                        preset="minimal"
+                        value={toRichTextEditorValue({ html: exp.descriptionHtml, plainText: exp.description })}
                       />
-                    </label>
+                    </div>
                     <label className="mt-2.5 block space-y-1">
                       <span className="text-xs font-medium">Thành tựu (mỗi dòng 1 ý)</span>
                       <textarea
@@ -837,20 +843,20 @@ function CvGeneratedContentFields({ content, onChange, metadataSkillTags = [] })
                         />
                       </label>
                     </div>
-                    <label className="mt-2.5 block space-y-1">
+                    <div className="mt-2.5 space-y-1" role="group" aria-label={`Mô tả dự án #${index + 1}`}>
                       <span className="text-xs font-medium">Mô tả</span>
-                      <textarea
-                        className={textareaClassName}
-                        onChange={(e) =>
+                      <RichTextEditor
+                        onChange={(html) =>
                           patchListItem('projects', projects, index, {
-                            description: e.target.value,
-                            descriptionHtml: null,
+                            description: toRichTextPlainText(html) || null,
+                            descriptionHtml: html || null,
                           })
                         }
                         placeholder="Mô tả ngắn về dự án..."
-                        value={proj.description ?? ''}
+                        preset="minimal"
+                        value={toRichTextEditorValue({ html: proj.descriptionHtml, plainText: proj.description })}
                       />
-                    </label>
+                    </div>
                   </div>
                 ))}
               </div>

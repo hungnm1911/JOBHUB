@@ -1,5 +1,5 @@
 import { Check, FileText, LoaderCircle, Trash2, Upload } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { createUploadedCandidateCvApi } from '@/apis/candidate-cv.api'
@@ -18,26 +18,33 @@ import {
 } from '../utils'
 import CvMetadataFields from './CvMetadataFields'
 
+const INITIAL_VALUES = {
+  name: '',
+  visibility: CANDIDATE_CV_VISIBILITY.PRIVATE,
+  categoryId: '',
+  experienceLevelId: '',
+  skillTags: [],
+  employmentTypes: [],
+  workModes: [],
+  preferredLocations: [],
+}
+
 function CvUploadForm({
   formId = 'cv-upload-form',
   idPrefix = 'upload',
   onCreated,
   onCancel,
+  onDirtyChange,
   className,
 }) {
   const catalogs = useCvCatalogOptions()
   const [busy, setBusy] = useState(false)
   const [file, setFile] = useState(null)
-  const [values, setValues] = useState({
-    name: '',
-    visibility: CANDIDATE_CV_VISIBILITY.PRIVATE,
-    categoryId: '',
-    experienceLevelId: '',
-    skillTags: [],
-    employmentTypes: [],
-    workModes: [],
-    preferredLocations: [],
-  })
+  const [values, setValues] = useState(INITIAL_VALUES)
+
+  useEffect(() => {
+    onDirtyChange?.(Boolean(file) || JSON.stringify(values) !== JSON.stringify(INITIAL_VALUES))
+  }, [file, values, onDirtyChange])
 
   const handleFileChange = (picked) => {
     setFile(picked)

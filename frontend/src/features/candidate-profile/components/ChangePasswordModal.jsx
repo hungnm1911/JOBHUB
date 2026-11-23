@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { changePasswordApi } from '@/apis/authentication.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import {
   AuthFormField,
   PasswordVisibilityToggle,
@@ -24,7 +25,7 @@ function ChangePasswordModal({ onClose }) {
     confirmPassword: false,
   })
   const {
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
     handleSubmit,
     register,
     setError,
@@ -36,6 +37,8 @@ function ChangePasswordModal({ onClose }) {
     },
     resolver: zodResolver(changePasswordSchema),
   })
+  const { confirmDiscard, markSaved } = useUnsavedChangesPrompt(isDirty)
+  const handleClose = () => confirmDiscard(onClose)
 
   const togglePassword = (field) => {
     setVisiblePasswords((current) => ({ ...current, [field]: !current[field] }))
@@ -63,6 +66,7 @@ function ChangePasswordModal({ onClose }) {
       return
     }
 
+    markSaved()
     await endSessionAfterPasswordReset()
     onClose()
     navigate('/login', {
@@ -84,7 +88,7 @@ function ChangePasswordModal({ onClose }) {
       description="Sau khi đổi mật khẩu, toàn bộ phiên đăng nhập hiện có sẽ được thu hồi để bảo mật và bạn cần đăng nhập lại."
       footer={
         <>
-          <Button disabled={isSubmitting} onClick={onClose} type="button" variant="outline">
+          <Button disabled={isSubmitting} onClick={handleClose} type="button" variant="outline">
             Hủy
           </Button>
           <Button disabled={isSubmitting} form="candidate-change-password-form" type="submit">
@@ -93,7 +97,7 @@ function ChangePasswordModal({ onClose }) {
           </Button>
         </>
       }
-      onClose={onClose}
+      onClose={handleClose}
       title="Đổi mật khẩu"
     >
       <form

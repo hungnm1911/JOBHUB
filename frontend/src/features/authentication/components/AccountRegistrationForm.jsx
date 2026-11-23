@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { ACCOUNT_FIELD_LIMIT, API_ERROR_MESSAGE } from '@/utils/constant'
 import { accountRegistrationSchema, zodResolver } from '@/validation'
 
@@ -29,7 +30,7 @@ function AccountRegistrationForm({
     confirmPassword: false,
   })
   const {
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
     handleSubmit,
     register,
     setError,
@@ -37,6 +38,7 @@ function AccountRegistrationForm({
     defaultValues,
     resolver: zodResolver(accountRegistrationSchema),
   })
+  const { markSaved } = useUnsavedChangesPrompt(isDirty)
 
   const togglePassword = (field) => {
     setVisiblePasswords((current) => ({ ...current, [field]: !current[field] }))
@@ -63,6 +65,7 @@ function AccountRegistrationForm({
       return
     }
 
+    markSaved()
     onRegistered({ registration, result })
   }
 
