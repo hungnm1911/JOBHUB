@@ -37,3 +37,4 @@ yarn-error.log*
 
 # personal
 /personal
+package-lock.json
