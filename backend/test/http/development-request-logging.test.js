@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("../../src/config/index.js", () => ({
   default: { env: "development", fileUpload: { maxFileSizeMB: 10 },
-    logging: { level: "debug", format: "pretty" } },
+    logging: { level: "debug", format: "pretty", timeZone: "Asia/Bangkok" } },
 }));
 
 import errorHandler from "../../src/middlewares/error-handler.js";
@@ -14,6 +14,21 @@ import requestLogger from "../../src/middlewares/request-logger.js";
 import logger from "../../src/utils/logger.js";
 
 afterEach(() => vi.restoreAllMocks());
+
+it("prints the local date and time to the second in readable logs", () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(new Date("2026-11-23T15:30:53.914Z"));
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    logger.info("Timestamp check");
+
+    expect(String(stdoutWrite.mock.calls[0][0]))
+      .toMatch(/^2026-11-23 22:30:53 INFO {2}Timestamp check/);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 it("logs the full JSON response and call site for a successful request", async () => {
   const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);

@@ -241,7 +241,7 @@ The root entry point imports normalized application configuration as part of boo
 ### Logging
 
 - `backend/src/utils/logger.js` is the single application logger; `backend/src/middlewares/request-logger.js` (registered first in `app.js`) owns request-id assignment, the `X-Request-Id` response header, and per-request access logging.
-- `LOG_LEVEL` is normalized by `backend/src/config/index.js`. Development defaults to `debug`, and other environments default to `info`. Production output is JSON lines.
+- `LOG_LEVEL` and `LOG_TIME_ZONE` are normalized by `backend/src/config/index.js`. Development defaults to `debug`, and other environments default to `info`; log timestamps default to `Asia/Bangkok` and use `YYYY-MM-DD HH:mm:ss`. Production output is JSON lines.
 - Detailed level semantics and redaction rules are defined in [`backend-conventions.md`](backend-conventions.md#logging-and-request-tracing).
 
 ### File naming

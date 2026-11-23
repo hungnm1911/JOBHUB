@@ -6,7 +6,7 @@ vi.mock("../../src/config/index.js", () => ({
   default: {
     env: "production",
     fileUpload: { maxFileSizeMB: 10 },
-    logging: { level: "info", format: "json" },
+    logging: { level: "info", format: "json", timeZone: "Asia/Bangkok" },
   },
 }));
 
@@ -16,6 +16,21 @@ import config from "../../src/config/index.js";
 import logger from "../../src/utils/logger.js";
 
 afterEach(() => vi.restoreAllMocks());
+
+it("includes the local date and time to the second in JSON logs", () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(new Date("2026-11-23T20:30:53.914Z"));
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    logger.info("Timestamp check");
+
+    expect(JSON.parse(stdoutWrite.mock.calls[0][0]).timestamp)
+      .toBe("2026-11-24 03:30:53");
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 it("emits correlated JSON access and exception records at production defaults", async () => {
   const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
