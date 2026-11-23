@@ -51,6 +51,8 @@ this leaf records the current state without copying CV content or credentials.
 
 ## Verification status
 
+- 2026-11-24 R4-L1 Preview → Commit round-trip coverage (Generated and Uploaded; unmodified Proposal → `201 GENERATED/DRAFT`, content/metadata match, no second AI call): focused test `ai-v06-r4-preview-commit-roundtrip.test.js` (3 tests) and targeted ESLint passed with mocked AI Kit. No production change, full gate or live provider call.
+
 - 2026-11-24 R3-AC-01 fix (owned Source archived after Preview → 409; missing/foreign stays 404): focused Backend tests (73 across `ai-v06-*`) and targeted ESLint passed with mocked AI Kit. No full gate or live provider call was run per the requested scope.
 
 - 2026-11-23 R3 Commit: focused Backend tests (71 across `ai-v06-*`, including 11 new R3 cases for success, tampering, expiry, ownership, Source conflict, content consistency and zero AI calls) and targeted ESLint passed with mocked AI Kit. No full gate or live provider call was run per the requested scope.
