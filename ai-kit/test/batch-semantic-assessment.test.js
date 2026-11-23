@@ -106,7 +106,7 @@ describe("AI-V05 F03 batch semantic assessment", () => {
     expect(request.instructions).toContain("reason for each Job");
     expect(request.instructions).toContain("For each jobKey independently, prefer Vietnamese for the reason");
     expect(request.instructions).toContain("only when its own requirements explicitly require English");
-    expect(request.requestTimeoutMs).toBe(120_000);
+    expect(request.requestTimeoutMs).toBe(180_000);
     const input = JSON.parse(request.input);
     expect(input.jobs.map((item) => item.jobKey)).toEqual(["J1", "J2"]);
     expect(request.input).not.toContain("private-job");

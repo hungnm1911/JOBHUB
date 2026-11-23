@@ -32,6 +32,6 @@ test('Uploaded PDF recommendation waits for normalization and batch assessment',
   assert.equal(requestConfig.method, 'post')
   assert.equal(requestConfig.url, '/candidate/job-recommendations')
   assert.equal(requestConfig.requiresAuthentication, true)
-  // PDF normalization may use 90s; the following batch may use 120s.
-  assert.ok(requestConfig.timeout > 210_000, `Timeout ${requestConfig.timeout}ms is too short`)
+  // PDF normalization may use 90s; the following batch may use 180s.
+  assert.ok(requestConfig.timeout >= 270_000, `Timeout ${requestConfig.timeout}ms is too short`)
 })
