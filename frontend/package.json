@@ -12,7 +12,7 @@
     "test:candidate-header-ai-actions": "node --test test/candidate-header-ai-actions.test.js",
     "test:featured-homepage": "node --test test/featured-homepage.test.js",
     "test:rich-text": "node --test --test-concurrency=1 test/rich-text-editor.test.js test/rich-text-viewer.test.js test/rich-text-preview.test.js test/company-rich-text-integration.test.js test/job-rich-text-integration.test.js",
-    "test:candidate-cvs": "node --test test/candidate-cv-builder.test.js",
+    "test:candidate-cvs": "node --test --test-concurrency=1 test/candidate-cv-builder.test.js test/candidate-cv-management.test.js",
     "test:ai-timeouts": "node --test test/candidate-job-recommendation-timeout.test.js test/candidate-cv-evaluation-timeout.test.js",
     "preview": "vite preview",
     "verify:agent": "yarn test:auth && yarn test:job-cards && yarn test:candidate-header-ai-actions && yarn test:featured-homepage && yarn test:rich-text && yarn test:candidate-cvs && yarn test:ai-timeouts && yarn lint && yarn build"

@@ -7,7 +7,7 @@ import {
 
 const CV_SOURCE_LABEL = Object.freeze({
   [CANDIDATE_CV_SOURCE_TYPE.GENERATED]: 'Tạo trên JOBHUB',
-  [CANDIDATE_CV_SOURCE_TYPE.UPLOADED]: 'Tải lên PDF',
+  [CANDIDATE_CV_SOURCE_TYPE.UPLOADED]: 'PDF tải lên',
 })
 
 const CV_STATUS_LABEL = Object.freeze({
@@ -202,36 +202,12 @@ function sortCvsForDisplay(cvs) {
   })
 }
 
-const CV_LIST_FILTER = Object.freeze({
-  ALL: 'all',
-  ACTIVE: 'active',
-  DRAFT: 'draft',
-  UPLOADED: 'uploaded',
-  GENERATED: 'generated',
-})
-
-const CV_LIST_FILTER_LABEL = Object.freeze({
-  [CV_LIST_FILTER.ALL]: 'Tất cả',
-  [CV_LIST_FILTER.ACTIVE]: 'Đang dùng',
-  [CV_LIST_FILTER.DRAFT]: 'Bản nháp',
-  [CV_LIST_FILTER.UPLOADED]: 'PDF tải lên',
-  [CV_LIST_FILTER.GENERATED]: 'Tạo trên JOBHUB',
-})
-
-function matchesCvFilter(cv, filter) {
-  if (filter === CV_LIST_FILTER.ACTIVE) {
-    return cv?.status === CANDIDATE_CV_STATUS.ACTIVE
-  }
-  if (filter === CV_LIST_FILTER.DRAFT) {
-    return cv?.status === CANDIDATE_CV_STATUS.DRAFT
-  }
-  if (filter === CV_LIST_FILTER.UPLOADED) {
-    return cv?.sourceType === CANDIDATE_CV_SOURCE_TYPE.UPLOADED
-  }
-  if (filter === CV_LIST_FILTER.GENERATED) {
-    return cv?.sourceType === CANDIDATE_CV_SOURCE_TYPE.GENERATED
-  }
-  return true
+function matchesCvFilter(cv, { status, sourceType, visibility }) {
+  return (
+    (!status || cv?.status === status) &&
+    (!sourceType || cv?.sourceType === sourceType) &&
+    (!visibility || cv?.visibility === visibility)
+  )
 }
 
 function matchesCvSearch(cv, query) {
@@ -252,8 +228,6 @@ function computeCvLibraryStats(cvs = []) {
 }
 
 export {
-  CV_LIST_FILTER,
-  CV_LIST_FILTER_LABEL,
   CV_SOURCE_LABEL,
   CV_STATUS_LABEL,
   CV_VISIBILITY_LABEL,

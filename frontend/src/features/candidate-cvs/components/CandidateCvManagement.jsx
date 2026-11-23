@@ -24,14 +24,19 @@ import {
 } from '@/apis/candidate-cv.api'
 import CenteredState from '@/components/common/CenteredState'
 import { Button } from '@/components/ui/button'
+import { SelectDropdown } from '@/components/ui/select-dropdown'
 import ProfileModal from '@/features/candidate-profile/components/ProfileModal'
-import { cn } from '@/lib/utils'
-import { CANDIDATE_CV_VISIBILITY } from '@/utils/constant'
+import {
+  CANDIDATE_CV_SOURCE_TYPE,
+  CANDIDATE_CV_STATUS,
+  CANDIDATE_CV_VISIBILITY,
+} from '@/utils/constant'
 
 import useCandidateCvs from '../hooks/useCandidateCvs'
 import {
-  CV_LIST_FILTER,
-  CV_LIST_FILTER_LABEL,
+  CV_SOURCE_LABEL,
+  CV_STATUS_LABEL,
+  CV_VISIBILITY_LABEL,
   computeCvLibraryStats,
   fileNameFromContentDisposition,
   matchesCvFilter,
@@ -48,32 +53,49 @@ function CandidateCvManagement() {
   const [busyId, setBusyId] = useState(null)
   const [dialog, setDialog] = useState(null)
   const [searchInput, setSearchInput] = useState('')
-  const [filter, setFilter] = useState(CV_LIST_FILTER.ALL)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [sourceFilter, setSourceFilter] = useState('')
+  const [visibilityFilter, setVisibilityFilter] = useState('')
 
   const stats = useMemo(() => computeCvLibraryStats(cvs), [cvs])
-
-  const filterCounts = useMemo(() => {
-    const counts = Object.fromEntries(
-      Object.values(CV_LIST_FILTER).map((option) => [option, 0]),
-    )
-    counts[CV_LIST_FILTER.ALL] = cvs.length
-    for (const cv of cvs) {
-      for (const option of Object.values(CV_LIST_FILTER)) {
-        if (option !== CV_LIST_FILTER.ALL && matchesCvFilter(cv, option)) {
-          counts[option] += 1
-        }
-      }
-    }
-    return counts
-  }, [cvs])
 
   const visibleCvs = useMemo(
     () =>
       cvs.filter(
-        (cv) => matchesCvFilter(cv, filter) && matchesCvSearch(cv, searchInput),
+        (cv) =>
+          matchesCvFilter(cv, {
+            status: statusFilter,
+            sourceType: sourceFilter,
+            visibility: visibilityFilter,
+          }) &&
+          matchesCvSearch(cv, searchInput),
       ),
-    [cvs, filter, searchInput],
+    [cvs, statusFilter, sourceFilter, visibilityFilter, searchInput],
   )
+  const defaultCv = visibleCvs.find((cv) => cv.isDefault)
+  const otherCvs = visibleCvs.filter((cv) => !cv.isDefault)
+
+  const statusOptions = [
+    { value: '', label: 'Mọi trạng thái' },
+    ...Object.values(CANDIDATE_CV_STATUS).map((status) => ({
+      value: status,
+      label: `${CV_STATUS_LABEL[status]} (${cvs.filter((cv) => cv.status === status).length})`,
+    })),
+  ]
+  const sourceOptions = [
+    { value: '', label: 'Mọi loại CV' },
+    ...Object.values(CANDIDATE_CV_SOURCE_TYPE).map((sourceType) => ({
+      value: sourceType,
+      label: `${CV_SOURCE_LABEL[sourceType]} (${cvs.filter((cv) => cv.sourceType === sourceType).length})`,
+    })),
+  ]
+  const visibilityOptions = [
+    { value: '', label: 'Mọi chế độ hiển thị' },
+    ...Object.values(CANDIDATE_CV_VISIBILITY).map((visibility) => ({
+      value: visibility,
+      label: `${CV_VISIBILITY_LABEL[visibility]} (${cvs.filter((cv) => cv.visibility === visibility).length})`,
+    })),
+  ]
 
   const withBusy = async (cvId, action) => {
     setBusyId(cvId)
@@ -180,6 +202,24 @@ function CandidateCvManagement() {
       }
     })
   }
+
+  const renderCvItem = (cv) => (
+    <li key={cv.id}>
+      <CvCard
+        busy={busyId === cv.id}
+        cv={cv}
+        onActivate={handleActivate}
+        onArchive={(item) => setDialog({ type: 'archive', cv: item })}
+        onDownload={handleDownload}
+        onEditMetadata={(item) => setDialog({ type: 'edit', cv: item })}
+        onPreview={(item) => setDialog({ type: 'preview', cv: item })}
+        onReplaceFile={(item) => setDialog({ type: 'replace', cv: item })}
+        onSetDefault={handleSetDefault}
+        onToggleVisibility={handleToggleVisibility}
+        onUnsetDefault={handleUnsetDefault}
+      />
+    </li>
+  )
 
   return (
     <div className="space-y-6">
@@ -302,45 +342,55 @@ function CandidateCvManagement() {
       ) : null}
 
       {!loading && !error && cvs.length > 0 ? (
-        <section className="space-y-4">
-          <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3">
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lọc danh sách CV">
-              {Object.values(CV_LIST_FILTER).map((option) => {
-                const active = filter === option
-                const count = filterCounts[option] ?? 0
-                if (option !== CV_LIST_FILTER.ALL && count === 0 && filter !== option) {
-                  return null
-                }
-                return (
-                  <button
-                    aria-pressed={active}
-                    className={cn(
-                      'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors',
-                      active
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-secondary text-muted-foreground hover:text-foreground',
-                    )}
-                    key={option}
-                    onClick={() => setFilter(option)}
-                    type="button"
-                  >
-                    {CV_LIST_FILTER_LABEL[option]}
-                    <span
-                      className={cn(
-                        'inline-flex min-w-4 justify-center rounded-full px-1 text-[10px] font-semibold',
-                        active
-                          ? 'bg-primary-foreground/20 text-primary-foreground'
-                          : 'bg-background/80 text-muted-foreground',
-                      )}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                )
-              })}
+        <section aria-label="Thư viện CV" className="space-y-5">
+          <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 sm:px-4 sm:py-3 xl:flex-row xl:items-end xl:justify-between">
+            <div className="flex flex-wrap items-end gap-3" role="group" aria-label="Lọc danh sách CV">
+              <Button
+                aria-pressed={!statusFilter && !sourceFilter && !visibilityFilter}
+                onClick={() => {
+                  setStatusFilter('')
+                  setSourceFilter('')
+                  setVisibilityFilter('')
+                }}
+                size="sm"
+                type="button"
+                variant={!statusFilter && !sourceFilter && !visibilityFilter ? 'default' : 'outline'}
+              >
+                Tất cả ({cvs.length})
+              </Button>
+              <div className="min-w-40 space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">Trạng thái</span>
+                <SelectDropdown
+                  ariaLabel="Lọc theo trạng thái"
+                  onChange={setStatusFilter}
+                  options={statusOptions}
+                  size="sm"
+                  value={statusFilter}
+                />
+              </div>
+              <div className="min-w-44 space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">Loại CV</span>
+                <SelectDropdown
+                  ariaLabel="Lọc theo loại CV"
+                  onChange={setSourceFilter}
+                  options={sourceOptions}
+                  size="sm"
+                  value={sourceFilter}
+                />
+              </div>
+              <div className="min-w-44 space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">Hiển thị</span>
+                <SelectDropdown
+                  ariaLabel="Lọc theo hiển thị"
+                  onChange={setVisibilityFilter}
+                  options={visibilityOptions}
+                  size="sm"
+                  value={visibilityFilter}
+                />
+              </div>
             </div>
 
-            <label className="relative block sm:w-64 md:w-72">
+            <label className="relative block w-full xl:w-64 2xl:w-72">
               <span className="sr-only">Tìm CV</span>
               <Search
                 aria-hidden="true"
@@ -372,7 +422,9 @@ function CandidateCvManagement() {
               action={
                 <Button
                   onClick={() => {
-                    setFilter(CV_LIST_FILTER.ALL)
+                    setStatusFilter('')
+                    setSourceFilter('')
+                    setVisibilityFilter('')
                     setSearchInput('')
                   }}
                   variant="outline"
@@ -386,25 +438,25 @@ function CandidateCvManagement() {
               tone="bg-secondary text-muted-foreground"
             />
           ) : (
-            <ul className="flex flex-col gap-3">
-              {visibleCvs.map((cv) => (
-                <li key={cv.id}>
-                  <CvCard
-                    busy={busyId === cv.id}
-                    cv={cv}
-                    onActivate={handleActivate}
-                    onArchive={(item) => setDialog({ type: 'archive', cv: item })}
-                    onDownload={handleDownload}
-                    onEditMetadata={(item) => setDialog({ type: 'edit', cv: item })}
-                    onPreview={(item) => setDialog({ type: 'preview', cv: item })}
-                    onReplaceFile={(item) => setDialog({ type: 'replace', cv: item })}
-                    onSetDefault={handleSetDefault}
-                    onToggleVisibility={handleToggleVisibility}
-                    onUnsetDefault={handleUnsetDefault}
-                  />
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-5">
+              {defaultCv ? (
+                <section aria-labelledby="default-cv-heading" className="space-y-3 border-b pb-5">
+                  <h2 className="flex items-center gap-2 text-base font-semibold text-foreground" id="default-cv-heading">
+                    <Star aria-hidden="true" className="size-4 fill-primary text-primary" />
+                    CV mặc định
+                  </h2>
+                  <ul>{renderCvItem(defaultCv)}</ul>
+                </section>
+              ) : null}
+              {otherCvs.length > 0 ? (
+                <section aria-labelledby="other-cvs-heading" className="space-y-3">
+                  <h2 className="text-base font-semibold text-foreground" id="other-cvs-heading">
+                    {stats.defaultCv ? 'CV khác' : 'Danh sách CV'}
+                  </h2>
+                  <ul className="flex flex-col gap-3">{otherCvs.map(renderCvItem)}</ul>
+                </section>
+              ) : null}
+            </div>
           )}
         </section>
       ) : null}
