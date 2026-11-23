@@ -32,7 +32,7 @@ integration remains **NOT STARTED**.
 
 ## Deferred / not started
 
-- Amended flow: R1 Backend Preview API (`POST /candidate/jobs/:jobId/optimize-cv/preview`, no persistence) is implemented. R2 Proposal signing (HMAC-SHA256, 60-minute TTL, identity and Source revision bound, stateless) is implemented in the Preview response. Commit and Frontend remain not started; legacy `/optimize-cv` remains in transition.
+- Amended flow: R1 Backend Preview API (`POST /candidate/jobs/:jobId/optimize-cv/preview`, no persistence) is implemented. R2 Proposal signing (HMAC-SHA256, 60-minute TTL, identity and Source revision bound, stateless) is implemented in the Preview response. R3 Backend Commit (`POST /candidate/jobs/:jobId/optimize-cv/commit`: signature, TTL, identity, current Job/Source authorization, Source revision 409, V7 `GENERATED/DRAFT` create from the signed `proposedContent`, no AI call) is implemented. Frontend remains not started; legacy `/optimize-cv` remains in transition.
 
 - Frontend integration has not started. Slice 08 exposes the action through
   Candidate HTTP and reuses V7 Draft management and Preview.
@@ -50,6 +50,10 @@ Optimization phase. The ignored local captures remain the detailed evidence;
 this leaf records the current state without copying CV content or credentials.
 
 ## Verification status
+
+- 2026-11-24 R3-AC-01 fix (owned Source archived after Preview → 409; missing/foreign stays 404): focused Backend tests (73 across `ai-v06-*`) and targeted ESLint passed with mocked AI Kit. No full gate or live provider call was run per the requested scope.
+
+- 2026-11-23 R3 Commit: focused Backend tests (71 across `ai-v06-*`, including 11 new R3 cases for success, tampering, expiry, ownership, Source conflict, content consistency and zero AI calls) and targeted ESLint passed with mocked AI Kit. No full gate or live provider call was run per the requested scope.
 
 - 2026-11-23 R2-AC-01 fix (own signing secret; content-hash Source revision): focused Backend tests (60 across `ai-v06-*`) and targeted ESLint passed with mocked AI Kit. No full gate or live provider call was run per the requested scope.
 

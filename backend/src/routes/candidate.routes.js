@@ -45,6 +45,7 @@ import { matchOwnCandidateCvToJobHandler } from "../controllers/candidate-job-ma
 import { evaluateOwnCandidateCvForJobHandler } from "../controllers/candidate-cv-evaluation.controller.js";
 import {
   createOptimizedCandidateCvDraftForJobHandler,
+  commitOptimizedCandidateCvProposalForJobHandler,
   previewOptimizedCandidateCvForJobHandler,
 } from "../controllers/candidate-cv-optimization.controller.js";
 import { recommendOwnDefaultCvJobsHandler } from "../controllers/candidate-job-recommendation.controller.js";
@@ -70,7 +71,9 @@ import validateSubmitCandidateAvailability from "../middlewares/validate-submit-
 import validateWithdrawApplication from "../middlewares/validate-withdraw-application.js";
 import validateSaveGeneratedDraftContent from "../middlewares/validate-save-generated-draft-content.js";
 import validateUpdateCandidateCvMetadata from "../middlewares/validate-update-candidate-cv-metadata.js";
-import validateOptimizeCandidateCv from "../middlewares/validate-optimize-candidate-cv.js";
+import validateOptimizeCandidateCv, {
+  validateCommitOptimizedCandidateCv,
+} from "../middlewares/validate-optimize-candidate-cv.js";
 
 const router = express.Router();
 
@@ -118,6 +121,14 @@ router.post(
   authorizeCandidate,
   validateOptimizeCandidateCv,
   previewOptimizedCandidateCvForJobHandler,
+);
+
+router.post(
+  "/jobs/:jobId/optimize-cv/commit",
+  authenticateAccess,
+  authorizeCandidate,
+  validateCommitOptimizedCandidateCv,
+  commitOptimizedCandidateCvProposalForJobHandler,
 );
 
 router.post(
