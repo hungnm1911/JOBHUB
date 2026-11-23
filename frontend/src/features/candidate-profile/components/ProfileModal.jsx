@@ -17,7 +17,7 @@ function ProfileModal({
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (event.key === 'Escape' && !busy) {
+      if (event.key === 'Escape' && !busy && !document.querySelector('[data-slot="alert-dialog-content"]')) {
         onClose()
       }
     }

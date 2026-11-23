@@ -2,6 +2,7 @@ import { LoaderCircle, Send } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { cn } from '@/lib/utils'
 
 function MessageComposer({
@@ -16,6 +17,7 @@ function MessageComposer({
   readOnlyHint = null,
 }) {
   const textareaRef = useRef(null)
+  useUnsavedChangesPrompt(!readOnlyHint && Boolean(value.trim()))
 
   useEffect(() => {
     const node = textareaRef.current

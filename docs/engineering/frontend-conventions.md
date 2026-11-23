@@ -256,6 +256,7 @@ with the shadcn/ui approach.
 shared across multiple pages or features.
 
 - Common components may compose UI primitives and router presentation helpers.
+- The shared unsaved-form provider may coordinate one router blocker and one browser unload listener; forms own their dirty state and report successful saves through its hook. Browser reload and tab close use the browser's native confirmation.
 - They may accept explicit display data and callbacks.
 - They must not own feature state, perform business API calls, or interpret one feature's domain rules.
 - A component stays in a feature until it has real cross-area use and domain-neutral application semantics.

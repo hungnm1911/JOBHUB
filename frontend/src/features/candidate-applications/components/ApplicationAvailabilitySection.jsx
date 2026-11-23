@@ -18,6 +18,7 @@ import {
   submitOwnApplicationAvailabilityApi,
 } from '@/apis/application.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { SelectDropdown } from '@/components/ui/select-dropdown'
 import { APPLICATION_STATUS_LABEL } from '@/features/candidate-dashboard/utils'
 import { cn } from '@/lib/utils'
@@ -488,6 +489,15 @@ function ApplicationAvailabilitySection({ application, onAvailabilityUpdated }) 
       ? availability.slots.map((slot) => ({ date: slot.date, dayPart: slot.dayPart }))
       : [],
   )
+  const savedSlots = (availability?.slots ?? []).map((slot) => ({
+    date: slot.date,
+    dayPart: slot.dayPart,
+  }))
+  const isDirty = (canSubmit || editing) && (
+    timezone !== (availability?.timezone || resolveDefaultTimezone()) ||
+    JSON.stringify(sortSlots(slots)) !== JSON.stringify(sortSlots(savedSlots))
+  )
+  const { confirmDiscard, markSaved } = useUnsavedChangesPrompt(isDirty)
 
   const resetFromAvailability = () => {
     setSlots(
@@ -539,6 +549,7 @@ function ApplicationAvailabilitySection({ application, onAvailabilityUpdated }) 
           })
 
       toast.success(submitted ? 'Đã cập nhật lịch rảnh phỏng vấn' : 'Đã gửi lịch rảnh phỏng vấn')
+      markSaved()
       onAvailabilityUpdated(response.availability)
       setEditing(false)
     } catch (error) {
@@ -639,7 +650,7 @@ function ApplicationAvailabilitySection({ application, onAvailabilityUpdated }) 
       ) : canSubmit || (submitted && editing && canEdit) ? (
         <AvailabilityDatePickerForm
           busy={busy}
-          onCancel={resetFromAvailability}
+          onCancel={() => confirmDiscard(resetFromAvailability)}
           onChangeSlots={setSlots}
           onSubmit={handleSave}
           onTimezoneChange={setTimezone}

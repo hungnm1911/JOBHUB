@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { replaceOwnUploadedCandidateCvPdfApi } from '@/apis/candidate-cv.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import ProfileModal from '@/features/candidate-profile/components/ProfileModal'
 import { CANDIDATE_CV_UPLOADED_PDF } from '@/utils/constant'
 
@@ -12,6 +13,8 @@ import { prepareUploadedPdfFile, toUploadedCvErrorMessage } from '../utils'
 function CvReplaceFileModal({ cv, onClose, onUpdated }) {
   const [busy, setBusy] = useState(false)
   const [file, setFile] = useState(null)
+  const { confirmDiscard, markSaved } = useUnsavedChangesPrompt(Boolean(file))
+  const handleClose = () => confirmDiscard(onClose)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -26,6 +29,7 @@ function CvReplaceFileModal({ cv, onClose, onUpdated }) {
 
       const response = await replaceOwnUploadedCandidateCvPdfApi(cv.id, prepared.file)
       toast.success('Đã thay file PDF')
+      markSaved()
       onUpdated(response.cv)
       onClose()
     } catch (error) {
@@ -41,7 +45,7 @@ function CvReplaceFileModal({ cv, onClose, onUpdated }) {
       description={`Thay PDF hiện tại của “${cv.name}”. Giới hạn ${CANDIDATE_CV_UPLOADED_PDF.MAX_SIZE_MB} MB / ${CANDIDATE_CV_UPLOADED_PDF.MAX_PAGE_COUNT} trang.`}
       footer={
         <>
-          <Button disabled={busy} onClick={onClose} type="button" variant="outline">
+          <Button disabled={busy} onClick={handleClose} type="button" variant="outline">
             Hủy
           </Button>
           <Button disabled={busy} form="cv-replace-form" type="submit">
@@ -50,7 +54,7 @@ function CvReplaceFileModal({ cv, onClose, onUpdated }) {
           </Button>
         </>
       }
-      onClose={onClose}
+      onClose={handleClose}
       title="Thay file PDF"
     >
       <form className="space-y-4" id="cv-replace-form" onSubmit={handleSubmit}>

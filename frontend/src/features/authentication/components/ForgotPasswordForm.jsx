@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { forgotPasswordApi } from '@/apis/authentication.api'
 import { Button } from '@/components/ui/button'
+import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
 import { API_ERROR_MESSAGE } from '@/utils/constant'
 import { forgotPasswordSchema, zodResolver } from '@/validation'
 
@@ -11,7 +12,7 @@ import { AuthFormField } from './AuthFormFields'
 
 function ForgotPasswordForm({ onRequested }) {
   const {
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
     handleSubmit,
     register,
     setError,
@@ -19,6 +20,7 @@ function ForgotPasswordForm({ onRequested }) {
     defaultValues: { email: '' },
     resolver: zodResolver(forgotPasswordSchema),
   })
+  const { markSaved } = useUnsavedChangesPrompt(isDirty)
 
   const onSubmit = async ({ email }) => {
     try {
@@ -34,6 +36,7 @@ function ForgotPasswordForm({ onRequested }) {
       return
     }
 
+    markSaved()
     onRequested(email)
   }
 
