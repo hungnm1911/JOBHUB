@@ -4,10 +4,13 @@
 
 Company Description integration (`F03`, `F06`) and the existing public Job
 detail read surface (`F01`, `F03`, `F05`) are implemented as of 2026-11-02.
+Generated CV create/edit Rich Text fields (`F02`) are implemented as of
+2026-11-23 with focused tests, targeted ESLint, and a production build.
 Focused Rich Text tests, focused ESLint, and the production build passed.
 Final E2E Phase 01 browser acceptance passed for public Company Rich Text and
 legacy fallback, and published Rich Text and legacy Job detail on desktop and
-mobile. The common frontend `verify:agent` gate was not run by user scope.
+mobile. The common frontend `verify:agent` gate was not run in that phase by
+user scope.
 Admin review of the newly captured Company HTML snapshot and public display
 after activation passed on 2026-11-03. Phase 01 is complete; V17 is not marked
 complete.
@@ -29,6 +32,10 @@ complete.
   `RichTextViewer` when present, with escaped `jobDescription` fallback for
   legacy responses. It consumes the existing `GET /api/job-discovery/jobs/:jobId`
   response without changing Search or Job actions.
+- Generated CV create and edit share `CvGeneratedContentFields`. The existing
+  `professionalSummary`, `workExperiences[].description`, and
+  `projects[].description` controls use the Minimal `RichTextEditor`; their
+  HTML and plain text pairs flow through the existing Candidate CV write APIs.
 
 ## Deferred / not started
 
@@ -38,10 +45,11 @@ complete.
 - Application and Invitation Job summary Rich Text: **DEFERRED**. No such
   Frontend screen or component exists; the existing Apply dialog shows only
   the Job title.
-- Generated CV and any other V17 Frontend display work outside the Company and
-  public Job detail surfaces remain deferred.
-- The common frontend `verify:agent` gate remains unrun by scope. Other V17
-  Frontend surfaces remain deferred as described above.
+- Generated CV Rich Text display outside the editing forms and other V17
+  Frontend display work outside the Company and public Job detail surfaces
+  remain deferred.
+- The common frontend `verify:agent` gate remains failing for unrelated
+  authentication tests; repository-wide ESLint also reports unrelated errors.
 
 ## Impact coverage — Job UI
 
@@ -54,6 +62,15 @@ complete.
 
 ## Verification status
 
+- 2026-11-23: `cd frontend && yarn test:rich-text` passed (36 tests),
+  `yarn test:candidate-cvs` passed (7 tests), targeted ESLint on changed source
+  and tests passed, `yarn build` passed, and `git diff --check` passed. The
+  new Generated CV regression failed before the fix (0 of 3 expected editors)
+  and passed after the fix. `yarn verify:agent` stopped at three unrelated
+  Job Discovery auth-route assertions; the isolated test reproduced the same
+  failures. Separate `yarn lint` reported three unrelated existing errors in
+  `ApplicationConversationPanel.jsx`, `useCandidateApplicationDetail.js`, and
+  `vite.config.js`. No browser or live backend integration check ran.
 - 2026-11-03: Final E2E Phase 01 Browser displayed the new test Company's
   captured HTML review snapshot in the Platform Admin surface after approval,
   activation, and active profile update; its public Company page displayed the

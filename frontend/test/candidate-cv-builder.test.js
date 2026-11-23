@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { after, test } from 'node:test'
 
+import { Editor } from '@tiptap/core'
 import { JSDOM } from 'jsdom'
 import { createServer } from 'vite'
 
@@ -10,9 +11,21 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
 for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'MutationObserver', 'localStorage']) {
   Object.defineProperty(globalThis, name, { configurable: true, value: name === 'window' ? dom.window : dom.window[name] })
 }
+globalThis.getSelection = dom.window.getSelection.bind(dom.window)
+globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window)
+dom.window.HTMLElement.prototype.attachEvent = () => {}
+dom.window.HTMLElement.prototype.detachEvent = () => {}
+dom.window.Range.prototype.getClientRects = () => ({ length: 0, item: () => null })
+dom.window.Range.prototype.getBoundingClientRect = () => ({ top: 0, right: 0, bottom: 0, left: 0 })
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const { act, createElement, useState } = await import('react')
 const { createRoot } = await import('react-dom/client')
+const editors = []
+const originalEmit = Editor.prototype.emit
+Editor.prototype.emit = function (event, ...args) {
+  if (event === 'beforeCreate') editors.push(this)
+  return originalEmit.call(this, event, ...args)
+}
 const vite = await createServer({ appType: 'custom', server: { middlewareMode: true, hmr: false, ws: false } })
 const { default: apiClient } = await vite.ssrLoadModule('/src/apis/client/index.js')
 const { default: CvMetadataFields } = await vite.ssrLoadModule('/src/features/candidate-cvs/components/CvMetadataFields.jsx')
@@ -50,6 +63,7 @@ apiClient.defaults.adapter = async (config) => {
 }
 
 after(async () => {
+  Editor.prototype.emit = originalEmit
   await vite.close()
   dom.window.close()
 })
@@ -119,7 +133,7 @@ test('create submits all four extended sections, preserves them across tabs and 
     await click(button(view.container, '2. Nội dung CV'))
     await click(button(view.container, 'Thêm kinh nghiệm'))
     await input(view.container.querySelector('input[placeholder="Frontend Developer"]'), 'Frontend Intern')
-    await input(view.container.querySelector('textarea[placeholder="Trách nhiệm chính..."]'), 'Built interfaces')
+    await act(async () => editors.at(-1).commands.setContent('<p>Built interfaces</p>'))
     const achievements = view.container.querySelector('textarea[placeholder="Giảm 30% thời gian tải trang..."]')
     await input(achievements, 'Shipped feature')
     await input(achievements, `${achievements.value}\n`)
@@ -127,7 +141,7 @@ test('create submits all four extended sections, preserves them across tabs and 
     await input(achievements, `${achievements.value}Improved performance\n`)
     await click(button(view.container, 'Thêm dự án'))
     await input(view.container.querySelector('input[placeholder="JOBHUB"]'), 'Project marker')
-    await input(view.container.querySelector('textarea[placeholder="Mô tả ngắn về dự án..."]'), 'Project description')
+    await act(async () => editors.at(-1).commands.setContent('<p>Project description</p>'))
     const technologies = view.container.querySelector('input[placeholder="React, Node.js, MongoDB"]')
     await input(technologies, 'React')
     await input(technologies, `${technologies.value},`)
@@ -145,10 +159,12 @@ test('create submits all four extended sections, preserves them across tabs and 
     assert.equal(payload.categoryId, 'position-1')
     assert.equal(payload.experienceLevelId, 'experience-1')
     assert.equal(payload.generatedContent.workExperiences[0].description, 'Built interfaces')
+    assert.equal(payload.generatedContent.workExperiences[0].descriptionHtml, '<p>Built interfaces</p>')
     assert.deepEqual(payload.generatedContent.workExperiences[0].achievements, ['Shipped feature', 'Improved performance'])
     assert.equal(payload.generatedContent.workExperiences[0].startDate, null)
     assert.equal(payload.generatedContent.workExperiences[0].endDate, null)
     assert.equal(payload.generatedContent.projects[0].description, 'Project description')
+    assert.equal(payload.generatedContent.projects[0].descriptionHtml, '<p>Project description</p>')
     assert.deepEqual(payload.generatedContent.projects[0].technologies, ['React', 'SQL'])
     assert.equal(payload.generatedContent.certifications[0].name, 'IELTS')
     assert.equal(payload.generatedContent.certifications[0].issueDate, null)

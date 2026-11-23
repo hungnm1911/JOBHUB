@@ -1,3 +1,5 @@
+import { toRichTextEditorValue, toRichTextPlainText } from '@/lib/rich-text-content'
+
 const COMPANY_PROFILE_FIELDS = Object.freeze([
   'name',
   'businessRegistrationNumber',
@@ -19,21 +21,11 @@ function toCompanyProfileFormValues(company) {
 }
 
 function toCompanyDescriptionEditorValue(company) {
-  if (company?.descriptionHtml) return company.descriptionHtml
-  if (!company?.description) return ''
-
-  const escapeHtml = (text) => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;')
-  return `<p>${company.description.split(/\r?\n/).map(escapeHtml).join('<br>')}</p>`
+  return toRichTextEditorValue({ html: company?.descriptionHtml, plainText: company?.description })
 }
 
 function toCompanyDescriptionPlainText(html) {
-  const template = document.createElement('template')
-  template.innerHTML = html
-  for (const breakElement of template.content.querySelectorAll('br')) {
-    breakElement.replaceWith('\n')
-  }
-  return [...template.content.children].map((block) => block.textContent).join('\n').trim()
+  return toRichTextPlainText(html)
 }
 
 function toCompanyProfileUpdatePayload(values, dirtyFields) {
