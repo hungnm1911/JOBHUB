@@ -286,8 +286,32 @@ backend, không có service riêng.
 
 Mở `http://localhost:5173` và kiểm tra API ở `http://localhost:8000/api/`.
 Những lần chạy sau chỉ cần `docker compose up -d`. `docker compose down` dừng
-stack. Sau khi đổi lockfile, dùng
-`docker compose down -v` rồi build lại để tạo mới các volume dependency.
+stack. Khi dependency thay đổi, đồng bộ volume bằng các script bên dưới rồi
+restart service tương ứng.
+
+### Cài thêm thư viện trong Docker
+
+Từ thư mục gốc, dùng các script sau nếu máy host có Yarn Classic 1.x. Backend
+và AI Kit dùng npm; frontend dùng Yarn. AI Kit không có service riêng nên lệnh
+của nó chạy trong container backend với thư mục làm việc `/app/ai-kit`.
+
+```bash
+yarn deps:add:backend <package>
+yarn restart:backend
+
+yarn deps:add:ai-kit <package>
+yarn restart:backend
+
+yarn deps:add:frontend <package>
+yarn restart:frontend
+```
+
+Thêm `--save-dev` cho npm hoặc `--dev` cho Yarn khi cài dependency phát triển.
+Nếu chỉ thay đổi manifest/lockfile bên ngoài container, chạy
+`yarn deps:sync:backend`, `yarn deps:sync:ai-kit`, hoặc
+`yarn deps:sync:frontend` rồi restart service tương ứng. AI Kit cần đồng bộ
+trước backend khi cả hai cùng thay đổi. Các script này thao tác trên volume
+`node_modules` hiện có; không cần xóa toàn bộ Docker volumes.
 
 Backend dev dùng DNS `1.1.1.1` và `8.8.8.8` để tra SRV của Atlas, tránh DNS
 router/WSL đã trả `ENODATA` trên máy phát triển này. Có thể đổi bằng
