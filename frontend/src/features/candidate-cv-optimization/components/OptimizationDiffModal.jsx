@@ -15,27 +15,51 @@ const CHANGE_LABEL = Object.freeze({
 })
 
 // Review-only Preview Diff (AI-V06 F04): no editing and no per-change
-// accept/reject. Saving is decided outside this component.
-function OptimizationDiffModal({ baseline, proposedContent, onClose }) {
+// accept/reject. The caller decides whole-Proposal actions through `actions`
+// and surfaces results through `notice`; `busy` locks closing while saving.
+function OptimizationDiffModal({
+  baseline,
+  proposedContent,
+  onClose,
+  actions,
+  notice,
+  busy = false,
+}) {
   const [splitView, setSplitView] = useState(true)
   const sections = useMemo(
     () => buildOptimizationDiffSections(baseline, proposedContent),
     [baseline, proposedContent],
   )
+  const hasChanges = sections.some(
+    ({ change }) =>
+      change === CHANGE.ADDED || change === CHANGE.REMOVED || change === CHANGE.MODIFIED,
+  )
 
   return (
     <ProfileModal
       description="Đối chiếu nội dung gốc với bản tối ưu trước khi lưu. Bạn chỉ xem xét, không chỉnh sửa tại đây."
+      busy={busy}
       footer={
-        <Button onClick={onClose} type="button" variant="outline">
-          Đóng
-        </Button>
+        actions ?? (
+          <Button onClick={onClose} type="button" variant="outline">
+            Đóng
+          </Button>
+        )
       }
       onClose={onClose}
       panelClassName="max-w-5xl"
       title="So sánh bản tối ưu"
     >
       <div className="space-y-4" data-testid="optimization-diff">
+        {notice}
+        {!hasChanges && (
+          <p
+            className="rounded-md border bg-muted/40 px-3 py-2 text-sm"
+            data-testid="optimization-no-changes"
+          >
+            Bản tối ưu không thay đổi nội dung so với bản gốc. Bạn vẫn có thể lưu bản nháp này.
+          </p>
+        )}
         <div className="flex gap-2" role="group" aria-label="Chế độ xem">
           <Button
             aria-pressed={splitView}
@@ -56,6 +80,11 @@ function OptimizationDiffModal({ baseline, proposedContent, onClose }) {
             Gộp
           </Button>
         </div>
+        {!splitView && (
+          <p className="text-xs text-muted-foreground" data-testid="unified-legend">
+            Chế độ gộp: dòng bị xóa (−) là bản gốc, dòng được thêm (+) là bản tối ưu.
+          </p>
+        )}
 
         {sections.map((section) => (
           <section
@@ -87,10 +116,10 @@ function OptimizationDiffModal({ baseline, proposedContent, onClose }) {
                 <ReactDiffViewer
                   compareMethod={DiffMethod.WORDS}
                   extraLinesSurroundingDiff={3}
-                  leftTitle="Trước"
+                  leftTitle={splitView ? 'Trước' : undefined}
                   newValue={section.after}
                   oldValue={section.before}
-                  rightTitle="Sau"
+                  rightTitle={splitView ? 'Sau' : undefined}
                   showDiffOnly
                   splitView={splitView}
                 />

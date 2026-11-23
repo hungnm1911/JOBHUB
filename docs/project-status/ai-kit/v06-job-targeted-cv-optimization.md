@@ -32,9 +32,9 @@ integration remains **NOT STARTED**.
 
 ## Deferred / not started
 
-- Amended flow: R1 Backend Preview API (`POST /candidate/jobs/:jobId/optimize-cv/preview`, no persistence) is implemented. R2 Proposal signing (HMAC-SHA256, 60-minute TTL, identity and Source revision bound, stateless) is implemented in the Preview response. R3 Backend Commit (`POST /candidate/jobs/:jobId/optimize-cv/commit`: signature, TTL, identity, current Job/Source authorization, Source revision 409, V7 `GENERATED/DRAFT` create from the signed `proposedContent`, no AI call) is implemented. Frontend remains not started; legacy `/optimize-cv` remains in transition.
+- Amended flow: R1 Backend Preview API (`POST /candidate/jobs/:jobId/optimize-cv/preview`, no persistence) is implemented. R2 Proposal signing (HMAC-SHA256, 60-minute TTL, identity and Source revision bound, stateless) is implemented in the Preview response. R3 Backend Commit (`POST /candidate/jobs/:jobId/optimize-cv/commit`: signature, TTL, identity, current Job/Source authorization, Source revision 409, V7 `GENERATED/DRAFT` create from the signed `proposedContent`, no AI call) is implemented. Frontend F1–F3 are implemented (see below); legacy `/optimize-cv` remains in transition.
 
-- Frontend F1 (Preview/Commit API module and `useCvOptimizationProposal` hook, stale-Proposal reset) is implemented but not wired into any UI. F2 `OptimizationDiffModal` (react-diff-viewer-continued 4.4.0, seven readable sections, split/unified, review-only) and its `diffSections.js` formatter are implemented but not integrated into the Workspace; workflow switch (F3) and legacy `/optimize-cv` removal are not started.
+- Frontend F1 (Preview/Commit API module and `useCvOptimizationProposal` hook, stale-Proposal reset) is implemented. F2 `OptimizationDiffModal` (react-diff-viewer-continued 4.4.0, seven readable sections, split/unified, review-only) and its `diffSections.js` formatter are implemented. F3 integrates both into `CandidateCvOptimizeWorkspace` (Optimize = Preview + Diff; Save Draft = Commit of the untouched signed Proposal; 400/403/404/409 and unknown 5xx/network Commit handling). The legacy `/optimize-cv` Backend endpoint and the legacy hook/`JobCvEvaluationDialog` flow remain for F4. Legacy `/optimize-cv` removal and migrating `JobCvEvaluationDialog` are not started (F4).
 
 - Frontend workflow integration has not started. Slice 08 exposes the action through
   Candidate HTTP and reuses V7 Draft management and Preview.
@@ -52,6 +52,8 @@ Optimization phase. The ignored local captures remain the detailed evidence;
 this leaf records the current state without copying CV content or credentials.
 
 ## Verification status
+
+- 2026-11-24 Frontend F3 (Workspace Preview → Diff → Save Draft): focused `test:cv-optimization-proposal` (F1 + F2 + 11 new Workspace integration tests) and targeted ESLint passed with a mocked API client. No `yarn verify:agent`, build, real-browser check or live provider call was run per the requested scope.
 
 - 2026-11-24 Frontend F2 (Diff Modal + formatter): focused `test/candidate-cv-optimization-diff.test.js` (5 tests) and targeted ESLint passed. No `yarn verify:agent`, build, browser check or live provider call was run per the requested scope.
 

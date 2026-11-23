@@ -19,6 +19,8 @@ import {
 } from '@/features/candidate-cv-evaluation/utils'
 import { cn } from '@/lib/utils'
 
+import { toOptimizationCommitErrorMessage } from '../utils'
+
 function ScoreBadge({ score }) {
   const tone = scoreTone(score)
   return (
@@ -48,6 +50,11 @@ function OptimizationPanel({
   draftCv,
   optimizationError,
   optimizing,
+  previewing,
+  commitStatus,
+  commitError,
+  reviewReady,
+  onReview,
   onEvaluate,
   onOptimize,
 }) {
@@ -108,7 +115,7 @@ function OptimizationPanel({
             ) : (
               <FileText aria-hidden="true" className="size-4" />
             )}
-            {optimizing ? 'Đang tạo bản nháp…' : '2. Tạo bản nháp tối ưu'}
+            {previewing ? 'Đang tạo bản xem trước…' : '2. Xem bản tối ưu'}
           </Button>
         </div>
       </div>
@@ -147,8 +154,8 @@ function OptimizationPanel({
             />
             <p className="mt-3 text-sm font-medium">Hai bước tối ưu CV</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Bước 1 đánh giá CV theo job. Bước 2 dùng kết quả đó để tạo bản nháp Generated mới
-              qua API optimize-cv.
+              Bước 1 đánh giá CV theo job. Bước 2 dùng kết quả đó để tạo bản xem trước; chỉ khi bạn
+              chọn lưu mới tạo bản nháp Generated mới.
             </p>
           </div>
         ) : null}
@@ -209,9 +216,9 @@ function OptimizationPanel({
           </>
         ) : null}
 
-        {optimizing ? (
+        {previewing ? (
           <CenteredState
-            description="Hệ thống đang tạo bản nháp Generated từ baseline CV và advice đánh giá. Có thể mất một lúc."
+            description="Hệ thống đang tạo bản xem trước từ baseline CV và advice đánh giá. Chưa có bản nháp nào được lưu. Có thể mất một lúc."
             icon={LoaderCircle}
             spinning
             title="Đang tối ưu CV…"
@@ -219,7 +226,7 @@ function OptimizationPanel({
           />
         ) : null}
 
-        {!optimizing && optimizationStatus === 'error' ? (
+        {!previewing && optimizationStatus === 'error' ? (
           <CenteredState
             action={
               <Button disabled={!canOptimize} onClick={onOptimize} variant="outline">
@@ -228,30 +235,54 @@ function OptimizationPanel({
               </Button>
             }
             description={
-              optimizationError?.message || 'Không tạo được bản nháp CV tối ưu.'
+              optimizationError?.message || 'Không tạo được bản tối ưu để xem trước.'
             }
             icon={CircleAlert}
-            title="Tối ưu thất bại"
+            title="Tạo bản tối ưu thất bại"
             tone="bg-secondary text-muted-foreground"
           />
         ) : null}
 
-        {!optimizing && optimizationStatus === 'success' && draftCv ? (
+        {reviewReady ? (
+          <section className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+            <h3 className="text-sm font-semibold">Bản tối ưu đang chờ bạn xem xét</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Chưa có bản nháp nào được lưu. Mở so sánh để xem và quyết định lưu hoặc hủy.
+            </p>
+            <Button className="mt-3" onClick={onReview} type="button">
+              Xem so sánh
+            </Button>
+          </section>
+        ) : null}
+
+        {commitStatus === 'error' && !reviewReady && commitError ? (
+          <section className="rounded-2xl border border-destructive/25 bg-destructive/5 p-4" role="alert">
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <CircleAlert aria-hidden="true" className="size-4 text-destructive" />
+              Không lưu được bản nháp
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {toOptimizationCommitErrorMessage(commitError)}
+            </p>
+            <Button asChild className="mt-3" variant="outline">
+              <Link to="/candidate/cvs">Quản lý CV</Link>
+            </Button>
+          </section>
+        ) : null}
+
+        {commitStatus === 'success' && draftCv ? (
           <section className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
             <h3 className="flex items-center gap-2 text-sm font-semibold">
               <CircleCheck aria-hidden="true" className="size-4 text-primary" />
-              Đã tạo bản nháp tối ưu
+              Đã lưu bản nháp tối ưu
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
               CV mới <span className="font-medium text-foreground">{draftCv.name}</span> đã
-              được lưu ở trạng thái bản nháp. Bạn có thể xem và chỉnh trong thư viện CV.
+              được lưu ở trạng thái bản nháp. Bạn có thể xem và chỉnh trong Quản lý CV.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild>
-                <Link to="/candidate/cvs">Mở thư viện CV</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/candidate/cvs/create">Tiếp tục chỉnh CV</Link>
+                <Link to="/candidate/cvs">Quản lý CV</Link>
               </Button>
             </div>
           </section>

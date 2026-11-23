@@ -5,7 +5,7 @@ import {
   previewOptimizedCandidateCvForJobApi,
 } from '@/apis/candidate-cv-optimization.api'
 
-import { toOptimizeEvaluationPayload } from '../utils'
+import { isProposalRejectedStatus, toOptimizeEvaluationPayload } from '../utils'
 
 const INITIAL_STATE = Object.freeze({
   previewStatus: 'idle',
@@ -15,11 +15,6 @@ const INITIAL_STATE = Object.freeze({
   previewError: null,
   commitError: null,
 })
-
-// Backend rejects an unusable Proposal (malformed/signature/expired 400,
-// identity 403, Source changed or archived 409, missing 404); retrying the same
-// Proposal cannot succeed, so it is discarded. Transport/5xx errors keep it.
-const PROPOSAL_REJECTED_STATUSES = new Set([400, 403, 404, 409])
 
 // AI-V06 F03/F04 client state: Preview -> signed Proposal -> Commit. The
 // Proposal is stored and committed untouched; it is cleared whenever the Source
@@ -101,7 +96,7 @@ function useCvOptimizationProposal({ jobId, candidateCvId } = {}) {
       return draftCv
     } catch (error) {
       if (contextRef.current === requestContext) {
-        const rejected = PROPOSAL_REJECTED_STATUSES.has(error?.status)
+        const rejected = isProposalRejectedStatus(error?.status)
         if (rejected) {
           proposalRef.current = null
         }
