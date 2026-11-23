@@ -13,6 +13,7 @@ const testEnvironment = {
   JWT_ALGORITHM: "HS256",
   JWT_INVITE_SECRET: "test-jwt-invite-secret-with-enough-length",
   JWT_INVITE_EXPIRES_IN: "24h",
+  AI_OPTIMIZATION_PROPOSAL_SECRET: "test-ai-optimization-proposal-secret-32chars",
   BCRYPT_SALT_ROUNDS: "4",
   ADMIN_EMAIL: "admin@example.com",
   ADMIN_PASSWORD: "admin-password",

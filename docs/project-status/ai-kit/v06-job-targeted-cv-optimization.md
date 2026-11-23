@@ -32,7 +32,7 @@ integration remains **NOT STARTED**.
 
 ## Deferred / not started
 
-- Amended flow: R1 Backend Preview API (`POST /candidate/jobs/:jobId/optimize-cv/preview`, no persistence) is implemented. Commit, Proposal signing, and Frontend remain not started; legacy `/optimize-cv` remains in transition.
+- Amended flow: R1 Backend Preview API (`POST /candidate/jobs/:jobId/optimize-cv/preview`, no persistence) is implemented. R2 Proposal signing (HMAC-SHA256, 60-minute TTL, identity and Source revision bound, stateless) is implemented in the Preview response. Commit and Frontend remain not started; legacy `/optimize-cv` remains in transition.
 
 - Frontend integration has not started. Slice 08 exposes the action through
   Candidate HTTP and reuses V7 Draft management and Preview.
@@ -50,6 +50,10 @@ Optimization phase. The ignored local captures remain the detailed evidence;
 this leaf records the current state without copying CV content or credentials.
 
 ## Verification status
+
+- 2026-11-23 R2-AC-01 fix (own signing secret; content-hash Source revision): focused Backend tests (60 across `ai-v06-*`) and targeted ESLint passed with mocked AI Kit. No full gate or live provider call was run per the requested scope.
+
+- 2026-11-23 R2 Proposal signing: focused Backend tests (55 across `ai-v06-*`, including R2 signing/tamper/identity/TTL cases) and targeted ESLint passed with mocked AI Kit. No full gate or live provider call was run per the requested scope.
 
 - 2026-11-23 R1 Preview: focused Backend tests (15 across R1, Slice 07, Slice 08) and targeted ESLint passed with mocked AI Kit. No full gate or live provider call was run per the requested scope.
 

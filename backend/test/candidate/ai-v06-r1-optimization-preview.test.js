@@ -11,6 +11,7 @@ vi.mock("../../src/services/ai-kit.service.js", async (importOriginal) => {
   return { aiKit: Object.freeze({ ...actual.aiKit, optimizeCv }) };
 });
 
+import { verifyOptimizationProposal } from "../../src/services/candidate-cv-optimization-proposal.service.js";
 import USER_ROLE from "../../src/constants/user-role.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
 import Category from "../../src/models/category.model.js";
@@ -116,7 +117,7 @@ describe("AI-V06 R1 Optimization Preview API", () => {
     const response = await request().expect(200);
 
     expect(response.headers["cache-control"]).toBe("private, no-store");
-    expect(Object.keys(response.body).sort()).toEqual(["baseline", "proposedContent"]);
+    expect(Object.keys(response.body).sort()).toEqual(["baseline", "proposal", "proposedContent"]);
     expect(response.body.baseline).toMatchObject({
       professionalSummary: "Original summary",
       professionalSummaryHtml: "<p>Original <strong>summary</strong></p>",
@@ -133,6 +134,21 @@ describe("AI-V06 R1 Optimization Preview API", () => {
         description: "Used Node", descriptionHtml: "<p>Used <strong>Node</strong></p>",
       }],
     });
+    const { proposal } = response.body;
+    expect(proposal.payload).toMatchObject({
+      candidateUserId: source.candidateUserId.toString(),
+      jobId: job._id.toString(), candidateCvId: source._id.toString(),
+      proposedContent: response.body.proposedContent,
+      metadata: { name: "Source CV" },
+      sourceRevision: {
+        sourceType: "GENERATED", updatedAt: sourceBefore.updatedAt.toISOString(),
+        contentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
+    });
+    expect(proposal.payload).not.toHaveProperty("baseline");
+    expect(verifyOptimizationProposal(proposal, {
+      candidateUserId: source.candidateUserId, jobId: job._id, candidateCvId: source._id,
+    }).valid).toBe(true);
     expect(optimizeCv).toHaveBeenCalledOnce();
     expect(optimizeCv).toHaveBeenCalledWith(expect.objectContaining({
       evaluationResult,
@@ -170,7 +186,7 @@ describe("AI-V06 R1 Optimization Preview API", () => {
       "personalInfo", "hiddenSections", "professionalSummary", "professionalSummaryHtml",
       "skills", "workExperiences", "projects", "educations", "certifications", "languages",
     ].sort();
-    expect(Object.keys(response.body).sort()).toEqual(["baseline", "proposedContent"]);
+    expect(Object.keys(response.body).sort()).toEqual(["baseline", "proposal", "proposedContent"]);
     expect(Object.keys(response.body.baseline).sort()).toEqual(generatedKeys);
     expect(Object.keys(response.body.proposedContent).sort()).toEqual(generatedKeys);
     expect(response.body.baseline.professionalSummary).toBe("Uploaded summary");

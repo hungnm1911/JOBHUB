@@ -6,6 +6,10 @@ import {
   prepareOwnUploadedCvBaseline,
 } from "./candidate-cv-optimization-baseline.service.js";
 import {
+  buildSourceRevision,
+  issueOptimizationProposal,
+} from "./candidate-cv-optimization-proposal.service.js";
+import {
   createGeneratedDraftCandidateCv,
   normalizeGeneratedContentForPersistence,
 } from "./candidate-cv.service.js";
@@ -13,7 +17,7 @@ import {
 // The request supplies only resource IDs and prior V04 advice. Authorized
 // profiles and baseline are always prepared from the current canonical sources.
 const optimizeOwnCandidateCvForJob = async ({
-  actorUser, jobId, candidateCvId, evaluationResult,
+  actorUser, jobId, candidateCvId, evaluationResult, onSourceSnapshot,
 } = {}) => {
   let sourceSnapshot;
   const { jobNormalizationResult, cvNormalizationResult } =
@@ -37,6 +41,8 @@ const optimizeOwnCandidateCvForJob = async ({
   if (!sourceSnapshot || sourceSnapshot._id?.toString() !== authorizedCvId) {
     throw new AppError(500, "AI CV source snapshot is unavailable or mismatched");
   }
+
+  onSourceSnapshot?.(sourceSnapshot);
 
   const baselineInput = {
     actorUser,
@@ -87,12 +93,27 @@ const mergeOptimizationWithBaseline = (generatedBaseline, optimizationResult) =>
 // AI-V06 F03 Optimize/Preview: no persistence. Both sides use the V7 Generated
 // content normalizer that Commit/create will apply, so Preview equals Save.
 const previewOptimizedCandidateCvForJob = async (input) => {
-  const { generatedBaseline, optimizationResult } = await optimizeOwnCandidateCvForJob(input);
+  let sourceSnapshot;
+  const {
+    jobId, candidateCvId, generatedBaseline, optimizationResult,
+  } = await optimizeOwnCandidateCvForJob({
+    ...input,
+    onSourceSnapshot: (source) => { sourceSnapshot = source; },
+  });
+  const proposedContent = normalizeGeneratedContentForPersistence(
+    mergeOptimizationWithBaseline(generatedBaseline, optimizationResult),
+  );
   return {
     baseline: normalizeGeneratedContentForPersistence(generatedBaseline.generatedContent),
-    proposedContent: normalizeGeneratedContentForPersistence(
-      mergeOptimizationWithBaseline(generatedBaseline, optimizationResult),
-    ),
+    proposedContent,
+    proposal: issueOptimizationProposal({
+      candidateUserId: input.actorUser._id,
+      jobId,
+      candidateCvId,
+      metadata: generatedBaseline.metadata,
+      proposedContent,
+      sourceRevision: buildSourceRevision(sourceSnapshot),
+    }),
   };
 };
 
