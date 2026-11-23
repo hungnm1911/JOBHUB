@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useId, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -189,10 +190,13 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
     evaluation.status === 'success' && Boolean(evaluation.result)
   const canOptimize = hasEvaluationResult && !busy
 
+  // Portal to <body>: the trigger sits under a `relative z-10` ancestor whose
+  // stacking context would otherwise put the overlay beneath the sticky header.
   return (
     <>
+    {createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-hero/50 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-hero/50 p-4 sm:items-center"
       onClick={() => {
         if (!busy) {
           onClose()
@@ -202,7 +206,7 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
       <div
         aria-labelledby={titleId}
         aria-modal="true"
-        className="flex max-h-[min(46rem,92svh)] w-full max-w-2xl flex-col rounded-2xl border bg-card shadow-lg"
+        className="flex max-h-full w-full max-w-2xl flex-col rounded-2xl border bg-card shadow-lg"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
@@ -514,7 +518,9 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
+    )}
     {reviewOpen && optimization.preview ? (
       <OptimizationProposalReviewModal
         commitError={optimization.commitError}
