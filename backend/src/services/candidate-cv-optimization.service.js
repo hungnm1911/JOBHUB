@@ -5,7 +5,10 @@ import {
   prepareOwnGeneratedCvBaseline,
   prepareOwnUploadedCvBaseline,
 } from "./candidate-cv-optimization-baseline.service.js";
-import { createGeneratedDraftCandidateCv } from "./candidate-cv.service.js";
+import {
+  createGeneratedDraftCandidateCv,
+  normalizeGeneratedContentForPersistence,
+} from "./candidate-cv.service.js";
 
 // The request supplies only resource IDs and prior V04 advice. Authorized
 // profiles and baseline are always prepared from the current canonical sources.
@@ -81,6 +84,18 @@ const mergeOptimizationWithBaseline = (generatedBaseline, optimizationResult) =>
     : { professionalSummaryHtml: null }),
 });
 
+// AI-V06 F03 Optimize/Preview: no persistence. Both sides use the V7 Generated
+// content normalizer that Commit/create will apply, so Preview equals Save.
+const previewOptimizedCandidateCvForJob = async (input) => {
+  const { generatedBaseline, optimizationResult } = await optimizeOwnCandidateCvForJob(input);
+  return {
+    baseline: normalizeGeneratedContentForPersistence(generatedBaseline.generatedContent),
+    proposedContent: normalizeGeneratedContentForPersistence(
+      mergeOptimizationWithBaseline(generatedBaseline, optimizationResult),
+    ),
+  };
+};
+
 const createOptimizedCandidateCvDraftForJob = async (input) => {
   const { generatedBaseline, optimizationResult } = await optimizeOwnCandidateCvForJob(input);
   const generatedContent = mergeOptimizationWithBaseline(generatedBaseline, optimizationResult);
@@ -93,4 +108,8 @@ const createOptimizedCandidateCvDraftForJob = async (input) => {
   });
 };
 
-export { optimizeOwnCandidateCvForJob, createOptimizedCandidateCvDraftForJob };
+export {
+  optimizeOwnCandidateCvForJob,
+  previewOptimizedCandidateCvForJob,
+  createOptimizedCandidateCvDraftForJob,
+};

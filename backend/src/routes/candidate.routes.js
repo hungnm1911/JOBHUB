@@ -43,7 +43,10 @@ import {
 } from "../controllers/candidate-profile.controller.js";
 import { matchOwnCandidateCvToJobHandler } from "../controllers/candidate-job-match.controller.js";
 import { evaluateOwnCandidateCvForJobHandler } from "../controllers/candidate-cv-evaluation.controller.js";
-import { createOptimizedCandidateCvDraftForJobHandler } from "../controllers/candidate-cv-optimization.controller.js";
+import {
+  createOptimizedCandidateCvDraftForJobHandler,
+  previewOptimizedCandidateCvForJobHandler,
+} from "../controllers/candidate-cv-optimization.controller.js";
 import { recommendOwnDefaultCvJobsHandler } from "../controllers/candidate-job-recommendation.controller.js";
 import {
   listSavedJobsHandler,
@@ -107,6 +110,14 @@ router.post(
   authenticateAccess,
   authorizeCandidate,
   evaluateOwnCandidateCvForJobHandler,
+);
+
+router.post(
+  "/jobs/:jobId/optimize-cv/preview",
+  authenticateAccess,
+  authorizeCandidate,
+  validateOptimizeCandidateCv,
+  previewOptimizedCandidateCvForJobHandler,
 );
 
 router.post(
