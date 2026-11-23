@@ -44,7 +44,6 @@ import {
 import { matchOwnCandidateCvToJobHandler } from "../controllers/candidate-job-match.controller.js";
 import { evaluateOwnCandidateCvForJobHandler } from "../controllers/candidate-cv-evaluation.controller.js";
 import {
-  createOptimizedCandidateCvDraftForJobHandler,
   commitOptimizedCandidateCvProposalForJobHandler,
   previewOptimizedCandidateCvForJobHandler,
 } from "../controllers/candidate-cv-optimization.controller.js";
@@ -129,14 +128,6 @@ router.post(
   authorizeCandidate,
   validateCommitOptimizedCandidateCv,
   commitOptimizedCandidateCvProposalForJobHandler,
-);
-
-router.post(
-  "/jobs/:jobId/optimize-cv",
-  authenticateAccess,
-  authorizeCandidate,
-  validateOptimizeCandidateCv,
-  createOptimizedCandidateCvDraftForJobHandler,
 );
 
 router.post(

@@ -121,18 +121,6 @@ const previewOptimizedCandidateCvForJob = async (input) => {
   };
 };
 
-const createOptimizedCandidateCvDraftForJob = async (input) => {
-  const { generatedBaseline, optimizationResult } = await optimizeOwnCandidateCvForJob(input);
-  const generatedContent = mergeOptimizationWithBaseline(generatedBaseline, optimizationResult);
-
-  return createGeneratedDraftCandidateCv({
-    candidateUserId: input.actorUser._id,
-    actorUser: input.actorUser,
-    draft: generatedBaseline.metadata,
-    generatedContent,
-  });
-};
-
 const COMMIT_REJECTIONS = {
   MALFORMED: [400, "Optimization Proposal is malformed"],
   INVALID_SIGNATURE: [400, "Optimization Proposal signature is invalid"],
@@ -233,5 +221,4 @@ export {
   commitOptimizedCandidateCvProposalForJob,
   optimizeOwnCandidateCvForJob,
   previewOptimizedCandidateCvForJob,
-  createOptimizedCandidateCvDraftForJob,
 };

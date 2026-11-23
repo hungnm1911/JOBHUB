@@ -103,13 +103,24 @@ const setup = async ({ sourceType = "GENERATED" } = {}) => {
       rewrite: null,
     }],
   };
-  const path = `/api/candidate/jobs/${job._id}/optimize-cv`;
+  const legacyPath = `/api/candidate/jobs/${job._id}/optimize-cv`;
+  const path = `${legacyPath}/preview`;
   const request = (body = { candidateCvId: source._id.toString(), evaluationResult }) =>
     agent.post(path).set("Authorization", `Bearer ${token}`).send(body);
-  return { agent, candidate, token, job, source, evaluationResult, path, request };
+  const commit = (proposal) => agent.post(`${legacyPath}/commit`)
+    .set("Authorization", `Bearer ${token}`).send({ proposal });
+  // Optimize = Preview; only Commit of the untouched Proposal creates the Draft.
+  const optimizeAndSave = async (body) => {
+    const preview = await request(body).expect(200);
+    return commit(preview.body.proposal).expect(201);
+  };
+  return {
+    agent, candidate, token, job, source, evaluationResult, path, legacyPath,
+    request, commit, optimizeAndSave,
+  };
 };
 
-describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
+describe("AI-V06 Slice 08 Candidate HTTP Preview/Commit optimization", () => {
   beforeAll(connectTestDatabase);
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -120,11 +131,11 @@ describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
   afterAll(disconnectTestDatabase);
 
   it("previews, edits, and re-previews a V06-created Generated Draft through V7", async () => {
-    const { agent, token, candidate, source, job, evaluationResult, request } = await setup();
+    const { agent, token, candidate, source, job, evaluationResult, optimizeAndSave } = await setup();
     const sourceBefore = await CandidateCV.findById(source._id).lean();
     optimizeCv.mockResolvedValue(optimizationResult);
 
-    const response = await request().expect(201);
+    const response = await optimizeAndSave();
 
     expect(response.headers["cache-control"]).toBe("private, no-store");
     expect(response.body.cv).toMatchObject({
@@ -205,7 +216,7 @@ describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
   });
 
   it("accepts Uploaded V04 feedback on non-output sections as advisory context", async () => {
-    const { source, evaluationResult, request } = await setup({ sourceType: "UPLOADED" });
+    const { source, evaluationResult, optimizeAndSave } = await setup({ sourceType: "UPLOADED" });
     const pdfContent = Object.fromEntries([
       "careerPositioning", "professionalSummary", "skills", "workExperiences",
       "projects", "educations", "certifications", "languages",
@@ -229,9 +240,9 @@ describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
     const advice = { ...evaluationResult, cvImprovements: improvements };
     optimizeCv.mockResolvedValue(optimizationResult);
 
-    const response = await request({
+    const response = await optimizeAndSave({
       candidateCvId: source._id.toString(), evaluationResult: advice,
-    }).expect(201);
+    });
 
     expect(normalizeUploaded).toHaveBeenCalledOnce();
     expect(optimizeCv).toHaveBeenCalledWith(expect.objectContaining({ evaluationResult: advice }));
@@ -291,15 +302,28 @@ describe("AI-V06 Slice 08 Candidate HTTP optimization", () => {
     expect(await CandidateCV.countDocuments()).toBe(2);
   });
 
+  it("no longer exposes the legacy single-step optimize-cv route", async () => {
+    const { agent, token, legacyPath, source, evaluationResult } = await setup();
+    optimizeCv.mockResolvedValue(optimizationResult);
+
+    await agent.post(legacyPath).set("Authorization", `Bearer ${token}`)
+      .send({ candidateCvId: source._id.toString(), evaluationResult })
+      .expect(404);
+    expect(optimizeCv).not.toHaveBeenCalled();
+    expect(await CandidateCV.countDocuments()).toBe(1);
+  });
+
   it("returns failure without a Draft when inference or persistence fails", async () => {
-    const { request } = await setup();
+    const { request, commit } = await setup();
     optimizeCv.mockRejectedValueOnce(new Error("Inference failed"));
     await request().expect(500);
     expect(await CandidateCV.countDocuments()).toBe(1);
 
     optimizeCv.mockResolvedValueOnce(optimizationResult);
+    const preview = await request().expect(200);
+    expect(await CandidateCV.countDocuments()).toBe(1);
     const create = vi.spyOn(CandidateCV, "create").mockRejectedValueOnce(new Error("Write failed"));
-    await request().expect(500);
+    await commit(preview.body.proposal).expect(500);
     expect(create).toHaveBeenCalledOnce();
     expect(await CandidateCV.countDocuments()).toBe(1);
   });
