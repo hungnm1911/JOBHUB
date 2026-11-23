@@ -8,7 +8,7 @@ import { CV_CAREER_GROUPS } from "../normalization/cv-match-profile-career.js";
 import { NORMALIZATION_STATUS } from "../normalization/normalization-support.js";
 
 const CRITERIA = Object.freeze(["skills", "category", "experience", "employmentType", "workMode"]);
-const UPLOADED_CV_CODEX_TIMEOUT_MS = 120_000;
+const CV_EVALUATION_CODEX_TIMEOUT_MS = 180_000;
 const nullableString = { type: ["string", "null"] };
 const CV_EVALUATION_SCHEMA = Object.freeze({
   type: "object",
@@ -150,8 +150,7 @@ const createCvEvaluator = ({ llm, logger }) => async ({
   try {
     text = await infer({ provider, config, logger, input, instruction: INSTRUCTION,
       schema, schemaName: "cv_evaluation",
-      requestTimeoutMs: provider === "codex" && cvMatchProfile.source.type === "UPLOADED_CV"
-        ? UPLOADED_CV_CODEX_TIMEOUT_MS : undefined });
+      requestTimeoutMs: provider === "codex" ? CV_EVALUATION_CODEX_TIMEOUT_MS : undefined });
   } catch (error) {
     if (error instanceof SemanticSkillsAssessmentError) throw new CvEvaluationError();
     throw error;

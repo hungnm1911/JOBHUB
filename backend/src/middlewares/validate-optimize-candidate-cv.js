@@ -51,4 +51,24 @@ const validateOptimizeCandidateCv = (request, _response, next) => {
   return next();
 };
 
+// Commit body: the signed Proposal exactly as issued by Preview. Content is
+// verified by signature in the service; `baseline` and unknown keys are ignored.
+const commitSchema = z.object({
+  proposal: z.object({
+    payload: z.record(z.string(), z.unknown()),
+    signature: z.string().min(1),
+  }),
+});
+
+const validateCommitOptimizedCandidateCv = (request, _response, next) => {
+  const parsed = commitSchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    const [issue] = parsed.error.issues;
+    return next(new AppError(400, issue.message, { field: issue.path.join(".") || undefined }));
+  }
+  request.body = parsed.data;
+  return next();
+};
+
+export { validateCommitOptimizedCandidateCv };
 export default validateOptimizeCandidateCv;

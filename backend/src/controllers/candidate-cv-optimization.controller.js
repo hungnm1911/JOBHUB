@@ -1,12 +1,30 @@
-import { createOptimizedCandidateCvDraftForJob } from "../services/candidate-cv-optimization.service.js";
+import {
+  commitOptimizedCandidateCvProposalForJob,
+  previewOptimizedCandidateCvForJob,
+} from "../services/candidate-cv-optimization.service.js";
 
-const createOptimizedCandidateCvDraftForJobHandler = async (request, response, next) => {
+const previewOptimizedCandidateCvForJobHandler = async (request, response, next) => {
   try {
-    const cv = await createOptimizedCandidateCvDraftForJob({
+    const preview = await previewOptimizedCandidateCvForJob({
       actorUser: request.auth.user,
       jobId: request.params.jobId,
       candidateCvId: request.body.candidateCvId,
       evaluationResult: request.body.evaluationResult,
+    });
+
+    response.setHeader("Cache-Control", "private, no-store");
+    return response.status(200).json(preview);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const commitOptimizedCandidateCvProposalForJobHandler = async (request, response, next) => {
+  try {
+    const cv = await commitOptimizedCandidateCvProposalForJob({
+      actorUser: request.auth.user,
+      jobId: request.params.jobId,
+      proposal: request.body.proposal,
     });
 
     response.setHeader("Cache-Control", "private, no-store");
@@ -16,4 +34,7 @@ const createOptimizedCandidateCvDraftForJobHandler = async (request, response, n
   }
 };
 
-export { createOptimizedCandidateCvDraftForJobHandler };
+export {
+  commitOptimizedCandidateCvProposalForJobHandler,
+  previewOptimizedCandidateCvForJobHandler,
+};

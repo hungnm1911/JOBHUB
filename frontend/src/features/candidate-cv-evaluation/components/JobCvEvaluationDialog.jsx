@@ -15,7 +15,13 @@ import { toast } from 'sonner'
 
 import { listOwnCandidateCvsApi } from '@/apis/candidate-cv.api'
 import { Button } from '@/components/ui/button'
-import useCvJobOptimization from '@/features/candidate-cv-optimization/hooks/useCvJobOptimization'
+import OptimizationProposalReviewModal from '@/features/candidate-cv-optimization/components/OptimizationProposalReviewModal'
+import useCvOptimizationProposal from '@/features/candidate-cv-optimization/hooks/useCvOptimizationProposal'
+import {
+  isProposalRejectedStatus,
+  toOptimizationCommitErrorMessage,
+  toOptimizationPreviewErrorMessage,
+} from '@/features/candidate-cv-optimization/utils'
 import { cn } from '@/lib/utils'
 import { CANDIDATE_CV_SOURCE_TYPE, CANDIDATE_CV_STATUS } from '@/utils/constant'
 
@@ -66,8 +72,13 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
   const [selectedCvId, setSelectedCvId] = useState(null)
 
   const evaluation = useCvJobEvaluation()
-  const optimization = useCvJobOptimization()
-  const busy = evaluation.evaluating || optimization.optimizing
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const optimization = useCvOptimizationProposal({
+    jobId,
+    candidateCvId: selectedCvId,
+  })
+  const optimizing = optimization.previewing || optimization.committing
+  const busy = evaluation.evaluating || optimizing
 
   useEffect(() => {
     let active = true
@@ -100,14 +111,14 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
 
   useEffect(() => {
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape' && !busy) {
+      if (event.key === 'Escape' && !busy && !reviewOpen) {
         onClose()
       }
     }
 
     document.addEventListener('keydown', closeOnEscape)
     return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [onClose, busy])
+  }, [onClose, busy, reviewOpen])
 
   const selectedCv = useMemo(
     () => view.cvs.find((cv) => cv.id === selectedCvId) ?? null,
@@ -118,6 +129,7 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
     setSelectedCvId(nextCvId)
     evaluation.reset()
     optimization.reset()
+    setReviewOpen(false)
   }
 
   const handleEvaluate = async () => {
@@ -127,6 +139,7 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
     }
 
     optimization.reset()
+    setReviewOpen(false)
     try {
       await evaluation.evaluate({
         jobId,
@@ -137,6 +150,7 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
     }
   }
 
+  // Optimize only requests a Preview Proposal and opens the Diff; no Draft yet.
   const handleOptimize = async () => {
     if (!jobId || !selectedCvId || !evaluation.rawResult) {
       toast.error('Hãy đánh giá CV thành công trước khi tối ưu.')
@@ -144,16 +158,30 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
     }
 
     try {
-      const draft = await optimization.optimize({
-        jobId,
-        candidateCvId: selectedCvId,
-        evaluationResult: evaluation.rawResult,
-      })
-      toast.success(
-        draft?.name ? `Đã tạo bản nháp “${draft.name}”` : 'Đã tạo bản nháp CV tối ưu',
-      )
+      const response = await optimization.requestPreview(evaluation.rawResult)
+      if (response) {
+        setReviewOpen(true)
+      }
     } catch (error) {
-      toast.error(error.message || 'Không tối ưu được CV.')
+      toast.error(toOptimizationPreviewErrorMessage(error))
+    }
+  }
+
+  // Save commits the signed Proposal exactly as previewed; it never calls AI.
+  const handleSaveDraft = async () => {
+    try {
+      const draft = await optimization.commit()
+      if (draft) {
+        setReviewOpen(false)
+        toast.success(
+          draft.name ? `Đã lưu bản nháp “${draft.name}”` : 'Đã lưu bản nháp CV tối ưu',
+        )
+      }
+    } catch (error) {
+      if (isProposalRejectedStatus(error?.status)) {
+        setReviewOpen(false)
+        toast.error(toOptimizationCommitErrorMessage(error))
+      }
     }
   }
 
@@ -162,6 +190,7 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
   const canOptimize = hasEvaluationResult && !busy
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-hero/50 p-4 sm:items-center"
       onClick={() => {
@@ -385,7 +414,7 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
                       3. Tối ưu CV theo việc làm này
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-                      Dùng kết quả đánh giá trên để tạo một bản nháp CV mới tối ưu riêng cho vị trí này.
+                      Dùng kết quả đánh giá trên để tạo bản xem trước, đối chiếu thay đổi rồi mới lưu thành bản nháp CV mới.
                     </p>
                   </div>
                   <Button
@@ -394,25 +423,25 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
                     size="sm"
                     type="button"
                   >
-                    {optimization.optimizing ? (
+                    {optimizing ? (
                       <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
                     ) : (
                       <WandSparkles aria-hidden="true" className="size-4" />
                     )}
-                    {optimization.optimizing ? 'Đang tối ưu CV…' : 'Tối ưu CV'}
+                    {optimizing ? 'Đang tạo bản xem trước…' : 'Tối ưu CV'}
                   </Button>
                 </div>
 
-                {optimization.optimizing && (
+                {optimizing && (
                   <p className="mt-3 text-xs text-muted-foreground">
-                    Hệ thống đang tạo bản nháp CV tối ưu từ CV gốc và các gợi ý đánh giá…
+                    Hệ thống đang tạo bản xem trước CV tối ưu. Chưa có bản nháp nào được lưu cho đến khi bạn xác nhận.
                   </p>
                 )}
 
-                {!optimization.optimizing && optimization.status === 'error' && (
+                {!optimizing && optimization.previewStatus === 'error' && (
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2.5">
                     <p className="text-xs text-destructive sm:text-sm">
-                      {optimization.error?.message || 'Không tạo được bản nháp CV tối ưu.'}
+                      {toOptimizationPreviewErrorMessage(optimization.previewError)}
                     </p>
                     <Button
                       disabled={!canOptimize}
@@ -427,8 +456,8 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
                   </div>
                 )}
 
-                {!optimization.optimizing &&
-                  optimization.status === 'success' &&
+                {!optimizing &&
+                  optimization.commitStatus === 'success' &&
                   optimization.draftCv && (
                     <div className="mt-3 rounded-xl border border-primary/25 bg-primary/5 p-3.5">
                       <p className="flex items-center gap-1.5 text-sm font-semibold text-primary">
@@ -486,6 +515,16 @@ function JobCvEvaluationDialog({ jobId, jobTitle, onClose }) {
         </div>
       </div>
     </div>
+    {reviewOpen && optimization.preview ? (
+      <OptimizationProposalReviewModal
+        commitError={optimization.commitError}
+        committing={optimization.committing}
+        onCancel={() => setReviewOpen(false)}
+        onSave={handleSaveDraft}
+        preview={optimization.preview}
+      />
+    ) : null}
+    </>
   )
 }
 

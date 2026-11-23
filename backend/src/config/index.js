@@ -15,6 +15,7 @@ const requiredEnvironmentVariables = [
   "JWT_ALGORITHM",
   "JWT_INVITE_SECRET",
   "JWT_INVITE_EXPIRES_IN",
+  "AI_OPTIMIZATION_PROPOSAL_SECRET",
   "BCRYPT_SALT_ROUNDS",
   "ADMIN_EMAIL",
   "ADMIN_PASSWORD",
@@ -329,6 +330,23 @@ const aiKit = Object.freeze({
   }),
 });
 
+// AI-V06 optimization proposal: stateless HMAC signing with its own secret.
+const optimizationProposalSecret = process.env.AI_OPTIMIZATION_PROPOSAL_SECRET;
+
+if (
+  optimizationProposalSecret.length < 32
+  || [process.env.JWT_SECRET, process.env.JWT_INVITE_SECRET].includes(optimizationProposalSecret)
+) {
+  throw new Error(
+    "AI_OPTIMIZATION_PROPOSAL_SECRET must be at least 32 characters and differ from the JWT secrets",
+  );
+}
+
+const optimizationProposal = Object.freeze({
+  signingSecret: optimizationProposalSecret,
+  ttlMs: 60 * 60 * 1000,
+});
+
 // logging :
 const LOG_LEVELS = Object.freeze(["silent", "error", "warn", "info", "debug"]);
 
@@ -372,5 +390,6 @@ export default Object.freeze({
   appBaseUrl,
   frontendBaseUrl,
   aiKit,
+  optimizationProposal,
   logging,
 });

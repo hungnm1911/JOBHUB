@@ -8,17 +8,31 @@ vi.mock("../../src/services/candidate-job-match.service.js", () => ({
   prepareOwnCandidateCvJobProfiles: prepareProfiles,
 }));
 vi.mock("../../src/services/ai-kit.service.js", () => ({ aiKit: { optimizeCv } }));
+vi.mock("../../src/services/job-discovery.service.js", () => ({
+  loadPublicJobDiscoverySource: vi.fn().mockResolvedValue({}),
+}));
 
 import CandidateCV from "../../src/models/candidate-cv.model.js";
 import Category from "../../src/models/category.model.js";
 import {
   createGeneratedDraftCandidateCv, loadOwnActiveCandidateCv,
 } from "../../src/services/candidate-cv.service.js";
-import { createOptimizedCandidateCvDraftForJob } from "../../src/services/candidate-cv-optimization.service.js";
+import {
+  commitOptimizedCandidateCvProposalForJob, previewOptimizedCandidateCvForJob,
+} from "../../src/services/candidate-cv-optimization.service.js";
 import { createVerifiedUser } from "../helpers/auth-fixtures.js";
 import { clearDatabase, connectTestDatabase, disconnectTestDatabase } from "../helpers/database.js";
 
 const jobId = "authorized-job";
+
+// Legacy single-step action removed: the Draft is created only by Commit of the
+// untouched signed Preview Proposal (merge/persistence semantics are unchanged).
+const optimizeAndCommit = async (input) => {
+  const { proposal } = await previewOptimizedCandidateCvForJob(input);
+  return commitOptimizedCandidateCvProposalForJob({
+    actorUser: input.actorUser, jobId: input.jobId, proposal,
+  });
+};
 const pdfContent = {
   professionalSummary: [{ value: "PDF summary" }],
   skills: [{ value: "PDF skill" }],
@@ -86,7 +100,7 @@ const createContext = async (sourceType, generatedContent) => {
   };
 };
 
-describe("AI-V06 Slice 07 action to CandidateCV persistence", () => {
+describe("AI-V06 Slice 07 Preview → Commit merge to CandidateCV persistence", () => {
   beforeAll(connectTestDatabase);
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -103,7 +117,7 @@ describe("AI-V06 Slice 07 action to CandidateCV persistence", () => {
       certifications: null, languages: null,
     });
 
-    const result = await createOptimizedCandidateCvDraftForJob(input);
+    const result = await optimizeAndCommit(input);
     const draft = await CandidateCV.findById(result.id).lean();
 
     expect(optimizeCv).toHaveBeenCalledOnce();
@@ -129,7 +143,7 @@ describe("AI-V06 Slice 07 action to CandidateCV persistence", () => {
       projects: null, educations: null, certifications: null, languages: null,
     });
 
-    const result = await createOptimizedCandidateCvDraftForJob(input);
+    const result = await optimizeAndCommit(input);
     const draft = await CandidateCV.findById(result.id).lean();
 
     expect(JSON.stringify(optimizeCv.mock.calls[0][0].generatedBaseline)).not.toContain("Html");
@@ -153,7 +167,7 @@ describe("AI-V06 Slice 07 action to CandidateCV persistence", () => {
       educations: null, certifications: null, languages: null,
     });
 
-    const result = await createOptimizedCandidateCvDraftForJob(input);
+    const result = await optimizeAndCommit(input);
     const draft = await CandidateCV.findById(result.id).lean();
 
     expect(draft.generatedContent).toMatchObject({
@@ -174,7 +188,7 @@ describe("AI-V06 Slice 07 action to CandidateCV persistence", () => {
       certifications: null, languages: null,
     });
 
-    const result = await createOptimizedCandidateCvDraftForJob(input);
+    const result = await optimizeAndCommit(input);
     const draft = await CandidateCV.findById(result.id).lean();
 
     expect(optimizeCv).toHaveBeenCalledOnce();
@@ -203,7 +217,7 @@ describe("AI-V06 Slice 07 action to CandidateCV persistence", () => {
       const failure = new Error("Draft write failed");
       const create = vi.spyOn(CandidateCV, "create").mockRejectedValueOnce(failure);
 
-      await expect(createOptimizedCandidateCvDraftForJob(input)).rejects.toBe(failure);
+      await expect(optimizeAndCommit(input)).rejects.toBe(failure);
       expect(optimizeCv).toHaveBeenCalledOnce();
       expect(create).toHaveBeenCalledOnce();
       expect(await CandidateCV.countDocuments()).toBe(1);

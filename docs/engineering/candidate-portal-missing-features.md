@@ -37,7 +37,7 @@ Phạm vi: Candidate Dashboard, Profile, Quản lý CV, Tạo CV.
 **Backend đã có (nhưng khác scope):**
 
 - `POST /api/candidate/jobs/:jobId/evaluate-cv` — đánh giá CV theo **một job**.
-- `POST /api/candidate/jobs/:jobId/optimize-cv` — tối ưu CV theo **một job** → tạo draft mới.
+- `POST /api/candidate/jobs/:jobId/optimize-cv/preview` và `/optimize-cv/commit` — tối ưu CV theo **một job**: Preview (không lưu) → Commit tạo draft mới.
 - `POST /api/candidate/job-recommendations` — gợi ý việc theo CV mặc định.
 
 **Frontend đang thiếu / chưa làm vì thiếu API:**
@@ -159,7 +159,7 @@ Các API sau **đã có** nhưng **không** phải Create CV độc lập:
 | --- | --- |
 | `POST /jobs/:jobId/match` | Match CV ↔ job |
 | `POST /jobs/:jobId/evaluate-cv` | Evaluate CV theo job |
-| `POST /jobs/:jobId/optimize-cv` | Tạo draft tối ưu theo job |
+| `POST /jobs/:jobId/optimize-cv/preview`, `/optimize-cv/commit` | Preview tối ưu theo job; Commit tạo draft |
 
 **Frontend:** Có thể gắn sau vào Job Detail / AI Center; **chưa** làm card AI trên Create CV vì thiếu builder độc lập.
 

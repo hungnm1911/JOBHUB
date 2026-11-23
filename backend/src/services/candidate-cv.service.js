@@ -2386,6 +2386,7 @@ export {
   loadCurrentSearchEligibleCandidateCvById,
   loadOwnActiveCandidateCv,
   loadOwnDefaultCandidateCv,
+  normalizeGeneratedContentForPersistence,
   previewOwnCandidateCv,
   previewSearchEligibleCandidateCv,
   previewSearchEligibleGeneratedCandidateCv,

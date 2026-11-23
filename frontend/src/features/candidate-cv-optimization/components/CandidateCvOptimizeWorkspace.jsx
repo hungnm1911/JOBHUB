@@ -14,8 +14,14 @@ import { JOB_DISCOVERY_SORT } from '@/features/job-discovery/search-params'
 import { cn } from '@/lib/utils'
 import { CANDIDATE_CV_STATUS } from '@/utils/constant'
 
-import useCvJobOptimization from '../hooks/useCvJobOptimization'
+import useCvOptimizationProposal from '../hooks/useCvOptimizationProposal'
+import {
+  isProposalRejectedStatus,
+  toOptimizationCommitErrorMessage,
+  toOptimizationPreviewErrorMessage,
+} from '../utils'
 import OptimizationPanel from './OptimizationPanel'
+import OptimizationProposalReviewModal from './OptimizationProposalReviewModal'
 
 function CandidateCvOptimizeWorkspace() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -23,6 +29,7 @@ function CandidateCvOptimizeWorkspace() {
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
   const [cvOverrideId, setCvOverrideId] = useState(null)
   const [mobileShowResult, setMobileShowResult] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
 
   const { loading: cvsLoading, cvs, error: cvsError } = useCandidateCvs()
   const jobQuery = useMemo(
@@ -41,8 +48,6 @@ function CandidateCvOptimizeWorkspace() {
     reload: reloadJobs,
   } = useDiscoveryJobs(jobQuery)
   const evaluation = useCvJobEvaluation()
-  const optimization = useCvJobOptimization()
-
   const selectableCvs = useMemo(
     () =>
       cvs.filter(
@@ -76,6 +81,11 @@ function CandidateCvOptimizeWorkspace() {
     () => jobs.find((job) => job.id === selectedJobId) ?? null,
     [jobs, selectedJobId],
   )
+
+  const optimization = useCvOptimizationProposal({
+    jobId: selectedJob?.id,
+    candidateCvId: selectedCv?.id,
+  })
 
   const showResultPane = mobileShowResult || Boolean(selectedJobId)
 
@@ -116,12 +126,13 @@ function CandidateCvOptimizeWorkspace() {
         jobId: selectedJob.id,
         candidateCvId: selectedCv.id,
       })
-      toast.success('Đã phân tích CV. Bạn có thể tạo bản nháp tối ưu.')
+      toast.success('Đã phân tích CV. Bạn có thể xem bản tối ưu.')
     } catch (error) {
       toast.error(toCvEvaluationErrorMessage(error))
     }
   }
 
+  // Optimize only requests a Preview Proposal and opens the Diff; no Draft yet.
   const handleOptimize = async () => {
     if (!selectedJob?.id || !selectedCv?.id || !evaluation.rawResult) {
       toast.error('Hãy phân tích CV thành công trước khi tối ưu.')
@@ -129,14 +140,28 @@ function CandidateCvOptimizeWorkspace() {
     }
 
     try {
-      const draft = await optimization.optimize({
-        jobId: selectedJob.id,
-        candidateCvId: selectedCv.id,
-        evaluationResult: evaluation.rawResult,
-      })
-      toast.success(draft?.name ? `Đã tạo bản nháp “${draft.name}”` : 'Đã tạo bản nháp CV tối ưu')
+      const response = await optimization.requestPreview(evaluation.rawResult)
+      if (response) {
+        setReviewOpen(true)
+      }
     } catch (error) {
-      toast.error(error.message || 'Không tối ưu được CV.')
+      toast.error(toOptimizationPreviewErrorMessage(error))
+    }
+  }
+
+  // Save commits the signed Proposal exactly as previewed; it never calls AI.
+  const handleSaveDraft = async () => {
+    try {
+      const draft = await optimization.commit()
+      if (draft) {
+        setReviewOpen(false)
+        toast.success(draft.name ? `Đã lưu bản nháp “${draft.name}”` : 'Đã lưu bản nháp CV tối ưu')
+      }
+    } catch (error) {
+      if (isProposalRejectedStatus(error?.status)) {
+        setReviewOpen(false)
+        toast.error(toOptimizationCommitErrorMessage(error))
+      }
     }
   }
 
@@ -155,7 +180,7 @@ function CandidateCvOptimizeWorkspace() {
               Tối ưu CV theo việc làm
             </h1>
             <p className="text-xs text-muted-foreground sm:text-sm">
-              Chọn việc, phân tích CV, rồi tạo bản nháp Generated tối ưu qua API thật.
+              Chọn việc, phân tích CV, xem so sánh bản tối ưu rồi lưu thành bản nháp Generated.
             </p>
           </div>
         </div>
@@ -243,21 +268,35 @@ function CandidateCvOptimizeWorkspace() {
             ) : null}
             <OptimizationPanel
               draftCv={optimization.draftCv}
+              onReview={() => setReviewOpen(true)}
+              reviewReady={Boolean(optimization.preview) && !reviewOpen}
               evaluating={evaluation.evaluating}
               evaluationError={evaluation.error}
               evaluationResult={evaluation.result}
               evaluationStatus={evaluation.status}
               onEvaluate={handleEvaluate}
               onOptimize={handleOptimize}
-              optimizationError={optimization.error}
-              optimizationStatus={optimization.status}
-              optimizing={optimization.optimizing}
+              commitError={optimization.commitError}
+              commitStatus={optimization.commitStatus}
+              optimizationError={optimization.previewError}
+              optimizationStatus={optimization.previewStatus}
+              optimizing={optimization.previewing || optimization.committing}
+              previewing={optimization.previewing}
               selectedCv={selectedCv}
               selectedJob={selectedJob}
             />
           </div>
         </div>
       </div>
+      {reviewOpen && optimization.preview ? (
+        <OptimizationProposalReviewModal
+          commitError={optimization.commitError}
+          committing={optimization.committing}
+          onCancel={() => setReviewOpen(false)}
+          onSave={handleSaveDraft}
+          preview={optimization.preview}
+        />
+      ) : null}
     </div>
   )
 }

@@ -11,8 +11,8 @@ const API_CONFIG = Object.freeze({
   TIMEOUT_MS: 15_000,
   // Requests whose backend handler sends email synchronously before responding.
   EMAIL_DELIVERY_TIMEOUT_MS: 60_000,
-  // Uploaded CV normalization (90s) and batch assessment (120s) run sequentially.
-  AI_RECOMMENDATION_TIMEOUT_MS: 240_000,
+  // Uploaded CV normalization (90s) and batch assessment (180s) run sequentially.
+  AI_RECOMMENDATION_TIMEOUT_MS: 270_000,
   // Uploaded CV normalization (90s) and CV evaluation (120s) run sequentially.
   AI_CV_EVALUATION_TIMEOUT_MS: 240_000,
   // Cloudinary image uploads for company logo/banner.

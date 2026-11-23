@@ -12,7 +12,7 @@
 
 Tài liệu này xác định Data Contract phục vụ AI-V06 — Tối ưu CV theo Job và tạo Generated CandidateCV Draft.
 
-AI-V06 sử dụng Candidate CV, Job và kết quả AI Evaluation hiện có để tạo một Generated CandidateCV mới ở trạng thái `DRAFT`.
+AI-V06 sử dụng Candidate CV, Job và kết quả AI Evaluation hiện có để tạo một Optimization Proposal runtime (Preview Diff, không persistence). Khi Candidate xác nhận lưu (Commit), Proposal được dùng để tạo một Generated CandidateCV mới ở trạng thái `DRAFT`.
 
 Data Contract xác định:
 
@@ -43,6 +43,7 @@ AI Product Specification là authority đối với business behavior. Data Cont
 | AI-V06 Generated Baseline | `RUNTIME_ONLY` | `NEW` | Nội dung Generated CV làm nền |
 | AI-V06 Optimization Context | `RUNTIME_ONLY` | `NEW` | Context đầu vào của capability tối ưu |
 | AI-V06 Optimization Result | `RUNTIME_ONLY` | `NEW` | Nội dung nghề nghiệp được AI đề xuất |
+| AI-V06 Optimization Proposal | `RUNTIME_ONLY` | `NEW` | Nội dung Generated CV đề xuất, stateless, được server ký, trả cho Candidate ở Preview và nhận lại ở Commit |
 | Generated CandidateCV Draft mới | `CANONICAL` | `NEW` document | Bản ghi CandidateCV được tạo trong collection hiện có |
 
 `UNCHANGED` có nghĩa schema và lifecycle contract hiện hành được giữ nguyên.
@@ -95,9 +96,9 @@ AI-V06 Optimization Result là artifact của một lần xử lý AI.
 
 Artifact này không có persisted lifecycle riêng.
 
-Khi workflow thành công, nội dung phù hợp được kết hợp vào Generated CandidateCV Draft.
+Khi workflow thành công, nội dung phù hợp được kết hợp thành Optimization Proposal; khi Candidate Commit, nội dung đó được lưu vào Generated CandidateCV Draft.
 
-Không persist riêng Optimization Result như một hồ sơ AI độc lập.
+Không persist riêng Optimization Result hoặc Optimization Proposal như một hồ sơ AI độc lập.
 
 ## 3.5. Runtime-only
 
@@ -110,7 +111,8 @@ Các dữ liệu runtime gồm:
 - dữ liệu bổ trợ từ Candidate Profile;
 - context phục vụ tối ưu;
 - phản hồi cấu trúc của AI-V06;
-- kết quả kết hợp nội dung trước persistence.
+- kết quả kết hợp nội dung trước persistence;
+- Optimization Proposal và chữ ký server-side của nó giữa Preview và Commit.
 
 Không tạo collection chỉ để lưu những object trung gian này.
 
@@ -127,7 +129,8 @@ Các relationship chính:
 | Source CV → `CVMatchProfile` | 1:1 theo lần chuẩn hóa | Runtime | Theo Source CV |
 | Target Job → `JobMatchProfile` | 1:1 theo lần chuẩn hóa | Runtime | Theo Job |
 | Evaluation → AI-V06 Context | Theo yêu cầu | Runtime | Theo Candidate request |
-| AI-V06 Result → Generated Draft | Theo yêu cầu thành công | Nội dung được persist trong Draft | Candidate |
+| AI-V06 Result → Optimization Proposal | Theo yêu cầu thành công | Runtime, không persist | Candidate |
+| Optimization Proposal → Generated Draft | Theo Commit thành công | Nội dung được persist trong Draft | Candidate |
 
 AI-V06 tạo Generated Draft mới từ Source CV và Target Job đã được hệ thống xác định hợp lệ.
 
@@ -499,13 +502,54 @@ AI-V06 không yêu cầu item-level diff, item-level identity hoặc operation l
 
 Optimization Result không được persist như một artifact độc lập.
 
-Backend kết hợp nó với Generated baseline để hình thành `generatedContent` của CandidateCV mới.
+Backend kết hợp nó với Generated baseline để hình thành Optimization Proposal (§6.7). Khi Commit, nội dung Proposal hình thành `generatedContent` của CandidateCV mới.
 
 Kết quả được tiếp nhận theo structured-output contract của capability.
 
 Không bổ sung semantic rejection gate để kiểm tra lại mức độ hữu ích hoặc tính chính xác của nội dung AI sau khi output đã đáp ứng contract.
 
 Các constraint thuộc CandidateCV V7 vẫn áp dụng cho dữ liệu được persist.
+
+---
+
+## 6.7. AI-V06 Optimization Proposal
+
+**Classification:** `RUNTIME_ONLY`.
+
+**Responsibility:** Mang nội dung Generated CV đề xuất từ bước Optimize/Preview sang bước Commit mà không persistence phía server.
+
+### Nội dung
+
+Preview response gồm:
+
+- `baseline`: nội dung Generated baseline đã chuẩn hóa, dùng làm phía "trước" của Diff;
+- `proposedContent`: nội dung Generated CV đề xuất (kết quả kết hợp baseline với Optimization Result), đã qua normalization/validation CandidateCV V7 mà Commit sẽ dùng khi lưu;
+- Proposal mang các dữ liệu sau và chữ ký server bao phủ toàn bộ:
+  - `proposedContent` đã chuẩn hóa;
+  - metadata cần thiết để tạo Draft theo contract hiện hành;
+  - định danh Candidate, Target Job và Source CV mà Proposal ràng buộc;
+  - dữ liệu cho phép phát hiện Source CV đã thay đổi.
+
+`baseline` chỉ phục vụ hiển thị Diff; Commit không dùng `baseline` làm nguồn nội dung lưu.
+
+Cấu trúc chi tiết, thuật toán chữ ký và thành phần nhận diện thay đổi của Source CV thuộc Engineering Contract, với điều kiện không thêm schema field vào CandidateCV hoặc persisted artifact.
+
+### Ràng buộc
+
+| Ràng buộc | Mô tả |
+|---|---|
+| Stateless | Server không lưu Proposal, diff hoặc chữ ký |
+| Do server phát hành | Commit chỉ chấp nhận Proposal có chữ ký server hợp lệ |
+| Toàn vẹn | Nội dung bị thay đổi làm chữ ký không hợp lệ và Commit bị từ chối |
+| Ràng buộc định danh | Proposal chỉ hợp lệ cho đúng Candidate, Target Job và Source CV đã được ký; Commit từ Candidate khác hoặc với định danh không khớp bị từ chối |
+| Preview = Save | Nội dung Draft được lưu bằng đúng `proposedContent` đã chuẩn hóa và đã ký trong Preview; Commit không kết hợp lại baseline, không chuẩn hóa theo cách khác và không bổ sung nội dung từ nguồn khác |
+| Không persistence khi Preview | Preview không tạo hoặc thay đổi CandidateCV hay artifact persisted nào |
+| Nguồn không đổi | Source CV thay đổi kể từ lúc tạo Proposal thì Commit trả 409, không tạo Draft |
+| Không gọi AI khi Commit | Commit chỉ dùng nội dung trong Proposal |
+| Không idempotent (MVP) | Commit lặp với cùng Proposal có thể tạo thêm Draft; không có dedupe server-side |
+| Persisted Draft | Nội dung lưu tương ứng với `proposedContent` của Proposal; nếu validation CandidateCV V7 khi Commit không chấp nhận nội dung đó thì Commit thất bại thay vì lưu nội dung khác |
+
+Chữ ký và dữ liệu nhận diện Source CV chỉ đi theo Proposal; không được persist trong CandidateCV hoặc collection khác.
 
 ---
 
@@ -546,27 +590,38 @@ Những state khác tiếp tục thuộc contract V7.
 
 # 9. Persistence Transitions
 
-## 9.1. Tạo Generated Draft từ yêu cầu AI-V06
+## 9.0. Optimize / Preview Diff
 
 **Business source:** Candidate yêu cầu tối ưu CV theo Job.
+
+Không có persisted entity nào thay đổi. Hệ thống trả Optimization Proposal (§6.7) và dữ liệu Preview Diff cho Candidate.
+
+## 9.1. Commit: tạo Generated Draft từ Optimization Proposal
+
+**Business source:** Candidate xác nhận lưu Optimization Proposal đã xem.
 
 **Before:**
 
 - Source CV tồn tại;
 - Target Job hợp lệ;
-- chưa có CandidateCV kết quả của yêu cầu thành công.
+- chưa có CandidateCV kết quả của yêu cầu thành công;
+- Proposal hợp lệ (chữ ký đúng) và Source CV không thay đổi kể từ lúc tạo Proposal.
+
+Nếu Source CV đã thay đổi, Commit trả 409 và không có persisted entity nào thay đổi.
 
 **After:**
 
 - một Generated CandidateCV Draft mới được tạo;
-- `generatedContent` chứa nội dung đã kết hợp;
+- `generatedContent` chứa nội dung của Proposal;
 - Source CV giữ nguyên;
 - Target Job giữ nguyên;
 - Candidate Profile giữ nguyên.
 
 **Persisted entity thay đổi:** `candidate_cvs`.
 
-Không persist Evaluation Result hoặc Optimization Result riêng.
+Không persist Evaluation Result, Optimization Result hoặc Optimization Proposal riêng.
+
+Commit không gọi lại AI. Commit lặp có thể tạo thêm Draft (không idempotency phía server trong MVP).
 
 ## 9.2. Preview Generated Draft
 
@@ -588,11 +643,13 @@ AI-V06 không định nghĩa lại quy tắc save, completeness, activation ho�
 
 AI-V06 không bổ sung cross-document transaction requirement mới.
 
-Kết quả thành công của workflow phải tương ứng với một Generated Draft có nội dung đã được kết hợp và lưu theo contract CandidateCV.
+Giai đoạn Optimize/Preview không persistence: kết quả thành công là Optimization Proposal runtime, không yêu cầu persistence hay transaction.
+
+Kết quả thành công của Commit phải tương ứng với một Generated Draft có nội dung của Proposal và được lưu theo contract CandidateCV.
 
 Việc tạo CV mới và lưu content có thể được tổ chức bằng các cơ chế persistence phù hợp với kiến trúc Backend.
 
-Nếu thao tác không hoàn tất, hệ thống không được báo rằng Generated Draft đã được tạo thành công khi kết quả persistence chưa tương ứng.
+Nếu Commit không hoàn tất, hệ thống không được báo rằng Generated Draft đã được tạo thành công khi kết quả persistence chưa tương ứng.
 
 Chi tiết kiểm soát partial write, retry hoặc recovery thuộc Engineering Contract.
 
@@ -626,7 +683,9 @@ Backend service chịu trách nhiệm:
 - đọc Candidate Profile đúng owner;
 - cung cấp metadata hợp lệ;
 - kết hợp Generated baseline với Optimization Result;
-- lưu Generated Draft theo lifecycle V7;
+- phát hành và xác minh chữ ký Optimization Proposal;
+- phát hiện Source CV đã thay đổi kể từ lúc tạo Proposal;
+- lưu Generated Draft theo lifecycle V7 khi Commit;
 - xác định kết quả persistence của action.
 
 Service không dùng identifier do AI tạo làm bằng chứng ownership.
@@ -751,6 +810,8 @@ AI-V06 chủ động không bổ sung:
 - bản sao Target Job;
 - snapshot hồ sơ Candidate;
 - persisted item-level diff;
+- persisted Optimization Proposal hoặc chữ ký của nó (Proposal chỉ stateless, §6.7);
+- idempotency key hoặc dedupe record cho Commit;
 - persisted AI-generated claim evidence;
 - trường `optimizedForJobId` mới;
 - trường `sourceCvId` mới chỉ phục vụ AI-V06;
@@ -800,8 +861,9 @@ AI-V06 được bổ sung:
 - runtime Optimization Context;
 - runtime Generated Baseline;
 - runtime Optimization Result;
+- runtime Optimization Proposal có chữ ký server-side;
 - logic kết hợp nội dung;
-- workflow tạo Generated CandidateCV Draft mới qua Backend.
+- workflow Optimize/Preview không persistence và Commit tạo Generated CandidateCV Draft mới qua Backend.
 
 Những bổ sung này không tạo business state mới.
 
@@ -829,7 +891,11 @@ AI-V06 không được âm thầm:
 | Generated CV có `generatedContent`, không có `uploadedFile` | Schema + Database |
 | Source CV không bị sửa bởi AI-V06 | Service |
 | Target Job không bị sửa bởi AI-V06 | Service |
-| Optimization Result không persist thành artifact riêng | AI processing + Service |
+| Optimization Result và Optimization Proposal không persist thành artifact riêng | AI processing + Service |
+| Preview không tạo CandidateCV | Service |
+| Commit chỉ nhận Proposal có chữ ký server hợp lệ | Service |
+| Source CV thay đổi sau Proposal thì Commit trả 409, không tạo Draft | Service |
+| Commit không gọi AI | Service |
 | `personalInfo` và metadata ngoài quyền chỉnh sửa trực tiếp của AI | Service |
 | Output AI được kết hợp theo change semantics của contract | Service |
 | Output hợp lệ không bị chặn bởi semantic quality gate bổ sung | AI processing + Service |
@@ -839,7 +905,7 @@ AI-V06 không được âm thầm:
 | AI-V06 không tự Activate hoặc Apply Job | Service |
 | Không phát sinh cross-user ownership | Service + Database |
 
-AI-generated content được lưu trong CandidateCV Draft sau action được phép của Candidate.
+AI-generated content được lưu trong CandidateCV Draft sau khi Candidate Commit Proposal đã xem trước.
 
 Điều này không đồng nghĩa mọi claim nghề nghiệp bên trong đã được hệ thống xác minh là đúng.
 

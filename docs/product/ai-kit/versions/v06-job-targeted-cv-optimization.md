@@ -12,14 +12,15 @@
 
 AI-V06 cho phép Candidate tạo một phiên bản CV được tối ưu theo một Job cụ thể, dựa trên CV hiện có và kết quả phân tích, đánh giá AI trước đó.
 
-Sau khi xem kết quả đánh giá CV với Job, Candidate có thể yêu cầu hệ thống tạo một **Generated CandidateCV Draft mới** chứa nội dung nghề nghiệp đã được AI điều chỉnh.
+Sau khi xem kết quả đánh giá CV với Job, Candidate có thể yêu cầu hệ thống tối ưu CV. Hệ thống trả về một **Optimization Proposal** để Candidate xem trước (Preview Diff) mà chưa lưu bất kỳ CV nào. Chỉ khi Candidate xác nhận lưu, hệ thống mới tạo một **Generated CandidateCV Draft mới** chứa nội dung nghề nghiệp đã được AI điều chỉnh.
 
 Capability hướng đến:
 
 - tận dụng kết quả đánh giá và góp ý cải thiện đã có;
 - điều chỉnh nội dung CV theo yêu cầu của Job;
 - hỗ trợ cả Generated CV và Uploaded CV làm nguồn;
-- chuyển kết quả thành CV Draft có cấu trúc, có thể Preview và tiếp tục chỉnh sửa;
+- trình bày đề xuất tối ưu để Candidate xem trước và đối chiếu với nội dung nền trước khi lưu;
+- chuyển đề xuất đã được Candidate xác nhận thành CV Draft có cấu trúc, có thể Preview và tiếp tục chỉnh sửa;
 - giữ Candidate là người quyết định việc sử dụng CV.
 
 AI-V06 không thay thế Matching/Scoring và không cam kết CV sau tối ưu sẽ đạt điểm cao hơn hoặc bảo đảm kết quả tuyển dụng.
@@ -36,8 +37,9 @@ AI-V06 bao gồm:
 - sử dụng một Candidate CV và một Job được chọn;
 - sử dụng kết quả đánh giá, góp ý cải thiện từ AI-V04 làm context;
 - hỗ trợ Generated CV, bao gồm Generated Draft, và Uploaded CV làm nguồn;
-- tạo nội dung CV nghề nghiệp được tối ưu theo Job;
-- tạo một Generated CandidateCV mới với trạng thái `DRAFT`;
+- tạo nội dung CV nghề nghiệp được tối ưu theo Job dưới dạng Optimization Proposal không persistence;
+- cho phép Candidate xem trước Proposal đối chiếu với Generated baseline (Preview Diff) trước khi lưu;
+- khi Candidate xác nhận, tạo một Generated CandidateCV mới với trạng thái `DRAFT` từ đúng Proposal đã được xem trước;
 - tái sử dụng dữ liệu nguồn phù hợp để hoàn thiện nội dung Draft;
 - hỗ trợ chuyển đổi best-effort từ Uploaded CV sang Generated Draft;
 - cho phép Preview Draft theo khả năng hiện có của JOBHUB;
@@ -69,7 +71,9 @@ AI-V06 không bao gồm:
 - quy trình Agent tự chủ thực hiện nhiều hành động ngoài yêu cầu tạo Draft;
 - hội thoại chỉnh sửa CV nhiều lượt;
 - thiết kế lại Harvard PDF Template;
-- bảo đảm kết quả tối ưu có Match Score cao hơn kết quả ban đầu.
+- bảo đảm kết quả tối ưu có Match Score cao hơn kết quả ban đầu;
+- lưu Optimization Proposal hoặc diff ở phía server;
+- cơ chế idempotency phía server cho thao tác xác nhận lưu Draft.
 
 Các capability ngoài phạm vi không được xem là điều kiện cần để hoàn thành AI-V06.
 
@@ -128,6 +132,9 @@ Kết quả AI-V04 là nguồn góp ý cải thiện, không phải nội dung C
 | Baseline Content | Nội dung Generated CV làm nền trước khi kết hợp kết quả AI |
 | AI-generated Content | Nội dung nghề nghiệp do AI tạo hoặc điều chỉnh |
 | Preview | Bản xem trước CV Draft để Candidate kiểm tra |
+| Optimization Proposal | Nội dung Generated CV đề xuất (baseline đã kết hợp kết quả AI), được trả về cho Candidate xem trước và chưa được lưu |
+| Preview Diff | Bản đối chiếu giữa Generated baseline và Optimization Proposal để Candidate xem trước khi quyết định lưu |
+| Commit | Hành động Candidate xác nhận lưu Optimization Proposal thành Generated CV Draft |
 
 AI-V06 là capability tạo Draft theo yêu cầu của Candidate. Thuật ngữ Agent, nếu được sử dụng trong tài liệu liên quan, không mặc định trao quyền tự chủ ngoài capability này.
 
@@ -140,17 +147,18 @@ AI-V06 là capability tạo Draft theo yêu cầu của Candidate. Thuật ngữ
 | Phân tích mức độ phù hợp CV–Job | Qua AI-V03/V04 | Yêu cầu |
 | Đề xuất cải thiện nội dung CV | ✓ | Xem xét |
 | Tối ưu nội dung nghề nghiệp theo Job | ✓ | Yêu cầu |
-| Tạo Generated CV Draft mới | Thực hiện trong workflow được phép | Khởi tạo yêu cầu |
+| Tạo Optimization Proposal và Preview Diff | Thực hiện trong workflow được phép | Khởi tạo yêu cầu |
+| Xác nhận lưu Proposal thành Generated CV Draft mới | Thực hiện trong workflow được phép | Xác nhận (Commit) |
 | Xem và kiểm tra Draft | | ✓ |
 | Chỉnh sửa Draft sau khi tạo | | ✓ |
 | Quyết định Activate Draft | | ✓ |
 | Quyết định sử dụng CV để Apply Job | | ✓ |
 
-AI chỉ được tạo Draft trong phạm vi yêu cầu tối ưu do Candidate chủ động thực hiện.
+AI chỉ được tạo Proposal trong phạm vi yêu cầu tối ưu do Candidate chủ động thực hiện, và chỉ được tạo Draft sau khi Candidate xác nhận lưu Proposal đã xem trước.
 
 Nội dung AI sinh ra là nội dung được đề xuất cho CV Draft, không phải sự xác nhận độc lập rằng mọi thông tin nghề nghiệp đều chính xác.
 
-Việc tạo Draft không đồng nghĩa Candidate đã chấp nhận CV đó làm CV chính thức.
+Việc xem Proposal không tạo CV. Việc tạo Draft không đồng nghĩa Candidate đã chấp nhận CV đó làm CV chính thức.
 
 ---
 
@@ -326,12 +334,12 @@ Candidate có thể yêu cầu tạo CV tối ưu cho một Job sau khi đã nh�
 1. Candidate truy cập luồng phân tích AI của Job.
 2. Candidate chọn CV để phân tích.
 3. Hệ thống cung cấp kết quả Matching/Evaluation theo các capability hiện hành.
-4. Candidate chọn yêu cầu tạo CV Draft tối ưu.
+4. Candidate chọn yêu cầu tối ưu CV.
 5. Hệ thống tiếp nhận Source CV, Target Job và context đánh giá liên quan để thực hiện AI-V06.
 
 ### Kết quả
 
-Một yêu cầu tạo Generated CV Draft theo Job được thực hiện trong phạm vi Candidate đã lựa chọn.
+Một yêu cầu tối ưu CV theo Job được thực hiện trong phạm vi Candidate đã lựa chọn; kết quả là Optimization Proposal theo F03, chưa phải Draft.
 
 ### Failure / Unknown behavior
 
@@ -414,48 +422,67 @@ Không yêu cầu khôi phục đầy đủ mọi chi tiết của PDF nguồn.
 
 ---
 
-## F03 — Tối ưu nội dung và tạo Generated CV Draft
+## F03 — Tối ưu nội dung, Preview Diff và Commit tạo Generated CV Draft
 
 ### Actor
 
-- AI System / JOBHUB Backend, theo yêu cầu của Candidate.
+- AI System / JOBHUB Backend, theo yêu cầu và xác nhận của Candidate.
 
 ### Mục tiêu
 
-Tạo một Generated CV Draft mới có nội dung nghề nghiệp được tối ưu theo Target Job.
+Tạo Optimization Proposal có nội dung nghề nghiệp được tối ưu theo Target Job để Candidate xem trước, sau đó tạo một Generated CV Draft mới khi Candidate xác nhận lưu.
 
 ### Input business
+
+Giai đoạn tối ưu (Optimize/Preview):
 
 - Target Job;
 - nội dung nghề nghiệp từ Source CV;
 - Generated baseline;
-- kết quả AI-V04 Evaluation;
+- kết quả AI-V04 Evaluation.
+
+Giai đoạn Commit:
+
+- Optimization Proposal đã được trả về ở giai đoạn Optimize/Preview;
 - thông tin cần thiết để tạo CandidateCV mới.
 
 ### Tiền điều kiện
 
 - F01 và các dữ liệu cần thiết của F02 khả dụng;
-- Candidate có quyền thực hiện hành động tạo CV.
+- Candidate có quyền thực hiện hành động tạo CV;
+- khi Commit: Optimization Proposal hợp lệ, do hệ thống phát hành và chưa bị thay đổi, và Source CV không thay đổi kể từ lúc Proposal được tạo.
 
 ### Luồng chính
+
+Giai đoạn Optimize/Preview:
 
 1. AI tiếp nhận context nghề nghiệp, Job và góp ý cải thiện.
 2. AI tạo nội dung tối ưu cho những nhóm nội dung được phép chỉnh sửa.
 3. Hệ thống tiếp nhận kết quả phù hợp output contract.
-4. Hệ thống kết hợp nội dung AI với Generated baseline và những trường cố định.
-5. Hệ thống tạo một CandidateCV mới thuộc loại Generated với trạng thái Draft.
+4. Hệ thống kết hợp nội dung AI với Generated baseline và những trường cố định để hình thành Optimization Proposal.
+5. Hệ thống trả Optimization Proposal và dữ liệu Preview Diff cho Candidate. Hệ thống không tạo hoặc thay đổi bất kỳ CandidateCV nào, và không lưu Proposal.
+
+Giai đoạn Commit:
+
+6. Candidate xác nhận lưu Optimization Proposal đã xem.
+7. Hệ thống xác minh Proposal là do hệ thống phát hành và nội dung không bị thay đổi, xác minh quyền của Candidate, và xác minh Source CV không thay đổi kể từ lúc Proposal được tạo.
+8. Hệ thống tạo một CandidateCV mới thuộc loại Generated với trạng thái Draft có nội dung tương ứng với Proposal đã xem trước. Giai đoạn này không gọi lại AI.
 
 ### Kết quả
 
-- Một Generated CV Draft mới được lưu;
+- Sau Optimize/Preview: không có CandidateCV nào được tạo hoặc thay đổi;
+- Sau Commit thành công: một Generated CV Draft mới được lưu;
 - Source CV không bị thay đổi;
 - Draft có thể chưa hoàn chỉnh theo quy tắc completeness hiện hành.
 
 ### Failure / Unknown behavior
 
-- Nếu một provider không tạo được output hoàn tất và đúng contract do lỗi xử lý AI hoặc giới hạn provider, hệ thống thực hiện provider fallback.
-- Nếu không có kết quả AI hợp lệ từ các provider khả dụng, hệ thống thông báo lỗi xử lý AI và không tạo kết quả thành công giả.
-- Nếu kết quả AI hợp lệ nhưng không có nội dung thay đổi, hệ thống vẫn tạo Draft từ baseline.
+- Nếu một provider không tạo được output hoàn tất và đúng contract do lỗi xử lý AI hoặc giới hạn provider, hệ thống thực hiện provider fallback ở giai đoạn Optimize/Preview.
+- Nếu không có kết quả AI hợp lệ từ các provider khả dụng, hệ thống thông báo lỗi xử lý AI và không tạo Proposal thành công giả.
+- Nếu kết quả AI hợp lệ nhưng không có nội dung thay đổi, hệ thống vẫn tạo Proposal từ baseline.
+- Nếu Source CV đã thay đổi kể từ lúc Proposal được tạo, Commit bị từ chối với lỗi xung đột (HTTP 409) và không tạo Draft; Candidate phải thực hiện lại bước tối ưu.
+- Nếu Proposal không do hệ thống phát hành hoặc nội dung đã bị thay đổi, Commit bị từ chối và không tạo Draft.
+- Commit lặp lại với cùng Proposal có thể tạo thêm Draft; MVP không yêu cầu idempotency phía server.
 - Lỗi lưu trữ là lỗi thực hiện action, không phải đánh giá tiêu cực về Candidate.
 
 ### Trường hợp từ chối
@@ -463,7 +490,8 @@ Tạo một Generated CV Draft mới có nội dung nghề nghiệp được t�
 - hành động không được Candidate cho phép;
 - vi phạm quyền truy cập;
 - dữ liệu nguồn hoặc dependency bắt buộc không khả dụng;
-- không thể tạo resource theo lifecycle hợp lệ.
+- không thể tạo resource theo lifecycle hợp lệ;
+- Proposal không hợp lệ hoặc Source CV đã thay đổi (xem Failure).
 
 ### Business Rules liên quan
 
@@ -471,13 +499,16 @@ Tạo một Generated CV Draft mới có nội dung nghề nghiệp được t�
 - `BR-AI-03`
 - `BR-AI-06`
 - `BR-AI-07`
+- `BR-AI-08`
 - `BR-AI-09`
 
 ### Không thuộc chức năng này
 
 - tự động Activate hoặc Publish CV;
 - cập nhật trực tiếp Source CV;
-- tạo Match Score mới.
+- tạo Match Score mới;
+- lưu Proposal hoặc diff ở phía server;
+- gọi lại AI khi Commit.
 
 ---
 
@@ -489,23 +520,26 @@ Tạo một Generated CV Draft mới có nội dung nghề nghiệp được t�
 
 ### Mục tiêu
 
-Candidate có thể xem nội dung CV vừa được AI tạo và tiếp tục làm việc với CV Draft.
+Candidate có thể xem Optimization Proposal đối chiếu với nội dung nền (Preview Diff) trước khi lưu, và sau khi Commit có thể xem và tiếp tục làm việc với CV Draft.
 
 ### Input business
 
-- Generated CV Draft đã được tạo thành công.
+- Optimization Proposal vừa được tạo (trước khi lưu);
+- Generated CV Draft đã được tạo thành công (sau Commit).
 
 ### Tiền điều kiện
 
-- Draft tồn tại;
-- Candidate có quyền truy cập Draft.
+- Preview Diff: Optimization Proposal đã được tạo thành công cho Candidate; không yêu cầu Draft tồn tại;
+- Preview Draft sau Commit: Draft tồn tại và Candidate có quyền truy cập Draft.
 
 ### Luồng chính
 
-1. Hệ thống cung cấp Generated Draft vừa tạo.
-2. Candidate mở Preview.
-3. Hệ thống hiển thị CV theo khả năng Preview Generated CV hiện hành.
-4. Candidate xem xét nội dung và có thể tiếp tục chỉnh sửa bằng workflow quản lý CV.
+1. Hệ thống cung cấp Optimization Proposal và dữ liệu Preview Diff; việc này không tạo CV.
+2. Candidate xem xét Preview Diff và quyết định xác nhận lưu hoặc không lưu. Nếu không lưu, không có thay đổi nào được ghi nhận.
+3. Sau Commit, hệ thống cung cấp Generated Draft vừa tạo.
+4. Candidate mở Preview.
+5. Hệ thống hiển thị CV theo khả năng Preview Generated CV hiện hành.
+6. Candidate xem xét nội dung và có thể tiếp tục chỉnh sửa bằng workflow quản lý CV.
 
 ### Kết quả
 
@@ -519,18 +553,20 @@ Draft chưa complete vẫn có thể Preview theo quy định của V7.
 
 ### Trường hợp từ chối
 
-- Candidate không có quyền với Draft;
-- Draft không tồn tại hoặc không còn khả dụng.
+- Preview Diff: Candidate không có quyền với Source CV hoặc Target Job của Proposal;
+- Preview Draft sau Commit: Candidate không có quyền với Draft, hoặc Draft không tồn tại hoặc không còn khả dụng.
 
 ### Business Rules liên quan
 
 - `BR-AI-02`
+- `BR-AI-03`
 - `BR-AI-08`
 - `BR-AI-10`
 
 ### Không thuộc chức năng này
 
 - tự động chấp nhận nội dung thay Candidate;
+- Candidate chỉnh sửa Proposal trước Commit (chỉnh sửa diễn ra trên Draft sau khi lưu, theo workflow CandidateCV hiện hành);
 - tự động Activate, đặt Default hoặc Apply Job.
 
 ---
@@ -555,7 +591,9 @@ AI không tạo đường truy cập vượt qua ownership hoặc authorization.
 
 ## BR-AI-03 — Đầu ra là Generated Draft mới
 
-AI-V06 tạo CandidateCV mới thuộc loại Generated, trạng thái `DRAFT`.
+AI-V06 tạo CandidateCV mới thuộc loại Generated, trạng thái `DRAFT`, chỉ khi Candidate xác nhận lưu (Commit) một Optimization Proposal đã xem trước.
+
+Giai đoạn tối ưu và Preview Diff không tạo CandidateCV. Nội dung Draft được lưu tương ứng với Proposal đã xem; Commit không gọi lại AI.
 
 Source CV được giữ nguyên.
 
@@ -607,9 +645,11 @@ AI được định hướng tạo nội dung hữu ích và bám dữ liệu ng
 
 ## BR-AI-08 — Candidate chủ động yêu cầu action
 
-Việc tạo Draft là side effect được phép sau yêu cầu rõ ràng của Candidate.
+Việc tạo Draft là side effect được phép sau xác nhận lưu (Commit) rõ ràng của Candidate đối với Proposal đã xem trước.
 
-AI-V06 không tự kích hoạt việc tạo Draft chỉ vì quá trình Matching/Evaluation đã hoàn thành.
+Yêu cầu tối ưu và Preview Diff không phải là xác nhận lưu.
+
+AI-V06 không tự kích hoạt việc tối ưu hoặc tạo Draft chỉ vì quá trình Matching/Evaluation đã hoàn thành.
 
 ---
 
@@ -625,7 +665,7 @@ Lỗi này không được biểu diễn thành Match Score thấp, đánh giá 
 
 AI-V06 không tự Activate, đặt Default, Publish hoặc Apply Job.
 
-Generated Draft tiếp tục tuân thủ quy trình quản lý CandidateCV hiện hành.
+Generated Draft tiếp tục tuân thủ quy trình quản lý CandidateCV hiện hành. Việc Preview Diff và Commit không thay đổi lifecycle này.
 
 ---
 
@@ -638,8 +678,9 @@ AI-V06 được phép tạo một Generated Draft theo yêu cầu của Candidat
 | Đọc Source CV hợp lệ | ✓ | Thông qua yêu cầu |
 | Đọc Target Job hợp lệ | ✓ | Thông qua yêu cầu |
 | Sử dụng Evaluation context | ✓ | Thông qua workflow |
-| Tạo nội dung CV tối ưu | ✓ | Thông qua yêu cầu |
-| Tạo Generated Draft mới | ✓ | Candidate chủ động yêu cầu |
+| Tạo Optimization Proposal (không persistence) | ✓ | Thông qua yêu cầu |
+| Preview Diff Proposal | Hệ thống hỗ trợ | Candidate lựa chọn |
+| Tạo Generated Draft mới | ✓ | Candidate xác nhận lưu (Commit) |
 | Preview Draft | Hệ thống hỗ trợ | Candidate lựa chọn |
 | Chỉnh sửa Source CV | ✗ | — |
 | Activate Draft | ✗ | Candidate thực hiện riêng |
@@ -647,7 +688,7 @@ AI-V06 được phép tạo một Generated Draft theo yêu cầu của Candidat
 | Archive hoặc xóa CV | ✗ | — |
 | Apply Job | ✗ | Candidate thực hiện riêng |
 
-Side effect của AI-V06 giới hạn ở việc tạo Generated Draft mới.
+Side effect của AI-V06 giới hạn ở việc tạo Generated Draft mới khi Candidate Commit. Giai đoạn Optimize/Preview không có side effect persistence.
 
 Một thao tác được Backend hỗ trợ không mặc định trở thành action được AI-V06 phép thực hiện.
 
@@ -660,20 +701,21 @@ AI-V06 tạo CandidateCV mới nhưng không định nghĩa một lifecycle CV �
 Luồng nghiệp vụ:
 
 1. Candidate nhận kết quả CV Evaluation.
-2. Candidate yêu cầu tạo Draft tối ưu theo Job.
-3. AI-V06 xử lý dữ liệu và tạo nội dung Generated CV.
-4. Hệ thống tạo CandidateCV mới với trạng thái `DRAFT`.
-5. Candidate Preview và tiếp tục sử dụng workflow CandidateCV hiện hành.
+2. Candidate yêu cầu tối ưu CV theo Job.
+3. AI-V06 xử lý dữ liệu và trả Optimization Proposal kèm Preview Diff; chưa có CandidateCV mới.
+4. Candidate xác nhận lưu (Commit) Proposal đã xem.
+5. Hệ thống tạo CandidateCV mới với trạng thái `DRAFT`.
+6. Candidate Preview và tiếp tục sử dụng workflow CandidateCV hiện hành.
 
 | Hành động | Trước | Sau | Actor |
 |---|---|---|---|
-| Yêu cầu tối ưu | Source CV tồn tại | Source CV giữ nguyên | Candidate |
-| Tạo CV mới | Chưa có CV kết quả | Generated CV `DRAFT` | AI-V06 qua Backend |
+| Yêu cầu tối ưu / Preview Diff | Source CV tồn tại | Source CV giữ nguyên; chưa có CV mới | Candidate |
+| Commit | Chưa có CV kết quả; Source CV không đổi kể từ lúc tạo Proposal | Generated CV `DRAFT` | Candidate, thực hiện qua Backend |
 | Preview | Generated CV `DRAFT` | Vẫn là `DRAFT` | Candidate |
 | Chỉnh sửa Draft | Generated CV `DRAFT` | Theo lifecycle V7 | Candidate |
 | Activate | Generated CV `DRAFT` đủ điều kiện | Theo lifecycle V7 | Candidate, ngoài AI-V06 |
 
-AI-V06 không bổ sung trạng thái persisted riêng cho tiến trình tối ưu.
+AI-V06 không bổ sung trạng thái persisted riêng cho tiến trình tối ưu hoặc cho Proposal.
 
 Việc tạo Draft không yêu cầu CV có completeness đầy đủ.
 
@@ -730,6 +772,12 @@ Bao gồm các tình huống như:
 Khi một provider không tạo được phản hồi hoàn tất và đúng output contract, hệ thống thực hiện provider fallback theo chính sách AI-V06.
 
 Nếu không có provider nào tạo được kết quả hợp lệ, yêu cầu được xem là thất bại về xử lý AI; hệ thống không tạo kết quả tối ưu thành công giả.
+
+## Proposal / Source conflict
+
+Nếu Source CV thay đổi kể từ lúc Optimization Proposal được tạo, Commit trả lỗi xung đột (HTTP 409) và không tạo Draft.
+
+Nếu Proposal không do hệ thống phát hành hoặc nội dung đã bị thay đổi, Commit bị từ chối và không tạo Draft.
 
 ## Dependency failure
 
@@ -873,11 +921,16 @@ AI-V06 được xem là hoàn thành về mặt business khi:
 
 - F01–F04 được thực hiện đúng;
 - các Business Rules được giữ;
-- Candidate có thể tạo Generated Draft theo một Job đã chọn;
+- Candidate có thể yêu cầu tối ưu CV theo một Job đã chọn và nhận Optimization Proposal kèm Preview Diff mà không tạo CandidateCV;
+- Preview Diff không persistence; Candidate chưa Commit thì không có CandidateCV mới;
+- Commit tạo Generated Draft có nội dung tương ứng với Proposal đã Preview, không gọi lại AI;
+- Proposal không do hệ thống phát hành, bị thay đổi, hoặc không thuộc đúng Candidate/Job/Source CV thì Commit bị từ chối và không tạo Draft;
+- Source CV thay đổi sau khi tạo Proposal thì Commit trả 409 và không tạo Draft;
+- AI/LLM chỉ được gọi ở giai đoạn Optimize/Preview: tối đa 1 lần xử lý tối ưu cho Generated CV; Uploaded CV thêm 1 lần chuẩn hóa AI-V02; Commit không gọi LLM (provider fallback không tính là thêm lần xử lý nghiệp vụ);
 - cả Generated và Uploaded CV đều được hỗ trợ trong phạm vi đã duyệt;
-- kết quả AI hợp lệ có thể hình thành Generated Draft;
+- kết quả AI hợp lệ có thể hình thành Optimization Proposal và, sau Commit, Generated Draft;
 - Source CV không thay đổi;
-- Draft chưa complete vẫn có thể được Preview;
+- Draft chưa complete vẫn có thể được Preview sau Commit;
 - Candidate tiếp tục kiểm soát lifecycle CV;
 - authorization và ownership được giữ;
 - failure/fallback behavior hoạt động phù hợp;
@@ -887,8 +940,10 @@ AI-V06 được xem là hoàn thành về mặt business khi:
 Các điều sau không tự động đủ để kết luận business completion:
 
 - AI provider trả response thành công;
-- response đúng schema nhưng workflow không tạo được Draft;
+- response đúng schema nhưng workflow không tạo được Proposal hoặc không Commit được Draft;
 - Draft được tạo nhưng không thể sử dụng trong workflow CandidateCV;
+- Draft được lưu có nội dung khác Proposal đã Preview;
+- Commit gọi lại AI hoặc tạo Draft từ Proposal không hợp lệ;
 - unit test pass nhưng action vượt ngoài phạm vi được phép;
 - chỉ thử một trường hợp demo thành công.
 

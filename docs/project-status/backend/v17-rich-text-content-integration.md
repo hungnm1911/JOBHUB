@@ -62,8 +62,11 @@ text fields. Existing CV writes sanitize HTML and derive plain text, clear stale
 HTML on plain updates, and preserve untouched fields on partial saves. Existing
 CV detail responses return both representations. Completeness and Draft/Active
 transitions continue using meaningful plain text. The AI-V01 source projection
-and AI-V06 optimization career sections omit HTML; the optimization Draft keeps
-source HTML only for unchanged content. No AI Kit contract or LLM behavior
+and AI-V06 optimization career sections omit HTML. The optimization Draft keeps
+source HTML per top-level career section: a section the AI returns as `null`
+retains its baseline HTML, while a replaced section is plain-only, so HTML is
+not kept per item even when an item's text is identical. The Source CV is
+never modified, so its formatting remains available. No AI Kit contract or LLM behavior
 changed.
 
 Slice 04 acceptance: Harvard PDF renders supported Minimal formatting and
