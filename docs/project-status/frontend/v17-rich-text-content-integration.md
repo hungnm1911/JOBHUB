@@ -48,8 +48,9 @@ complete.
 - Generated CV Rich Text display outside the editing forms and other V17
   Frontend display work outside the Company and public Job detail surfaces
   remain deferred.
-- The common frontend `verify:agent` gate remains failing for unrelated
-  authentication tests; repository-wide ESLint also reports unrelated errors.
+- The common frontend `verify:agent` gate now passes the Job Discovery
+  authentication tests and stops at two existing React Hooks ESLint errors
+  outside V17. The Vite config lint error is resolved.
 
 ## Impact coverage — Job UI
 
@@ -62,6 +63,12 @@ complete.
 
 ## Verification status
 
+- 2026-11-23: The V8 Job Discovery route regression was fixed in its canonical
+  guard without changing the V17 Rich Text forms or their tests. The isolated
+  Job Discovery test passed (11/11); `yarn verify:agent` passed all test groups
+  and stopped at the two existing React Hooks ESLint errors deliberately left
+  outside this fix. Targeted ESLint for the guard and Vite config passed, and
+  a separate `yarn build` passed. No browser check ran for this correction.
 - 2026-11-23: `cd frontend && yarn test:rich-text` passed (36 tests),
   `yarn test:candidate-cvs` passed (7 tests), targeted ESLint on changed source
   and tests passed, `yarn build` passed, and `git diff --check` passed. The
