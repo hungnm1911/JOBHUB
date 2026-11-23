@@ -1,21 +1,24 @@
 import { MessageSquare } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import HeaderNotificationsMenu from '@/features/candidate-notifications/components/HeaderNotificationsMenu'
 import { cn } from '@/lib/utils'
 
 const CANDIDATE_PRIMARY_NAV_LINKS = Object.freeze([
+  { to: '/jobs', label: 'Tìm việc làm' },
+  { to: '/candidate/ai-jobs', label: 'Gợi ý việc làm', ai: true },
   { to: '/candidate/cvs', label: 'Quản lý CV' },
   { to: '/candidate/applications', label: 'Đơn ứng tuyển' },
   { to: '/candidate/invitations', label: 'Lời mời ứng tuyển' },
-  { to: '/candidate/ai-jobs', label: 'Gợi ý việc làm' },
 ])
 
 function AppHeader({ accountArea, isCandidate = false }) {
-  const navLinkClass = ({ isActive }) =>
+  const navLinkClass = ({ isActive }, visibleOnMobile = false) =>
     cn(
-      'hidden shrink-0 whitespace-nowrap font-semibold text-muted-foreground transition-colors hover:text-foreground sm:inline',
+      'shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring xl:inline-flex',
+      visibleOnMobile ? 'inline-flex' : 'hidden',
       isActive && 'text-primary hover:text-primary',
     )
 
@@ -42,14 +45,21 @@ function AppHeader({ accountArea, isCandidate = false }) {
         >
           {isCandidate &&
             CANDIDATE_PRIMARY_NAV_LINKS.map((item) => (
-              <NavLink className={navLinkClass} key={item.to} to={item.to}>
+              <NavLink
+                className={(state) => navLinkClass(state, item.to === '/jobs')}
+                key={item.to}
+                to={item.to}
+              >
                 {item.label}
+                {item.ai && <Badge className="rounded-sm border-0 px-1.5 font-bold">AI</Badge>}
               </NavLink>
             ))}
 
-          <Button asChild size="sm" className="shrink-0 font-semibold">
-            <Link to="/jobs">Tìm việc làm</Link>
-          </Button>
+          {!isCandidate && (
+            <Button asChild size="sm" className="shrink-0 font-semibold">
+              <Link to="/jobs">Tìm việc làm</Link>
+            </Button>
+          )}
 
           {accountArea}
 

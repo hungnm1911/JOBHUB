@@ -2,6 +2,7 @@ import { FileSearch } from 'lucide-react'
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { toLoginNavigationState } from '@/features/authentication/utils'
 import { USER_ROLE } from '@/utils/constant'
@@ -36,17 +37,18 @@ function EvaluateCvButton({ jobId, jobTitle, viewer }) {
     <>
       <Button
         aria-label={
-          isGuest ? 'Đăng nhập để đánh giá CV với AI' : `Đánh giá CV với AI cho ${jobTitle}`
+          isGuest ? 'Đăng nhập để đánh giá CV (AI)' : `Đánh giá CV cho ${jobTitle} (AI)`
         }
         className="relative z-10 h-9 px-3 text-xs font-semibold"
         onClick={handleClick}
         size="sm"
-        title={isGuest ? 'Hãy đăng nhập để đánh giá CV với AI' : 'Đánh giá CV với AI'}
+        title={isGuest ? 'Hãy đăng nhập để đánh giá CV (AI)' : 'Đánh giá CV (AI)'}
         type="button"
         variant="outline"
       >
         <FileSearch aria-hidden="true" className="size-4" />
-        Đánh giá CV với AI
+        Đánh giá CV
+        <Badge className="rounded-sm border-0 px-1.5 font-bold">AI</Badge>
       </Button>
 
       {open && (
