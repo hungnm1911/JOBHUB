@@ -520,12 +520,17 @@ Các constraint thuộc CandidateCV V7 vẫn áp dụng cho dữ liệu được
 
 ### Nội dung
 
-Proposal gồm:
+Preview response gồm:
 
-- nội dung Generated CV đề xuất (kết quả kết hợp Generated baseline với Optimization Result);
-- metadata cần thiết để tạo Draft theo contract hiện hành;
-- dữ liệu cho phép hệ thống xác định Source CV và phát hiện Source CV đã thay đổi;
-- chữ ký do server tạo, bao phủ toàn bộ nội dung nêu trên.
+- `baseline`: nội dung Generated baseline đã chuẩn hóa, dùng làm phía "trước" của Diff;
+- `proposedContent`: nội dung Generated CV đề xuất (kết quả kết hợp baseline với Optimization Result), đã qua normalization/validation CandidateCV V7 mà Commit sẽ dùng khi lưu;
+- Proposal mang các dữ liệu sau và chữ ký server bao phủ toàn bộ:
+  - `proposedContent` đã chuẩn hóa;
+  - metadata cần thiết để tạo Draft theo contract hiện hành;
+  - định danh Candidate, Target Job và Source CV mà Proposal ràng buộc;
+  - dữ liệu cho phép phát hiện Source CV đã thay đổi.
+
+`baseline` chỉ phục vụ hiển thị Diff; Commit không dùng `baseline` làm nguồn nội dung lưu.
 
 Cấu trúc chi tiết, thuật toán chữ ký và thành phần nhận diện thay đổi của Source CV thuộc Engineering Contract, với điều kiện không thêm schema field vào CandidateCV hoặc persisted artifact.
 
@@ -536,10 +541,13 @@ Cấu trúc chi tiết, thuật toán chữ ký và thành phần nhận diện 
 | Stateless | Server không lưu Proposal, diff hoặc chữ ký |
 | Do server phát hành | Commit chỉ chấp nhận Proposal có chữ ký server hợp lệ |
 | Toàn vẹn | Nội dung bị thay đổi làm chữ ký không hợp lệ và Commit bị từ chối |
+| Ràng buộc định danh | Proposal chỉ hợp lệ cho đúng Candidate, Target Job và Source CV đã được ký; Commit từ Candidate khác hoặc với định danh không khớp bị từ chối |
+| Preview = Save | Nội dung Draft được lưu bằng đúng `proposedContent` đã chuẩn hóa và đã ký trong Preview; Commit không kết hợp lại baseline, không chuẩn hóa theo cách khác và không bổ sung nội dung từ nguồn khác |
+| Không persistence khi Preview | Preview không tạo hoặc thay đổi CandidateCV hay artifact persisted nào |
 | Nguồn không đổi | Source CV thay đổi kể từ lúc tạo Proposal thì Commit trả 409, không tạo Draft |
 | Không gọi AI khi Commit | Commit chỉ dùng nội dung trong Proposal |
 | Không idempotent (MVP) | Commit lặp với cùng Proposal có thể tạo thêm Draft; không có dedupe server-side |
-| Persisted Draft | Nội dung lưu tương ứng với Proposal, sau khi qua normalization/validation hiện hành của CandidateCV V7 |
+| Persisted Draft | Nội dung lưu tương ứng với `proposedContent` của Proposal; nếu validation CandidateCV V7 khi Commit không chấp nhận nội dung đó thì Commit thất bại thay vì lưu nội dung khác |
 
 Chữ ký và dữ liệu nhận diện Source CV chỉ đi theo Proposal; không được persist trong CandidateCV hoặc collection khác.
 
@@ -635,11 +643,13 @@ AI-V06 không định nghĩa lại quy tắc save, completeness, activation ho�
 
 AI-V06 không bổ sung cross-document transaction requirement mới.
 
-Kết quả thành công của workflow phải tương ứng với một Generated Draft có nội dung đã được kết hợp và lưu theo contract CandidateCV.
+Giai đoạn Optimize/Preview không persistence: kết quả thành công là Optimization Proposal runtime, không yêu cầu persistence hay transaction.
+
+Kết quả thành công của Commit phải tương ứng với một Generated Draft có nội dung của Proposal và được lưu theo contract CandidateCV.
 
 Việc tạo CV mới và lưu content có thể được tổ chức bằng các cơ chế persistence phù hợp với kiến trúc Backend.
 
-Nếu thao tác không hoàn tất, hệ thống không được báo rằng Generated Draft đã được tạo thành công khi kết quả persistence chưa tương ứng.
+Nếu Commit không hoàn tất, hệ thống không được báo rằng Generated Draft đã được tạo thành công khi kết quả persistence chưa tương ứng.
 
 Chi tiết kiểm soát partial write, retry hoặc recovery thuộc Engineering Contract.
 

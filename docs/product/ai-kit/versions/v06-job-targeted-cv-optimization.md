@@ -529,8 +529,8 @@ Candidate có thể xem Optimization Proposal đối chiếu với nội dung n�
 
 ### Tiền điều kiện
 
-- Proposal đã được trả về cho Candidate (Preview Diff), hoặc Draft tồn tại;
-- Candidate có quyền truy cập Draft.
+- Preview Diff: Optimization Proposal đã được tạo thành công cho Candidate; không yêu cầu Draft tồn tại;
+- Preview Draft sau Commit: Draft tồn tại và Candidate có quyền truy cập Draft.
 
 ### Luồng chính
 
@@ -553,12 +553,13 @@ Draft chưa complete vẫn có thể Preview theo quy định của V7.
 
 ### Trường hợp từ chối
 
-- Candidate không có quyền với Draft;
-- Draft không tồn tại hoặc không còn khả dụng.
+- Preview Diff: Candidate không có quyền với Source CV hoặc Target Job của Proposal;
+- Preview Draft sau Commit: Candidate không có quyền với Draft, hoặc Draft không tồn tại hoặc không còn khả dụng.
 
 ### Business Rules liên quan
 
 - `BR-AI-02`
+- `BR-AI-03`
 - `BR-AI-08`
 - `BR-AI-10`
 
@@ -920,11 +921,16 @@ AI-V06 được xem là hoàn thành về mặt business khi:
 
 - F01–F04 được thực hiện đúng;
 - các Business Rules được giữ;
-- Candidate có thể tạo Generated Draft theo một Job đã chọn;
+- Candidate có thể yêu cầu tối ưu CV theo một Job đã chọn và nhận Optimization Proposal kèm Preview Diff mà không tạo CandidateCV;
+- Preview Diff không persistence; Candidate chưa Commit thì không có CandidateCV mới;
+- Commit tạo Generated Draft có nội dung tương ứng với Proposal đã Preview, không gọi lại AI;
+- Proposal không do hệ thống phát hành, bị thay đổi, hoặc không thuộc đúng Candidate/Job/Source CV thì Commit bị từ chối và không tạo Draft;
+- Source CV thay đổi sau khi tạo Proposal thì Commit trả 409 và không tạo Draft;
+- AI/LLM chỉ được gọi ở giai đoạn Optimize/Preview: tối đa 1 lần xử lý tối ưu cho Generated CV; Uploaded CV thêm 1 lần chuẩn hóa AI-V02; Commit không gọi LLM (provider fallback không tính là thêm lần xử lý nghiệp vụ);
 - cả Generated và Uploaded CV đều được hỗ trợ trong phạm vi đã duyệt;
-- kết quả AI hợp lệ có thể hình thành Generated Draft;
+- kết quả AI hợp lệ có thể hình thành Optimization Proposal và, sau Commit, Generated Draft;
 - Source CV không thay đổi;
-- Draft chưa complete vẫn có thể được Preview;
+- Draft chưa complete vẫn có thể được Preview sau Commit;
 - Candidate tiếp tục kiểm soát lifecycle CV;
 - authorization và ownership được giữ;
 - failure/fallback behavior hoạt động phù hợp;
@@ -934,8 +940,10 @@ AI-V06 được xem là hoàn thành về mặt business khi:
 Các điều sau không tự động đủ để kết luận business completion:
 
 - AI provider trả response thành công;
-- response đúng schema nhưng workflow không tạo được Draft;
+- response đúng schema nhưng workflow không tạo được Proposal hoặc không Commit được Draft;
 - Draft được tạo nhưng không thể sử dụng trong workflow CandidateCV;
+- Draft được lưu có nội dung khác Proposal đã Preview;
+- Commit gọi lại AI hoặc tạo Draft từ Proposal không hợp lệ;
 - unit test pass nhưng action vượt ngoài phạm vi được phép;
 - chỉ thử một trường hợp demo thành công.
 
