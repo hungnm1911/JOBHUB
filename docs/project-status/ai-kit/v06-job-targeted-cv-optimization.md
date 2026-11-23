@@ -34,7 +34,9 @@ integration remains **NOT STARTED**.
 
 - Amended flow: R1 Backend Preview API (`POST /candidate/jobs/:jobId/optimize-cv/preview`, no persistence) is implemented. R2 Proposal signing (HMAC-SHA256, 60-minute TTL, identity and Source revision bound, stateless) is implemented in the Preview response. R3 Backend Commit (`POST /candidate/jobs/:jobId/optimize-cv/commit`: signature, TTL, identity, current Job/Source authorization, Source revision 409, V7 `GENERATED/DRAFT` create from the signed `proposedContent`, no AI call) is implemented. Frontend remains not started; legacy `/optimize-cv` remains in transition.
 
-- Frontend integration has not started. Slice 08 exposes the action through
+- Frontend F1 (Preview/Commit API module and `useCvOptimizationProposal` hook, stale-Proposal reset) is implemented but not wired into any UI; Diff Modal (F2), workflow switch (F3) and legacy `/optimize-cv` removal are not started.
+
+- Frontend workflow integration has not started. Slice 08 exposes the action through
   Candidate HTTP and reuses V7 Draft management and Preview.
 - Live fallback on Gemini/Groq and the official V06 Backend/AI Kit full gates
   remain unverified. Representative live quality has the accepted limitations
@@ -50,6 +52,8 @@ Optimization phase. The ignored local captures remain the detailed evidence;
 this leaf records the current state without copying CV content or credentials.
 
 ## Verification status
+
+- 2026-11-24 Frontend F1 (Preview/Commit API + hook): focused `test:cv-optimization-proposal` (5 tests) and targeted ESLint passed. No frontend full gate (`yarn verify:agent`), build, browser check or live provider call was run per the requested scope.
 
 - 2026-11-24 R4-L1 Preview → Commit round-trip coverage (Generated and Uploaded; unmodified Proposal → `201 GENERATED/DRAFT`, content/metadata match, no second AI call): focused test `ai-v06-r4-preview-commit-roundtrip.test.js` (3 tests) and targeted ESLint passed with mocked AI Kit. No production change, full gate or live provider call.
 
