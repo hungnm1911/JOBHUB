@@ -660,6 +660,7 @@ realtime behavior when it does not need them.
 
 - `frontend/src/components/ui/` contains general UI primitives managed with shadcn/ui conventions and Tailwind CSS. Primitives contain no JOBHUB-specific business logic.
 - `frontend/src/components/common/` contains application-level presentation shared by multiple pages or features, such as the current `AppHeader`.
+- A component that owns supporting hooks may use a folder named after that component, with `index.jsx` as its importable component and `hooks/` for hooks owned by its behavior. `components/common/UnsavedChangesProvider/` follows this layout; hook placement follows ownership scope rather than a blanket shared-hooks folder.
 - `frontend/src/components/layouts/` contains route-level structural frames; its layouts keep the layout ownership rules above.
 - `frontend/src/features/<feature>/components/` contains presentation tied to one business feature.
 - Components are promoted from feature scope to `common/` only when their semantics are application-level and they have real cross-area use.

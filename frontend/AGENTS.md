@@ -56,6 +56,7 @@ Before a significant frontend change, state:
 - Identify the canonical owner of every responsibility affected by the task.
 - Search the frontend for an existing implementation before creating a constant, API module, socket handler, route group, guard, layout, page, feature service, hook, slice, component, primitive, helper, validator, schema, or other abstraction.
 - Reuse or extend the canonical owner instead of creating a parallel implementation.
+- Place component-owned hooks beside their owning component as specified in [`frontend-conventions.md`](../docs/engineering/frontend-conventions.md#component-owned-hooks); do not infer a global hooks folder from a hook's filename.
 - Preserve the documented layer and dependency boundaries.
 - Keep exactly one browser router, Redux store, configured Axios client, Socket.IO client, `<Toaster />`, and `VITE_*` reader.
 - Treat route guards and client validation as user-experience aids only; never describe them as security controls or rely on them instead of backend authorization.

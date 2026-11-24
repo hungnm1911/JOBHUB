@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 
-import { UnsavedChangesContext } from './useUnsavedChangesPrompt'
+import { UnsavedChangesContext } from './hooks/useUnsavedChangesPrompt'
 
 function UnsavedChangesProvider({ children }) {
   const dirtyFormsRef = useRef(new Set())

@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 
 import { resetPasswordApi } from '@/apis/authentication.api'
 import { Button } from '@/components/ui/button'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import { ACCOUNT_FIELD_LIMIT } from '@/utils/constant'
 import { resetPasswordSchema, zodResolver } from '@/validation'
 

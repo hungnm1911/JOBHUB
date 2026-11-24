@@ -388,7 +388,7 @@ Các trạng thái authentication hiện có:
 | `unauthenticated` | Không có session hợp lệ |
 | `temporarilyUnavailable` | Có credential nhưng restore thất bại do hạ tầng tạm thời |
 
-Shared hooks là `useAppDispatch` và `useAppSelector` trong `src/store/hooks.js`. Reducer mới phải nằm cạnh feature sở hữu và chỉ được đăng ký tại store trung tâm khi state thực sự cần đi qua component/route boundary.
+Redux hook aliases dùng chung là `useAppDispatch` và `useAppSelector` trong `src/store/hooks.js`. Reducer mới phải nằm cạnh feature sở hữu và chỉ được đăng ký tại store trung tâm khi state thực sự cần đi qua component/route boundary.
 
 ## Form và validation
 
@@ -444,6 +444,7 @@ Client validation giúp phản hồi sớm nhưng không xác nhận authorizati
 ```text
 components/ui/                  -> primitive trung lập nghiệp vụ
 components/common/              -> presentation dùng chung cấp ứng dụng
+components/common/<Component>/   -> index.jsx của component, hooks/ nếu hook thuộc component đó
 components/layouts/             -> structural frame + Outlet
 features/<feature>/components/  -> UI chỉ thuộc một feature
 pages/                          -> complete URL-mapped screen
@@ -479,6 +480,7 @@ Toast là phản hồi tạm thời, không phải persisted JOBHUB Notification
 ### Đặt tên file
 
 - Component, page, layout và guard: `PascalCase.jsx`.
+- Component có thư mục riêng: dùng tên component cho thư mục và có thể dùng `index.jsx` làm entry point; hook gắn với component nằm trong `hooks/` của thư mục đó.
 - Route group: `<name>.routes.jsx`.
 - Resource API: `<name>.api.js`.
 - Form schema: `<scope>.schema.js`.
@@ -562,7 +564,7 @@ frontend/
     │   ├── authentication.api.js    # Login/refresh/logout transport
     │   └── client/                  # Axios, interceptor và ApiError
     ├── components/
-    │   ├── common/                  # Shared application presentation
+    │   ├── common/                  # Shared application presentation; component folders may own hooks/
     │   ├── layouts/                 # Shared structural frames
     │   └── ui/                      # Domain-neutral UI primitives
     ├── features/

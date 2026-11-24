@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 
 import { updateOwnedCompanyApi } from '@/apis/company.api'
 import RichTextEditor from '@/components/common/RichTextEditor'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import { Button } from '@/components/ui/button'
 import { API_ERROR_MESSAGE, COMPANY_IMAGE_KIND, COMPANY_PROFILE_LIMIT } from '@/utils/constant'
 import { companyDraftSchema, companySubmissionSchema, zodResolver } from '@/validation'

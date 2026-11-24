@@ -35,7 +35,7 @@ const { default: CvMetadataFields } = await vite.ssrLoadModule('/src/features/ca
 const { default: CvCreateDraftForm } = await vite.ssrLoadModule('/src/features/candidate-cvs/components/CvCreateDraftForm.jsx')
 const { default: CandidateCvCreate } = await vite.ssrLoadModule('/src/features/candidate-cvs/components/CandidateCvCreate.jsx')
 const { default: CvEditMetadataModal } = await vite.ssrLoadModule('/src/features/candidate-cvs/components/CvEditMetadataModal.jsx')
-const { default: UnsavedChangesProvider } = await vite.ssrLoadModule('/src/components/common/UnsavedChangesProvider.jsx')
+const { default: UnsavedChangesProvider } = await vite.ssrLoadModule('/src/components/common/UnsavedChangesProvider/index.jsx')
 const { emptyGeneratedContent, toContentPayload } = await vite.ssrLoadModule('/src/features/candidate-profile/utils.js')
 
 const fields = [{ id: 'field-1', name: 'Engineering' }, { id: 'field-2', name: 'Design' }]
