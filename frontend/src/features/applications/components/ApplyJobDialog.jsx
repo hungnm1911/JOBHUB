@@ -3,7 +3,7 @@ import { useCallback, useEffect, useId, useState } from 'react'
 
 import { listOwnCandidateCvsApi } from '@/apis/candidate-cv.api'
 import { Button } from '@/components/ui/button'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import { CANDIDATE_CV_SOURCE_TYPE, CANDIDATE_CV_STATUS } from '@/utils/constant'
 
 const SOURCE_LABEL = Object.freeze({

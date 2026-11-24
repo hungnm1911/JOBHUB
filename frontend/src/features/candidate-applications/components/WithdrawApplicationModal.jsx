@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 
 import { withdrawOwnApplicationApi } from '@/apis/application.api'
 import { Button } from '@/components/ui/button'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import ProfileModal from '@/features/candidate-profile/components/ProfileModal'
 
 function WithdrawApplicationModal({ application, onClose, onWithdrawn }) {

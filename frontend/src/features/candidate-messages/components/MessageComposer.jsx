@@ -2,7 +2,7 @@ import { LoaderCircle, Send } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
 import { Button } from '@/components/ui/button'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import { cn } from '@/lib/utils'
 
 function MessageComposer({

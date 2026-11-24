@@ -31,6 +31,7 @@ rules.
 ### Files
 
 - React component, page, layout, and route-guard filenames must use PascalCase with `.jsx`.
+- A component with its own folder may use `index.jsx` as that folder's component entry point; the folder must carry the component's functional name.
 - Route-group modules must use `<name>.routes.jsx`.
 - Resource HTTP modules must use `<name>.api.js`.
 - Form and payload schema modules under `src/validation/` must use a descriptive `<scope>.schema.js` name.
@@ -261,6 +262,12 @@ shared across multiple pages or features.
 - They must not own feature state, perform business API calls, or interpret one feature's domain rules.
 - A component stays in a feature until it has real cross-area use and domain-neutral application semantics.
 - `components/common/` must not become a second layouts or features folder.
+
+### Component-owned hooks
+
+- Place a hook according to the scope of the component or feature that owns its behavior. Feature workflow hooks stay in `features/<feature>/hooks/`; Redux hook aliases stay in `src/store/hooks.js`.
+- When a hook belongs to one component, whether shared or feature-owned, give that component a folder named after the component and put the hook in its `hooks/` child. The component implementation may be the folder's `index.jsx`, which is the component import path. Do not create a general `components/hooks/` folder for this case.
+- `components/common/UnsavedChangesProvider/index.jsx` and `components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt.js` are the current example. Forms across features consume this hook because they participate in the provider's confirmation behavior; they do not take ownership of it.
 
 ### Redux store
 

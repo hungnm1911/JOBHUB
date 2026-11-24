@@ -18,7 +18,7 @@ import {
   submitOwnApplicationAvailabilityApi,
 } from '@/apis/application.api'
 import { Button } from '@/components/ui/button'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import { SelectDropdown } from '@/components/ui/select-dropdown'
 import { APPLICATION_STATUS_LABEL } from '@/features/candidate-dashboard/utils'
 import { cn } from '@/lib/utils'

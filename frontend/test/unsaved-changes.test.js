@@ -19,8 +19,8 @@ const { act, createElement, useState } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { createMemoryRouter, RouterProvider, useNavigate } = await import('react-router-dom')
 const vite = await createServer({ appType: 'custom', server: { middlewareMode: true, hmr: false, ws: false } })
-const { default: UnsavedChangesProvider } = await vite.ssrLoadModule('/src/components/common/UnsavedChangesProvider.jsx')
-const { default: useUnsavedChangesPrompt } = await vite.ssrLoadModule('/src/components/common/useUnsavedChangesPrompt.js')
+const { default: UnsavedChangesProvider } = await vite.ssrLoadModule('/src/components/common/UnsavedChangesProvider/index.jsx')
+const { default: useUnsavedChangesPrompt } = await vite.ssrLoadModule('/src/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt.js')
 
 after(async () => {
   await vite.close()

@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 
 import { forgotPasswordApi } from '@/apis/authentication.api'
 import { Button } from '@/components/ui/button'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import { API_ERROR_MESSAGE } from '@/utils/constant'
 import { forgotPasswordSchema, zodResolver } from '@/validation'
 

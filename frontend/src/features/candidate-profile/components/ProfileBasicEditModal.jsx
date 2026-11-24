@@ -8,7 +8,7 @@ import {
 } from '@/apis/candidate-profile.api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/Input'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import { COMPANY_IMAGE_ACCEPT } from '@/utils/constant'
 
 import ProfileModal from './ProfileModal'

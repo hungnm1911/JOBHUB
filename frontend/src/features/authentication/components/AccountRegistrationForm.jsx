@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import { ACCOUNT_FIELD_LIMIT, API_ERROR_MESSAGE } from '@/utils/constant'
 import { accountRegistrationSchema, zodResolver } from '@/validation'
 

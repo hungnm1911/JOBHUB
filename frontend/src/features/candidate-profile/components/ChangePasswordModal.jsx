@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 
 import { changePasswordApi } from '@/apis/authentication.api'
 import { Button } from '@/components/ui/button'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import {
   AuthFormField,
   PasswordVisibilityToggle,

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import ProfileModal from '@/features/candidate-profile/components/ProfileModal'
 
 import CvCreateDraftForm from './CvCreateDraftForm'

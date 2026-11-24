@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 
 import { replaceOwnUploadedCandidateCvPdfApi } from '@/apis/candidate-cv.api'
 import { Button } from '@/components/ui/button'
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import ProfileModal from '@/features/candidate-profile/components/ProfileModal'
 import { CANDIDATE_CV_UPLOADED_PDF } from '@/utils/constant'
 

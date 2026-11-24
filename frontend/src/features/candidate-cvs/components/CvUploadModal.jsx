@@ -32,4 +32,4 @@ function CvUploadModal({ onClose, onCreated }) {
 export default CvUploadModal
 import { useState } from 'react'
 
-import useUnsavedChangesPrompt from '@/components/common/useUnsavedChangesPrompt'
+import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
