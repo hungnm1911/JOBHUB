@@ -4,6 +4,7 @@ import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
 import HomePage from '@/pages/HomePage'
 import JobDetailPage from '@/pages/JobDetailPage'
 import JobSearchPage from '@/pages/JobSearchPage'
+import RecruiterActivationPage from '@/pages/RecruiterActivationPage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import VerifyEmailPage from '@/pages/VerifyEmailPage'
 import { DEVELOPMENT_ENV, RUNTIME_ENV } from '@/utils/constant'
@@ -43,6 +44,10 @@ const publicRoutes = [
   {
     path: 'verify-email',
     element: <VerifyEmailPage />,
+  },
+  {
+    path: 'activate-recruiter',
+    element: <RecruiterActivationPage />,
   },
   {
     path: 'confirm-company-approval',

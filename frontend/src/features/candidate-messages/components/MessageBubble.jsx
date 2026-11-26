@@ -19,7 +19,7 @@ function MessageBubble({
     return (
       <li className="flex justify-center px-3 py-1">
         <div className="max-w-[min(24rem,90%)] text-center">
-          <p className="rounded-full bg-muted/80 px-2.5 py-1 text-[10px] leading-relaxed text-muted-foreground">
+          <p className="rounded-full bg-muted/80 px-2.5 py-1 text-xs leading-relaxed text-muted-foreground">
             {message.content}
           </p>
         </div>
@@ -57,7 +57,7 @@ function MessageBubble({
 
       <div className={cn('flex w-[min(100%,28rem)] max-w-[78%] flex-col', isOwn ? 'items-end' : 'items-start')}>
         {showSenderMeta ? (
-          <span className="mb-0.5 px-1 text-[10px] font-medium text-muted-foreground">
+          <span className="mb-0.5 px-1 text-xs font-medium text-muted-foreground">
             {recruiterName || 'Nhà tuyển dụng'}
           </span>
         ) : null}
@@ -72,7 +72,7 @@ function MessageBubble({
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         </div>
         {timeLabel ? (
-          <span className="mt-0.5 px-1 text-[10px] text-muted-foreground">{timeLabel}</span>
+          <span className="mt-0.5 px-1 text-xs text-muted-foreground">{timeLabel}</span>
         ) : null}
       </div>
     </li>

@@ -1,6 +1,7 @@
 import {
   Bookmark,
   ChevronDown,
+  KeyRound,
   LayoutDashboard,
   LoaderCircle,
   LogOut,
@@ -12,10 +13,15 @@ import { toast } from 'sonner'
 
 import { cn } from '@/lib/utils'
 import { useAppSelector } from '@/store/hooks'
-import { USER_ROLE } from '@/utils/constant'
+import { COMPANY_MEMBER_ROLE, USER_ROLE, USER_STATUS } from '@/utils/constant'
 
 import { logout } from '../services/authentication.service'
-import { AUTHENTICATION_STATUS, selectAuthenticatedUser, selectAuthenticationStatus } from '../slice'
+import {
+  AUTHENTICATION_STATUS,
+  selectAuthenticatedUser,
+  selectAuthenticationStatus,
+  selectMembership,
+} from '../slice'
 import { USER_ROLE_LABEL, getInitials, toLoginNavigationState, toPostLoginDestination } from '../utils'
 
 const WORKSPACE_LINK_LABEL = Object.freeze({
@@ -91,8 +97,20 @@ function AccountMenu({ user }) {
   const containerRef = useRef(null)
   const [open, setOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
-  const workspacePath = toPostLoginDestination(user)
-  const workspaceLabel = workspacePath === '/' ? null : WORKSPACE_LINK_LABEL[user.role]
+  const membership = useAppSelector(selectMembership)
+  const isRecruiter = membership?.role === COMPANY_MEMBER_ROLE.RECRUITER
+  const isCompanyManager =
+    membership?.role === COMPANY_MEMBER_ROLE.COMPANY_MANAGER && user.status === USER_STATUS.ACTIVE
+  const defaultPath = toPostLoginDestination(user)
+  let workspacePath = defaultPath
+  let workspaceLabel = defaultPath === '/' ? null : WORKSPACE_LINK_LABEL[user.role]
+  if (isRecruiter) {
+    workspacePath = '/recruiter/jobs'
+    workspaceLabel = 'Khu nhà tuyển dụng'
+  } else if (isCompanyManager) {
+    workspacePath = '/company/recruiters'
+    workspaceLabel = 'Quản lý Recruiter'
+  }
 
   useEffect(() => {
     if (!open) {
@@ -147,11 +165,19 @@ function AccountMenu({ user }) {
         type="button"
       >
         <AccountAvatar user={user} />
-        <span
-          className="hidden min-w-0 max-w-[9rem] truncate xl:max-w-[14rem] lg:inline"
-          title={displayName}
-        >
-          {displayName}
+        <span className="hidden min-w-0 text-left lg:block">
+          <span
+            className="block max-w-[9rem] truncate xl:max-w-[14rem]"
+            title={displayName}
+          >
+            {displayName}
+          </span>
+          {/* Company staff see their Company job title under the name. */}
+          {membership?.jobTitle && (
+            <span className="block max-w-[9rem] truncate text-xs font-normal text-muted-foreground xl:max-w-[14rem]">
+              {membership.jobTitle}
+            </span>
+          )}
         </span>
         <ChevronDown
           aria-hidden="true"
@@ -200,6 +226,18 @@ function AccountMenu({ user }) {
                 >
                   <LayoutDashboard aria-hidden="true" className="size-4 text-muted-foreground" />
                   {workspaceLabel}
+                </Link>
+              </li>
+            )}
+            {isRecruiter && (
+              <li>
+                <Link
+                  className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors outline-none hover:bg-secondary focus-visible:bg-secondary"
+                  onClick={() => setOpen(false)}
+                  to="/recruiter/change-password"
+                >
+                  <KeyRound aria-hidden="true" className="size-4 text-muted-foreground" />
+                  Đổi mật khẩu
                 </Link>
               </li>
             )}

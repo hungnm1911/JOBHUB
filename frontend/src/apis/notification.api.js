@@ -2,8 +2,12 @@ import apiClient from '@/apis/client'
 
 const AUTHENTICATED_REQUEST = Object.freeze({ requiresAuthentication: true })
 
-async function listOwnNotificationsApi() {
-  const response = await apiClient.get('/notifications', AUTHENTICATED_REQUEST)
+// Without params the backend returns the full list; any control turns pagination on.
+async function listOwnNotificationsApi(params) {
+  const response = await apiClient.get('/notifications', {
+    ...AUTHENTICATED_REQUEST,
+    params,
+  })
   return response.data
 }
 

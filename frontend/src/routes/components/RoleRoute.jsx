@@ -1,4 +1,4 @@
-import { CircleX, LoaderCircle, RotateCw } from 'lucide-react'
+import { CircleX, LoaderCircle, LockKeyhole, RotateCw } from 'lucide-react'
 import { Navigate, Outlet } from 'react-router-dom'
 
 import CenteredState from '@/components/common/CenteredState'
@@ -18,6 +18,7 @@ function RoleRoute({
   allowedStatuses,
   allowedMembershipRoles,
   allowedMembershipStatuses,
+  requirePasswordSetup = false,
   redirectTo,
   fallback = null,
   children,
@@ -36,6 +37,21 @@ function RoleRoute({
     (allowedStatuses && !allowedStatuses.includes(user?.status))
   ) {
     return <Navigate replace to={redirectTo ?? toPostLoginDestination(user)} />
+  }
+
+  // V3 BR-13: no business access until the Staff account has set its own password.
+  // There is no forced change-password flow (V1 BR-16), so the screen only explains.
+  if (requirePasswordSetup && user?.mustChangePassword) {
+    return (
+      <div className="mx-auto w-full max-w-2xl px-6 py-10">
+        <CenteredState
+          description="Hãy mở liên kết trong email kích hoạt để đặt mật khẩu. Nếu liên kết đã hết hạn, nhờ Quản lý công ty gửi lại."
+          icon={LockKeyhole}
+          title="Tài khoản chưa hoàn tất thiết lập mật khẩu"
+          tone="bg-secondary text-muted-foreground"
+        />
+      </div>
+    )
   }
 
   if (allowedMembershipRoles || allowedMembershipStatuses) {

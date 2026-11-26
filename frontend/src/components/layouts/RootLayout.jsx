@@ -12,7 +12,8 @@ import { USER_ROLE } from '@/utils/constant'
 function RootLayout() {
   const location = useLocation()
   const viewer = useSessionViewer()
-  const isCandidate = viewer.resolved && viewer.role === USER_ROLE.CANDIDATE
+  const isAccountActivationFlow = location.pathname === '/activate-recruiter'
+  const isCandidate = !isAccountActivationFlow && viewer.resolved && viewer.role === USER_ROLE.CANDIDATE
   const isFullBleedWorkspace = location.pathname.startsWith('/candidate/messages')
 
   return (
@@ -24,7 +25,10 @@ function RootLayout() {
         )}
       >
         <ScrollRestoration />
-        <AppHeader accountArea={<HeaderAccountMenu />} isCandidate={isCandidate} />
+        <AppHeader
+          accountArea={isAccountActivationFlow ? null : <HeaderAccountMenu />}
+          isCandidate={isCandidate}
+        />
 
         <FlashMessage />
 

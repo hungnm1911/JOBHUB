@@ -47,8 +47,11 @@ const APPLICATION_SOURCE_LABEL = Object.freeze({
 })
 
 const dateTimeFormatter = new Intl.DateTimeFormat('vi-VN', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
 })
 
 function formatDateTime(value) {

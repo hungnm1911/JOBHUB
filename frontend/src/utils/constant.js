@@ -296,6 +296,11 @@ const REALTIME_EVENT = Object.freeze({
   CONVERSATION_STATE: 'conversationState',
 })
 
+// Socket.IO client lifecycle event; used to resynchronize after a reconnect.
+const SOCKET_LIFECYCLE_EVENT = Object.freeze({
+  CONNECT: 'connect',
+})
+
 const VALIDATION_MESSAGE = Object.freeze({
   REQUIRED: 'Trường này là bắt buộc.',
   INVALID_EMAIL: 'Email không hợp lệ.',
@@ -363,6 +368,7 @@ export {
   SALARY_PERIOD,
   SALARY_TYPE,
   SOCKET_CONFIG,
+  SOCKET_LIFECYCLE_EVENT,
   TOASTER_CONFIG,
   USER_ROLE,
   USER_STATUS,

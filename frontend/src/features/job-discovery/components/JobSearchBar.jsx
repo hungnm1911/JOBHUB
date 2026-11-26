@@ -6,7 +6,15 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import LocationHierarchyPicker from './LocationHierarchyPicker'
 
-function JobSearchBar({ keyword, locations, provinces, onSearch, onLocationChange }) {
+function JobSearchBar({
+  keyword,
+  locations,
+  provinces,
+  onSearch,
+  onLocationChange,
+  ariaLabel = 'Tìm kiếm việc làm',
+  placeholder = 'Vị trí tuyển dụng, tên công ty, kỹ năng...',
+}) {
   const [locationOpen, setLocationOpen] = useState(false)
   const { handleSubmit, register } = useForm({
     values: { keyword },
@@ -14,7 +22,7 @@ function JobSearchBar({ keyword, locations, provinces, onSearch, onLocationChang
 
   return (
     <form
-      aria-label="Tìm kiếm việc làm"
+      aria-label={ariaLabel}
       className={cn(
         'flex flex-col gap-2 rounded-2xl border bg-card p-2 shadow-sm md:flex-row md:items-center',
         locationOpen && 'mb-[52rem] sm:mb-[27rem] lg:mb-0',
@@ -28,7 +36,7 @@ function JobSearchBar({ keyword, locations, provinces, onSearch, onLocationChang
         <input
           className="h-12 w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           maxLength={200}
-          placeholder="Vị trí tuyển dụng, tên công ty, kỹ năng..."
+          placeholder={placeholder}
           type="search"
           {...register('keyword')}
         />

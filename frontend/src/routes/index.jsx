@@ -7,6 +7,7 @@ import companyManagerRoutes from './company-manager.routes'
 import guestRoutes from './guest.routes'
 import platformAdminRoutes from './platform-admin.routes'
 import publicRoutes from './public.routes'
+import recruiterRoutes from './recruiter.routes'
 
 const router = createBrowserRouter([
   {
@@ -15,6 +16,7 @@ const router = createBrowserRouter([
     children: [...publicRoutes, guestRoutes, companyManagerRoutes, ...candidateRoutes],
   },
   ...platformAdminRoutes,
+  ...recruiterRoutes,
 ])
 
 export default router

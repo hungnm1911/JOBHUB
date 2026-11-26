@@ -109,7 +109,7 @@ function MessageComposer({
           )}
         </Button>
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-3 px-1 text-[10px] text-muted-foreground">
+      <div className="mt-1.5 flex items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
         <span>Enter gửi · Shift+Enter xuống dòng</span>
         <span>{value.length}/10000</span>
       </div>

@@ -96,8 +96,9 @@ function toPostLoginLocation(user, navigationState) {
 
 function getInitials(fullName) {
   return (fullName ?? '')
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
     .split(/\s+/)
-    .filter(Boolean)
+    .filter((part) => /^[\p{L}\p{N}]/u.test(part))
     .slice(-2)
     .map((part) => part[0].toUpperCase())
     .join('')

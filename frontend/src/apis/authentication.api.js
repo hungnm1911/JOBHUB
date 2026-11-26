@@ -55,6 +55,15 @@ async function resetPasswordApi({ token, password }) {
   return response.data
 }
 
+async function activateRecruiterApi({ token, password }) {
+  const response = await apiClient.post(
+    '/auth/activate-recruiter',
+    { token, password },
+    PUBLIC_AUTH_REQUEST,
+  )
+  return response.data
+}
+
 async function loginApi(credentials) {
   const response = await apiClient.post(
     '/auth/login',
@@ -106,6 +115,7 @@ async function changePasswordApi({ currentPassword, password }) {
 }
 
 export {
+  activateRecruiterApi,
   changePasswordApi,
   confirmCompanyApprovalApi,
   forgotPasswordApi,

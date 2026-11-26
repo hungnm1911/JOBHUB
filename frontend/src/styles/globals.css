@@ -89,6 +89,19 @@
   }
 }
 
+/* Recruiter surfaces sit on tinted backgrounds: darker muted and danger text keep 4.5:1. */
+[data-area="recruiter"] {
+  --muted-foreground: oklch(0.5 0.046 257.417);
+  --destructive: oklch(0.53 0.222 27.325);
+}
+
+@media (pointer: coarse) {
+  [data-area="recruiter"] :is(button, a[data-slot="button"], input:not([type="checkbox"], [type="radio"]), select, [role="tab"]) {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+}
+
 .rich-text-editor .tiptap {
   min-height: 6rem;
   outline: none;

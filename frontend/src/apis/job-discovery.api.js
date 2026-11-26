@@ -60,4 +60,19 @@ async function getDiscoveryCompanyApi(companyId) {
   return response.data
 }
 
-export { getDiscoveryCompanyApi, getDiscoveryJobApi, listDiscoveryJobsApi }
+// The public Company profile read without the session: Company Staff sessions are not
+// Job Discovery actors, but their own Company's public profile is public data.
+async function getPublicCompanyProfileApi(companyId) {
+  const response = await apiClient.get(
+    `${JOB_DISCOVERY_PATH}/companies/${encodeURIComponent(companyId)}`,
+    { requiresAuthentication: false },
+  )
+  return response.data
+}
+
+export {
+  getDiscoveryCompanyApi,
+  getDiscoveryJobApi,
+  getPublicCompanyProfileApi,
+  listDiscoveryJobsApi,
+}
