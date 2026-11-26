@@ -2,11 +2,13 @@
 
 ## Current project state
 
-V3 API completion is implemented and verified (2026-10-21). F10/BR-29 now permit employeeCode/jobTitle updates of same-Company non-TERMINATED Recruiters, following the approved business decision.
+V3 API completion is implemented and verified. Admin API Phase 1 is verified (2026-11-27): the Admin Company Recruiter list rejects unsupported query companyId while preserving the Company Manager same-Company guard. The existing F10/BR-29 employee metadata scope and all lifecycle/persistence rules are unchanged.
+
+The [V1–V4 API contract](../../engineering/v1-v4-api-contract.md#platform-admin-integration-14-endpoints) now provides the integration handoff for all 14 existing Admin endpoints; the Backend README lists all 14, including the five previously omitted reads.
 
 - Strict PATCH uses an atomic status predicate and the existing unique index; PUT remains unsupported. Both Recruiter lists support search/filter/stable sort/pagination. Platform Admin reads by Company ID; Company Manager stays tenant-bound.
 - Activation resend uses existing activation credentials and SMTP cleanup. Existing create, lock, unlock, terminate and activation completion functions are unchanged.
-- Common backend gate: 178 files / 1,823 tests passed; see [Platform and operations](platform-and-operations.md) for shared evidence.
+- Latest common backend gate passed; see [Platform and operations](platform-and-operations.md) for cross-version evidence.
 
 ## Deferred / not started
 
@@ -40,7 +42,7 @@ V3 API completion is implemented and verified (2026-10-21). F10/BR-29 now permit
 
 ## Verification status
 
-- 2026-10-21 final common backend gate passed with `VITEST_MAX_WORKERS=2 npm run verify:agent`: ESLint 0 errors / 2 pre-existing V6 test warnings; ARCH-001–ARCH-019; 178/178 files and 1,823/1,823 tests. No tests were excluded and timeouts were unchanged. The earlier default-worker run's unrelated V15 timeout passed alone (33/33) before the clean gate rerun.
+- 2026-11-27 Admin API Phase 1: the new HTTP regression failed before the fix (expected 400, received 200 for query companyId). After the fix, `npm test -- test/auth/v1-api-completion.test.js test/auth/v2-v3-api-completion.test.js test/auth/v3-recruiter-list-detail.test.js` passed 3 files / 20 tests, including unsupported-query rejection and preserved same-Company 200 / foreign-Company 403 behavior. The common `npm run verify:agent` gate passed; shared totals and limitations are recorded in [Platform and operations](platform-and-operations.md). Route inventory comparison matched 14/14 endpoints in implementation, README and integration contract; `git diff --check` passed.
 - Focused completion run: five files / 39 tests passed (`v1-api-completion`, `v2-v3-api-completion`, `v3-recruiter-password-reset`, `v3-acceptance`, `v4-optional-pagination`). After reusing the existing regex helper, the two affected completion suites passed again (16/16).
 - `git diff --check` and whitespace checks on the seven new files passed. Shared environment and gate evidence: [Platform and operations](platform-and-operations.md).
 - Real SMTP, live MongoDB/provider and frontend runtime checks were not performed. Integration tests use MongoMemoryReplSet, mocked mail and stubbed Location provider.
