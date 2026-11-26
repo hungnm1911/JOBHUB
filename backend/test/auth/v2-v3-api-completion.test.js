@@ -79,6 +79,32 @@ describe("V2/V3 API completion", () => {
     expect((await agent.get("/api/platform-admin/companies/000000000000000000000000/recruiters").auth(adminToken, bearer)).status).toBe(404);
   });
 
+  it("admin recruiter list rejects unsupported queries while manager companyId guard remains intact", async () => {
+    const { agent, manager, token } = await setup();
+    const recruiter = await createActiveRecruiterContext({ company: manager.company });
+    const { user: admin } = await createVerifiedUser({ email: "admin@example.com", role: "PLATFORM_ADMIN" });
+    const adminToken = await loginAndGetAccessToken(agent, { email: admin.email });
+    const path = `/api/platform-admin/companies/${manager.company.id}/recruiters`;
+    for (const query of [
+      { companyId: manager.company.id },
+      { companyId: new mongoose.Types.ObjectId().toString() },
+      { companyId: "invalid" },
+      { unsupported: "value" },
+      { membershipStatus: "UNKNOWN" },
+      { page: ["1", "2"] },
+    ]) {
+      const response = await agent.get(path).auth(adminToken, bearer).query(query);
+      expect(response.status, JSON.stringify(query)).toBe(400);
+    }
+    const managerList = await agent.get("/api/company/recruiters").auth(token, bearer)
+      .query({ companyId: manager.company.id });
+    expect(managerList.status).toBe(200);
+    expect(managerList.body.recruiters.map((item) => item.id)).toEqual([recruiter.user.id]);
+    const foreign = await agent.get("/api/company/recruiters").auth(token, bearer)
+      .query({ companyId: new mongoose.Types.ObjectId().toString() });
+    expect(foreign.status).toBe(403);
+  });
+
   it("PATCH only employee metadata; rejects duplicate atomically and never changes identity/lifecycle", async () => {
     const { agent, manager, token } = await setup();
     const target = await createActiveRecruiterContext({ company: manager.company });

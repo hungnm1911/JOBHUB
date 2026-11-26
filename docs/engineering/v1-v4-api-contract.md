@@ -144,6 +144,214 @@ parameters are limited to page/limit; no catalog sort/search/filter is added.
 DTOs, dataset ordering, parent validation and provider failures retain their
 existing behavior. No mutation, local provider fallback or consumer change is added.
 
+## Platform Admin integration (14 endpoints)
+
+This section documents the existing V1–V4 Admin HTTP surface for FE handoff.
+It introduces no business capability or persistence change. The version sections
+above remain the shared read contract; the tables below include the existing
+lifecycle and Category commands as well. Canonical implementations are
+`platform-admin.routes.js`, `platform-admin.controller.js`,
+`platform-admin.service.js`, and the existing Recruiter/Category owners.
+
+### Authentication and request conventions
+
+- All 14 endpoints below require `Authorization: Bearer <accessToken>` from
+  normal ACTIVE authentication and `User.role=PLATFORM_ADMIN`. Use the existing
+  `/api/auth/login`, `/api/auth/refresh`, and `/api/auth/logout` session flow;
+  `/api/auth/me` supplies the signed-in public account. A browser role guard
+  does not replace these backend checks.
+- Base path: `/api/platform-admin`. Every path parameter ending in `Id` is a
+  MongoDB ObjectId represented as a 24-character hex string.
+- GET requests need no body. The lock/terminate/approve/reject commands need
+  no body and define no query options. Category commands send JSON with
+  `Content-Type: application/json` and strictly accept only `{ "name": "..." }`;
+  name must be a nonblank string. Do not send role, level or Company selectors.
+- Only the four dynamic list endpoints accept the strict list queries in the
+  next table. Unknown/repeated/non-string query values return 400. Detail and
+  command endpoints define no list controls; do not attach list queries there.
+- Response IDs are strings; dates serialize as ISO timestamps, or null where
+  the lifecycle has not reached that milestone. Profile values may be null.
+  Treat IDs and timestamps as server-owned values.
+
+### Endpoint inventory and success responses
+
+Paths in this table are relative to the base path above. DTOs are defined below.
+The `message` strings are informational; branch client behavior on HTTP status
+and returned state rather than matching these strings.
+
+| Method/path | Input and purpose | HTTP success body |
+| --- | --- | --- |
+| GET `/accounts` | Accounts list queries; platform-wide account management | 200 `{ accounts: AdminAccount[], pagination }` |
+| GET `/accounts/:userId` | Target User ID; account and Company-role inspection | 200 `{ account: AdminAccount }` |
+| POST `/accounts/:userId/lock` | Target User ID; platform account restriction | 200 `{ message, user: User }` |
+| POST `/accounts/:userId/terminate` | Target User ID; platform account termination | 200 `{ message, user: User }` |
+| GET `/companies` | Company list queries; current profiles including NOT_SUBMITTED | 200 `{ companies: CompanyWithManager[], pagination }` |
+| GET `/companies/:companyId` | Company ID; current Company and representative | 200 `{ company: Company, manager: ManagerSummary }` |
+| POST `/companies/:companyId/lock` | Company ID; stop an active Company | 200 `{ message, company: Company, manager: User }` |
+| GET `/companies/:companyId/recruiters` | Company ID in path, Recruiter list queries; inspect its Recruiters | 200 `{ recruiters: Recruiter[], pagination }` |
+| GET `/company-registrations` | Company list queries; submitted review snapshots only | 200 `{ companyRegistrations: RegistrationSummary[], pagination }` |
+| GET `/company-registrations/:companyId` | Company ID; submitted review source | 200 `{ companyRegistration: RegistrationDetail }` |
+| POST `/company-registrations/:companyId/approve` | Company ID; approve pending submitted snapshot | 200 `{ message, companyRegistration: RegistrationDetail }` |
+| POST `/company-registrations/:companyId/reject` | Company ID; reject pending submitted snapshot | 200 `{ message, companyRegistration: RegistrationDetail }` |
+| POST `/categories/fields` | JSON `{ name }`; create immutable platform FIELD | 201 `{ message, category: Category }` |
+| POST `/categories/fields/:fieldId/positions` | Parent FIELD ID and JSON `{ name }`; create immutable POSITION | 201 `{ message, category: Category }` |
+
+### List query reference
+
+All four lists accept `page`, `limit`, `q`, and `sort` using the common list
+contract above. Omit blank filters/search instead of sending empty strings.
+
+| List | Additional filters | `q` searches | Sort fields; default |
+| --- | --- | --- | --- |
+| `/accounts` | `actorType`, `userStatus`, `companyId` | User fullName/email | createdAt, updatedAt, fullName, email; `-createdAt` |
+| `/companies` | `approvalStatus`, `operationalStatus` | Current Company name/businessRegistrationNumber | createdAt, updatedAt, name, submittedAt; `-createdAt` |
+| `/company-registrations` | `approvalStatus`, `operationalStatus` | Snapshot name/businessRegistrationNumber | createdAt, updatedAt, name (snapshot), submittedAt; `-createdAt` |
+| `/companies/:companyId/recruiters` | `membershipStatus`, `userStatus` | User fullName/email and membership employeeCode/jobTitle | createdAt, updatedAt (membership), fullName, email, employeeCode, jobTitle; `createdAt` |
+
+Accepted enums:
+
+- `actorType`: CANDIDATE, COMPANY_MANAGER, RECRUITER, PLATFORM_ADMIN.
+- `userStatus`: PENDING_ACTIVATION, ACTIVE, LOCKED, TERMINATED.
+- `membershipStatus`: ACTIVE, LOCKED, TERMINATED.
+- `approvalStatus`: NOT_SUBMITTED, PENDING, APPROVED, REJECTED.
+- `operationalStatus`: INACTIVE, ACTIVE, LOCKED.
+
+For the Admin Recruiter list, Company comes exclusively from the URL:
+**any query `companyId` returns 400**, including one equal to the path ID.
+This differs from `GET /api/company/recruiters`, where Company Manager's
+existing same-Company query guard is retained (same ID allowed; foreign ID 403).
+
+Example: find Company Managers in one Company:
+
+```http
+GET /api/platform-admin/accounts?actorType=COMPANY_MANAGER&companyId=507f1f77bcf86cd799439011&userStatus=ACTIVE&page=1&limit=20&sort=fullName
+Authorization: Bearer <accessToken>
+```
+
+Example: the five oldest pending registrations across the full dataset:
+
+```http
+GET /api/platform-admin/company-registrations?approvalStatus=PENDING&sort=submittedAt&page=1&limit=5
+Authorization: Bearer <accessToken>
+```
+
+Each list returns `pagination: { page, limit, total, totalPages }`. Defaults
+are page 1 / limit 20, maximum limit 100. Use `pagination.total` for the filtered
+total, not the returned array length. Search/filter/sort apply to the full
+dataset before pagination. Do not compute global counts, search results or
+oldest-pending order from just one page. A page beyond the last page is 200
+with an empty array; it is not a resource 404.
+
+### Public DTO reference
+
+Field sets below reflect the current serializers. No password/hash, action
+token, refresh credential or session collection is returned.
+
+| DTO | Fields |
+| --- | --- |
+| User | id, fullName, email, role, status, emailVerifiedAt, mustChangePassword, createdAt, updatedAt |
+| Membership | id, companyId, role, status, employeeCode, jobTitle |
+| AdminAccount | User fields plus actorType and membership (null for non-staff) |
+| ManagerSummary | id, fullName, email, role, status |
+| Recruiter | User fields plus membership |
+| ReviewSnapshot | name, logoUrl, bannerUrl, website, address, description, descriptionHtml, contactInfo, businessRegistrationNumber |
+| Company | id, managerUserId, all ReviewSnapshot profile fields as current values, approvalStatus, operationalStatus, reviewSnapshot, submittedAt, reviewedByUserId, reviewedAt, activatedAt, createdAt, updatedAt |
+| CompanyWithManager | Company fields plus manager: ManagerSummary |
+| RegistrationSummary | id (Company ID), approvalStatus, operationalStatus, submittedAt, companyName (snapshot name), businessRegistrationNumber (snapshot value), manager: ManagerSummary |
+| RegistrationDetail | id (Company ID), approvalStatus, operationalStatus, submittedAt, reviewedByUserId, reviewedAt, activatedAt, manager: ManagerSummary, reviewSnapshot: ReviewSnapshot |
+| Category | id, name, normalizedName, level, parentCategoryId (null for FIELD) |
+
+Company Manager and Recruiter accounts both have `User.role=COMPANY_STAFF`.
+Use `actorType` and `membership.role` from Accounts reads for the Company role;
+there is no separate Admin Company Manager list/detail endpoint. The `user`
+returned by lock/terminate is a User DTO without actorType/membership; reread
+Accounts when the screen needs the complete account/membership projection.
+Company.managerUserId is a derived response field, not a second ownership source.
+
+`User.status` is platform account state. `membership.status` is Company-level
+state. They are independent: a Recruiter can have ACTIVE membership and LOCKED
+User, and still has no business access. Admin account lock/terminate does not
+change membership state. Platform Admin does not gain Company membership or
+Company Manager authority through these APIs.
+
+A newly created Recruiter may have ACTIVE User and ACTIVE membership while
+`mustChangePassword=true`; initial activation is still required for business
+access. PENDING_ACTIVATION represents Company Manager onboarding, not Recruiter
+activation readiness.
+
+### Lifecycle and error handling
+
+All endpoints share the centralized error shape:
+
+```json
+{
+  "error": {
+    "message": "Invalid companyId query",
+    "details": { "field": "companyId" }
+  }
+}
+```
+
+`details` and its `field` are optional and depend on the failure. The example
+is the unsupported Recruiter-list query, not a universal message/field. Handle
+HTTP status and optional field errors; production does not return a stack.
+`X-Request-Id` is available for correlating an HTTP failure with backend logs.
+
+| Scope | Expected error outcomes and client handling |
+| --- | --- |
+| All 14 endpoints | 401 for missing/invalid/expired/revoked access; 403 for an authenticated non-admin or a non-ACTIVE account with an otherwise valid session. Unexpected infrastructure/persistence failures can return 5xx; surface a retry/error state. |
+| Four dynamic lists | 400 for unsupported query, invalid filter/id/sort or malformed pagination/search. Correct input before retrying. |
+| Accounts detail | 400 malformed userId; 404 absent account. |
+| Companies detail / Recruiter list | 400 malformed path ID; 404 absent Company. An existing Company with no Recruiters returns 200 with an empty list. |
+| Registration detail | 400 malformed companyId; 404 absent or unsubmitted registration. |
+| Account lock/terminate | 400 malformed userId; 404 absent account; 403 self-target or any Platform Admin target; 409 unsupported source state or Company Manager lifecycle conflict. |
+| Company lock | 400 malformed companyId; 404 absent Company; 409 unless Company is APPROVED + ACTIVE and its Manager is ACTIVE. |
+| Approve/reject registration | 400 malformed companyId; 404 absent Company; 409 unless it is PENDING + INACTIVE with a submitted snapshot and a PENDING_ACTIVATION Manager. A conflicting/repeated decision returns 409; reread detail. |
+| Approve email delivery | 503 can occur **after approval is committed**. Reread registration: it remains APPROVED + INACTIVE with confirmation capability. Do not assume rollback or blindly retry approve. |
+| Create FIELD | 400 invalid/extra body fields; 409 duplicate normalized FIELD name. |
+| Create POSITION | 400 invalid/extra body fields or malformed fieldId; 404 absent parent; 409 non-FIELD parent or duplicate normalized name within that FIELD. |
+
+Account lock accepts ACTIVE → LOCKED. Repeating lock on LOCKED is the same-intent
+reconciliation path. Terminate accepts ACTIVE/LOCKED → TERMINATED; repeating
+terminate on TERMINATED reconciles remaining consequences. Successful account
+commands revoke the target's sessions. Recruiter User eligibility loss also
+triggers the existing automatic Application Unassign consequence; it does not
+grant Admin assignment/pipeline authority or alter Job-team/membership state.
+A failure during post-commit consequences may leave the account restricted;
+reread Accounts and retry the same intended command for reconciliation.
+
+For an ACTIVE Company Manager representing an active Company, use Company
+lock: it atomically sets Company APPROVED + LOCKED, terminates the Manager and
+revokes the Manager's sessions. Generic account commands return 409 when they
+would break the canonical Company/Manager lifecycle. Company lock is terminal;
+a repeated lock returns 409. Existing Company/data are retained.
+
+Review always uses the submitted snapshot. Approve leaves Company
+APPROVED + INACTIVE and Manager PENDING_ACTIVATION until the Manager confirms
+the emailed link. Reject leaves REJECTED + INACTIVE and is terminal. The Admin
+reject command takes no reason. Resend approval confirmation belongs to the
+existing Company Manager onboarding flow, with its existing eligibility rules.
+
+Current Company reads include NOT_SUBMITTED; registration reads never do.
+For the existing registration stage tabs/counts, combine the following filters
+and read each response's `pagination.total` (limit 1 is sufficient for counts):
+
+| Display stage | approvalStatus | operationalStatus |
+| --- | --- | --- |
+| Chờ duyệt | PENDING | INACTIVE |
+| Chờ Manager kích hoạt | APPROVED | INACTIVE |
+| Đang hoạt động | APPROVED | ACTIVE |
+| Đã từ chối | REJECTED | INACTIVE |
+| Đã khóa | APPROVED | LOCKED |
+
+Registration `q` does not search Manager name/email in this phase. Category
+selection reuses public `GET /api/categories/fields` and
+`GET /api/categories/fields/:fieldId/positions` (optional pagination as above).
+Category names are canonicalized and normalized for uniqueness; FIELD is unique
+platform-wide and POSITION within its FIELD. Created Categories are immutable.
+This handoff adds no dashboard/summary, unlock/reactivation, rejection reason,
+Category update/delete or Admin Job-operation endpoint.
+
 ## Changed files for this completion
 
 Implementation:

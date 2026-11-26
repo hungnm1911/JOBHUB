@@ -13,8 +13,9 @@ import {
   unlockRecruiter,
 } from "../services/recruiter.service.js";
 
-const recruiterListOptions = (query) => parseListQuery(query, {
-  filters: { membershipStatus: Object.values(COMPANY_MEMBER_STATUS), userStatus: Object.values(USER_STATUS), companyId: null },
+const recruiterListOptions = (query, { allowCompanyId = false } = {}) => parseListQuery(query, {
+  filters: { membershipStatus: Object.values(COMPANY_MEMBER_STATUS), userStatus: Object.values(USER_STATUS),
+    ...(allowCompanyId ? { companyId: null } : {}) },
   sorts: ["createdAt", "updatedAt", "fullName", "email", "employeeCode", "jobTitle"], defaultSort: "createdAt",
 });
 const readClientCompanyId = (request) => {
@@ -51,7 +52,7 @@ const listRecruitersHandler = async (request, response, next) => {
     const result = await listRecruiters({
       managerUser: request.auth.user,
       clientCompanyId: readClientCompanyId(request),
-      options: recruiterListOptions(request.query),
+      options: recruiterListOptions(request.query, { allowCompanyId: true }),
     });
 
     return response.status(200).json({
