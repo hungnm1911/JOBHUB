@@ -2135,3 +2135,14 @@ Tài liệu này không quy định:
 Các quyết định kỹ thuật phải phục vụ business truth đã được định nghĩa trong tài liệu này.
 
 Nếu data design hoặc implementation mâu thuẫn với tài liệu này, **Product Specification là authority đối với business behavior**, trừ khi Product Specification được con người cập nhật và phê duyệt lại.
+
+
+## Recruiter Inbox read extension approved — 2026-11-26
+
+The user approved independent Messages, with Interviews remaining within
+Application. Add a paginated Recruiter inbox over existing readable Application
+Conversations, with Candidate/Job search, current mode/Job filters, last-message
+preview and deterministic ordering. Add opt-in paginated/searchable Recruiter
+message history. Reuse F02/F07/F08 authority without new participants, persistence,
+receipts, unread counters, Manager/non-assigned Primary access or pre-Application
+chat. HTTP contract: [Recruiter API](../../../engineering/recruiter-api-contract.md).

@@ -1,8 +1,10 @@
+import { escapeRegex } from "../utils/escape-regex.js";
 import mongoose from "mongoose";
 
 import NotificationEvent from "../models/notification-event.model.js";
 import Notification from "../models/notification.model.js";
 import { emitNotificationToRecipient } from "../sockets/index.js";
+import { paginationMetadata } from "../utils/list-query.js";
 import AppError from "../utils/app-error.js";
 import logger from "../utils/logger.js";
 
@@ -51,6 +53,19 @@ const findNotificationForRecipient = async ({
 
 const listNotificationsForRecipient = async ({ recipientUserId }) => {
   return Notification.find({ recipientUserId }).sort({ createdAt: -1, _id: -1 });
+};
+
+const listNotificationPageForRecipient = async ({ recipientUserId, options }) => {
+  if (!options) return { notifications: await listNotificationsForRecipient({ recipientUserId }) };
+  const filter = { recipientUserId,
+    ...(options.type ? { type: options.type } : {}),
+    ...(options.readState ? { readAt: options.readState === "READ" ? { $ne: null } : null } : {}),
+    ...(options.q ? { content: { $regex: escapeRegex(options.q), $options: "i" } } : {}) };
+  const [notifications, total] = await Promise.all([
+    Notification.find(filter).sort(options.sort).skip(options.skip).limit(options.limit),
+    Notification.countDocuments(filter),
+  ]);
+  return { notifications, pagination: paginationMetadata(options, total) };
 };
 
 const countUnreadNotificationsForRecipient = async ({ recipientUserId }) => {
@@ -246,6 +261,7 @@ const recoverPendingNotificationEvents = async ({
 };
 
 export {
+  listNotificationPageForRecipient,
   DEFAULT_RECOVERY_BATCH_SIZE,
   countUnreadNotificationsForRecipient,
   createNotificationEvent,

@@ -1,3 +1,4 @@
+import { escapeRegex } from "../utils/escape-regex.js";
 import mongoose from "mongoose";
 
 import APPLICATION_SOURCE from "../constants/application-source.js";
@@ -32,6 +33,7 @@ import {
   emitMessageToRecipients,
 } from "../sockets/index.js";
 import INTERVIEW_SCHEDULE_STATUS from "../constants/interview-schedule-status.js";
+import { paginationMetadata, projectList } from "../utils/list-query.js";
 import AppError from "../utils/app-error.js";
 import {
   APPLICATION_EXISTS_MESSAGE,
@@ -570,10 +572,53 @@ const resolvePrimaryManagedJobContext = async ({
   return { context, job };
 };
 
+const loadApplicationPage = async ({ filter, options, tenantCompanyId, searchJobTitle = false }) => {
+  const stages = [{ $match: filter }, { $lookup: { from: Job.collection.name, localField: "jobId", foreignField: "_id",
+    pipeline: [{ $match: { companyId: tenantCompanyId } }, { $project: { title: 1 } }], as: "pageJob" } },
+    { $unwind: "$pageJob" }];
+  const match = {};
+  for (const key of ["status", "source"]) if (options[key]) match[key] = options[key];
+  if (options.jobId) match.jobId = new mongoose.Types.ObjectId(options.jobId);
+  if (options.assigneeCompanyMemberId) match.assignedRecruiterCompanyMemberId =
+    options.assigneeCompanyMemberId === "NONE" ? null : new mongoose.Types.ObjectId(options.assigneeCompanyMemberId);
+  if (options.q) {
+    stages.push({ $lookup: { from: User.collection.name, localField: "candidateUserId", foreignField: "_id",
+      pipeline: [{ $project: { fullName: 1 } }], as: "pageCandidate" } });
+    match.$or = ["pageCandidate.fullName", ...(searchJobTitle ? ["pageJob.title"] : [])]
+      .map((field) => ({ [field]: { $regex: escapeRegex(options.q), $options: "i" } }));
+  }
+  const [result] = await Application.aggregate([...stages, { $match: match }, { $facet: {
+    count: [{ $count: "total" }], rows: [{ $sort: options.sort }, { $skip: options.skip }, { $limit: options.limit }, { $project: { _id: 1 } }],
+  } }]);
+  const ids = result.rows.map((row) => row._id);
+  const docs = await Application.find({ _id: { $in: ids } });
+  const byId = new Map(docs.map((doc) => [String(doc._id), doc]));
+  return { applications: ids.map((id) => byId.get(String(id))).filter(Boolean),
+    pagination: paginationMetadata(options, result.count[0]?.total ?? 0) };
+};
+
+const projectApplicationList = (applications, options) => projectList("applications", applications, options, {
+  status: (item) => item.status, source: (item) => item.source,
+  assigneeCompanyMemberId: (item) => item.assignedRecruiterCompanyMemberId ?? "NONE",
+  jobId: (item) => item.jobId, createdAt: (item) => item.createdAt,
+  updatedAt: (item) => item.updatedAt,
+}, (item) => [item.candidate?.fullName, item.job?.title]);
+
+const getPrimaryJobApplication = async ({ actorUser, jobId, applicationId, clientCompanyId }) => {
+  const { job } = await resolvePrimaryManagedJobContext({ actorUser, jobId, clientCompanyId });
+  if (!mongoose.isValidObjectId(applicationId)) throw new AppError(404, "Application not found", { field: "applicationId" });
+  const application = await Application.findOne({ _id: applicationId, jobId: job._id,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES } });
+  if (!application) throw new AppError(404, "Application not found", { field: "applicationId" });
+  const [view] = await hydratePrimaryJobApplicationViews([application]);
+  return { job: toPublicJob(job), application: view };
+};
+
 const listPrimaryJobApplications = async ({
   actorUser,
   jobId,
   clientCompanyId,
+  options = null,
 } = {}) => {
   if (!mongoose.isValidObjectId(jobId)) {
     throw new AppError(404, "Job not found", {
@@ -611,19 +656,24 @@ const listPrimaryJobApplications = async ({
   // V15 Slice 07: Primary/CM Application View covers both Direct Apply and
   // Invitation-source Applications. Authority remains tenant + current
   // assignment-management role, never sourceInvitationId or historical sender.
+  if (options) {
+    const page = await loadApplicationPage({ filter: { jobId: job._id,
+      source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES } }, options, tenantCompanyId: context.companyId });
+    return { job: toPublicJob(job), applications: await hydratePrimaryJobApplicationViews(page.applications), pagination: page.pagination };
+  }
   const applications = await loadLifecycleCompatibleApplicationsForJob(job._id);
   const applicationViews = await hydratePrimaryJobApplicationViews(applications);
 
   return {
     job: toPublicJob(job),
-    applications: applicationViews,
+    ...projectApplicationList(applicationViews, options),
   };
 };
 
 // F06 / F10 / Slice 05: Managed Jobs + Pipeline Workspace + Current Workload.
 // Read-only derived views; never persist ManagedJob/Kanban/workload counters.
 // Non-terminal Unassigned Applications remain in their Recruitment Status group.
-const listManagedJobs = async ({ actorUser, clientCompanyId } = {}) => {
+const listManagedJobs = async ({ actorUser, clientCompanyId, options = null } = {}) => {
   const context = await resolveRecruiterBusinessContext({
     user: actorUser,
     clientCompanyId,
@@ -633,12 +683,18 @@ const listManagedJobs = async ({ actorUser, clientCompanyId } = {}) => {
 
   // F06: Managed Jobs are current-Primary Jobs; not limited to accepting Jobs.
   // DRAFT/PENDING_APPROVAL/PUBLISHED/CLOSED/EXPIRED all qualify while Primary.
-  const managedJobs = await Job.find({
+  const managedJobRefs = await Job.find({
     primaryRecruiterCompanyMemberId: primaryMemberId,
     companyId: context.companyId,
-  }).sort({ createdAt: 1, _id: 1 });
+  }).select("_id title status createdAt supportingRecruiterCompanyMemberIds").sort({ createdAt: 1, _id: 1 });
 
-  const managedJobIds = managedJobs.map((job) => job._id);
+  const selected = projectList("jobs", managedJobRefs, options, {
+    status: (item) => item.status, createdAt: (item) => item.createdAt, title: (item) => item.title,
+  }, (item) => [item.title]);
+  const docs = await Job.find({ _id: { $in: selected.jobs.map((job) => job._id) }, companyId: context.companyId });
+  const byId = new Map(docs.map((job) => [String(job._id), job]));
+  const managedJobs = selected.jobs.map((job) => byId.get(String(job._id))).filter(Boolean);
+  const managedJobIds = managedJobRefs.map((job) => job._id);
 
   const applicationRows =
     managedJobIds.length === 0
@@ -681,9 +737,10 @@ const listManagedJobs = async ({ actorUser, clientCompanyId } = {}) => {
 
   return {
     managedJobs: managedJobProjections,
+    ...(options ? { pagination: selected.pagination } : {}),
     // BR-33 / BR-40: scoped to actor Managed Jobs only — never company-global.
     currentWorkloadByAssignee: mergeWorkloadByAssignee(
-      managedJobProjections.map((item) => item.currentWorkloadByAssignee),
+      [...applicationsByJobId.values()].map((items) => deriveManagedJobApplicationProjection(items).currentWorkloadByAssignee),
     ),
   };
 };
@@ -777,12 +834,27 @@ const loadRecruiterMyApplicationsForActor = async ({
 const listRecruiterMyApplications = async ({
   actorUser,
   clientCompanyId,
+  options = null,
 } = {}) => {
   const context = await resolveRecruiterBusinessContext({
     user: actorUser,
     clientCompanyId,
   });
 
+  if (options) {
+    const filter = { assignedRecruiterCompanyMemberId: context.membership._id,
+      source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES } };
+    const page = await loadApplicationPage({ filter, options, tenantCompanyId: context.companyId, searchJobTitle: true });
+    const views = await hydratePrimaryJobApplicationViews(page.applications);
+    const jobs = await Job.find({ _id: { $in: page.applications.map((item) => item.jobId) }, companyId: context.companyId });
+    const byId = new Map(jobs.map((job) => [String(job._id), job]));
+    const [count] = await Application.aggregate([{ $match: { ...filter, status: { $in: APPLICATION_NON_TERMINAL_STATUSES } } },
+      { $lookup: { from: Job.collection.name, localField: "jobId", foreignField: "_id",
+        pipeline: [{ $match: { companyId: context.companyId } }, { $project: { _id: 1 } }], as: "owningJob" } },
+      { $match: { "owningJob.0": { $exists: true } } }, { $count: "total" }]);
+    return { applications: views.map((view) => toRecruiterMyApplicationView(view, byId.get(view.jobId))),
+      pagination: page.pagination, currentWorkloadCount: count?.total ?? 0 };
+  }
   const applications = await loadRecruiterMyApplicationsForActor({
     actorMembershipId: context.membership._id,
     tenantCompanyId: context.companyId,
@@ -794,7 +866,7 @@ const listRecruiterMyApplications = async ({
   ).length;
 
   return {
-    applications,
+    ...projectApplicationList(applications, options),
     currentWorkloadCount,
   };
 };
@@ -3536,6 +3608,7 @@ const loadApplicationConversationHistoryContext = async ({
 const readAuthorizedConversationHistory = async ({
   context,
   actor,
+  options = null,
 } = {}) => {
   const authority = evaluateApplicationConversationChatAuthority({
     conversationExists: true,
@@ -3553,15 +3626,13 @@ const readAuthorizedConversationHistory = async ({
     });
   }
 
-  const messages = await Message.find({
-    conversationId: context.conversation._id,
-  }).sort({ createdAt: 1, _id: 1 });
-
-  return toPublicConversationHistory({
-    conversation: context.conversation,
-    messages,
-    authority,
-  });
+  const filter = { conversationId: context.conversation._id,
+    ...(options?.q ? { content: { $regex: escapeRegex(options.q), $options: "i" } } : {}) };
+  const query = Message.find(filter).sort(options?.sort ?? { createdAt: 1, _id: 1 });
+  const messages = await (options ? query.skip(options.skip).limit(options.limit) : query);
+  const result = toPublicConversationHistory({ conversation: context.conversation, messages, authority });
+  if (options) result.pagination = paginationMetadata(options, await Message.countDocuments(filter));
+  return result;
 };
 
 // V11 Slice 05 / F02 / F04 / F05 / F07 / F08 / F09: Candidate Conversation
@@ -3607,10 +3678,45 @@ const getCandidateApplicationConversation = async ({
 // Supporting, Company Manager, Former Assignee, and cross-tenant actors do
 // not gain authority from Job membership or Message history (BR-09–BR-12,
 // BR-17, BR-48).
+const listRecruiterConversations = async ({ actorUser, clientCompanyId, options }) => {
+  const recruiter = await resolveRecruiterChatHistoryContext({ user: actorUser, clientCompanyId });
+  const applications = await Application.find({ assignedRecruiterCompanyMemberId: recruiter.membership._id,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES } }).select("_id jobId");
+  const conversations = [];
+  for (const row of applications) {
+    if (!await Conversation.exists({ applicationId: row._id })) continue;
+    const context = await loadApplicationConversationHistoryContext({ applicationId: row._id });
+    if (String(context.job.companyId) !== String(recruiter.companyId)) continue;
+    const authority = evaluateApplicationConversationChatAuthority({
+      conversationExists: true, applicationStatus: context.application.status,
+      isUnassigned: context.isUnassigned, companyIsOperational: context.companyIsOperational,
+      currentAssignee: context.currentAssignee, actor: { kind: "RECRUITER", userId: String(actorUser._id),
+        companyMemberId: String(recruiter.membership._id), membershipStatus: recruiter.membership.status,
+        userStatus: actorUser.status },
+    });
+    if (!authority.canRead) continue;
+    const [lastMessage, candidate] = await Promise.all([
+      Message.findOne({ conversationId: context.conversation._id }).sort({ createdAt: -1, _id: -1 }),
+      User.findById(context.application.candidateUserId).select("fullName avatarUrl"),
+    ]);
+    conversations.push({ id: String(context.conversation._id), applicationId: String(row._id),
+      jobId: String(context.job._id), job: { id: String(context.job._id), title: context.job.title, status: context.job.status },
+      candidate: toPublicCandidateSummary(candidate), mode: authority.mode,
+      authority: { canRead: authority.canRead, canSendNormal: authority.canSendNormal },
+      createdAt: context.conversation.createdAt, lastMessageAt: lastMessage?.createdAt ?? context.conversation.createdAt,
+      lastMessage: lastMessage ? toPublicConversationMessage(lastMessage) : null });
+  }
+  return projectList("conversations", conversations, options, {
+    mode: (item) => item.mode, jobId: (item) => item.jobId,
+    createdAt: (item) => item.createdAt, lastMessageAt: (item) => item.lastMessageAt,
+  }, (item) => [item.candidate?.fullName, item.job.title]);
+};
+
 const getRecruiterApplicationConversation = async ({
   actorUser,
   applicationId,
   clientCompanyId,
+  options = null,
 } = {}) => {
   const recruiterContext = await resolveRecruiterChatHistoryContext({
     user: actorUser,
@@ -3628,6 +3734,7 @@ const getRecruiterApplicationConversation = async ({
 
   return readAuthorizedConversationHistory({
     context,
+    options,
     actor: {
       kind: "RECRUITER",
       userId: actorUser._id.toString(),
@@ -6656,6 +6763,8 @@ const withdrawApplication = async ({
 };
 
 export {
+  listRecruiterConversations,
+  getPrimaryJobApplication,
   assertNoOutstandingRecruiterApplicationResponsibility,
   assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
   automaticallyUnassignApplication,

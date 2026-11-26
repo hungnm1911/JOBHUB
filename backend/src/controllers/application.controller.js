@@ -1,3 +1,8 @@
+import { parseListQuery, parseOptionalListQuery } from "../utils/list-query.js";
+import APPLICATION_STATUS from "../constants/application-status.js";
+import APPLICATION_SOURCE from "../constants/application-source.js";
+import JOB_STATUS from "../constants/job-status.js";
+
 import {
   cancelRecruiterInterviewProposal,
   confirmCandidateInterviewProposal,
@@ -13,10 +18,12 @@ import {
   getCandidateMyApplication,
   getManagedJobPipelineWorkspace,
   getRecruiterApplicationConversation,
+  listRecruiterConversations,
   getRecruiterMyApplication,
   listCandidateMyApplications,
   listManagedJobs,
   listPrimaryJobApplications,
+  getPrimaryJobApplication,
   listRecruiterMyApplications,
   previewCandidateApplicationSubmittedCv,
   previewPrimaryJobApplicationSubmittedCv,
@@ -314,10 +321,27 @@ const readClientCompanyId = (request) => {
   );
 };
 
+const parseRecruiterApplicationListQuery = (query) => parseOptionalListQuery(query, {
+  filters: {
+    status: Object.values(APPLICATION_STATUS), source: Object.values(APPLICATION_SOURCE),
+    jobId: null, assigneeCompanyMemberId: { literals: ["NONE"] },
+  },
+  sorts: ["createdAt", "updatedAt"], defaultSort: "createdAt",
+});
+
+const getPrimaryJobApplicationHandler = async (request, response, next) => {
+  try {
+    return response.status(200).json(await getPrimaryJobApplication({ actorUser: request.auth.user,
+      jobId: request.params.jobId, applicationId: request.params.applicationId,
+      clientCompanyId: readClientCompanyId(request) }));
+  } catch (error) { return next(error); }
+};
+
 const listPrimaryJobApplicationsHandler = async (request, response, next) => {
   try {
     const result = await listPrimaryJobApplications({
       actorUser: request.auth.user,
+      options: parseRecruiterApplicationListQuery(request.query),
       jobId: request.params.jobId,
       clientCompanyId: readClientCompanyId(request),
     });
@@ -332,6 +356,7 @@ const listManagedJobsHandler = async (request, response, next) => {
   try {
     const result = await listManagedJobs({
       actorUser: request.auth.user,
+      options: parseOptionalListQuery(request.query, { filters: { status: Object.values(JOB_STATUS) }, sorts: ["createdAt", "title"], defaultSort: "createdAt" }),
       clientCompanyId: readClientCompanyId(request),
     });
 
@@ -363,6 +388,7 @@ const listRecruiterMyApplicationsHandler = async (request, response, next) => {
   try {
     const result = await listRecruiterMyApplications({
       actorUser: request.auth.user,
+      options: parseRecruiterApplicationListQuery(request.query),
       clientCompanyId: readClientCompanyId(request),
     });
 
@@ -386,6 +412,17 @@ const getRecruiterMyApplicationHandler = async (request, response, next) => {
   }
 };
 
+const listRecruiterConversationsHandler = async (request, response, next) => {
+  try {
+    const query = Object.fromEntries(Object.entries(request.query).filter(([key]) => key !== "companyId"));
+    const options = parseListQuery(query, { filters: { jobId: null,
+      mode: ["ACTIVE", "READ_ONLY", "FROZEN_COMPANY"] },
+      sorts: ["createdAt", "lastMessageAt"], defaultSort: "-lastMessageAt" });
+    return response.status(200).json(await listRecruiterConversations({ actorUser: request.auth.user,
+      clientCompanyId: readClientCompanyId(request), options }));
+  } catch (error) { return next(error); }
+};
+
 const getRecruiterApplicationConversationHandler = async (
   request,
   response,
@@ -393,6 +430,7 @@ const getRecruiterApplicationConversationHandler = async (
 ) => {
   try {
     const result = await getRecruiterApplicationConversation({
+      options: parseOptionalListQuery(request.query, { sorts: ["createdAt"], defaultSort: "createdAt" }),
       actorUser: request.auth.user,
       applicationId: request.params.applicationId,
       clientCompanyId: readClientCompanyId(request),
@@ -593,6 +631,8 @@ const updateApplicationRecruitmentPipelineStatusHandler = async (
 };
 
 export {
+  listRecruiterConversationsHandler,
+  getPrimaryJobApplicationHandler,
   cancelRecruiterInterviewProposalHandler,
   confirmCandidateInterviewProposalHandler,
   createInterviewProposalHandler,

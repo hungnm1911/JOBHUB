@@ -2306,3 +2306,10 @@ Implementation
 ```
 
 Nếu implementation hoặc data design mâu thuẫn với tài liệu này, **Product Specification là authority đối với business behavior**, trừ khi Product Specification được con người cập nhật và phê duyệt lại.
+
+
+## Recruiter FE API completion approved — 2026-11-26
+
+F06: Primary Invitation list gains optional Candidate/sender-name search, evaluated-status filter, sort and pagination. Supporting and Manager still do not gain Invitation management/detail authority.
+
+HTTP fields, query controls and compatibility: [Recruiter API contract](../../../engineering/recruiter-api-contract.md). This approval implements the five read API items requested by the Product Owner; it does not approve unrelated recruitment capabilities.

@@ -243,6 +243,15 @@ This document identifies the single canonical owner for each backend responsibil
 | AI-V06 R2 — Stateless Optimization Proposal signing (F03; BR-AI-03/08; Data §6.7) | `backend/src/services/candidate-cv-optimization-proposal.service.js` (`issueOptimizationProposal`, `verifyOptimizationProposal`, `buildSourceRevision`: HMAC-SHA256 over canonical JSON of `{version, candidateUserId, jobId, candidateCvId, metadata, proposedContent, sourceRevision{sourceType, updatedAt, contentHash = SHA-256 of the canonical persisted CV snapshot; incomplete snapshots are refused, never signed}, issuedAt, expiresAt}`; key derived from `config.optimizationProposal.signingSecret` (own required env `AI_OPTIMIZATION_PROPOSAL_SECRET`, ≥ 32 chars, must differ from the JWT secrets), TTL `config.optimizationProposal.ttlMs` = 60 min); issued only by `previewOptimizedCandidateCvForJob`, whose response is `200 { baseline, proposedContent, proposal: { payload, signature } }` | Preview issues; the later Commit slice verifies identity, expiry, signature, and Source revision against the signed payload | Persisting Proposals or signatures, CandidateCV schema fields, reusing the JWT secrets, a version key on CandidateCV, signing `baseline`, or Commit/frontend (not in R2) |
 | AI-V06 R3 — Optimization Commit API (F03; BR-AI-02/03/08/10; Data §6.7/§9.1/§11.2) | `backend/src/services/candidate-cv-optimization.service.js` (`commitOptimizedCandidateCvProposalForJob`: `verifyOptimizationProposal` → `loadPublicJobDiscoverySource` Job visibility → `loadOwnActiveCandidateCv({lean:true})` → `buildSourceRevision` compared with the signed revision, mismatch 409, and an owned Source archived after Preview also 409 while missing/foreign Sources stay 404 → content-persistable check against `normalizeGeneratedContentForPersistence` and ISO dates → V7 `createGeneratedDraftCandidateCv` with the signed `metadata` and `proposedContent`); `backend/src/routes/candidate.routes.js` (`POST /api/candidate/jobs/:jobId/optimize-cv/commit`), `validate-optimize-candidate-cv.js` (`validateCommitOptimizedCandidateCv`: `{ proposal: { payload, signature } }`) and `candidate-cv-optimization.controller.js` (`201 { cv }`, private no-store) | Authenticated Candidate carrying the Proposal returned by Preview; invalid/expired/tampered 400, identity mismatch 403, unavailable Job/Source 404, Source changed 409 | Calling AI Kit or reading/normalizing the Uploaded PDF; merging with baseline or using `baseline`; a second Source revision, signature, Job-visibility, or CandidateCV writer; persisting Proposals; server-side idempotency (repeat Commit may create another Draft); frontend |
 
+## Recruiter FE API completion ownership — 2026-11-26
+
+| Responsibility | Canonical owner | Allowed consumers | Forbidden duplication |
+| --- | --- | --- | --- |
+| Job-scoped Supporting/Assignee choices and minimal team summaries | `backend/src/services/job.service.js` (`listJobRecruiterOptions`, `getJobRecruitmentTeam`, private summary projection) | Job controllers after authenticated Company Staff authorization | Company-wide personnel-management access, separate directory model, new eligibility source |
+| Primary Application detail | `backend/src/services/application.service.js` (`getPrimaryJobApplication`) | Job routes/controller after Recruiter authorization | My Applications authority expansion, Chat authority from Primary relation |
+| Optional list parsing and pure projection mechanics | `backend/src/utils/list-query.js` (`parseOptionalListQuery`, `projectList`) | Resource controllers parse; existing services supply business selectors after authorization | Business authorization, model access or fixed business enums in utilities |
+
+
 ## Consumption rules
 
 - Consumers import the canonical owner; they do not reconstruct its state or configuration.
@@ -299,3 +308,15 @@ Until those decisions are made, code must not establish a second owner or infer 
 ### AI-V06 Optimize/Preview/Commit flow: accepted, legacy endpoint removed
 
 The AI-V06 Product Specification F03/F04 and Data Contract §6.7 define Optimize → Preview Diff → Commit with a stateless, server-signed Optimization Proposal. Backend Preview (R1), Proposal signing (R2) and Commit (R3) are implemented and the phase was closed as ACCEPTED on 2026-11-24 (Product Owner decision). The legacy single-step `/optimize-cv` (`createOptimizedCandidateCvDraftForJob`) was removed in F4-B after Frontend migrated; only Commit creates the `GENERATED/DRAFT`. Rich Text semantics: a section returned as `null` keeps its baseline HTML; a replaced section does not inherit the old HTML; the Source CV is never changed. Accepted limits: Commit is not idempotent (a network failure after Commit may leave an unknown outcome), and Uploaded PDF normalization is best-effort.
+
+
+## Recruiter Inbox and list follow-up — 2026-11-26
+
+- `application.service.js` owns `listRecruiterConversations`, reusing the canonical
+  chat-authority evaluator and Chat-history context; history paging remains in
+  `readAuthorizedConversationHistory`. No second participant/authority model.
+- Existing resource services own eligibility-first database pagination and
+  page-only heavy projection hydration; no repository layer or schema added.
+- `error-handler.js` remains the sole safe stack-location extraction owner;
+  accepts spaced/Unicode/parenthesized paths while excluding messages/function
+  labels and query-bearing frames. Logging/regression tests protect this.

@@ -10,6 +10,7 @@ import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CompanyMember from "../models/company-member.model.js";
 import Job from "../models/job.model.js";
 import JobInvitation from "../models/job-invitation.model.js";
+import { projectList } from "../utils/list-query.js";
 import AppError from "../utils/app-error.js";
 import { loadCurrentSearchEligibleCandidateCvById } from "./candidate-cv.service.js";
 import {
@@ -1522,6 +1523,7 @@ const listPrimaryJobInvitations = async ({
   clientCompanyId,
   jobId,
   now = new Date(),
+  options = null,
 } = {}) => {
   const { job } = await loadCurrentPrimaryManagedJob({
     recruiterUser,
@@ -1529,13 +1531,20 @@ const listPrimaryJobInvitations = async ({
     jobId,
   });
 
-  const invitations = await JobInvitation.find({
-    jobId: job._id,
-  }).sort({ createdAt: -1, _id: -1 });
-
-  return {
-    invitations: await hydratePrimaryJobInvitationViews(invitations, { now }),
-  };
+  const query = JobInvitation.find({ jobId: job._id }).sort({ createdAt: -1, _id: -1 });
+  if (!options) return { invitations: await hydratePrimaryJobInvitationViews(await query, { now }) };
+  const metadata = await hydrateJobInvitationViews(await query.select("-invitedCvSnapshot"),
+    (invitation, evaluation, resources) => ({ id: String(invitation._id), status: evaluation.currentStatus,
+      createdAt: invitation.createdAt, sentAt: invitation.sentAt,
+      candidate: toPrimaryVisibleCandidate(resources.candidateUser),
+      sender: toCandidateVisibleSender({ membership: resources.senderMembership, user: resources.senderUser }) }), { now });
+  const page = projectList("invitations", metadata, options, {
+    status: (item) => item.status, createdAt: (item) => item.createdAt, sentAt: (item) => item.sentAt,
+  }, (item) => [item.candidate?.fullName, item.sender?.fullName]);
+  const docs = await JobInvitation.find({ jobId: job._id, _id: { $in: page.invitations.map((item) => item.id) } });
+  const byId = new Map(docs.map((doc) => [String(doc._id), doc]));
+  return { invitations: await hydratePrimaryJobInvitationViews(page.invitations.map((item) => byId.get(item.id)).filter(Boolean), { now }),
+    pagination: page.pagination };
 };
 
 const getPrimaryJobInvitation = async ({

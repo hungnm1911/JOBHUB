@@ -482,13 +482,11 @@ tham số lặp lại hoặc scope không hợp lệ trả `400` theo error cont
 `{ "error": { "message": "Invalid scope query", "details": { "field": "scope" } } }`
 (môi trường ngoài production có thể kèm error stack).
 
-Scoped reads chỉ nhận `scope`, `page`, `limit` và optional `companyId` làm tenant
+Scoped reads hỗ trợ `scope`, `q`, `status`, `sort`, `page`, `limit` và optional `companyId` làm tenant
 guard. `companyId` phải khớp Company được resolve từ caller; giá trị khác bị
-`403`, không thay tenant. Endpoint này trước đây không có search/status/sort
-filter; phần bổ sung không tạo các filter đó. Tham số khác trên scoped reads
-trả `400`. Không có `scope`, các query search/status/sort trước đây bị bỏ qua
-vẫn giữ hành vi cũ. `page`/`limit` nếu gửi phải hợp lệ, nhưng không phân trang
-khi thiếu `scope`.
+`403`, không thay tenant. API completion ngày 2026-11-26 bổ sung title search,
+persisted-status filter và sort; query controls bật phân trang cả khi thiếu scope.
+Không gửi controls vẫn giữ danh sách V5 không phân trang.
 
 Ví dụ kết quả rỗng cho bốn scope (Job có dữ liệu vẫn dùng nguyên DTO hiện có):
 
@@ -500,11 +498,12 @@ Ví dụ kết quả rỗng cho bốn scope (Job có dữ liệu vẫn dùng ngu
 }
 ```
 
-Sort cố định `createdAt ASC, _id ASC`. Database lọc/count/skip/limit trước khi
+Sort mặc định `createdAt ASC, _id ASC`; có thể chọn `createdAt`, `title`,
+`applicationDeadline` (prefix `-` để giảm dần). Database lọc/count/skip/limit trước khi
 serialize DTO; `total` là toàn bộ số Job khớp scope, `totalPages=ceil(total/limit)`.
 Trang vượt phạm vi trả `jobs: []` cùng metadata của tổng thực tế.
 
-Không có `scope`, giữ payload `{ message, jobs }`, toàn bộ kết quả và thứ tự V5:
+Không gửi query controls, giữ payload `{ message, jobs }`, toàn bộ kết quả và thứ tự V5:
 Recruiter thấy current Primary mọi trạng thái hoặc Company `PUBLISHED`;
 Manager thấy Company Jobs ở `PENDING_APPROVAL`, `PUBLISHED`, `CLOSED`, `EXPIRED`.
 
@@ -518,8 +517,8 @@ Policy riêng của `/:jobId/team` giữ nguyên, kể cả hạn chế đọc t
 trên Job đã kết thúc. Scope nội bộ dùng persisted status, không đổi public Job
 Discovery hay Guest/Candidate/Platform Admin policy.
 
-`GET /api/jobs/managed` giữ nguyên: chỉ Primary, không phân trang, trả
-`{ message, managedJobs, currentWorkloadByAssignee }`; mỗi item gồm `job`,
+`GET /api/jobs/managed` chỉ dành cho Primary. Không gửi query controls thì
+không phân trang, trả `{ managedJobs, currentWorkloadByAssignee }`; mỗi item gồm `job`,
 `supportingRecruiterCount`, `applicationCount`, `unassignedCount`,
 `countsByStatus`, `currentWorkloadByAssignee`. Đây là projection V10 dành cho
 pipeline, khác danh sách Job thông thường ở `/api/jobs`.
@@ -535,6 +534,7 @@ và đọc pagination khi xây dựng màn hình; không có thay đổi Fronten
 | `GET` | `/api/jobs` | Company Staff | Danh sách Job nội bộ |
 | `POST` | `/api/jobs` | Recruiter | Tạo Job `DRAFT` |
 | `GET` | `/api/jobs/managed` | Recruiter | Job Recruiter đang quản lý |
+| `GET` | `/api/jobs/my-conversations` | Recruiter có quyền lịch sử chat | Inbox phân trang theo quyền đọc hiện tại; hỗ trợ Company freeze |
 | `GET` | `/api/jobs/my-applications` | Recruiter | Application được phân công cho mình |
 | `GET` | `/api/jobs/my-applications/:applicationId` | Recruiter | Chi tiết Application được phân công |
 | `GET` | `/api/jobs/my-applications/:applicationId/submitted-cv/preview` | Recruiter | Preview submitted CV |
@@ -774,3 +774,7 @@ Khi tài liệu mâu thuẫn, không tự suy diễn: Product Specification quy�
 ## Giấy phép
 
 Dự án sử dụng giấy phép MIT theo khai báo trong `package.json`.
+
+## Recruiter FE API completion
+
+Xem [contract đầy đủ](../docs/engineering/recruiter-api-contract.md) cho hai API lựa chọn Recruiter, thông tin hiển thị team, Primary Application detail và query controls của các danh sách.

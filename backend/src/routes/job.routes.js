@@ -13,6 +13,7 @@ import {
   deletePrePublicationJobHandler,
   getInternalJobHandler,
   getJobRecruitmentTeamHandler,
+  listJobRecruiterOptionsHandler,
   addSupportingRecruiterHandler,
   listInternalJobsHandler,
   reassignPrimaryRecruiterHandler,
@@ -31,9 +32,11 @@ import {
   forceReassignApplicationHandler,
   getManagedJobPipelineWorkspaceHandler,
   getRecruiterApplicationConversationHandler,
+  listRecruiterConversationsHandler,
   getRecruiterMyApplicationHandler,
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
+  getPrimaryJobApplicationHandler,
   listRecruiterMyApplicationsHandler,
   previewPrimaryJobApplicationSubmittedCvHandler,
   previewRecruiterMyApplicationSubmittedCvHandler,
@@ -82,6 +85,9 @@ router.get(
   authorizeRecruiterBusinessAccess,
   listManagedJobsHandler,
 );
+
+router.get("/my-conversations", authenticateAccess,
+  authorizeRecruiterChatHistoryAccess, listRecruiterConversationsHandler);
 
 router.get(
   "/my-applications",
@@ -161,6 +167,9 @@ router.get(
   authorizeCompanyStaffBusinessAccess,
   listPrimaryJobApplicationsHandler,
 );
+
+router.get("/:jobId/applications/:applicationId", authenticateAccess,
+  authorizeRecruiterBusinessAccess, getPrimaryJobApplicationHandler);
 
 router.get(
   "/:jobId/applications/:applicationId/submitted-cv/preview",
@@ -266,6 +275,11 @@ router.post(
   authorizeRecruiterBusinessAccess,
   revokePrimaryJobInvitationHandler,
 );
+
+router.get("/:jobId/team/supporting-options", authenticateAccess,
+  authorizeCompanyStaffBusinessAccess, listJobRecruiterOptionsHandler);
+router.get("/:jobId/assignment-options", authenticateAccess,
+  authorizeCompanyStaffBusinessAccess, listJobRecruiterOptionsHandler);
 
 router.get(
   "/:jobId/team",

@@ -2,6 +2,13 @@
 
 ## Current project state
 
+2026-11-26 Recruiter Inbox read extension is implemented and verified: independent
+Inbox over authorized existing Application Conversations, frozen/terminal history,
+and opt-in message-content search/pagination. Calendar remains within Application
+per the user's decision. No new participants, receipts, unread-message persistence,
+Chat mutation or Manager/non-assigned Primary authority. HTTP and list strategy:
+[Recruiter API contract](../../engineering/recruiter-api-contract.md).
+
 **V11 — Conversation và Chat thuộc Application** is `COMPLETED AND VERIFIED`.
 Slices 01–06 plus Slice 07 Final Acceptance & Regression Closure passed across
 `F01`–`F10`, `BR-01`–`BR-55`, and `TX-01`–`TX-08`. Canonical Product/Data
@@ -198,6 +205,8 @@ later versions), not as remaining V11 business slices.
   Vitest: 113 files / 1,059 tests).
 
 ## Verification status
+
+- 2026-11-26: Inbox, history pagination, freeze/read-only and Unassign revocation checks passed along with the full Backend gate. Cross-version verification counts and the resolved logging/temporary-port issues are recorded in [Platform and operations](platform-and-operations.md#verification-status). No Frontend or live-provider verification is claimed.
 
 - V11 Final Acceptance & Regression Closure: after closing the Send guard-document timestamp side effect, complementary Send ↔ eligibility-loss keep ordering, and actual Send ↔ Assign-again ordering, the official `cd backend && npm run verify:agent` gate passed across F01–F10 / BR-01–BR-55 / TX-01–TX-08 (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 119 files / 1,140 tests). The focused V11 baseline passed 8 files / 104 tests, including `test/application/v11-acceptance.test.js` (20 tests) and `test/application/v11-normal-message-send.test.js` (15 tests). The remediations add no new Chat capability, field, collection, index, or migration.
 

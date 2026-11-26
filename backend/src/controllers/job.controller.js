@@ -1,6 +1,6 @@
 import JOB_LIST_SCOPE from "../constants/job-list-scope.js";
-import AppError from "../utils/app-error.js";
-import { parseListQuery } from "../utils/list-query.js";
+import JOB_STATUS from "../constants/job-status.js";
+import { parseListQuery, parseOptionalListQuery } from "../utils/list-query.js";
 import {
   approveAndPublishJob,
   addSupportingRecruiter,
@@ -10,6 +10,7 @@ import {
   getInternalJob,
   getJobRecruitmentTeam,
   listInternalJobs,
+  listJobRecruiterOptions,
   reassignPrimaryRecruiter,
   rejectPendingJob,
   removeSupportingRecruiter,
@@ -64,24 +65,9 @@ const updateDraftJobHandler = async (request, response, next) => {
 
 const listInternalJobsHandler = async (request, response, next) => {
   try {
-    const { scope, page, limit } = request.query;
-    // Legacy reads did not consume search/status/sort parameters. Keep that
-    // contract; scoped reads accept only the new parameters and tenant guard.
-    if (scope !== undefined) {
-      for (const key of Object.keys(request.query)) {
-        if (!["scope", "page", "limit", "companyId"].includes(key)) {
-          throw new AppError(400, `Invalid ${key} query`, { field: key });
-        }
-      }
-    }
-    const options = parseListQuery({
-      ...(scope !== undefined ? { scope } : {}),
-      ...(page !== undefined ? { page } : {}),
-      ...(limit !== undefined ? { limit } : {}),
-    }, {
-      filters: { scope: Object.values(JOB_LIST_SCOPE) },
-      defaultSort: "createdAt",
-    });
+    const config = { filters: { scope: Object.values(JOB_LIST_SCOPE), status: Object.values(JOB_STATUS) },
+      sorts: ["createdAt", "title", "applicationDeadline"], defaultSort: "createdAt" };
+    const options = parseOptionalListQuery(request.query, config) ?? {};
     const result = await listInternalJobs({
       actorUser: request.auth.user,
       clientCompanyId: readClientCompanyId(request),
@@ -219,6 +205,17 @@ const closePublishedJobHandler = async (request, response, next) => {
   }
 };
 
+const listJobRecruiterOptionsHandler = async (request, response, next) => {
+  try {
+    const options = parseListQuery(Object.fromEntries(Object.entries(request.query).filter(([key]) => key !== "companyId")),
+      { sorts: ["fullName"], defaultSort: "fullName" });
+    const result = await listJobRecruiterOptions({ actorUser: request.auth.user,
+      jobId: request.params.jobId, clientCompanyId: readClientCompanyId(request), options,
+      purpose: request.path.endsWith("assignment-options") ? "assignment" : "supporting" });
+    return response.status(200).json(result);
+  } catch (error) { return next(error); }
+};
+
 const getJobRecruitmentTeamHandler = async (request, response, next) => {
   try {
     const team = await getJobRecruitmentTeam({
@@ -293,6 +290,7 @@ const replacePrimaryRecruiterHandler = async (request, response, next) => {
 };
 
 export {
+  listJobRecruiterOptionsHandler,
   approveAndPublishJobHandler,
   closePublishedJobHandler,
   createDraftJobHandler,

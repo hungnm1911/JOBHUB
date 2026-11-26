@@ -1,5 +1,7 @@
+import { parseOptionalListQuery } from "../utils/list-query.js";
+import AppError from "../utils/app-error.js";
 import {
-  listCandidateSearchEligibleCandidateCvs,
+  listCandidateSearchPage,
   previewSearchEligibleCandidateCv,
 } from "../services/candidate-cv.service.js";
 import { parseLocationFilterQuery } from "../utils/location-filter-query.js";
@@ -47,7 +49,11 @@ const listCandidateSearchEligibleCandidateCvsHandler = async (
     const employmentTypes = normalizeQueryArray(request.query?.employmentTypes);
     const workModes = normalizeQueryArray(request.query?.workModes);
 
-    const cvs = await listCandidateSearchEligibleCandidateCvs({
+    if (request.query.q !== undefined) throw new AppError(400, "Use keyword to search skill metadata", { field: "q" });
+    const options = parseOptionalListQuery(request.query, { sorts: ["updatedAt"], defaultSort: "-updatedAt" },
+      ["keyword", "categoryIds", "experienceLevelIds", "skillTags", "preferredLocations", "employmentTypes", "workModes"]);
+    const result = await listCandidateSearchPage({
+      options,
       actorUser: request.auth.user,
       filters: {
         keyword: request.query?.keyword,
@@ -60,9 +66,7 @@ const listCandidateSearchEligibleCandidateCvsHandler = async (
       },
     });
 
-    return response.status(200).json({
-      cvs,
-    });
+    return response.status(200).json(result);
   } catch (error) {
     return next(error);
   }

@@ -2,6 +2,8 @@
 
 ## Current project state
 
+2026-11-26 Recruiter FE API read extension: Internal Job title search, persisted-status filtering, sorting and opt-in pagination are implemented. Focused verification and the common Backend gate now pass after the logging fix and list-read follow-up. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
+
 V5 Slices 01–12 and the recorded acceptance corrections are implemented;
 Final Acceptance / regression closure passed across F01–F12.
 
@@ -46,6 +48,8 @@ Final Acceptance / regression closure passed across F01–F12.
 - **Prepared; verified:** V5 implementation readiness — the approved Product/Data contracts were established as repository sources of truth; roadmap and project status then marked V5 `READY FOR IMPLEMENTATION`; the existing MongoDB replica-set test harness supported the persistence and transaction invariants needed by Slice 01; and the backend verification gate accepted the then-current pre-V5 baseline without weakening architecture or regression checks. No V5 Fxx behavior was implemented by that readiness step. Slice 01 was required to combine Job foundation/create DRAFT with the BR-41 Recruiter lock/terminate responsibility guard.
 
 ## Verification status
+
+- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate now passes after the logging fix and list-read follow-up. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
 
 - Focused automated tests cover `test/job/v5-job-create-draft.test.js`, `test/job/v5-recruiter-responsibility-guard.test.js`, `test/job/v5-job-edit-draft.test.js`, `test/job/v5-job-internal-visibility.test.js`, `test/job/v5-job-submit-draft.test.js`, `test/job/v5-job-manager-pending-review.test.js`, `test/job/v5-job-approve-publish.test.js`, `test/job/v5-job-reject-pending.test.js`, `test/job/v5-job-manual-delete.test.js`, `test/job/v5-job-reassign-primary.test.js`, `test/job/v5-job-manual-close.test.js`, `test/job/v5-job-effective-expiration-public-eligibility.test.js`, and `test/job/v5-job-draft-privacy-delete-authority.test.js`.
 

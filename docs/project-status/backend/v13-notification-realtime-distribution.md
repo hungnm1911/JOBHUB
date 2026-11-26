@@ -2,6 +2,8 @@
 
 ## Current project state
 
+2026-11-26 Recruiter FE API read extension: Optional recipient inbox content search, type/read-state filters, sorting and pagination are implemented; global unread count is preserved. Focused verification and the common Backend gate now pass after the logging fix and list-read follow-up. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
+
 **V13 — Notification và phân phối realtime** is `COMPLETED AND VERIFIED`:
 Slices 01–12 plus Slice 13 Final Acceptance passed across `F01`–`F11`,
 `BR-01`–`BR-50`, and `TX-01`. The final independent architecture review found
@@ -207,6 +209,8 @@ Focused coverage in
 `test/notification/v13-slice12-offline-reconnect-resync.test.js` (6 tests).
 
 ## Verification status
+
+- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate now passes after the logging fix and list-read follow-up. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
 
 - V13 Slice 13 Final Acceptance: independent architecture review of F01–F11,
   BR-01–BR-50, and TX-01 found no Critical finding; the V12-closure High gate
