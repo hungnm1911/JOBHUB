@@ -32,6 +32,7 @@ import {
   emitMessageToRecipients,
 } from "../sockets/index.js";
 import INTERVIEW_SCHEDULE_STATUS from "../constants/interview-schedule-status.js";
+import { projectList } from "../utils/list-query.js";
 import AppError from "../utils/app-error.js";
 import {
   APPLICATION_EXISTS_MESSAGE,
@@ -570,10 +571,28 @@ const resolvePrimaryManagedJobContext = async ({
   return { context, job };
 };
 
+const projectApplicationList = (applications, options) => projectList("applications", applications, options, {
+  status: (item) => item.status, source: (item) => item.source,
+  assigneeCompanyMemberId: (item) => item.assignedRecruiterCompanyMemberId ?? "NONE",
+  jobId: (item) => item.jobId, createdAt: (item) => item.createdAt,
+  updatedAt: (item) => item.updatedAt,
+}, (item) => [item.candidate?.fullName, item.job?.title]);
+
+const getPrimaryJobApplication = async ({ actorUser, jobId, applicationId, clientCompanyId }) => {
+  const { job } = await resolvePrimaryManagedJobContext({ actorUser, jobId, clientCompanyId });
+  if (!mongoose.isValidObjectId(applicationId)) throw new AppError(404, "Application not found", { field: "applicationId" });
+  const application = await Application.findOne({ _id: applicationId, jobId: job._id,
+    source: { $in: LIFECYCLE_COMPATIBLE_APPLICATION_SOURCES } });
+  if (!application) throw new AppError(404, "Application not found", { field: "applicationId" });
+  const [view] = await hydratePrimaryJobApplicationViews([application]);
+  return { job: toPublicJob(job), application: view };
+};
+
 const listPrimaryJobApplications = async ({
   actorUser,
   jobId,
   clientCompanyId,
+  options = null,
 } = {}) => {
   if (!mongoose.isValidObjectId(jobId)) {
     throw new AppError(404, "Job not found", {
@@ -616,14 +635,14 @@ const listPrimaryJobApplications = async ({
 
   return {
     job: toPublicJob(job),
-    applications: applicationViews,
+    ...projectApplicationList(applicationViews, options),
   };
 };
 
 // F06 / F10 / Slice 05: Managed Jobs + Pipeline Workspace + Current Workload.
 // Read-only derived views; never persist ManagedJob/Kanban/workload counters.
 // Non-terminal Unassigned Applications remain in their Recruitment Status group.
-const listManagedJobs = async ({ actorUser, clientCompanyId } = {}) => {
+const listManagedJobs = async ({ actorUser, clientCompanyId, options = null } = {}) => {
   const context = await resolveRecruiterBusinessContext({
     user: actorUser,
     clientCompanyId,
@@ -680,7 +699,10 @@ const listManagedJobs = async ({ actorUser, clientCompanyId } = {}) => {
   });
 
   return {
-    managedJobs: managedJobProjections,
+    ...projectList("managedJobs", managedJobProjections, options, {
+      status: (item) => item.job.status, createdAt: (item) => item.job.createdAt,
+      title: (item) => item.job.title,
+    }, (item) => [item.job.title], (item) => item.job.id),
     // BR-33 / BR-40: scoped to actor Managed Jobs only — never company-global.
     currentWorkloadByAssignee: mergeWorkloadByAssignee(
       managedJobProjections.map((item) => item.currentWorkloadByAssignee),
@@ -777,6 +799,7 @@ const loadRecruiterMyApplicationsForActor = async ({
 const listRecruiterMyApplications = async ({
   actorUser,
   clientCompanyId,
+  options = null,
 } = {}) => {
   const context = await resolveRecruiterBusinessContext({
     user: actorUser,
@@ -794,7 +817,7 @@ const listRecruiterMyApplications = async ({
   ).length;
 
   return {
-    applications,
+    ...projectApplicationList(applications, options),
     currentWorkloadCount,
   };
 };
@@ -6656,6 +6679,7 @@ const withdrawApplication = async ({
 };
 
 export {
+  getPrimaryJobApplication,
   assertNoOutstandingRecruiterApplicationResponsibility,
   assertNoOutstandingRecruiterApplicationResponsibilityOnJob,
   automaticallyUnassignApplication,

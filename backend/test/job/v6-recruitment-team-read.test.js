@@ -287,6 +287,10 @@ describe("V6 Slice 01 — Recruitment Team persistence + read (F01)", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.team).toEqual({
+        primaryRecruiter: { companyMemberId: recruiter.membership.id, fullName: recruiter.user.fullName,
+          jobTitle: recruiter.membership.jobTitle, avatarUrl: null },
+        supportingRecruiters: [{ companyMemberId: supporting.membership.id, fullName: supporting.user.fullName,
+          jobTitle: supporting.membership.jobTitle, avatarUrl: null }],
         jobId: job._id.toString(),
         primaryRecruiterCompanyMemberId: recruiter.membership._id.toString(),
         supportingRecruiterCompanyMemberIds: [

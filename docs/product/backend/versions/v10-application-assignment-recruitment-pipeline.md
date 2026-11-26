@@ -2472,3 +2472,10 @@ Tài liệu này không quy định:
 Các quyết định kỹ thuật phải phục vụ các business truth đã định nghĩa trong tài liệu này.
 
 Nếu data design hoặc implementation mâu thuẫn với tài liệu này, **Product Specification là authority đối với business behavior**, trừ khi Product Specification được con người cập nhật và phê duyệt lại.
+
+
+## Recruiter FE API completion approved — 2026-11-26
+
+F01/F02/F06/F07: add current-team Assignee choices for Primary/Company Manager on PUBLISHED/CLOSED/EXPIRED Jobs; add Primary-only Application detail matching existing Job read projection. Managed Jobs and Job/My Application lists gain optional search/filter/sort/pagination; full-scope workload statistics and mutation authority remain unchanged.
+
+HTTP fields, query controls and compatibility: [Recruiter API contract](../../../engineering/recruiter-api-contract.md). This approval implements the five read API items requested by the Product Owner; it does not approve unrelated recruitment capabilities.

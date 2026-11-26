@@ -1,13 +1,16 @@
+import { parseOptionalListQuery } from "../utils/list-query.js";
+import NOTIFICATION_TYPE from "../constants/notification-type.js";
 import {
   countUnreadNotificationsForRecipient,
   findNotificationForRecipient,
-  listNotificationsForRecipient,
+  listNotificationPageForRecipient,
   openNotificationForRecipient,
 } from "../services/notification.service.js";
 
 const listOwnNotificationsHandler = async (request, response, next) => {
   try {
-    const notifications = await listNotificationsForRecipient({
+    const result = await listNotificationPageForRecipient({
+      options: parseOptionalListQuery(request.query, { filters: { type: Object.values(NOTIFICATION_TYPE), readState: ["READ", "UNREAD"] }, defaultSort: "-createdAt" }),
       recipientUserId: request.auth.user._id,
     });
     const unreadCount = await countUnreadNotificationsForRecipient({
@@ -15,7 +18,7 @@ const listOwnNotificationsHandler = async (request, response, next) => {
     });
 
     return response.status(200).json({
-      notifications,
+      ...result,
       unreadCount,
     });
   } catch (error) {

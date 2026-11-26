@@ -2,6 +2,8 @@
 
 ## Current project state
 
+2026-11-26 Recruiter FE API read extension: Optional eligible-CV pagination and updatedAt sorting are implemented; existing skill keyword/metadata filters and visibility gates remain. Focused verification passed; common-gate acceptance remains pending because of pre-existing logging tests failing on paths containing spaces. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
+
 **V14 — Candidate Search trên CV PUBLIC** is `COMPLETED AND VERIFIED`.
 Its approved canonical Product/Data contracts are tracked at
 `docs/product/backend/versions/v14-candidate-search-public-cv.md` and
@@ -156,6 +158,8 @@ Keyword/full-text search, Saved Search, Recruiter Download, Direct Message,
 and Job Invitation stay outside V14 by product boundary.
 
 ## Verification status
+
+- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate was executed but is not green due to the independently reproduced baseline logging failure; no full-gate acceptance is claimed. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
 
 - V14 Slice 07 Dynamic Revocation + Read-only Acceptance Closure: focused
   Slice 07 coverage passed 11 tests in

@@ -1574,3 +1574,10 @@ Các quyết định về cách hiện thực không được phép:
 * hoặc đưa chức năng đã defer vào V14.
 
 Nếu thiết kế dữ liệu hoặc implementation mâu thuẫn với tài liệu này, **Product Specification này là authority đối với business behavior**, trừ khi Product Specification được con người cập nhật và phê duyệt lại.
+
+
+## Recruiter FE API completion approved — 2026-11-26
+
+F02/F04: add optional pagination and updatedAt ascending/descending sorting after current CV eligibility and existing metadata/skill filters. No Candidate-name search, q search, download or new Candidate authority.
+
+HTTP fields, query controls and compatibility: [Recruiter API contract](../../../engineering/recruiter-api-contract.md). This approval implements the five read API items requested by the Product Owner; it does not approve unrelated recruitment capabilities.

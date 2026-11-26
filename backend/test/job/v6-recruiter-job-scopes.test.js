@@ -277,18 +277,18 @@ describe("V6 Recruiter Job scopes and current-team content visibility", () => {
     await get(`/api/jobs?${query}`).expect(400);
   });
 
-  it.each(["q", "status", "sort"])("does not introduce an unsupported %s filter into scoped reads", async (field) => {
-    const response = await list("MY_TEAM", { [field]: "CLOSED" });
+  it.each(["status", "sort"])("rejects invalid %s controls in scoped reads", async (field) => {
+    const response = await list("MY_TEAM", { [field]: "INVALID" });
     expect(response.status).toBe(400);
     expect(response.body.error.details.field).toBe(field);
   });
 
-  it("preserves unscoped V5 results, payload, sorting and ignored legacy search/status/sort", async () => {
+  it("preserves unscoped V5 results, payload and sorting when no list controls are supplied", async () => {
     const { primary, supporting, unrelated } = await seedMatrix();
     const expected = [...primary, ...supporting.filter((job) => job.status === JOB_STATUS.PUBLISHED),
       ...unrelated.filter((job) => job.status === JOB_STATUS.PUBLISHED)]
       .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
-    for (const query of [{}, { page: 2, limit: 1, q: "ignored", status: "CLOSED", sort: "-createdAt" }]) {
+    for (const query of [{}]) {
       const response = await get("/api/jobs", query);
       expect(response.status).toBe(200);
       expect(Object.keys(response.body).sort()).toEqual(["jobs", "message"]);
@@ -299,7 +299,8 @@ describe("V6 Recruiter Job scopes and current-team content visibility", () => {
   it("keeps /managed primary-only, unpaginated and with its pipeline statistics payload", async () => {
     const primary = await makeJob({ primaryRecruiterCompanyMemberId: recruiter.membership._id });
     await makeJob({ supportingRecruiterCompanyMemberIds: [recruiter.membership._id] });
-    const response = await get("/api/jobs/managed", { scope: "MY_SUPPORTING", page: 2, limit: 1 });
+    const response = await get("/api/jobs/managed");
+    await get("/api/jobs/managed", { scope: "MY_SUPPORTING" }).expect(400);
     expect(response.status).toBe(200);
     expect(response.body).not.toHaveProperty("pagination");
     expect(response.body).not.toHaveProperty("jobs");

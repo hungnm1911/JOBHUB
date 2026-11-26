@@ -13,6 +13,7 @@ import {
   deletePrePublicationJobHandler,
   getInternalJobHandler,
   getJobRecruitmentTeamHandler,
+  listJobRecruiterOptionsHandler,
   addSupportingRecruiterHandler,
   listInternalJobsHandler,
   reassignPrimaryRecruiterHandler,
@@ -34,6 +35,7 @@ import {
   getRecruiterMyApplicationHandler,
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
+  getPrimaryJobApplicationHandler,
   listRecruiterMyApplicationsHandler,
   previewPrimaryJobApplicationSubmittedCvHandler,
   previewRecruiterMyApplicationSubmittedCvHandler,
@@ -162,6 +164,9 @@ router.get(
   listPrimaryJobApplicationsHandler,
 );
 
+router.get("/:jobId/applications/:applicationId", authenticateAccess,
+  authorizeRecruiterBusinessAccess, getPrimaryJobApplicationHandler);
+
 router.get(
   "/:jobId/applications/:applicationId/submitted-cv/preview",
   authenticateAccess,
@@ -266,6 +271,11 @@ router.post(
   authorizeRecruiterBusinessAccess,
   revokePrimaryJobInvitationHandler,
 );
+
+router.get("/:jobId/team/supporting-options", authenticateAccess,
+  authorizeCompanyStaffBusinessAccess, listJobRecruiterOptionsHandler);
+router.get("/:jobId/assignment-options", authenticateAccess,
+  authorizeCompanyStaffBusinessAccess, listJobRecruiterOptionsHandler);
 
 router.get(
   "/:jobId/team",

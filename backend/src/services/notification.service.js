@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import NotificationEvent from "../models/notification-event.model.js";
 import Notification from "../models/notification.model.js";
 import { emitNotificationToRecipient } from "../sockets/index.js";
+import { projectList } from "../utils/list-query.js";
 import AppError from "../utils/app-error.js";
 import logger from "../utils/logger.js";
 
@@ -51,6 +52,14 @@ const findNotificationForRecipient = async ({
 
 const listNotificationsForRecipient = async ({ recipientUserId }) => {
   return Notification.find({ recipientUserId }).sort({ createdAt: -1, _id: -1 });
+};
+
+const listNotificationPageForRecipient = async ({ recipientUserId, options }) => {
+  const notifications = await listNotificationsForRecipient({ recipientUserId });
+  return projectList("notifications", notifications, options, {
+    type: (item) => item.type, readState: (item) => item.readAt == null ? "UNREAD" : "READ",
+    createdAt: (item) => item.createdAt,
+  }, (item) => [item.title, item.content]);
 };
 
 const countUnreadNotificationsForRecipient = async ({ recipientUserId }) => {
@@ -246,6 +255,7 @@ const recoverPendingNotificationEvents = async ({
 };
 
 export {
+  listNotificationPageForRecipient,
   DEFAULT_RECOVERY_BATCH_SIZE,
   countUnreadNotificationsForRecipient,
   createNotificationEvent,

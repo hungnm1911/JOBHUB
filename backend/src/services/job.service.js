@@ -35,9 +35,10 @@ import {
 import { validateLocation } from "./location.service.js";
 import { synchronizeJobEmbeddingText } from "./job-embedding.service.js";
 import { normalizeRichText } from "./rich-text.service.js";
+import { escapeRegex } from "../utils/escape-regex.js";
 import AppError from "../utils/app-error.js";
 import logger from "../utils/logger.js";
-import { paginationMetadata } from "../utils/list-query.js";
+import { paginationMetadata, projectList } from "../utils/list-query.js";
 
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
@@ -2483,6 +2484,51 @@ const closePublishedJob = async ({
   return publicJob;
 };
 
+// Minimal staff projection shared by team display and Job-scoped choices.
+const getJobRecruiterSummaries = async ({ companyId, memberIds, eligible = false, requirePasswordSetup = false }) => {
+  const members = await CompanyMember.find({
+    companyId, _id: { $in: memberIds }, role: COMPANY_MEMBER_ROLE.RECRUITER,
+    ...(eligible ? { status: COMPANY_MEMBER_STATUS.ACTIVE } : {}),
+  }).select("userId jobTitle");
+  const users = await User.find({
+    _id: { $in: members.map((member) => member.userId) },
+    ...(eligible ? { role: USER_ROLE.COMPANY_STAFF, status: USER_STATUS.ACTIVE } : {}),
+    ...(requirePasswordSetup ? { mustChangePassword: false } : {}),
+  }).select("fullName avatarUrl");
+  const byId = new Map(users.map((user) => [String(user._id), user]));
+  return members.filter((member) => byId.has(String(member.userId))).map((member) => {
+    const user = byId.get(String(member.userId));
+    return { companyMemberId: String(member._id), fullName: user.fullName,
+      jobTitle: member.jobTitle, avatarUrl: user.avatarUrl ?? null };
+  });
+};
+
+const listJobRecruiterOptions = async ({ actorUser, jobId, clientCompanyId, options, purpose = "supporting" }) => {
+  if (!mongoose.isValidObjectId(jobId)) throw new AppError(404, "Job not found", { field: "jobId" });
+  const context = await resolveCompanyStaffBusinessContext({ user: actorUser, clientCompanyId });
+  const job = await Job.findById(jobId);
+  if (!job) throw new AppError(404, "Job not found", { field: "jobId" });
+  assertSameCompanyTenant({ resourceCompanyId: job.companyId, tenantCompanyId: context.companyId });
+  if (context.companyRole !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER &&
+      String(job.primaryRecruiterCompanyMemberId) !== String(context.membership._id)) {
+    throw new AppError(403, "Only Company Manager or current Primary Recruiter can view Recruiter options", { field: "role" });
+  }
+  const status = resolveEffectiveJobStatus(job);
+  if (purpose === "supporting" ? status !== JOB_STATUS.PUBLISHED :
+      ![JOB_STATUS.PUBLISHED, JOB_STATUS.CLOSED, JOB_STATUS.EXPIRED].includes(status)) {
+    throw new AppError(409, "Job is not eligible for this operation", { field: "status", status });
+  }
+  const teamIds = [job.primaryRecruiterCompanyMemberId, ...(job.supportingRecruiterCompanyMemberIds ?? [])];
+  const members = purpose === "assignment" ? teamIds :
+    (await CompanyMember.find({ companyId: context.companyId,
+      role: COMPANY_MEMBER_ROLE.RECRUITER, _id: { $nin: teamIds } }).select("_id")).map((member) => member._id);
+  const recruiters = await getJobRecruiterSummaries({ companyId: context.companyId,
+    memberIds: members, eligible: true, requirePasswordSetup: purpose === "supporting" });
+  return projectList("recruiters", recruiters, options, {
+    fullName: (item) => item.fullName,
+  }, (item) => [item.fullName, item.jobTitle], (item) => item.companyMemberId);
+};
+
 // V6 F01: Recruitment Team read — dedicated authorization separate from
 // Job-content visibility. The Job-read amendment does not change this
 // endpoint's ended-Job or team-management policy.
@@ -2548,7 +2594,11 @@ const getJobRecruitmentTeam = async ({
     }
   }
 
+  const summaries = await getJobRecruiterSummaries({ companyId: context.companyId,
+    memberIds: [job.primaryRecruiterCompanyMemberId, ...(job.supportingRecruiterCompanyMemberIds ?? [])] });
   return {
+    primaryRecruiter: summaries.find((item) => item.companyMemberId === String(job.primaryRecruiterCompanyMemberId)) ?? null,
+    supportingRecruiters: summaries.filter((item) => item.companyMemberId !== String(job.primaryRecruiterCompanyMemberId)),
     jobId: job._id.toString(),
     primaryRecruiterCompanyMemberId:
       job.primaryRecruiterCompanyMemberId.toString(),
@@ -3304,12 +3354,11 @@ const listInternalJobs = async ({ actorUser, clientCompanyId, options = {} } = {
     scope: options.scope,
   });
 
-  const query = Job.find(filter).sort({
-    createdAt: 1,
-    _id: 1,
-  });
+  if (options.status) filter.$and = [{ status: options.status }];
+  if (options.q) filter.title = { $regex: escapeRegex(options.q), $options: "i" };
+  const query = Job.find(filter).sort(options.sort ?? { createdAt: 1, _id: 1 });
 
-  if (options.scope === undefined) {
+  if (options.scope === undefined && !options.paginated) {
     return { jobs: (await query).map(toPublicJob) };
   }
 
@@ -3733,6 +3782,7 @@ const executeForcedSupportingRemoval = async ({
 };
 
 export {
+  listJobRecruiterOptions,
   acquireActiveCompanyStaffMembershipForBusinessAccessTx,
   acquireActiveRecruiterMembershipForTeamResponsibilityTx,
   acquireActiveUserForAssigneeEligibilityTx,

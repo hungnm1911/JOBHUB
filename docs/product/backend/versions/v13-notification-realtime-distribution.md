@@ -1923,3 +1923,10 @@ Implementation
 ```
 
 Nếu implementation hoặc data design mâu thuẫn với tài liệu này, **Product Specification là authority đối với business behavior**, trừ khi Product Specification được con người cập nhật và phê duyệt lại.
+
+
+## Recruiter FE API completion approved — 2026-11-26
+
+F01: recipient inbox gains optional content search, type/read-state filters, sort and pagination; no-query legacy reads and full recipient unread count remain unchanged. No new read-state mutation or notification type.
+
+HTTP fields, query controls and compatibility: [Recruiter API contract](../../../engineering/recruiter-api-contract.md). This approval implements the five read API items requested by the Product Owner; it does not approve unrelated recruitment capabilities.

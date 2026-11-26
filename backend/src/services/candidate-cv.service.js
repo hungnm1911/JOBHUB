@@ -19,6 +19,7 @@ import CandidateCV, {
 import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import User from "../models/user.model.js";
+import { catalogPage } from "../utils/list-query.js";
 import AppError from "../utils/app-error.js";
 import { escapeRegex } from "../utils/escape-regex.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
@@ -1429,7 +1430,7 @@ const resolveCandidateSearchCategoryFilterIds = async (categoryIds) => {
   return [...categoryIdSet].map((id) => new mongoose.Types.ObjectId(id));
 };
 
-const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {} }) => {
+const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}, sort = { updatedAt: -1, _id: -1 } }) => {
   assertRecruiterCandidateSearchActor(actorUser);
 
   const requestedCategoryIds = normalizeCandidateSearchFilterObjectIds(
@@ -1526,7 +1527,7 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     ...(requestedWorkModes.length > 0
       ? { workModes: { $in: requestedWorkModes } }
       : {}),
-  }).sort({ updatedAt: -1, _id: -1 });
+  }).sort(sort);
 
   if (candidateCvs.length === 0) {
     return [];
@@ -1551,6 +1552,12 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
         candidateById.get(cv.candidateUserId.toString()),
       ),
     );
+};
+
+const listCandidateSearchPage = async ({ actorUser, filters, options }) => {
+  const cvs = await listCandidateSearchEligibleCandidateCvs({ actorUser, filters,
+    ...(options ? { sort: options.sort } : {}) });
+  return options ? catalogPage("cvs", cvs, options) : { cvs };
 };
 
 const loadOwnActiveCandidateCv = async ({
@@ -2374,6 +2381,7 @@ const archiveOwnCandidateCv = async ({
 };
 
 export {
+  listCandidateSearchPage,
   activateOwnGeneratedCandidateCv,
   archiveOwnCandidateCv,
   createGeneratedDraftCandidateCv,

@@ -1542,3 +1542,10 @@ Implementation
 ```
 
 Nếu implementation hoặc data design mâu thuẫn với tài liệu này, **Product Specification V6 là authority đối với business behavior**, trừ khi Product Specification được con người cập nhật và phê duyệt lại.
+
+
+## Recruiter FE API completion approved — 2026-11-26
+
+F01/F02: add safe member summaries to team reads and a paginated same-Company eligible Supporting chooser for current Primary/Company Manager. The chooser requires effectively PUBLISHED Job and excludes current team. The 2026-11-13 restriction against q/status/sort on scoped Job lists is superseded by this approved extension; explicit scope and all visibility rules remain.
+
+HTTP fields, query controls and compatibility: [Recruiter API contract](../../../engineering/recruiter-api-contract.md). This approval implements the five read API items requested by the Product Owner; it does not approve unrelated recruitment capabilities.

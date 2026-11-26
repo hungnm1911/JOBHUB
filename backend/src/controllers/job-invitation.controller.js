@@ -1,3 +1,5 @@
+import { parseOptionalListQuery } from "../utils/list-query.js";
+import JOB_INVITATION_STATUS from "../constants/job-invitation-status.js";
 import {
   acceptOwnJobInvitation,
   getOwnJobInvitation,
@@ -92,6 +94,8 @@ const acceptOwnJobInvitationHandler = async (request, response, next) => {
 const listPrimaryJobInvitationsHandler = async (request, response, next) => {
   try {
     const result = await listPrimaryJobInvitations({
+      options: parseOptionalListQuery(request.query, { filters: { status: Object.values(JOB_INVITATION_STATUS) },
+        sorts: ["createdAt", "sentAt"], defaultSort: "-createdAt" }),
       recruiterUser: request.auth.user,
       clientCompanyId: readClientCompanyId(request),
       jobId: request.params.jobId,

@@ -10,6 +10,7 @@ import CANDIDATE_CV_SOURCE_TYPE from "../constants/candidate-cv-source-type.js";
 import CompanyMember from "../models/company-member.model.js";
 import Job from "../models/job.model.js";
 import JobInvitation from "../models/job-invitation.model.js";
+import { projectList } from "../utils/list-query.js";
 import AppError from "../utils/app-error.js";
 import { loadCurrentSearchEligibleCandidateCvById } from "./candidate-cv.service.js";
 import {
@@ -1522,6 +1523,7 @@ const listPrimaryJobInvitations = async ({
   clientCompanyId,
   jobId,
   now = new Date(),
+  options = null,
 } = {}) => {
   const { job } = await loadCurrentPrimaryManagedJob({
     recruiterUser,
@@ -1533,9 +1535,9 @@ const listPrimaryJobInvitations = async ({
     jobId: job._id,
   }).sort({ createdAt: -1, _id: -1 });
 
-  return {
-    invitations: await hydratePrimaryJobInvitationViews(invitations, { now }),
-  };
+  return projectList("invitations", await hydratePrimaryJobInvitationViews(invitations, { now }), options, {
+    status: (item) => item.status, createdAt: (item) => item.createdAt, sentAt: (item) => item.sentAt,
+  }, (item) => [item.candidate?.fullName, item.sender?.fullName]);
 };
 
 const getPrimaryJobInvitation = async ({

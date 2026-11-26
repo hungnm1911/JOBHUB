@@ -36,10 +36,10 @@ const parseListQuery = (query = {}, {
   }
   for (const [key, values] of Object.entries(filters)) {
     if (query[key] === undefined) continue;
-    if (values ? !values.includes(query[key]) : !/^[a-fA-F0-9]{24}$/.test(query[key])) {
-      invalidQuery(key);
-    }
-    result[key] = query[key];
+    const valid = Array.isArray(values) ? values.includes(query[key]) :
+      (values?.literals?.includes(query[key]) || /^[a-fA-F0-9]{24}$/.test(query[key]));
+    if (!valid) invalidQuery(key);
+    result[key] = /^[a-fA-F0-9]{24}$/.test(query[key]) ? query[key].toLowerCase() : query[key];
   }
   return result;
 };
@@ -53,3 +53,42 @@ const catalogPage = (key, items, options) => options.paginated
   : { [key]: items };
 
 export { parseListQuery, paginationMetadata, catalogPage };
+
+// Optional list controls preserve existing unpaginated reads. Passthrough keys
+// remain validated by their resource's existing parser or tenant guard.
+const parseOptionalListQuery = (query = {}, config = {}, passthrough = []) => {
+  const controls = Object.fromEntries(Object.entries(query).filter(([key]) =>
+    key !== "companyId" && !passthrough.includes(key)));
+  if (Object.keys(controls).length === 0) return null;
+  return parseListQuery(controls, config);
+};
+
+// Pure projection mechanics; resource services supply field/search semantics
+// only after enforcing their canonical authorization and eligibility policies.
+const projectList = (key, items, options, fields, searchValues = () => [], identity = (item) => item.id ?? item._id) => {
+  if (!options) return { [key]: items };
+  const keyword = options.q?.toLocaleLowerCase();
+  let selected = items.filter((item) => {
+    if (keyword && !searchValues(item).some((value) =>
+      String(value ?? "").toLocaleLowerCase().includes(keyword))) return false;
+    return Object.entries(fields).every(([name, value]) =>
+      options[name] === undefined || String(value(item) ?? "") === options[name]);
+  });
+  const entries = Object.entries(options.sort);
+  selected = [...selected].sort((a, b) => {
+    for (const [field, direction] of entries) {
+      const read = field === "_id" ? identity : fields[field];
+      const left = read?.(a) ?? "";
+      const right = read?.(b) ?? "";
+      const comparison = left < right ? -1 : left > right ? 1 : 0;
+      if (comparison) return comparison * direction;
+    }
+    return 0;
+  });
+  return {
+    [key]: selected.slice(options.skip, options.skip + options.limit),
+    pagination: paginationMetadata(options, selected.length),
+  };
+};
+
+export { parseOptionalListQuery, projectList };

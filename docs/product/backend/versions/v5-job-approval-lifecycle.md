@@ -1899,3 +1899,10 @@ Implementation
 ```
 
 Nếu Data Contract hoặc implementation mâu thuẫn với tài liệu này về business behavior, **Product Specification V5 là authority**, trừ khi Product Specification được con người cập nhật và phê duyệt lại.
+
+
+## Recruiter FE API completion approved — 2026-11-26
+
+F03: internal Job reads gain optional title search, persisted-status filter, sorting and pagination. Existing Company visibility and immutable Job lifecycle remain unchanged.
+
+HTTP fields, query controls and compatibility: [Recruiter API contract](../../../engineering/recruiter-api-contract.md). This approval implements the five read API items requested by the Product Owner; it does not approve unrelated recruitment capabilities.

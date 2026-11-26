@@ -1,3 +1,8 @@
+import { parseOptionalListQuery } from "../utils/list-query.js";
+import APPLICATION_STATUS from "../constants/application-status.js";
+import APPLICATION_SOURCE from "../constants/application-source.js";
+import JOB_STATUS from "../constants/job-status.js";
+
 import {
   cancelRecruiterInterviewProposal,
   confirmCandidateInterviewProposal,
@@ -17,6 +22,7 @@ import {
   listCandidateMyApplications,
   listManagedJobs,
   listPrimaryJobApplications,
+  getPrimaryJobApplication,
   listRecruiterMyApplications,
   previewCandidateApplicationSubmittedCv,
   previewPrimaryJobApplicationSubmittedCv,
@@ -314,10 +320,27 @@ const readClientCompanyId = (request) => {
   );
 };
 
+const parseRecruiterApplicationListQuery = (query) => parseOptionalListQuery(query, {
+  filters: {
+    status: Object.values(APPLICATION_STATUS), source: Object.values(APPLICATION_SOURCE),
+    jobId: null, assigneeCompanyMemberId: { literals: ["NONE"] },
+  },
+  sorts: ["createdAt", "updatedAt"], defaultSort: "createdAt",
+});
+
+const getPrimaryJobApplicationHandler = async (request, response, next) => {
+  try {
+    return response.status(200).json(await getPrimaryJobApplication({ actorUser: request.auth.user,
+      jobId: request.params.jobId, applicationId: request.params.applicationId,
+      clientCompanyId: readClientCompanyId(request) }));
+  } catch (error) { return next(error); }
+};
+
 const listPrimaryJobApplicationsHandler = async (request, response, next) => {
   try {
     const result = await listPrimaryJobApplications({
       actorUser: request.auth.user,
+      options: parseRecruiterApplicationListQuery(request.query),
       jobId: request.params.jobId,
       clientCompanyId: readClientCompanyId(request),
     });
@@ -332,6 +355,7 @@ const listManagedJobsHandler = async (request, response, next) => {
   try {
     const result = await listManagedJobs({
       actorUser: request.auth.user,
+      options: parseOptionalListQuery(request.query, { filters: { status: Object.values(JOB_STATUS) }, sorts: ["createdAt", "title"], defaultSort: "createdAt" }),
       clientCompanyId: readClientCompanyId(request),
     });
 
@@ -363,6 +387,7 @@ const listRecruiterMyApplicationsHandler = async (request, response, next) => {
   try {
     const result = await listRecruiterMyApplications({
       actorUser: request.auth.user,
+      options: parseRecruiterApplicationListQuery(request.query),
       clientCompanyId: readClientCompanyId(request),
     });
 
@@ -593,6 +618,7 @@ const updateApplicationRecruitmentPipelineStatusHandler = async (
 };
 
 export {
+  getPrimaryJobApplicationHandler,
   cancelRecruiterInterviewProposalHandler,
   confirmCandidateInterviewProposalHandler,
   createInterviewProposalHandler,
