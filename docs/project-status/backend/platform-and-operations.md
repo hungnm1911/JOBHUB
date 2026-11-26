@@ -2,7 +2,7 @@
 
 ## Current project state
 
-2026-11-27: Admin API Phase 1 passed the common Backend gate. The scoped Recruiter query correction and 14-endpoint integration handoff are recorded in [V3 status](v3-company-recruitment-staff-management.md). No schema, dependency or business lifecycle change was introduced.
+2026-11-27: Admin phases 2–3 passed the common Backend gate. Manager search and registration summary implementation status is recorded in [V2 status](v02-company-onboarding-platform-administration.md). No schema, dependency or business lifecycle change was introduced.
 
 Error handling and runtime request logging are standardized across Backend
 and its injected AI Kit logger.
@@ -61,7 +61,7 @@ and its injected AI Kit logger.
   changed.
 
 **Verification:**
-- Latest backend gate (2026-11-27 Admin API Phase 1): `npm run verify:agent` passed 218 files / 2,260 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 existing warnings.
+- Latest backend gate (2026-11-27 Admin phases 2–3): `npm run verify:agent` passed 219 files / 2,267 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 existing warnings.
 - 2026-10-18 clean-install check on temporary `ai-kit/` + `backend/` copies
   without `node_modules`/`.env` (Node 20.19.1, npm 10.8.2): after the
   canonical two-step install, `npm ls @jobhub/ai-kit --depth=0` passed,
@@ -105,7 +105,7 @@ and its injected AI Kit logger.
 
 ## Verification status
 
-- 2026-11-27 Admin API Phase 1: `cd backend && npm run verify:agent` passed **218 files / 2,260 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors / 2 existing V6 warnings**. No tests were excluded and timeouts were unchanged. Focused Accounts/Company/Recruiter verification passed **3 files / 20 tests**, including the new regression proven to fail before the fix. Implementation, README and the integration contract matched all **14 Admin endpoints**; `git diff --check` passed. The gate ran on the working tree including the pre-existing V15 test delta, which remains outside this commit. Integration tests use MongoMemoryReplSet and mocked external services. No live MongoDB/SMTP/Cloudinary, browser or Frontend verification is claimed. Scoped implementation status is in [V3](v3-company-recruitment-staff-management.md).
+- 2026-11-27 Admin phases 2–3: final `cd backend && npm run verify:agent` passed **219 files / 2,267 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors / 2 existing V6 warnings**. No tests were excluded and timeouts were unchanged. Focused registration search/summary and existing read regressions passed **3 files / 18 tests**. An earlier gate run was stopped to include the empty-key query regression; the final run above verified the completed code. Route/README/integration inventory matched **15/15 endpoints** and `git diff --check` passed. The gate ran on the working tree including the unchanged pre-existing V15 test delta, outside this feature. Integration tests use MongoMemoryReplSet and mocked external services; no live MongoDB/SMTP/Cloudinary, browser or Frontend verification is claimed. Scoped implementation state is recorded in [V2](v02-company-onboarding-platform-administration.md).
 
 - 2026-11-26 Recruiter FE API completion: `cd backend && npm run verify:agent` was executed with default logging and no excluded tests or changed timeouts. ESLint passed with 0 errors / 2 existing V6 warnings; ARCH-001–ARCH-019 passed. Vitest returned 216 passed / 2 failed files and 2,252 passed / 5 failed tests (218 files / 2,257 tests total). All failures are stack-location assertions in `test/http/error-logging.test.js` (3) and `test/http/production-error-logging.test.js` (2). Unmodified HEAD `d7a81da` in a separate checkout with spaces reproduced the exact 5 failures / 10 passes; moving the same checkout to a path without spaces passed both files / all 15 tests. No logging source or tests were changed. Therefore the common gate is recorded as failed, not accepted. Final focused command `npm test -- test/job/recruiter-fe-api-completion.test.js test/job/v6-recruiter-job-scopes.test.js test/job/v6-recruitment-team-read.test.js` passed 3 files / 78 tests on the final working tree. The gate includes a pre-existing uncommitted V15 test change that remains outside this feature commit. An earlier reduced-log run was stopped after the migration CLI stdout assertion failed because logging was suppressed; it is not acceptance evidence. No Atlas, SMTP, Cloudinary, browser/E2E or load check was performed. New read projections may paginate in memory as documented in the [API contract](../../engineering/recruiter-api-contract.md).
 

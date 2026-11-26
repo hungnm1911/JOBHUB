@@ -397,7 +397,7 @@ Ký hiệu quyền:
 
 ### Platform Admin
 
-[Contract integration cho đủ 14 endpoint](../docs/engineering/v1-v4-api-contract.md#platform-admin-integration-14-endpoints)
+[Contract integration cho đủ 15 endpoint](../docs/engineering/v1-v4-api-contract.md#platform-admin-integration-15-endpoints)
 bao gồm query/body, DTO, phân trang, quyền, lỗi và quy tắc account/membership.
 
 | Method | Endpoint | Quyền | Mô tả |
@@ -411,7 +411,8 @@ bao gồm query/body, DTO, phân trang, quyền, lỗi và quy tắc account/mem
 | `GET` | `/api/platform-admin/companies` | Platform Admin | Company hiện tại, gồm cả chưa submit; tìm/lọc/phân trang |
 | `GET` | `/api/platform-admin/companies/:companyId` | Platform Admin | Hồ sơ Company hiện tại và Manager đại diện |
 | `GET` | `/api/platform-admin/companies/:companyId/recruiters` | Platform Admin | Recruiter theo Company; tìm/lọc account và membership, phân trang |
-| `GET` | `/api/platform-admin/company-registrations` | Platform Admin | Danh sách hồ sơ Company |
+| `GET` | `/api/platform-admin/company-registrations` | Platform Admin | Hồ sơ đã submit; tìm snapshot hoặc tên/email Manager, lọc/sort/phân trang |
+| `GET` | `/api/platform-admin/company-registrations/summary` | Platform Admin | Tổng số hồ sơ đã submit và số đếm 5 trạng thái; không query/phân trang |
 | `GET` | `/api/platform-admin/company-registrations/:companyId` | Platform Admin | Chi tiết hồ sơ Company |
 | `POST` | `/api/platform-admin/company-registrations/:companyId/approve` | Platform Admin | Duyệt hồ sơ Company |
 | `POST` | `/api/platform-admin/company-registrations/:companyId/reject` | Platform Admin | Từ chối hồ sơ Company |

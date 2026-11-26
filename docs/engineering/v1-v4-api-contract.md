@@ -74,6 +74,7 @@ All paths require normal ACTIVE authentication and Platform Admin authorization.
 | GET `/api/platform-admin/companies` | `q`, `approvalStatus`, `operationalStatus`, `sort`, `page`, `limit` | `{ companies, pagination }` |
 | GET `/api/platform-admin/companies/:companyId` | None | `{ company, manager }` |
 | GET `/api/platform-admin/company-registrations` | Same list queries | `{ companyRegistrations, pagination }` |
+| GET `/api/platform-admin/company-registrations/summary` | No query/body; full submitted dataset | `{ summary: { total, pending, awaitingConfirmation, active, rejected, locked } }` |
 
 Companies include NOT_SUBMITTED and return current public Company fields,
 plus public manager summary in each list entry. Detail returns the same current
@@ -84,7 +85,7 @@ Manager summary: `id, fullName, email, role, status`.
 Registrations require non-null submittedAt/reviewSnapshot and approvalStatus
 other than NOT_SUBMITTED, including when the caller filters NOT_SUBMITTED
 (which produces an empty page). Existing registration DTO keys remain unchanged;
-search uses snapshot name/businessRegistrationNumber. Companies search current
+search uses snapshot name/businessRegistrationNumber or current Manager fullName/email, resolved through CompanyMember (approved F04 extension 2026-11-27). Companies search current
 name/businessRegistrationNumber. Approval filters: NOT_SUBMITTED, PENDING,
 APPROVED, REJECTED. Operational filters: INACTIVE, ACTIVE, LOCKED.
 Sort fields: createdAt, updatedAt, name, submittedAt. Registration name sorting
@@ -144,10 +145,13 @@ parameters are limited to page/limit; no catalog sort/search/filter is added.
 DTOs, dataset ordering, parent validation and provider failures retain their
 existing behavior. No mutation, local provider fallback or consumer change is added.
 
-## Platform Admin integration (14 endpoints)
+<a id="platform-admin-integration-14-endpoints"></a>
 
-This section documents the existing V1–V4 Admin HTTP surface for FE handoff.
-It introduces no business capability or persistence change. The version sections
+## Platform Admin integration (15 endpoints)
+
+This section documents the V1–V4 Admin HTTP surface for FE handoff, including
+the approved 2026-11-27 F04 Manager search and registration summary extension.
+It introduces no persistence or lifecycle change. The version sections
 above remain the shared read contract; the tables below include the existing
 lifecycle and Category commands as well. Canonical implementations are
 `platform-admin.routes.js`, `platform-admin.controller.js`,
@@ -155,7 +159,7 @@ lifecycle and Category commands as well. Canonical implementations are
 
 ### Authentication and request conventions
 
-- All 14 endpoints below require `Authorization: Bearer <accessToken>` from
+- All 15 endpoints below require `Authorization: Bearer <accessToken>` from
   normal ACTIVE authentication and `User.role=PLATFORM_ADMIN`. Use the existing
   `/api/auth/login`, `/api/auth/refresh`, and `/api/auth/logout` session flow;
   `/api/auth/me` supplies the signed-in public account. A browser role guard
@@ -190,6 +194,7 @@ and returned state rather than matching these strings.
 | POST `/companies/:companyId/lock` | Company ID; stop an active Company | 200 `{ message, company: Company, manager: User }` |
 | GET `/companies/:companyId/recruiters` | Company ID in path, Recruiter list queries; inspect its Recruiters | 200 `{ recruiters: Recruiter[], pagination }` |
 | GET `/company-registrations` | Company list queries; submitted review snapshots only | 200 `{ companyRegistrations: RegistrationSummary[], pagination }` |
+| GET `/company-registrations/summary` | No query/body; counts across all submitted registrations | 200 `{ summary: RegistrationCounts }` |
 | GET `/company-registrations/:companyId` | Company ID; submitted review source | 200 `{ companyRegistration: RegistrationDetail }` |
 | POST `/company-registrations/:companyId/approve` | Company ID; approve pending submitted snapshot | 200 `{ message, companyRegistration: RegistrationDetail }` |
 | POST `/company-registrations/:companyId/reject` | Company ID; reject pending submitted snapshot | 200 `{ message, companyRegistration: RegistrationDetail }` |
@@ -205,7 +210,7 @@ contract above. Omit blank filters/search instead of sending empty strings.
 | --- | --- | --- | --- |
 | `/accounts` | `actorType`, `userStatus`, `companyId` | User fullName/email | createdAt, updatedAt, fullName, email; `-createdAt` |
 | `/companies` | `approvalStatus`, `operationalStatus` | Current Company name/businessRegistrationNumber | createdAt, updatedAt, name, submittedAt; `-createdAt` |
-| `/company-registrations` | `approvalStatus`, `operationalStatus` | Snapshot name/businessRegistrationNumber | createdAt, updatedAt, name (snapshot), submittedAt; `-createdAt` |
+| `/company-registrations` | `approvalStatus`, `operationalStatus` | Snapshot name/businessRegistrationNumber OR current Manager fullName/email | createdAt, updatedAt, name (snapshot), submittedAt; `-createdAt` |
 | `/companies/:companyId/recruiters` | `membershipStatus`, `userStatus` | User fullName/email and membership employeeCode/jobTitle | createdAt, updatedAt (membership), fullName, email, employeeCode, jobTitle; `createdAt` |
 
 Accepted enums:
@@ -258,6 +263,7 @@ token, refresh credential or session collection is returned.
 | Company | id, managerUserId, all ReviewSnapshot profile fields as current values, approvalStatus, operationalStatus, reviewSnapshot, submittedAt, reviewedByUserId, reviewedAt, activatedAt, createdAt, updatedAt |
 | CompanyWithManager | Company fields plus manager: ManagerSummary |
 | RegistrationSummary | id (Company ID), approvalStatus, operationalStatus, submittedAt, companyName (snapshot name), businessRegistrationNumber (snapshot value), manager: ManagerSummary |
+| RegistrationCounts | total, pending, awaitingConfirmation, active, rejected, locked; all nonnegative numeric counts, including zero |
 | RegistrationDetail | id (Company ID), approvalStatus, operationalStatus, submittedAt, reviewedByUserId, reviewedAt, activatedAt, manager: ManagerSummary, reviewSnapshot: ReviewSnapshot |
 | Category | id, name, normalizedName, level, parentCategoryId (null for FIELD) |
 
@@ -299,10 +305,11 @@ HTTP status and optional field errors; production does not return a stack.
 
 | Scope | Expected error outcomes and client handling |
 | --- | --- |
-| All 14 endpoints | 401 for missing/invalid/expired/revoked access; 403 for an authenticated non-admin or a non-ACTIVE account with an otherwise valid session. Unexpected infrastructure/persistence failures can return 5xx; surface a retry/error state. |
+| All 15 endpoints | 401 for missing/invalid/expired/revoked access; 403 for an authenticated non-admin or a non-ACTIVE account with an otherwise valid session. Unexpected infrastructure/persistence failures can return 5xx; surface a retry/error state. |
 | Four dynamic lists | 400 for unsupported query, invalid filter/id/sort or malformed pagination/search. Correct input before retrying. |
 | Accounts detail | 400 malformed userId; 404 absent account. |
 | Companies detail / Recruiter list | 400 malformed path ID; 404 absent Company. An existing Company with no Recruiters returns 200 with an empty list. |
+| Registration summary | 400 for any query parameter, including q/page/limit/approvalStatus. Auth is checked before query validation. |
 | Registration detail | 400 malformed companyId; 404 absent or unsubmitted registration. |
 | Account lock/terminate | 400 malformed userId; 404 absent account; 403 self-target or any Platform Admin target; 409 unsupported source state or Company Manager lifecycle conflict. |
 | Company lock | 400 malformed companyId; 404 absent Company; 409 unless Company is APPROVED + ACTIVE and its Manager is ACTIVE. |
@@ -344,12 +351,44 @@ and read each response's `pagination.total` (limit 1 is sufficient for counts):
 | Đã từ chối | REJECTED | INACTIVE |
 | Đã khóa | APPROVED | LOCKED |
 
-Registration `q` does not search Manager name/email in this phase. Category
+Registration `q` matches any of snapshot name/businessRegistrationNumber or
+current Manager fullName/email, with case-insensitive literal substring semantics.
+The Manager relationship comes from CompanyMember.role=COMPANY_MANAGER, not
+Recruiter membership, persisted Company.managerUserId, or client identity.
+Matches are ANDed with status filters before count/sort/page selection. Matching
+both snapshot and Manager returns the Company once. Current Company name is not
+a registration search source. Current Company read/search semantics stay unchanged.
+
+The summary endpoint is registered before `/:companyId`. It accepts no query
+parameters, needs no request body, is not paginated, and counts the same submitted-registration dataset as
+an unfiltered list (excluding NOT_SUBMITTED). Its response always has all keys:
+
+```json
+{
+  "summary": {
+    "total": 25,
+    "pending": 21,
+    "awaitingConfirmation": 1,
+    "active": 1,
+    "rejected": 1,
+    "locked": 1
+  }
+}
+```
+
+The five count keys use the stage filter pairs in the table above; `total`
+equals their sum. An empty dataset returns zero for every key. Counts reflect
+current persisted states, include LOCKED Companies, and do not depend on the
+current list page or search. Refresh summary after a review/lock action; a
+separate list read may observe later state changes. No counter, cache, history,
+new business status or Company/User/membership mutation is introduced.
+
+Category
 selection reuses public `GET /api/categories/fields` and
 `GET /api/categories/fields/:fieldId/positions` (optional pagination as above).
 Category names are canonicalized and normalized for uniqueness; FIELD is unique
 platform-wide and POSITION within its FIELD. Created Categories are immutable.
-This handoff adds no dashboard/summary, unlock/reactivation, rejection reason,
+The registration summary is limited to F04; it adds no recruitment/platform dashboard, unlock/reactivation, rejection reason,
 Category update/delete or Admin Job-operation endpoint.
 
 ## Changed files for this completion

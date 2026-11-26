@@ -38,7 +38,7 @@ Sau khi V02 hoàn thành, hệ thống phải:
 - Hoàn thiện hồ sơ Company trước khi gửi xét duyệt.
 - Gửi hồ sơ Company để Platform Admin xét duyệt.
 - Ghi nhận snapshot hồ sơ tại thời điểm gửi.
-- Platform Admin xem danh sách và chi tiết đăng ký Company.
+- Platform Admin xem danh sách và chi tiết đăng ký Company, tìm theo snapshot hoặc tên/email Manager hiện tại, và đọc tổng số hồ sơ theo 5 trạng thái xét duyệt.
 - Platform Admin xem danh sách/chi tiết Company hiện tại, bao gồm chưa submit, tách biệt đăng ký xét duyệt.
 - Platform Admin chấp thuận Company.
 - Platform Admin từ chối Company.
@@ -1560,3 +1560,14 @@ Nếu data design hoặc implementation mâu thuẫn với tài liệu này, tà
 ## API completion được duyệt — 2026-10-21
 
 F11 — Platform Admin đọc Company hiện tại: list/search/filter approvalStatus, operationalStatus/sort/pagination, bao gồm NOT_SUBMITTED. Detail trả public Company hiện tại và manager summary resolve qua CompanyMember. Đây là chức năng riêng F04 xét duyệt snapshot; F04 chỉ liệt kê hồ sơ đã submit và bổ sung search/filter/sort/pagination. Giữ nguyên snapshot và mọi lifecycle. Không unlock/reactivate Company.
+
+
+## Mở rộng Admin giai đoạn 2–3 được duyệt — 2026-11-27
+
+Theo yêu cầu triển khai giai đoạn 2 và 3 của người dùng, F04 được mở rộng:
+
+- `q` tìm chuỗi literal không phân biệt hoa/thường, trim, không rỗng, tối đa 200 ký tự trên snapshot name/businessRegistrationNumber **hoặc** fullName/email của Manager hiện tại. Manager được resolve qua CompanyMember.role=COMPANY_MANAGER → User; không tìm theo Recruiter hoặc Company profile hiện tại. Không tạo bản chụp danh tính Manager mới.
+- Các điều kiện tìm kiếm được OR với nhau và AND với filter approvalStatus/operationalStatus; áp dụng trên toàn bộ hồ sơ hợp lệ trước count/sort/pagination. Một Company khớp nhiều trường chỉ xuất hiện và được đếm một lần. DTO và sort hiện tại giữ nguyên; snapshot tiếp tục là căn cứ xét duyệt (BR-07).
+- Platform Admin có normal ACTIVE authentication được đọc summary của toàn bộ hồ sơ đã submit: tổng số, chờ duyệt (PENDING+INACTIVE), chờ kích hoạt (APPROVED+INACTIVE), đang hoạt động (APPROVED+ACTIVE), đã từ chối (REJECTED+INACTIVE), đã khóa (APPROVED+LOCKED). Khi rỗng, tất cả số đếm bằng 0; tổng bằng tổng 5 nhóm trạng thái hợp lệ.
+- Summary không nhận query/filter/pagination; không phụ thuộc trang danh sách hoặc ô tìm kiếm hiện tại. Chỉ tính hồ sơ có submittedAt/reviewSnapshot và approvalStatus khác NOT_SUBMITTED, bao gồm Company đã bị khóa. Không trả danh tính hoặc hồ sơ trong summary.
+- Đây là tổng quan hồ sơ xét duyệt thuộc F04, không phải dashboard tuyển dụng/toàn nền tảng. BR-14, BR-19, BR-20 và các lifecycle invariant tiếp tục áp dụng. Không thay đổi Company/User/CompanyMember, approve/reject, activation, snapshot, quyền Company hoặc phạm vi F11 đọc Company hiện tại.
