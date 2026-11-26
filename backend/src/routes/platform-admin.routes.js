@@ -6,6 +6,7 @@ import {
 } from "../controllers/category.controller.js";
 import {
   listAccountsHandler, getAccountHandler, listCompaniesHandler, getCompanyHandler,
+  getCompanyRegistrationSummaryHandler,
   approveCompanyRegistrationHandler,
   getCompanyRegistrationHandler,
   listCompanyRegistrationsHandler,
@@ -72,6 +73,13 @@ router.post(
   authenticateAccess,
   authorizePlatformAdmin,
   rejectCompanyRegistrationHandler,
+);
+
+router.get(
+  "/company-registrations/summary",
+  authenticateAccess,
+  authorizePlatformAdmin,
+  getCompanyRegistrationSummaryHandler,
 );
 
 router.get(

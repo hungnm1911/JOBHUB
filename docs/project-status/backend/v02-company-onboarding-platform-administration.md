@@ -2,16 +2,16 @@
 
 ## Current project state
 
-V2 current Company read APIs and submitted-registration list completion are implemented and verified (2026-10-21).
+V2 Admin phases 2–3 are implemented and verified (2026-11-27): F04 registration search now includes current Manager fullName/email through CompanyMember; registration summary returns total and the five review-stage counts across all submitted registrations.
 
-- Platform Admin Companies list/detail includes NOT_SUBMITTED and current Company plus public manager summary. Submitted registrations remain a distinct snapshot-based read with search/filter/sort/pagination.
+- Platform Admin Companies list/detail includes NOT_SUBMITTED and current Company plus public manager summary. Submitted registration search remains snapshot-based for Company fields, adds current Manager name/email, and filters before count/sort/pagination without duplicates. The new summary read is unfiltered/unpaginated and shares the submitted predicate; see the [API contract](../../engineering/v1-v4-api-contract.md#platform-admin-integration-15-endpoints).
 - No Company lifecycle, approval, snapshot mutation, unlock or reactivation workflow changed.
-- Common backend gate: 178 files / 1,823 tests passed; see [Platform and operations](platform-and-operations.md) for shared evidence.
+- Latest common Backend gate passed; see [Platform and operations](platform-and-operations.md) for cross-version evidence.
 
 ## Deferred / not started
 
 - No V2 business slice remains. Non-blocking Low findings from the final Architecture Review are deferred: the BR-21 onboarding predicate `isCompanyManagerOnboarding` is defined in both `auth.service.js` and `authenticate-access.service.js` (the canonical owner), and F08 resend issuance placeholders (`expiresAt = epoch`) are subject to the `AuthToken` TTL index, so a placeholder reaped mid-resend can leave a sent email with a non-existent token and a 409 response. Neither creates a usable extra credential or violates a canonical requirement.
-- V2 Product contract is unchanged. The Data Contract "Email action delivery contract" was changed on 2026-10-19 (approved by the user) so the F07 confirmation email links to the frontend screen `{FRONTEND_BASE_URL}/confirm-company-approval?token=…`, which consumes the token through `POST /api/auth/confirm-company-approval`; the `GET` query-token endpoint is retained. Token type, TTL, single-use, and TX-03 semantics are unchanged. Focused email-link tests and the backend gate passed (172 files / 1783 tests).
+- The Data Contract "Email action delivery contract" was changed on 2026-10-19 (approved by the user) so the F07 confirmation email links to the frontend screen `{FRONTEND_BASE_URL}/confirm-company-approval?token=…`, which consumes the token through `POST /api/auth/confirm-company-approval`; the `GET` query-token endpoint is retained. Token type, TTL, single-use, and TX-03 semantics are unchanged. Focused email-link tests and the backend gate passed (172 files / 1783 tests).
 - **Implemented; verified (2026-10-19):** Company image upload delivery for F02/F09 `logoUrl`/`bannerUrl` — `POST /api/company/images/:kind` (`logo` | `banner`) after company self-service authentication uploads JPEG/PNG/WebP via `file.service` into `CLOUDINARY_FOLDER.COMPANY_LOGOS` / `COMPANY_BANNERS` and returns a public `secureUrl`; Company is not mutated until the existing profile PATCH. Focused coverage in `test/auth/company-image-upload.test.js` (4/4). Persistence wording that predates V3 (`Company.managerUserId`, `User.role = COMPANY_MANAGER`) was adapted by V3 TX-06/TX-07 to `CompanyMember` and `COMPANY_STAFF`; this is accepted version history, not a V2 defect.
 
 ## Previously completed and verified baseline
@@ -45,7 +45,7 @@ V2 current Company read APIs and submitted-registration list completion are impl
 
 ## Verification status
 
-- 2026-10-21 final common backend gate passed with `VITEST_MAX_WORKERS=2 npm run verify:agent`: ESLint 0 errors / 2 pre-existing V6 test warnings; ARCH-001–ARCH-019; 178/178 files and 1,823/1,823 tests. No tests were excluded and timeouts were unchanged. The earlier default-worker run's unrelated V15 timeout passed alone (33/33) before the clean gate rerun.
+- 2026-11-27 phases 2–3: `npm test -- test/auth/platform-admin-registration-search-summary.test.js test/auth/v2-v3-api-completion.test.js test/auth/platform-admin-company-registrations.test.js` passed 3 files / 18 tests. Coverage includes current Manager name/email, literal matching, full-dataset filtering/count/sort/pagination, duplicate prevention, snapshot/current-profile distinction, Recruiter/draft exclusion, all five summary states beyond a 20-record page, zero data, state refresh after reject, read-only Company/snapshot behavior, authorization and strict queries (including an empty query key). The common `npm run verify:agent` gate passed; totals and runtime limitations are in [Platform and operations](platform-and-operations.md). Route/README/integration inventory matched 15/15 endpoints and `git diff --check` passed. No persistence/index/migration, lifecycle or Frontend change was introduced.
 - Focused completion run: five files / 39 tests passed (`v1-api-completion`, `v2-v3-api-completion`, `v3-recruiter-password-reset`, `v3-acceptance`, `v4-optional-pagination`). After reusing the existing regex helper, the two affected completion suites passed again (16/16).
 - `git diff --check` and whitespace checks on the seven new files passed. Shared environment and gate evidence: [Platform and operations](platform-and-operations.md).
 - Real SMTP, live MongoDB/provider and frontend runtime checks were not performed. Integration tests use MongoMemoryReplSet, mocked mail and stubbed Location provider.

@@ -44,7 +44,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V16 | Saved Jobs | PLANNED |
 | V17 | Rich Text Content Integration | READY FOR IMPLEMENTATION |
 
-Dashboard, thống kê và giám sát vẫn `PLANNED`; chưa được gán version.
+Dashboard, thống kê tuyển dụng và giám sát toàn nền tảng vẫn `PLANNED`; chưa được gán version. Summary số lượng hồ sơ xét duyệt Company thuộc mở rộng F04 của V2 được duyệt ngày 2026-11-27, không mở phạm vi dashboard toàn nền tảng.
 
 ---
 

@@ -2063,3 +2063,14 @@ Không được khôi phục behavior cũ từ macro database hoặc entity diag
 ## Admin Company read completion — approved 2026-10-21
 
 Đọc Company hiện tại bao gồm NOT_SUBMITTED, resolve manager qua CompanyMember theo V3. Registrations chỉ match submittedAt và reviewSnapshot tồn tại và approvalStatus khác NOT_SUBMITTED; dùng reviewSnapshot cho search/display. Search/filter được áp dụng trước count/sort/skip/limit. Không sửa snapshot, reference hay lifecycle; không thêm persistence.
+
+
+## Admin registration search/summary — approved 2026-11-27
+
+Hỗ trợ mở rộng F04 giai đoạn 2–3 đã được duyệt trong Product V2. Không thêm collection, field, index, cache hay dữ liệu tổng hợp được persist.
+
+- Tiếp tục dùng predicate hồ sơ đã submit của Admin Company read completion: submittedAt và reviewSnapshot khác null, approvalStatus khác NOT_SUBMITTED.
+- Snapshot name/businessRegistrationNumber là nguồn tìm Company. Tên/email Manager là dữ liệu User hiện tại, resolve qua CompanyMember(role=COMPANY_MANAGER, companyId, userId) theo Data V3; không dùng Company.managerUserId persist hoặc User.companyId, không tìm qua Recruiter.
+- Tìm kiếm Manager/snapshot được kết hợp trước count/sort/skip/limit. Company khớp nhiều trường không bị nhân bản hoặc đếm lặp.
+- Summary aggregate trực tiếp từ Company theo hai state dimension hiện tại trong cùng một lần đọc: total, pending, awaitingConfirmation, active, rejected, locked. Dùng cùng predicate submitted với danh sách; không phân trang, không lưu counter và không suy ra trạng thái mới. Kết quả rỗng trả đủ các số 0.
+- Tất cả thao tác là read-only; giữ nguyên reviewSnapshot, Company/User/CompanyMember, quan hệ canonical, timestamps và lifecycle. Không có migration hay transaction ghi mới.

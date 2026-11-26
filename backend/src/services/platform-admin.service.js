@@ -195,12 +195,34 @@ const toCompanyRegistrationDetail = (company, manager) => {
   };
 };
 
-const listCompanyRegistrations = async (options) => {
+const SUBMITTED_REGISTRATION_FILTER = {
+  approvalStatus: { $ne: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED },
+  reviewSnapshot: { $ne: null },
+  submittedAt: { $ne: null },
+};
+
+const buildCompanyRegistrationFilter = async (options) => {
   const filter = {
-    approvalStatus: { $ne: COMPANY_APPROVAL_STATUS.NOT_SUBMITTED },
-    reviewSnapshot: { $ne: null }, submittedAt: { $ne: null },
+    ...SUBMITTED_REGISTRATION_FILTER,
   };
   applyCompanyFilters(filter, options, "reviewSnapshot.");
+  if (options.q) {
+    const regex = { $regex: escapeRegex(options.q), $options: "i" };
+    const users = await User.find({
+      role: USER_ROLE.COMPANY_STAFF,
+      $or: [{ fullName: regex }, { email: regex }],
+    }).select("_id").lean();
+    const memberships = await CompanyMember.find({
+      role: COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+      userId: { $in: users.map((user) => user._id) },
+    }).select("companyId").lean();
+    filter.$or.push({ _id: { $in: memberships.map((member) => member.companyId) } });
+  }
+  return filter;
+};
+
+const listCompanyRegistrations = async (options) => {
+  const filter = await buildCompanyRegistrationFilter(options);
   const [companies, total] = await Promise.all([
     Company.find(filter).sort(options.sort).skip(options.skip).limit(options.limit),
     Company.countDocuments(filter),
@@ -211,6 +233,28 @@ const listCompanyRegistrations = async (options) => {
     if (!manager) throw new AppError(500, "Company Manager for submitted registration is missing");
     return toCompanyRegistrationSummary(company, manager);
   }), pagination: paginationMetadata(options, total) };
+};
+
+const getCompanyRegistrationSummary = async () => {
+  const rows = await Company.aggregate([
+    { $match: SUBMITTED_REGISTRATION_FILTER },
+    { $group: {
+      _id: { approvalStatus: "$approvalStatus", operationalStatus: "$operationalStatus" },
+      count: { $sum: 1 },
+    } },
+  ]);
+  const counts = new Map(rows.map((row) => [
+    `${row._id.approvalStatus}:${row._id.operationalStatus}`, row.count,
+  ]));
+  const count = (approval, operational) => counts.get(`${approval}:${operational}`) ?? 0;
+  return {
+    total: rows.reduce((total, row) => total + row.count, 0),
+    pending: count(COMPANY_APPROVAL_STATUS.PENDING, COMPANY_OPERATIONAL_STATUS.INACTIVE),
+    awaitingConfirmation: count(COMPANY_APPROVAL_STATUS.APPROVED, COMPANY_OPERATIONAL_STATUS.INACTIVE),
+    active: count(COMPANY_APPROVAL_STATUS.APPROVED, COMPANY_OPERATIONAL_STATUS.ACTIVE),
+    rejected: count(COMPANY_APPROVAL_STATUS.REJECTED, COMPANY_OPERATIONAL_STATUS.INACTIVE),
+    locked: count(COMPANY_APPROVAL_STATUS.APPROVED, COMPANY_OPERATIONAL_STATUS.LOCKED),
+  };
 };
 
 const getCompanyRegistration = async ({ companyId }) => {
@@ -855,6 +899,7 @@ const getCompany = async ({ companyId }) => {
 
 export {
   listAccounts, getAccount, listCompanies, getCompany,
+  getCompanyRegistrationSummary,
   approveCompanyRegistration,
   getCompanyRegistration,
   listCompanyRegistrations,

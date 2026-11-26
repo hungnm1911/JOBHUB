@@ -1,4 +1,5 @@
 import { parseListQuery } from "../utils/list-query.js";
+import AppError from "../utils/app-error.js";
 import USER_ROLE from "../constants/user-role.js";
 import COMPANY_MEMBER_ROLE from "../constants/company-member-role.js";
 import USER_STATUS from "../constants/user-status.js";
@@ -7,6 +8,7 @@ import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.
 
 import {
   listAccounts, getAccount, listCompanies, getCompany,
+  getCompanyRegistrationSummary,
   approveCompanyRegistration,
   getCompanyRegistration,
   listCompanyRegistrations,
@@ -62,6 +64,18 @@ const listCompanyRegistrationsHandler = async (request, response, next) => {
   try {
     const result = await listCompanyRegistrations(companyListOptions(request.query, true));
     return response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getCompanyRegistrationSummaryHandler = async (request, response, next) => {
+  try {
+    const [field] = Object.keys(request.query);
+    if (field !== undefined) {
+      throw new AppError(400, "Summary does not accept query parameters", { field });
+    }
+    return response.status(200).json({ summary: await getCompanyRegistrationSummary() });
   } catch (error) {
     next(error);
   }
@@ -130,6 +144,7 @@ const lockCompanyHandler = async (request, response, next) => {
 };
 
 export {
+  getCompanyRegistrationSummaryHandler,
   approveCompanyRegistrationHandler,
   getCompanyRegistrationHandler,
   listCompanyRegistrationsHandler,
