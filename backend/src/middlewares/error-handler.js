@@ -15,7 +15,7 @@ const isExposedClientHttpError = (error) => {
 const MAX_CAUSE_DEPTH = 5;
 const MAX_STACK_FRAMES = 20;
 const SAFE_CODE = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
-const STACK_FRAME = /^\s*at\s+(?:.*?\()?((?:(?:file:\/\/)?\/[^()\s?#]+|node:[\w/.-]+):\d+:\d+)\)?\s*$/;
+const STACK_FRAME = /^\s*at\s+(?:.*?\()?((?:(?:file:\/\/)?\/[^\r\n?#]+|node:[\w/.-]+):\d+:\d+)\)?\s*$/;
 
 // Error messages, the first stack line, and provider payloads can contain CV/JD
 // data. Keep only source locations from stack frames for runtime diagnosis.

@@ -308,3 +308,15 @@ Until those decisions are made, code must not establish a second owner or infer 
 ### AI-V06 Optimize/Preview/Commit flow: accepted, legacy endpoint removed
 
 The AI-V06 Product Specification F03/F04 and Data Contract §6.7 define Optimize → Preview Diff → Commit with a stateless, server-signed Optimization Proposal. Backend Preview (R1), Proposal signing (R2) and Commit (R3) are implemented and the phase was closed as ACCEPTED on 2026-11-24 (Product Owner decision). The legacy single-step `/optimize-cv` (`createOptimizedCandidateCvDraftForJob`) was removed in F4-B after Frontend migrated; only Commit creates the `GENERATED/DRAFT`. Rich Text semantics: a section returned as `null` keeps its baseline HTML; a replaced section does not inherit the old HTML; the Source CV is never changed. Accepted limits: Commit is not idempotent (a network failure after Commit may leave an unknown outcome), and Uploaded PDF normalization is best-effort.
+
+
+## Recruiter Inbox and list follow-up — 2026-11-26
+
+- `application.service.js` owns `listRecruiterConversations`, reusing the canonical
+  chat-authority evaluator and Chat-history context; history paging remains in
+  `readAuthorizedConversationHistory`. No second participant/authority model.
+- Existing resource services own eligibility-first database pagination and
+  page-only heavy projection hydration; no repository layer or schema added.
+- `error-handler.js` remains the sole safe stack-location extraction owner;
+  accepts spaced/Unicode/parenthesized paths while excluding messages/function
+  labels and query-bearing frames. Logging/regression tests protect this.

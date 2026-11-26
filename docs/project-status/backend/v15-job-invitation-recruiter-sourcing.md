@@ -2,7 +2,7 @@
 
 ## Current project state
 
-2026-11-26 Recruiter FE API read extension: Primary Invitation search, evaluated-status filtering, sorting and pagination are implemented; Supporting/Manager management authority is unchanged. Focused verification passed; common-gate acceptance remains pending because of pre-existing logging tests failing on paths containing spaces. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
+2026-11-26 Recruiter FE API read extension: Primary Invitation search, evaluated-status filtering, sorting and pagination are implemented; Supporting/Manager management authority is unchanged. Focused verification and the common Backend gate now pass after the logging fix and list-read follow-up. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
 
 **V15 — Job Invitation và nhánh Recruiter săn ứng viên** is
 `COMPLETED AND VERIFIED`.
@@ -314,7 +314,7 @@ No further V15 business slice remains in the approved specification.
 
 ## Verification status
 
-- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate was executed but is not green due to the independently reproduced baseline logging failure; no full-gate acceptance is claimed. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
+- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate now passes after the logging fix and list-read follow-up. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
 
 - V15 Final Acceptance finding — Day-15 Invitation expiration production
   runtime trigger: focused coverage passed 3 tests in

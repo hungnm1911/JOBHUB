@@ -124,3 +124,28 @@ it("never emits development-only payloads in production", () => {
   expect(stdoutWrite).not.toHaveBeenCalled();
   expect(stderrWrite).not.toHaveBeenCalled();
 });
+
+it("keeps spaced Unicode source locations while excluding messages, function labels and query-bearing frames", async () => {
+  const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  const error = new Error("PRIVATE_MARKER");
+  error.stack = [
+    "Error: PRIVATE_MARKER",
+    "    at PRIVATE_FUNCTION (/srv/Đồ án (demo)/handler.js:12:34)",
+    "    at /srv/Đồ án/handler.js:56:7",
+    "    at file:///srv/encoded%20path/handler.js:8:9",
+    "    at /srv/handler.js?token=PRIVATE_MARKER:1:2",
+    "    at node:internal/process/task_queues:1:2",
+  ].join("\n");
+  const app = express();
+  app.get("/fail", () => { throw error; });
+  app.use(errorHandler);
+  await request(app).get("/fail");
+  const output = JSON.parse(stderrWrite.mock.calls[0][0]);
+  expect(output.stack).toEqual([
+    "/srv/Đồ án (demo)/handler.js:12:34",
+    "/srv/Đồ án/handler.js:56:7",
+    "file:///srv/encoded%20path/handler.js:8:9",
+    "node:internal/process/task_queues:1:2",
+  ]);
+  expect(JSON.stringify(output)).not.toMatch(/PRIVATE_MARKER|PRIVATE_FUNCTION/);
+});

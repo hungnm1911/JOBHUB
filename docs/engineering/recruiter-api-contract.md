@@ -60,11 +60,38 @@ Workspace/Kanban remains an unpaginated projection with its eight status groups.
 Notification controls are shared for all authenticated recipients, preserving
 ownership and existing Candidate consumers.
 
-Job lists filter/count/page in MongoDB, preserving the V6 DB-pagination guarantee.
-Other reads filter/page their existing authorized derived projections in memory;
-they do not claim bounded DB reads or production-scale query performance. CV
-sort occurs on the underlying eligible-CV query before projection and paging.
-Invitation filtering uses evaluated current status, never stale persisted PENDING.
+Job lists, Notifications, Supporting/Assignee choices and paginated CV results
+filter/count/page in MongoDB. CV owner ACTIVE/email verification and chooser
+User eligibility are joined before count/page. Job/My Application reads select
+page IDs in MongoDB and hydrate snapshots/Availability/Schedules only for that
+page; workload counts remain full-scope. Managed Jobs paginate lightweight Job
+metadata before loading full Job content and retain full-scope lightweight
+Application aggregates. Invitation reads evaluate current status on metadata
+before paging and load full CV snapshots only for selected IDs. Managed/Invitation
+metadata selection and inbox authority evaluation remain in memory; no bounded
+DB-scan or production-load claim is made. No new indexes/migrations are added.
+
+## Recruiter independent Inbox — approved follow-up 2026-11-26
+
+The user chose independent Messages and Interview data only within Application.
+No standalone Calendar API or Supporting Invitation authority is added.
+
+`GET /api/jobs/my-conversations` always paginates. q searches Candidate fullName
+or Job title; filters jobId and mode=ACTIVE/READ_ONLY/FROZEN_COMPANY; sort createdAt
+or lastMessageAt (default -lastMessageAt), with Conversation ID tie-break.
+Response `{ conversations, pagination }`; each row contains id, applicationId,
+jobId, minimal Job/Candidate summaries, mode, authority, createdAt, lastMessageAt
+and lastMessage. No unread-message counter, receipt, presence or independent
+chat relationship is created. Eligibility uses the canonical V11 authority
+evaluator; current/final persisted Assignee with ACTIVE account/membership may
+read frozen/terminal history. Former Assignee, non-assigned Primary, Manager
+and foreign Company get no new Chat authority. Pagination follows authorization.
+
+Recruiter `GET /api/jobs/my-applications/:applicationId/conversation` additionally
+accepts page/limit, q (literal message-content search) and sort=createdAt or
+-createdAt. Without controls, the old complete-history response is preserved;
+with controls, messages are counted/paged in MongoDB and pagination is added.
+Sending still uses the existing POST endpoint and its commit-time authority.
 
 ## Ownership and verification
 

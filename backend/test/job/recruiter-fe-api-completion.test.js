@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import Conversation from "../../src/models/conversation.model.js";
+import Message from "../../src/models/message.model.js";
+import Company from "../../src/models/company.model.js";
 import Job from "../../src/models/job.model.js";
 import Application from "../../src/models/application.model.js";
 import CandidateCV from "../../src/models/candidate-cv.model.js";
@@ -46,6 +49,32 @@ describe("Recruiter FE API completion", () => {
     if (assignee) await Application.updateOne({ _id: row._id }, { $set: { assignedRecruiterCompanyMemberId: assignee } });
     return row;
   };
+
+  it("lists only readable conversations and retains frozen history without granting send authority", async () => {
+    const row = await application("ChatAlice", primary.membership._id);
+    const conversation = await Conversation.create({ applicationId: row._id });
+    for (const content of ["one", "two"]) await Message.create({ conversationId: conversation._id,
+      type: "NORMAL", senderUserId: primary.user._id, senderCompanyMemberId: primary.membership._id, content });
+    const inbox = await get("/api/jobs/my-conversations?q=ChatAlice&limit=1");
+    expect(inbox.status).toBe(200);
+    expect(inbox.body.pagination.total).toBe(1);
+    expect(inbox.body.conversations[0]).toMatchObject({ applicationId: row.id, mode: "ACTIVE",
+      authority: { canRead: true, canSendNormal: true } });
+    const history = await get(`/api/jobs/my-applications/${row.id}/conversation?limit=1&page=2`);
+    expect(history.status).toBe(200);
+    expect(history.body.messages).toHaveLength(1);
+    expect(history.body.pagination.total).toBe(2);
+    expect((await get("/api/jobs/my-conversations", await login(supporting))).body.pagination.total).toBe(0);
+    await get("/api/jobs/my-conversations", await login(manager)).expect(403);
+    await Company.updateOne({ _id: manager.company._id }, { $set: { operationalStatus: "LOCKED" } });
+    const frozen = await get("/api/jobs/my-conversations");
+    expect(frozen.status).toBe(200);
+    expect(frozen.body.conversations[0]).toMatchObject({ mode: "FROZEN_COMPANY",
+      authority: { canRead: true, canSendNormal: false } });
+    await get("/api/jobs/my-applications").expect(403);
+    await Application.updateOne({ _id: row._id }, { $set: { assignedRecruiterCompanyMemberId: null } });
+    expect((await get("/api/jobs/my-conversations")).body.conversations).toEqual([]);
+  });
 
   it("returns only eligible same-company non-team Supporting options with minimal fields", async () => {
     await User.updateOne({ _id: available.user._id }, { $set: { mustChangePassword: true } });

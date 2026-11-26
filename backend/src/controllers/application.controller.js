@@ -1,4 +1,4 @@
-import { parseOptionalListQuery } from "../utils/list-query.js";
+import { parseListQuery, parseOptionalListQuery } from "../utils/list-query.js";
 import APPLICATION_STATUS from "../constants/application-status.js";
 import APPLICATION_SOURCE from "../constants/application-source.js";
 import JOB_STATUS from "../constants/job-status.js";
@@ -18,6 +18,7 @@ import {
   getCandidateMyApplication,
   getManagedJobPipelineWorkspace,
   getRecruiterApplicationConversation,
+  listRecruiterConversations,
   getRecruiterMyApplication,
   listCandidateMyApplications,
   listManagedJobs,
@@ -411,6 +412,17 @@ const getRecruiterMyApplicationHandler = async (request, response, next) => {
   }
 };
 
+const listRecruiterConversationsHandler = async (request, response, next) => {
+  try {
+    const query = Object.fromEntries(Object.entries(request.query).filter(([key]) => key !== "companyId"));
+    const options = parseListQuery(query, { filters: { jobId: null,
+      mode: ["ACTIVE", "READ_ONLY", "FROZEN_COMPANY"] },
+      sorts: ["createdAt", "lastMessageAt"], defaultSort: "-lastMessageAt" });
+    return response.status(200).json(await listRecruiterConversations({ actorUser: request.auth.user,
+      clientCompanyId: readClientCompanyId(request), options }));
+  } catch (error) { return next(error); }
+};
+
 const getRecruiterApplicationConversationHandler = async (
   request,
   response,
@@ -418,6 +430,7 @@ const getRecruiterApplicationConversationHandler = async (
 ) => {
   try {
     const result = await getRecruiterApplicationConversation({
+      options: parseOptionalListQuery(request.query, { sorts: ["createdAt"], defaultSort: "createdAt" }),
       actorUser: request.auth.user,
       applicationId: request.params.applicationId,
       clientCompanyId: readClientCompanyId(request),
@@ -618,6 +631,7 @@ const updateApplicationRecruitmentPipelineStatusHandler = async (
 };
 
 export {
+  listRecruiterConversationsHandler,
   getPrimaryJobApplicationHandler,
   cancelRecruiterInterviewProposalHandler,
   confirmCandidateInterviewProposalHandler,

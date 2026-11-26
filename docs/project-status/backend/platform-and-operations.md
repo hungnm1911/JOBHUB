@@ -2,6 +2,8 @@
 
 ## Current project state
 
+2026-11-26: the safe stack-location parser now supports paths with spaces, Unicode and parentheses while retaining private-message/function-label/query-frame exclusions. Recruiter Inbox and list-read follow-up passed the common Backend gate; no schema, dependency, Calendar API or Supporting Invitation authority change was introduced.
+
 Error handling and runtime request logging are standardized across Backend
 and its injected AI Kit logger.
 
@@ -59,7 +61,7 @@ and its injected AI Kit logger.
   changed.
 
 **Verification:**
-- Latest Recruiter API verification (2026-11-26): focused HTTP checks passed (3 files / 78 tests), lint has 0 errors / 2 existing warnings, and ARCH-001–ARCH-019 passed. The full backend gate is not green: 216 files / 2,252 tests passed; 2 files / 5 logging tests failed because filesystem paths contain spaces. Baseline reproduction and scope are detailed in Verification status below.
+- Latest backend gate (2026-11-26 Recruiter Inbox/list/logging follow-up): `npm run verify:agent` passed 218 files / 2,259 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 existing warnings. The prior spaced-path logging failure is fixed and regression-covered.
 - 2026-10-18 clean-install check on temporary `ai-kit/` + `backend/` copies
   without `node_modules`/`.env` (Node 20.19.1, npm 10.8.2): after the
   canonical two-step install, `npm ls @jobhub/ai-kit --depth=0` passed,
@@ -76,7 +78,6 @@ and its injected AI Kit logger.
 
 ## Known issues / known mismatches
 
-- Existing safe stack-frame extraction in `error-handler.js` excludes paths containing spaces. Five tests in `error-logging.test.js` / `production-error-logging.test.js` therefore fail in this workspace. Reproduced independently on unmodified HEAD `d7a81da`; the same two suites pass at an ASCII path without spaces. This is outside the Recruiter read-API change and remains unresolved here.
 
 - Several configuration values are both required and given unreachable defaults.
 - Model and middleware barrels are empty or disconnected; seed files are placeholders.
@@ -103,6 +104,8 @@ and its injected AI Kit logger.
 - **Documented only:** repository-level and backend-specific agent contracts exist.
 
 ## Verification status
+
+- 2026-11-26 follow-up: `cd backend && npm run verify:agent` passed **218 files / 2,259 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors / 2 existing warnings**. No tests were excluded or timeouts changed. The first attempt was stopped after a MongoMemoryServer random-port collision prevented V15 Slice 08 startup; the full retry above passed all tests. Logging regression evidence: existing failures plus a synthetic spaced/Unicode/parenthesized-path privacy test failed **6 tests** before the regex fix, then `npm test -- test/http/error-logging.test.js test/http/production-error-logging.test.js` passed **2 files / 16 tests**. Final focused `npm test -- test/job/recruiter-fe-api-completion.test.js test/application/v11-conversation-history-read.test.js test/http/production-error-logging.test.js` passed **3 files / 30 tests**. Inbox tests cover frozen Company read-only history, Manager/non-assignee denial, Unassign revocation and message pagination; list regressions preserve scope/eligibility/full workload and unread totals. Gate ran on the working tree including the unchanged pre-existing V15 test delta; that delta remains outside the follow-up commit. Earlier failed gate evidence below is retained as history and is superseded by this successful run. No live-provider, production query-plan/load, browser or Frontend verification is claimed; metadata-only in-memory selection remains explicitly documented in the [API contract](../../engineering/recruiter-api-contract.md).
 
 - 2026-11-26 Recruiter FE API completion: `cd backend && npm run verify:agent` was executed with default logging and no excluded tests or changed timeouts. ESLint passed with 0 errors / 2 existing V6 warnings; ARCH-001–ARCH-019 passed. Vitest returned 216 passed / 2 failed files and 2,252 passed / 5 failed tests (218 files / 2,257 tests total). All failures are stack-location assertions in `test/http/error-logging.test.js` (3) and `test/http/production-error-logging.test.js` (2). Unmodified HEAD `d7a81da` in a separate checkout with spaces reproduced the exact 5 failures / 10 passes; moving the same checkout to a path without spaces passed both files / all 15 tests. No logging source or tests were changed. Therefore the common gate is recorded as failed, not accepted. Final focused command `npm test -- test/job/recruiter-fe-api-completion.test.js test/job/v6-recruiter-job-scopes.test.js test/job/v6-recruitment-team-read.test.js` passed 3 files / 78 tests on the final working tree. The gate includes a pre-existing uncommitted V15 test change that remains outside this feature commit. An earlier reduced-log run was stopped after the migration CLI stdout assertion failed because logging was suppressed; it is not acceptance evidence. No Atlas, SMTP, Cloudinary, browser/E2E or load check was performed. New read projections may paginate in memory as documented in the [API contract](../../engineering/recruiter-api-contract.md).
 

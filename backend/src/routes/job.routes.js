@@ -32,6 +32,7 @@ import {
   forceReassignApplicationHandler,
   getManagedJobPipelineWorkspaceHandler,
   getRecruiterApplicationConversationHandler,
+  listRecruiterConversationsHandler,
   getRecruiterMyApplicationHandler,
   listManagedJobsHandler,
   listPrimaryJobApplicationsHandler,
@@ -84,6 +85,9 @@ router.get(
   authorizeRecruiterBusinessAccess,
   listManagedJobsHandler,
 );
+
+router.get("/my-conversations", authenticateAccess,
+  authorizeRecruiterChatHistoryAccess, listRecruiterConversationsHandler);
 
 router.get(
   "/my-applications",

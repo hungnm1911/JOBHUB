@@ -1,9 +1,10 @@
+import { escapeRegex } from "../utils/escape-regex.js";
 import mongoose from "mongoose";
 
 import NotificationEvent from "../models/notification-event.model.js";
 import Notification from "../models/notification.model.js";
 import { emitNotificationToRecipient } from "../sockets/index.js";
-import { projectList } from "../utils/list-query.js";
+import { paginationMetadata } from "../utils/list-query.js";
 import AppError from "../utils/app-error.js";
 import logger from "../utils/logger.js";
 
@@ -55,11 +56,16 @@ const listNotificationsForRecipient = async ({ recipientUserId }) => {
 };
 
 const listNotificationPageForRecipient = async ({ recipientUserId, options }) => {
-  const notifications = await listNotificationsForRecipient({ recipientUserId });
-  return projectList("notifications", notifications, options, {
-    type: (item) => item.type, readState: (item) => item.readAt == null ? "UNREAD" : "READ",
-    createdAt: (item) => item.createdAt,
-  }, (item) => [item.title, item.content]);
+  if (!options) return { notifications: await listNotificationsForRecipient({ recipientUserId }) };
+  const filter = { recipientUserId,
+    ...(options.type ? { type: options.type } : {}),
+    ...(options.readState ? { readAt: options.readState === "READ" ? { $ne: null } : null } : {}),
+    ...(options.q ? { content: { $regex: escapeRegex(options.q), $options: "i" } } : {}) };
+  const [notifications, total] = await Promise.all([
+    Notification.find(filter).sort(options.sort).skip(options.skip).limit(options.limit),
+    Notification.countDocuments(filter),
+  ]);
+  return { notifications, pagination: paginationMetadata(options, total) };
 };
 
 const countUnreadNotificationsForRecipient = async ({ recipientUserId }) => {

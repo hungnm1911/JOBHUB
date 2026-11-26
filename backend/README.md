@@ -534,6 +534,7 @@ và đọc pagination khi xây dựng màn hình; không có thay đổi Fronten
 | `GET` | `/api/jobs` | Company Staff | Danh sách Job nội bộ |
 | `POST` | `/api/jobs` | Recruiter | Tạo Job `DRAFT` |
 | `GET` | `/api/jobs/managed` | Recruiter | Job Recruiter đang quản lý |
+| `GET` | `/api/jobs/my-conversations` | Recruiter có quyền lịch sử chat | Inbox phân trang theo quyền đọc hiện tại; hỗ trợ Company freeze |
 | `GET` | `/api/jobs/my-applications` | Recruiter | Application được phân công cho mình |
 | `GET` | `/api/jobs/my-applications/:applicationId` | Recruiter | Chi tiết Application được phân công |
 | `GET` | `/api/jobs/my-applications/:applicationId/submitted-cv/preview` | Recruiter | Preview submitted CV |

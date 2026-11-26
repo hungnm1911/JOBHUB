@@ -2,7 +2,7 @@
 
 ## Current project state
 
-2026-11-26 Recruiter FE API read extension: Internal Job title search, persisted-status filtering, sorting and opt-in pagination are implemented. Focused verification passed; common-gate acceptance remains pending because of pre-existing logging tests failing on paths containing spaces. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
+2026-11-26 Recruiter FE API read extension: Internal Job title search, persisted-status filtering, sorting and opt-in pagination are implemented. Focused verification and the common Backend gate now pass after the logging fix and list-read follow-up. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
 
 V5 Slices 01–12 and the recorded acceptance corrections are implemented;
 Final Acceptance / regression closure passed across F01–F12.
@@ -49,7 +49,7 @@ Final Acceptance / regression closure passed across F01–F12.
 
 ## Verification status
 
-- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate was executed but is not green due to the independently reproduced baseline logging failure; no full-gate acceptance is claimed. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
+- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate now passes after the logging fix and list-read follow-up. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
 
 - Focused automated tests cover `test/job/v5-job-create-draft.test.js`, `test/job/v5-recruiter-responsibility-guard.test.js`, `test/job/v5-job-edit-draft.test.js`, `test/job/v5-job-internal-visibility.test.js`, `test/job/v5-job-submit-draft.test.js`, `test/job/v5-job-manager-pending-review.test.js`, `test/job/v5-job-approve-publish.test.js`, `test/job/v5-job-reject-pending.test.js`, `test/job/v5-job-manual-delete.test.js`, `test/job/v5-job-reassign-primary.test.js`, `test/job/v5-job-manual-close.test.js`, `test/job/v5-job-effective-expiration-public-eligibility.test.js`, and `test/job/v5-job-draft-privacy-delete-authority.test.js`.
 

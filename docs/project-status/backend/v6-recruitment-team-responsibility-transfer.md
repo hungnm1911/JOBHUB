@@ -2,7 +2,7 @@
 
 ## Current project state
 
-2026-11-26 Recruiter FE API read extension: Job-scoped eligible Supporting choices and minimal team display summaries are implemented; dedicated team-read policy is preserved. Focused verification passed; common-gate acceptance remains pending because of pre-existing logging tests failing on paths containing spaces. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
+2026-11-26 Recruiter FE API read extension: Job-scoped eligible Supporting choices and minimal team display summaries are implemented; dedicated team-read policy is preserved. Focused verification and the common Backend gate now pass after the logging fix and list-read follow-up. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
 
 V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33,
 and TX-01–TX-03. No known V6 business-blocking finding remains.
@@ -56,7 +56,7 @@ retain their existing contracts.
 
 ## Verification status
 
-- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate was executed but is not green due to the independently reproduced baseline logging failure; no full-gate acceptance is claimed. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
+- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate now passes after the logging fix and list-read follow-up. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
 
 - 2026-11-13 Job-read amendment: `cd backend && npm test -- test/job/v6-recruiter-job-scopes.test.js test/job/v5-job-internal-visibility.test.js test/job/v6-recruitment-team-read.test.js test/application/v10-managed-jobs-pipeline-workspace.test.js` passed **4 files / 93 tests**, including 46 scoped-read tests. `cd backend && npm run verify:agent` passed ESLint (**0 errors / 2 existing warnings** in `v6-acceptance.test.js`), **ARCH-001–ARCH-019**, and **208 files / 2,181 tests**. Tests used the isolated MongoDB replica-set/HTTP harness with local server permissions; no production runtime/load verification or new Final Acceptance review was performed.
 

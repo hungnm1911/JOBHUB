@@ -2,7 +2,7 @@
 
 ## Current project state
 
-2026-11-26 Recruiter FE API read extension: Current-team Assignee choices (including ended Jobs), Primary Application detail, and optional list controls are implemented; mutation and workload semantics are preserved. Focused verification passed; common-gate acceptance remains pending because of pre-existing logging tests failing on paths containing spaces. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
+2026-11-26 Recruiter FE API read extension: Current-team Assignee choices (including ended Jobs), Primary Application detail, and optional list controls are implemented; mutation and workload semantics are preserved. Focused verification and the common Backend gate now pass after the logging fix and list-read follow-up. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
 
 **V10 — Phân công Application và Recruitment Pipeline** Slices 01–10 of the
 current `ASSIGN / UNASSIGN` revision are `IMPLEMENTED AND VERIFIED`. Slice 01
@@ -801,7 +801,7 @@ the current V10 revision complete.
 
 ## Verification status
 
-- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate was executed but is not green due to the independently reproduced baseline logging failure; no full-gate acceptance is claimed. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
+- 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate now passes after the logging fix and list-read follow-up. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
 
 - V10 Slice 07 CompanyMember Recruiter LOCK/TERMINATE automatic Unassign integration (`ASSIGN / UNASSIGN` revision): the official `cd backend && npm run verify:agent` gate passed after CompanyMember LOCK/TERMINATE switched Application resolution from trusted `A → B` handoff to Slice 06 `A → NONE` automatic Unassign while keeping V6 Job-team Primary transfer / Supporting removal and the dual current-state final zero-responsibility guard (ESLint: 0 errors / 2 existing warnings in `test/job/v6-acceptance.test.js`; architecture: ARCH-001 through ARCH-016; Vitest: 107 files / 998 tests). Focused LOCK/TERMINATE Unassign coverage passed 1 file / 17 tests. No generic Recruitment Team removal change, Platform Admin User lifecycle change, Application replacement heuristic, history, recovery state, queue, worker, field, collection, index, or migration was added.
 

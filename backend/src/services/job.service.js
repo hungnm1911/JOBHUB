@@ -38,7 +38,7 @@ import { normalizeRichText } from "./rich-text.service.js";
 import { escapeRegex } from "../utils/escape-regex.js";
 import AppError from "../utils/app-error.js";
 import logger from "../utils/logger.js";
-import { paginationMetadata, projectList } from "../utils/list-query.js";
+import { paginationMetadata } from "../utils/list-query.js";
 
 const EMPLOYMENT_TYPE_VALUES = new Set(Object.values(EMPLOYMENT_TYPE));
 const WORK_MODE_VALUES = new Set(Object.values(WORK_MODE));
@@ -2519,14 +2519,24 @@ const listJobRecruiterOptions = async ({ actorUser, jobId, clientCompanyId, opti
     throw new AppError(409, "Job is not eligible for this operation", { field: "status", status });
   }
   const teamIds = [job.primaryRecruiterCompanyMemberId, ...(job.supportingRecruiterCompanyMemberIds ?? [])];
-  const members = purpose === "assignment" ? teamIds :
-    (await CompanyMember.find({ companyId: context.companyId,
-      role: COMPANY_MEMBER_ROLE.RECRUITER, _id: { $nin: teamIds } }).select("_id")).map((member) => member._id);
-  const recruiters = await getJobRecruiterSummaries({ companyId: context.companyId,
-    memberIds: members, eligible: true, requirePasswordSetup: purpose === "supporting" });
-  return projectList("recruiters", recruiters, options, {
-    fullName: (item) => item.fullName,
-  }, (item) => [item.fullName, item.jobTitle], (item) => item.companyMemberId);
+  const filter = { companyId: context.companyId, role: COMPANY_MEMBER_ROLE.RECRUITER,
+    status: COMPANY_MEMBER_STATUS.ACTIVE, _id: purpose === "assignment" ? { $in: teamIds } : { $nin: teamIds } };
+  const stages = [{ $match: filter }, { $lookup: { from: User.collection.name,
+    localField: "userId", foreignField: "_id", pipeline: [{ $match: {
+      role: USER_ROLE.COMPANY_STAFF, status: USER_STATUS.ACTIVE,
+      ...(purpose === "supporting" ? { mustChangePassword: false } : {}),
+    } }, { $project: { fullName: 1, avatarUrl: 1 } }], as: "user" } }, { $unwind: "$user" },
+    ...(options?.q ? [{ $match: { $or: ["user.fullName", "jobTitle"].map((field) =>
+      ({ [field]: { $regex: escapeRegex(options.q), $options: "i" } })) } }] : [])];
+  const page = options ?? { page: 1, limit: 20, skip: 0, sort: { fullName: 1, _id: 1 } };
+  const sort = Object.fromEntries(Object.entries(page.sort).map(([key, value]) =>
+    [key === "fullName" ? "user.fullName" : key, value]));
+  const [result] = await CompanyMember.aggregate([...stages, { $facet: {
+    count: [{ $count: "total" }], rows: [{ $sort: sort }, { $skip: page.skip }, { $limit: page.limit }],
+  } }]);
+  return { recruiters: result.rows.map((member) => ({ companyMemberId: String(member._id),
+    fullName: member.user.fullName, jobTitle: member.jobTitle, avatarUrl: member.user.avatarUrl ?? null })),
+    pagination: paginationMetadata(page, result.count[0]?.total ?? 0) };
 };
 
 // V6 F01: Recruitment Team read — dedicated authorization separate from

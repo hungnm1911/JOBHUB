@@ -19,7 +19,7 @@ import CandidateCV, {
 import Category from "../models/category.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import User from "../models/user.model.js";
-import { catalogPage } from "../utils/list-query.js";
+import { paginationMetadata } from "../utils/list-query.js";
 import AppError from "../utils/app-error.js";
 import { escapeRegex } from "../utils/escape-regex.js";
 import { inspectUploadedCandidateCvPdf } from "./candidate-cv-uploaded-pdf.service.js";
@@ -1430,8 +1430,7 @@ const resolveCandidateSearchCategoryFilterIds = async (categoryIds) => {
   return [...categoryIdSet].map((id) => new mongoose.Types.ObjectId(id));
 };
 
-const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}, sort = { updatedAt: -1, _id: -1 } }) => {
-  assertRecruiterCandidateSearchActor(actorUser);
+const resolveCandidateSearchMatch = async (filters = {}) => {
 
   const requestedCategoryIds = normalizeCandidateSearchFilterObjectIds(
     filters.categoryIds,
@@ -1472,7 +1471,7 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     requestedLocationSelections.length > 0 &&
     locationFilterSelections.length === 0
   ) {
-    return [];
+    return null;
   }
 
   // V14 BR-10..BR-16 + BR-32:
@@ -1480,7 +1479,7 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
   // - GENERATED requires status ACTIVE;
   // - UPLOADED has no extra business status predicate;
   // - final eligibility also requires current Candidate ACTIVE + verified email.
-  const candidateCvs = await CandidateCV.find({
+  return {
     ...buildCandidateSearchEligibleCvFilter(),
     ...(categoryFilterIds.length > 0
       ? { categoryId: { $in: categoryFilterIds } }
@@ -1527,8 +1526,15 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
     ...(requestedWorkModes.length > 0
       ? { workModes: { $in: requestedWorkModes } }
       : {}),
-  }).sort(sort);
+  };
+};
 
+
+const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}, sort = { updatedAt: -1, _id: -1 } }) => {
+  assertRecruiterCandidateSearchActor(actorUser);
+  const match = await resolveCandidateSearchMatch(filters);
+  if (!match) return [];
+  const candidateCvs = await CandidateCV.find(match).sort(sort);
   if (candidateCvs.length === 0) {
     return [];
   }
@@ -1555,9 +1561,22 @@ const listCandidateSearchEligibleCandidateCvs = async ({ actorUser, filters = {}
 };
 
 const listCandidateSearchPage = async ({ actorUser, filters, options }) => {
-  const cvs = await listCandidateSearchEligibleCandidateCvs({ actorUser, filters,
-    ...(options ? { sort: options.sort } : {}) });
-  return options ? catalogPage("cvs", cvs, options) : { cvs };
+  if (!options) return { cvs: await listCandidateSearchEligibleCandidateCvs({ actorUser, filters }) };
+  assertRecruiterCandidateSearchActor(actorUser);
+  const match = await resolveCandidateSearchMatch(filters);
+  if (!match) return { cvs: [], pagination: paginationMetadata(options, 0) };
+  const [result] = await CandidateCV.aggregate([
+    { $match: match },
+    { $lookup: { from: User.collection.name, localField: "candidateUserId", foreignField: "_id",
+      pipeline: [{ $match: buildSearchEligibleCandidateOwnerFilter() }, { $project: { fullName: 1 } }], as: "owner" } },
+    { $unwind: "$owner" },
+    { $facet: { count: [{ $count: "total" }], rows: [{ $sort: options.sort },
+      { $skip: options.skip }, { $limit: options.limit },
+      { $project: { _id: 1, owner: 1, name: 1, categoryId: 1, experienceLevelId: 1, skillTags: 1,
+        preferredLocations: 1, employmentTypes: 1, workModes: 1 } }] } },
+  ]);
+  return { cvs: result.rows.map((cv) => toCandidateSearchResultSummary(cv, cv.owner)),
+    pagination: paginationMetadata(options, result.count[0]?.total ?? 0) };
 };
 
 const loadOwnActiveCandidateCv = async ({
