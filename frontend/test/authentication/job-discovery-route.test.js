@@ -104,7 +104,7 @@ for (const [actor, role, membership] of [
   ['Company Manager', 'COMPANY_STAFF', { role: 'COMPANY_MANAGER', status: 'ACTIVE' }],
   ['Platform Admin', 'PLATFORM_ADMIN', null],
 ]) {
-  test(`${actor} is denied across discovery paths regardless of CompanyMember state`, async () => {
+  test(`${actor} stays denied on Discovery resources; only eligible CM has the website home exception`, async () => {
     for (const path of discoveryPaths) {
       for (const accountContextStatus of role === 'COMPANY_STAFF' ? ['resolved'] : ['loading', 'unavailable', 'resolved']) {
         for (const companyMembership of membership ? [null, membership] : [null]) {
@@ -113,6 +113,10 @@ for (const [actor, role, membership] of [
             accountContextStatus,
           }), path)
           try {
+            if (role === 'COMPANY_STAFF' && companyMembership && path === '/') {
+              assert.match(mounted.container.textContent, /Discovery page:/)
+              continue
+            }
             assert.match(mounted.container.textContent, /Không thể truy cập Job Discovery/)
             assert.doesNotMatch(mounted.container.textContent, /Discovery page:|Đang xác định quyền|Thử lại/)
           } finally {

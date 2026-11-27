@@ -165,7 +165,7 @@ test('home search sends keyword and the selected Location to canonical Discovery
 
 test('Manager, onboarding, Admin and safe return defaults remain role-appropriate; /recruiter stays a workspace alias', () => {
   assert.equal(toPostLoginLocation(user, null, membership).pathname, '/')
-  assert.equal(toPostLoginLocation(user, { from: '/' }, { role: 'COMPANY_MANAGER' }).pathname, '/company/recruiters')
+  assert.equal(toPostLoginLocation(user, { from: '/' }, { role: 'COMPANY_MANAGER' }).pathname, '/')
   assert.equal(toPostLoginLocation({ ...user, status: 'PENDING_ACTIVATION' }).pathname, '/onboarding/company')
   assert.equal(toPostLoginLocation({ role: 'PLATFORM_ADMIN' }).pathname, '/admin')
   assert.equal(toPostLoginLocation(user, { from: '//outside.example' }, membership).pathname, '/')

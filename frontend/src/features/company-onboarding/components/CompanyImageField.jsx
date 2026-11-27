@@ -1,5 +1,5 @@
 import { Image as ImageIcon, LoaderCircle, Trash2, Upload } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { uploadOwnedCompanyImageApi } from '@/apis/company.api'
@@ -15,10 +15,18 @@ function CompanyImageField({
   error,
   disabled = false,
   onUploaded,
+  onUploadingChange,
   onCleared,
 }) {
   const inputId = useId()
   const inputRef = useRef(null)
+  const mountedRef = useRef(false)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
   const [uploading, setUploading] = useState(false)
   const [failedUrl, setFailedUrl] = useState(null)
   const hasImage = Boolean(value) && failedUrl !== value
@@ -39,16 +47,21 @@ function CompanyImageField({
     }
 
     setUploading(true)
+    onUploadingChange?.(kind, true)
 
     try {
       const result = await uploadOwnedCompanyImageApi({ kind, file })
+      if (!mountedRef.current) return
       setFailedUrl(null)
       onUploaded(result.image.url)
       toast.success(`${label} đã được tải lên. Nhớ lưu hồ sơ để giữ thay đổi.`)
     } catch (uploadError) {
-      toast.error(uploadError.message)
+      if (mountedRef.current) toast.error(uploadError.message)
     } finally {
-      setUploading(false)
+      if (mountedRef.current) {
+        setUploading(false)
+        onUploadingChange?.(kind, false)
+      }
     }
   }
 
@@ -86,7 +99,10 @@ function CompanyImageField({
           <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center text-muted-foreground">
             <span className="flex size-10 items-center justify-center rounded-full bg-background/80 shadow-sm">
               {uploading ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-4 animate-spin"
+                />
               ) : (
                 <ImageIcon aria-hidden="true" className="size-4" />
               )}
@@ -108,7 +124,10 @@ function CompanyImageField({
           >
             <span className="inline-flex items-center gap-2 rounded-full bg-black/50 px-3 py-1.5 text-sm font-medium backdrop-blur-sm">
               {uploading ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-4 animate-spin"
+                />
               ) : (
                 <Upload aria-hidden="true" className="size-4" />
               )}
@@ -120,7 +139,9 @@ function CompanyImageField({
 
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          {hasImage ? 'Nhấp vào ảnh để thay thế.' : 'Nhấp vào khung để tải ảnh lên.'}
+          {hasImage
+            ? 'Nhấp vào ảnh để thay thế.'
+            : 'Nhấp vào khung để tải ảnh lên.'}
         </p>
         {hasImage && (
           <Button

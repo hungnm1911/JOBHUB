@@ -20,7 +20,21 @@ const footerColumns = [
 
 const footerLabels = ['Điều khoản sử dụng', 'Chính sách bảo mật', 'Trung tâm trợ giúp']
 
-function AppFooter() {
+function AppFooter({ isCompanyManager = false }) {
+  if (isCompanyManager) {
+    return (
+      <footer className="border-t bg-card">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-5 text-sm sm:px-6">
+          <Link className="font-semibold" to="/">© {new Date().getFullYear()} JOBHUB</Link>
+          <nav aria-label="Điều hướng doanh nghiệp" className="flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground">
+            <Link className="hover:text-primary" to="/company/jobs">Job tuyển dụng</Link>
+            <Link className="hover:text-primary" to="/company/recruiters">Recruiter</Link>
+            <Link className="hover:text-primary" to="/company/profile">Hồ sơ công ty</Link>
+          </nav>
+        </div>
+      </footer>
+    )
+  }
   return (
     <footer className="bg-hero text-hero-foreground">
       <div className="mx-auto w-full max-w-6xl px-6 py-12">

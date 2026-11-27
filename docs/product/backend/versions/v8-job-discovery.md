@@ -252,6 +252,9 @@ Các nhu cầu của Company Manager tiếp tục được xử lý trong busine
 context quản lý Company và các resource thuộc Company.
 
 V8 không bổ sung capability Job Discovery riêng cho Company Manager.
+Trang chủ website `/` dành cho Company Manager, được duyệt ngày 2026-11-27
+trong đặc tả V6, chỉ dùng API nội bộ Company/Job/Recruiter. Ngoại lệ giao diện
+ở `/` không cấp quyền vào resource Discovery hay thay đổi quy tắc `403` của V8.
 
 ### 4.5. Platform Admin
 

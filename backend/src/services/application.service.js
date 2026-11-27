@@ -71,6 +71,7 @@ import {
   acquireJobCurrentPrimaryForAssignmentManagementTx,
   acquireJobTeamMembershipForAssigneeEligibilityTx,
   acquireOperationalCompanyForAssigneeEligibilityTx,
+  assertJobInternallyVisible,
   isJobPubliclyEligible,
   isOwningCompanyActiveForPublicEligibility,
   toPublicJob,
@@ -651,6 +652,13 @@ const listPrimaryJobApplications = async ({
     context,
     job,
     actionLabel: "view",
+  });
+
+  // V5 BR-37 also applies when the Job is embedded in an Application list.
+  assertJobInternallyVisible({
+    job,
+    companyRole: context.companyRole,
+    membershipId: context.membership._id,
   });
 
   // V15 Slice 07: Primary/CM Application View covers both Direct Apply and

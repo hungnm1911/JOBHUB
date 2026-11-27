@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import {
   ACCOUNT_CONTEXT_STATUS,
@@ -13,7 +13,8 @@ import { API_ERROR_MESSAGE, USER_ROLE, USER_STATUS } from '@/utils/constant'
 
 import RouteAccessState from './RouteAccessState'
 
-function JobDiscoveryRoute() {
+function JobDiscoveryRoute({ allowCompanyManagerHome = false }) {
+  const location = useLocation()
   const status = useAppSelector(selectAuthenticationStatus)
   const user = useAppSelector(selectAuthenticatedUser)
   const accountContextStatus = useAppSelector(selectAccountContextStatus)
@@ -47,6 +48,9 @@ function JobDiscoveryRoute() {
       return <RouteAccessState description="Không thể xác định vai trò trong doanh nghiệp. Vui lòng thử lại." retry title="Chưa tải được quyền truy cập" />
     }
     if (viewer.isRecruiter) return <Outlet />
+    // The CM website home consumes internal Company APIs, not Discovery V8.
+    // This exception never admits CM to the three Discovery resource routes.
+    if (allowCompanyManagerHome && location.pathname === '/' && viewer.isCompanyManager) return <Outlet />
   }
 
   return <RouteAccessState description={API_ERROR_MESSAGE.JOB_DISCOVERY_NOT_AVAILABLE} title="Không thể truy cập Job Discovery" />

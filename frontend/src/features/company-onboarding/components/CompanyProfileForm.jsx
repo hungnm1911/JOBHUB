@@ -8,7 +8,7 @@ import {
   Phone,
   Save,
 } from 'lucide-react'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 
@@ -71,6 +71,13 @@ function CompanyProfileForm({
 }) {
   const intentRef = useRef(SAVE_INTENT.DRAFT)
   const descriptionLabelId = useId()
+  const uploadsRef = useRef(new Set())
+  const [uploading, setUploading] = useState(false)
+  const onUploadingChange = useCallback((kind, pending) => {
+    if (pending) uploadsRef.current.add(kind)
+    else uploadsRef.current.delete(kind)
+    setUploading(uploadsRef.current.size > 0)
+  }, [])
   const [pendingIntent, setPendingIntent] = useState(null)
   const {
     control,
@@ -93,7 +100,7 @@ function CompanyProfileForm({
     control,
     name: ['logoUrl', 'bannerUrl', 'description', 'descriptionHtml'],
   })
-  const { markSaved } = useUnsavedChangesPrompt(isDirty)
+  const { markSaved } = useUnsavedChangesPrompt(isDirty || uploading)
 
   const assignImageUrl = (field, url) => {
     setValue(field, url, { shouldDirty: true, shouldValidate: true })
@@ -156,6 +163,7 @@ function CompanyProfileForm({
   }
 
   const submitWithIntent = async (intent) => {
+    if (uploadsRef.current.size > 0) return
     intentRef.current = intent
     setPendingIntent(intent)
 
@@ -190,6 +198,7 @@ function CompanyProfileForm({
             error={errors.name}
             icon={Building2}
             inputProps={{
+              disabled: isSubmitting,
               autoComplete: 'organization',
               readOnly: active,
               placeholder: 'Công ty Cổ phần ABC',
@@ -203,6 +212,7 @@ function CompanyProfileForm({
             hint="Mỗi mã số doanh nghiệp chỉ được dùng cho một doanh nghiệp."
             icon={FileBadge}
             inputProps={{
+              disabled: isSubmitting,
               placeholder: '0109876543',
               readOnly: active,
               ...register('businessRegistrationNumber'),
@@ -219,6 +229,7 @@ function CompanyProfileForm({
             error={errors.website}
             icon={Globe}
             inputProps={{
+              disabled: isSubmitting,
               inputMode: 'url',
               placeholder: 'https://abc-tech.vn',
               ...register('website'),
@@ -229,6 +240,7 @@ function CompanyProfileForm({
             error={errors.contactInfo}
             icon={Phone}
             inputProps={{
+              disabled: isSubmitting,
               placeholder: 'Email: hr@abc-tech.vn – Hotline: 024…',
               ...register('contactInfo'),
             }}
@@ -239,6 +251,7 @@ function CompanyProfileForm({
             error={errors.address}
             icon={MapPin}
             inputProps={{
+              disabled: isSubmitting,
               autoComplete: 'street-address',
               placeholder:
                 'Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố',
@@ -305,6 +318,7 @@ function CompanyProfileForm({
             error={errors.logoUrl}
             frameClassName="aspect-square"
             kind={COMPANY_IMAGE_KIND.LOGO}
+            onUploadingChange={onUploadingChange}
             label="Logo"
             onCleared={() => assignImageUrl('logoUrl', '')}
             onUploaded={(url) => assignImageUrl('logoUrl', url)}
@@ -315,6 +329,7 @@ function CompanyProfileForm({
             error={errors.bannerUrl}
             frameClassName="aspect-[21/9] min-h-28"
             kind={COMPANY_IMAGE_KIND.BANNER}
+            onUploadingChange={onUploadingChange}
             label="Ảnh bìa"
             onCleared={() => assignImageUrl('bannerUrl', '')}
             onUploaded={(url) => assignImageUrl('bannerUrl', url)}
@@ -327,7 +342,7 @@ function CompanyProfileForm({
         {!active && (
           <Button
             className="h-11"
-            disabled={isSubmitting}
+            disabled={isSubmitting || uploading}
             onClick={() => submitWithIntent(SAVE_INTENT.DRAFT)}
             type="button"
             variant="outline"
@@ -343,7 +358,11 @@ function CompanyProfileForm({
             Lưu nháp
           </Button>
         )}
-        <Button className="h-11" disabled={isSubmitting} type="submit">
+        <Button
+          className="h-11"
+          disabled={isSubmitting || uploading}
+          type="submit"
+        >
           {savingIntent === SAVE_INTENT.CONTINUE ? (
             <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
           ) : null}

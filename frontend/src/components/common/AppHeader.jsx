@@ -14,7 +14,7 @@ const CANDIDATE_PRIMARY_NAV_LINKS = Object.freeze([
   { to: '/candidate/invitations', label: 'Lời mời ứng tuyển' },
 ])
 
-function AppHeader({ accountArea, isCandidate = false, isRecruiter = false, homeTo = '/', showDiscoveryAction = true }) {
+function AppHeader({ accountArea, isCandidate = false, isRecruiter = false, isCompanyManager = false, homeTo = '/', showDiscoveryAction = true }) {
   const navLinkClass = ({ isActive }, visibleOnMobile = false) =>
     cn(
       'shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring xl:inline-flex',
@@ -63,7 +63,14 @@ function AppHeader({ accountArea, isCandidate = false, isRecruiter = false, home
             </div>
           )}
 
-          {!isCandidate && !isRecruiter && showDiscoveryAction && (
+          {isCompanyManager && (
+            <div className="hidden items-center gap-3 sm:flex sm:gap-5">
+              <NavLink className={(state) => navLinkClass(state, true)} end to="/">Trang chủ</NavLink>
+              <NavLink className={(state) => navLinkClass(state, true)} to="/company/jobs">Quản lý công ty</NavLink>
+            </div>
+          )}
+
+          {!isCandidate && !isRecruiter && !isCompanyManager && showDiscoveryAction && (
             <Button asChild size="sm" className="shrink-0 font-semibold">
               <Link to="/jobs">Tìm việc làm</Link>
             </Button>
@@ -91,6 +98,12 @@ function AppHeader({ accountArea, isCandidate = false, isRecruiter = false, home
           <NavLink className={({ isActive }) => cn('rounded-sm hover:text-primary focus-visible:ring-2 focus-visible:ring-ring', isActive && 'text-primary')} end to="/">Trang chủ</NavLink>
           <NavLink className={({ isActive }) => cn('rounded-sm hover:text-primary focus-visible:ring-2 focus-visible:ring-ring', isActive && 'text-primary')} to="/jobs">Khám phá việc làm</NavLink>
           <Link className="rounded-sm text-primary focus-visible:ring-2 focus-visible:ring-ring" to="/recruiter/jobs">Khu tuyển dụng</Link>
+        </nav>
+      )}
+      {isCompanyManager && (
+        <nav aria-label="Điều hướng Company Manager trên mobile" className="flex flex-wrap gap-x-6 gap-y-2 border-t px-4 py-3 text-sm font-medium sm:hidden">
+          <NavLink className={({ isActive }) => cn('rounded-sm hover:text-primary focus-visible:ring-2 focus-visible:ring-ring', isActive && 'text-primary')} end to="/">Trang chủ</NavLink>
+          <NavLink className={({ isActive }) => cn('rounded-sm hover:text-primary focus-visible:ring-2 focus-visible:ring-ring', isActive && 'text-primary')} to="/company/jobs">Quản lý công ty</NavLink>
         </nav>
       )}
     </header>
