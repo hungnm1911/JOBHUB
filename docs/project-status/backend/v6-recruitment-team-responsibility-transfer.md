@@ -2,6 +2,16 @@
 
 ## Current project state
 
+2026-11-27 Company Manager workspace: the F05 read-only handover preview is
+implemented and Backend verified. `GET /api/company/recruiters/:recruiterId/handover`
+reuses the existing unfinished-Job predicates and Recruiter list aggregation;
+it exposes only Primary Job IDs/statuses, Supporting count and paginated eligible
+replacement summaries. General DRAFT content visibility and existing lifecycle
+mutations remain unchanged. API handoff is in the
+[V1–V4 contract](../../engineering/v1-v4-api-contract.md#company-manager-handover-preview--2026-11-27).
+Frontend scope and its separate gate limitation are recorded in
+[Company Manager workspace](../frontend/company-manager-workspace.md).
+
 2026-11-26 Recruiter FE API read extension: Job-scoped eligible Supporting choices and minimal team display summaries are implemented; dedicated team-read policy is preserved. Focused verification and the common Backend gate now pass after the logging fix and list-read follow-up. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
 
 V6 has Final Acceptance / regression closure across F01–F05, BR-01–BR-33,
@@ -55,6 +65,17 @@ retain their existing contracts.
 - **Implemented; verified:** V6 Slice 02 — Add Supporting Recruiter (F02; BR-04, BR-08–BR-10, BR-12–BR-17, BR-30, BR-32) + TX-02 boundary. Adds `POST /api/jobs/:jobId/team/supporting` with validator + service-side canonical eligibility checks; constrains operation to effectively `PUBLISHED` at mutation boundary (deadline via `$$NOW` semantics); enforces operational eligibility for target Recruiter (active membership, recruiter role, active User, `mustChangePassword=false`, same Company, Company `APPROVED + ACTIVE`); preserves job invariants (Primary/createdBy/company ownership/status/content unchanged) while atomically updating only `supportingRecruiterCompanyMemberIds`; extends lock/terminate completion guard to block LOCKED/TERMINATED recruiters that still hold active Supporting responsibilities on un-ended jobs (TX-02); regression ensures generic Job read does not expose `supportingRecruiterCompanyMemberIds`. Focused coverage in `test/job/v6-recruitment-team-add-supporting.test.js`.
 
 ## Verification status
+
+- 2026-11-27 handover preview: `npm test -- test/job/company-manager-handover-preview.test.js`
+  passed **2/2** tests: tenant/role/target boundaries, immutable minimal DRAFT
+  projection, unfinished/effective-expiration predicates, eligible replacement
+  count/search/paging, source exclusion and read-only persistence. Existing forced
+  lock/terminate suites passed **31/31** during the focused integration run; its
+  initial new-preview test had a tenant-query precedence expectation corrected
+  to the existing guard's 403, followed by the successful preview rerun. The final
+  `npm run verify:agent` passed **220 files / 2,275 tests**, ARCH-001–ARCH-019 and
+  ESLint with 2 existing warnings. Shared evidence/limits are in
+  [Platform and operations](platform-and-operations.md#verification-status).
 
 - 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate now passes after the logging fix and list-read follow-up. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
 

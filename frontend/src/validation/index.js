@@ -7,12 +7,23 @@ import { forgotPasswordSchema } from './authentication-forgot-password.schema'
 import { loginSchema } from './authentication-login.schema'
 import { resetPasswordSchema } from './authentication-reset-password.schema'
 import { validators } from './common.validators'
-import { companyDraftSchema, companySubmissionSchema } from './company-profile.schema'
+import {
+  companyActiveSchema,
+  companyDraftSchema,
+  companySubmissionSchema,
+} from './company-profile.schema'
+import {
+  companyRecruiterCreateSchema,
+  companyRecruiterMetadataSchema,
+} from './company-recruiter.schema'
 
 export {
   accountRegistrationSchema,
   changePasswordSchema,
   companyDraftSchema,
+  companyActiveSchema,
+  companyRecruiterCreateSchema,
+  companyRecruiterMetadataSchema,
   companySubmissionSchema,
   forgotPasswordSchema,
   loginSchema,

@@ -247,13 +247,20 @@ const listRecruiters = async ({ managerUser, clientCompanyId, options }) => {
   return listRecruitersByCompany({ companyId: context.companyId, options });
 };
 
-const listRecruitersByCompany = async ({ companyId, options }) => {
+const listRecruitersByCompany = async ({ companyId, options, handoverSourceMemberId }) => {
   if (!mongoose.isObjectIdOrHexString(companyId)) throw new AppError(400, "Invalid company id");
   if (!(await Company.exists({ _id: companyId }))) throw new AppError(404, "Company not found");
   const filter = { companyId: new mongoose.Types.ObjectId(companyId.toString()), role: COMPANY_MEMBER_ROLE.RECRUITER };
   if (options.membershipStatus) filter.status = options.membershipStatus;
   const userFilter = { "user.role": USER_ROLE.COMPANY_STAFF };
   if (options.userStatus) userFilter["user.status"] = options.userStatus;
+  // Internal handover projection; this is not a client-supplied list filter.
+  if (handoverSourceMemberId) {
+    filter._id = { $ne: handoverSourceMemberId };
+    filter.status = COMPANY_MEMBER_STATUS.ACTIVE;
+    userFilter["user.status"] = USER_STATUS.ACTIVE;
+    userFilter["user.mustChangePassword"] = false;
+  }
   if (options.q) {
     const regex = { $regex: escapeRegex(options.q), $options: "i" };
     userFilter.$or = ["user.fullName", "user.email", "employeeCode", "jobTitle"].map((field) => ({ [field]: regex }));
@@ -443,6 +450,39 @@ const buildLifecycleTransferMap = (transfers = []) => {
   }
 
   return transferMap;
+};
+
+// Read-only input to V6 forced transfer. Reuse the same unfinished-Job owners
+// as lifecycle completion; never expose DRAFT content through this projection.
+const getRecruiterHandover = async ({ managerUser, recruiterId, clientCompanyId, options }) => {
+  const context = await resolveCompanyManagerRecruiterManagementContext({
+    user: managerUser, clientCompanyId,
+  });
+  const { membership } = await loadSameTenantRecruiterMembership({
+    companyId: context.companyId, recruiterId,
+  });
+  if (membership.status === COMPANY_MEMBER_STATUS.TERMINATED) {
+    throw new AppError(409, "Terminated Recruiter has no lifecycle handover", { field: "membershipStatus" });
+  }
+  const now = new Date();
+  const [primaryJobs, supportingJobs, replacements] = await Promise.all([
+    findAllUnfinishedJobsAsPrimary({ companyId: context.companyId,
+      primaryRecruiterCompanyMemberId: membership._id, now }),
+    findAllUnfinishedJobsAsSupporting({ companyId: context.companyId,
+      supportingRecruiterCompanyMemberId: membership._id, now }),
+    listRecruitersByCompany({ companyId: context.companyId, options,
+      handoverSourceMemberId: membership._id }),
+  ]);
+  return {
+    primaryJobs: primaryJobs.map((job) => ({ jobId: String(job._id), status: job.status }))
+      .sort((left, right) => left.jobId.localeCompare(right.jobId)),
+    supportingJobCount: supportingJobs.length,
+    recruiters: replacements.recruiters.map((recruiter) => ({
+      companyMemberId: recruiter.membership.id, fullName: recruiter.fullName,
+      jobTitle: recruiter.membership.jobTitle,
+    })),
+    pagination: replacements.pagination,
+  };
 };
 
 const assertZeroActiveRecruiterResponsibility = async ({
@@ -921,6 +961,7 @@ export {
   listRecruitersByCompany, updateRecruiter, resendRecruiterActivation,
   createRecruiter,
   getRecruiterDetail,
+  getRecruiterHandover,
   initiateRecruiterPasswordReset,
   listRecruiters,
   lockRecruiter,

@@ -31,28 +31,46 @@ const getRecruiterJobApi = (jobId) => get(toJobPath(jobId))
 const createDraftJobApi = (content) => post('/jobs', content)
 
 async function updateDraftJobApi(jobId, content) {
-  const response = await apiClient.patch(toJobPath(jobId), content, PROTECTED_REQUEST)
+  const response = await apiClient.patch(
+    toJobPath(jobId),
+    content,
+    PROTECTED_REQUEST,
+  )
   return response.data
 }
 
 const submitDraftJobApi = (jobId) => post(`${toJobPath(jobId)}/submit`)
 const closePublishedJobApi = (jobId) => post(`${toJobPath(jobId)}/close`)
+const approveCompanyJobApi = (jobId) => post(`${toJobPath(jobId)}/approve`)
+const rejectCompanyJobApi = (jobId) => post(`${toJobPath(jobId)}/reject`)
+const replaceJobPrimaryApi = (jobId, body) =>
+  post(`${toJobPath(jobId)}/team/replace-primary`, body)
 const deleteDraftJobApi = (jobId) => remove(toJobPath(jobId))
 
 // V6 Recruitment Team and V10 workspace.
-const getJobPipelineWorkspaceApi = (jobId) => get(`${toJobPath(jobId)}/workspace`)
+const getJobPipelineWorkspaceApi = (jobId) =>
+  get(`${toJobPath(jobId)}/workspace`)
 const getJobTeamApi = (jobId) => get(`${toJobPath(jobId)}/team`)
 const listSupportingOptionsApi = (jobId, params) =>
   get(`${toJobPath(jobId)}/team/supporting-options`, params)
 const listAssignmentOptionsApi = (jobId, params) =>
   get(`${toJobPath(jobId)}/assignment-options`, params)
 const addSupportingRecruiterApi = (jobId, supportingRecruiterCompanyMemberId) =>
-  post(`${toJobPath(jobId)}/team/supporting`, { supportingRecruiterCompanyMemberId })
+  post(`${toJobPath(jobId)}/team/supporting`, {
+    supportingRecruiterCompanyMemberId,
+  })
 const removeSupportingRecruiterApi = (jobId, companyMemberId) =>
-  remove(`${toJobPath(jobId)}/team/supporting/${encodeURIComponent(companyMemberId)}`)
+  remove(
+    `${toJobPath(jobId)}/team/supporting/${encodeURIComponent(
+      companyMemberId,
+    )}`,
+  )
 
 export {
   addSupportingRecruiterApi,
+  approveCompanyJobApi,
+  rejectCompanyJobApi,
+  replaceJobPrimaryApi,
   closePublishedJobApi,
   createDraftJobApi,
   deleteDraftJobApi,

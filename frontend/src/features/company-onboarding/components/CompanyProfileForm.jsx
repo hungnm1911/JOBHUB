@@ -16,8 +16,17 @@ import { updateOwnedCompanyApi } from '@/apis/company.api'
 import RichTextEditor from '@/components/common/RichTextEditor'
 import useUnsavedChangesPrompt from '@/components/common/UnsavedChangesProvider/hooks/useUnsavedChangesPrompt'
 import { Button } from '@/components/ui/button'
-import { API_ERROR_MESSAGE, COMPANY_IMAGE_KIND, COMPANY_PROFILE_LIMIT } from '@/utils/constant'
-import { companyDraftSchema, companySubmissionSchema, zodResolver } from '@/validation'
+import {
+  API_ERROR_MESSAGE,
+  COMPANY_IMAGE_KIND,
+  COMPANY_PROFILE_LIMIT,
+} from '@/utils/constant'
+import {
+  companyActiveSchema,
+  companyDraftSchema,
+  companySubmissionSchema,
+  zodResolver,
+} from '@/validation'
 
 import {
   COMPANY_PROFILE_FIELDS,
@@ -36,20 +45,30 @@ const SAVE_INTENT = Object.freeze({
 
 const draftResolver = zodResolver(companyDraftSchema)
 const submissionResolver = zodResolver(companySubmissionSchema)
+const activeResolver = zodResolver(companyActiveSchema)
 
 function FormSection({ title, description, children }) {
   return (
     <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
       <div>
         <h2 className="text-base font-semibold">{title}</h2>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+        {description && (
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        )}
       </div>
       {children}
     </section>
   )
 }
 
-function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, onStateChanged }) {
+function CompanyProfileForm({
+  company,
+  active = false,
+  serverFieldError,
+  onSaved,
+  onContinue,
+  onStateChanged,
+}) {
   const intentRef = useRef(SAVE_INTENT.DRAFT)
   const descriptionLabelId = useId()
   const [pendingIntent, setPendingIntent] = useState(null)
@@ -64,11 +83,11 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
   } = useForm({
     defaultValues: toCompanyProfileFormValues(company),
     resolver: (values, context, options) =>
-      (intentRef.current === SAVE_INTENT.CONTINUE ? submissionResolver : draftResolver)(
-        values,
-        context,
-        options,
-      ),
+      (active
+        ? activeResolver
+        : intentRef.current === SAVE_INTENT.CONTINUE
+          ? submissionResolver
+          : draftResolver)(values, context, options),
   })
   const [logoUrl, bannerUrl, description, descriptionHtml] = useWatch({
     control,
@@ -94,7 +113,12 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
     let result
 
     try {
-      result = await updateOwnedCompanyApi(toCompanyProfileUpdatePayload(values, dirtyFields))
+      const payload = toCompanyProfileUpdatePayload(values, dirtyFields)
+      if (active) {
+        delete payload.name
+        delete payload.businessRegistrationNumber
+      }
+      result = await updateOwnedCompanyApi(payload)
     } catch (error) {
       const field = error.details?.field
 
@@ -104,7 +128,10 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
           { message: API_ERROR_MESSAGE.BUSINESS_REGISTRATION_NUMBER_TAKEN },
           { shouldFocus: true },
         )
-      } else if (error.status === 400 && COMPANY_PROFILE_FIELDS.includes(field)) {
+      } else if (
+        error.status === 400 &&
+        COMPANY_PROFILE_FIELDS.includes(field)
+      ) {
         setError(field, { message: error.message }, { shouldFocus: true })
       } else if (error.status === 409 && field === 'approvalStatus') {
         onStateChanged()
@@ -117,12 +144,14 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
     markSaved()
     reset(toCompanyProfileFormValues(result.company))
 
-    if (intentRef.current === SAVE_INTENT.CONTINUE) {
+    if (!active && intentRef.current === SAVE_INTENT.CONTINUE) {
       onContinue(result.company)
       return
     }
 
-    toast.success('Đã lưu nháp hồ sơ doanh nghiệp.')
+    toast.success(
+      active ? 'Đã lưu hồ sơ doanh nghiệp.' : 'Đã lưu nháp hồ sơ doanh nghiệp.',
+    )
     onSaved(result.company)
   }
 
@@ -149,7 +178,11 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
       }}
     >
       <FormSection
-        description="Tên doanh nghiệp và mã số doanh nghiệp là bắt buộc khi gửi xét duyệt."
+        description={
+          active
+            ? 'Tên và mã số doanh nghiệp được giữ nguyên sau khi kích hoạt.'
+            : 'Tên doanh nghiệp và mã số doanh nghiệp là bắt buộc khi gửi xét duyệt.'
+        }
         title="Thông tin pháp lý"
       >
         <div className="grid gap-4 sm:grid-cols-2">
@@ -158,6 +191,7 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
             icon={Building2}
             inputProps={{
               autoComplete: 'organization',
+              readOnly: active,
               placeholder: 'Công ty Cổ phần ABC',
               ...register('name'),
             }}
@@ -170,6 +204,7 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
             icon={FileBadge}
             inputProps={{
               placeholder: '0109876543',
+              readOnly: active,
               ...register('businessRegistrationNumber'),
             }}
             label="Mã số doanh nghiệp"
@@ -205,7 +240,8 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
             icon={MapPin}
             inputProps={{
               autoComplete: 'street-address',
-              placeholder: 'Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố',
+              placeholder:
+                'Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố',
               ...register('address'),
             }}
             label="Địa chỉ"
@@ -214,8 +250,14 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
       </FormSection>
 
       <FormSection title="Giới thiệu doanh nghiệp">
-        <div aria-labelledby={descriptionLabelId} className="space-y-1.5" role="group">
-          <p className="text-sm font-medium" id={descriptionLabelId}>Mô tả doanh nghiệp</p>
+        <div
+          aria-labelledby={descriptionLabelId}
+          className="space-y-1.5"
+          role="group"
+        >
+          <p className="text-sm font-medium" id={descriptionLabelId}>
+            Mô tả doanh nghiệp
+          </p>
           <RichTextEditor
             disabled={isSubmitting}
             onChange={(html) => {
@@ -227,16 +269,32 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
             }}
             placeholder="Lĩnh vực hoạt động, sản phẩm, văn hóa doanh nghiệp…"
             preset="full"
-            value={descriptionHtml || toCompanyDescriptionEditorValue({ description })}
+            value={
+              descriptionHtml ||
+              toCompanyDescriptionEditorValue({ description })
+            }
           />
-          <p className={errors.description ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
-            {errors.description?.message ?? `${description?.length ?? 0}/${COMPANY_PROFILE_LIMIT.DESCRIPTION_MAX_LENGTH} ký tự`}
+          <p
+            className={
+              errors.description
+                ? 'text-xs text-destructive'
+                : 'text-xs text-muted-foreground'
+            }
+          >
+            {errors.description?.message ??
+              `${description?.length ?? 0}/${
+                COMPANY_PROFILE_LIMIT.DESCRIPTION_MAX_LENGTH
+              } ký tự`}
           </p>
         </div>
       </FormSection>
 
       <FormSection
-        description="Chọn ảnh từ máy. JOBHUB tải lên và gắn vào hồ sơ khi bạn lưu nháp hoặc tiếp tục."
+        description={
+          active
+            ? 'Chọn ảnh từ máy và lưu hồ sơ để cập nhật hình ảnh.'
+            : 'Chọn ảnh từ máy. JOBHUB tải lên và gắn vào hồ sơ khi bạn lưu nháp hoặc tiếp tục.'
+        }
         title="Hình ảnh thương hiệu"
       >
         <input type="hidden" {...register('logoUrl')} />
@@ -266,30 +324,37 @@ function CompanyProfileForm({ company, serverFieldError, onSaved, onContinue, on
       </FormSection>
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        <Button
-          className="h-11"
-          disabled={isSubmitting}
-          onClick={() => submitWithIntent(SAVE_INTENT.DRAFT)}
-          type="button"
-          variant="outline"
-        >
-          {savingIntent === SAVE_INTENT.DRAFT ? (
-            <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-          ) : (
-            <Save aria-hidden="true" className="size-4" />
-          )}
-          Lưu nháp
-        </Button>
+        {!active && (
+          <Button
+            className="h-11"
+            disabled={isSubmitting}
+            onClick={() => submitWithIntent(SAVE_INTENT.DRAFT)}
+            type="button"
+            variant="outline"
+          >
+            {savingIntent === SAVE_INTENT.DRAFT ? (
+              <LoaderCircle
+                aria-hidden="true"
+                className="size-4 animate-spin"
+              />
+            ) : (
+              <Save aria-hidden="true" className="size-4" />
+            )}
+            Lưu nháp
+          </Button>
+        )}
         <Button className="h-11" disabled={isSubmitting} type="submit">
           {savingIntent === SAVE_INTENT.CONTINUE ? (
             <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
           ) : null}
-          Tiếp tục kiểm tra hồ sơ
-          <ArrowRight aria-hidden="true" className="size-4" />
+          {active ? 'Lưu hồ sơ công ty' : 'Tiếp tục kiểm tra hồ sơ'}
+          {!active && <ArrowRight aria-hidden="true" className="size-4" />}
         </Button>
       </div>
       {isDirty && (
-        <p className="text-right text-xs text-muted-foreground">Bạn có thay đổi chưa lưu.</p>
+        <p className="text-right text-xs text-muted-foreground">
+          Bạn có thay đổi chưa lưu.
+        </p>
       )}
     </form>
   )

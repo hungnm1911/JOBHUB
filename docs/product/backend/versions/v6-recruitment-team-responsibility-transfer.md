@@ -776,6 +776,25 @@ Từ chối nếu:
 
 ## F05 — Chuyển giao bắt buộc trước khi lock hoặc terminate Recruiter
 
+### Company Manager FE integration — được duyệt 2026-11-27
+
+Theo yêu cầu triển khai các màn Company Manager đã đánh giá, F05 có bước
+xem trước chỉ đọc để chuẩn bị forced transfer. Company Manager hợp lệ được
+đọc toàn bộ định danh và trạng thái các Job chưa kết thúc mà Recruiter cùng
+Company đang là Primary, số Job chưa kết thúc đang là Supporting, và chọn
+Recruiter thay thế hợp lệ cùng Company bằng danh sách tìm kiếm/phân trang.
+Recruiter nguồn bị loại khỏi lựa chọn. Membership TERMINATED không còn bước
+bàn giao lifecycle.
+
+Projection này chỉ cung cấp `jobId` và `status`, kể cả với DRAFT; không cấp
+quyền đọc tiêu đề, nội dung hoặc sửa Job nháp. Không mở rộng Job list/detail
+visibility của V5. Preview không ghi dữ liệu, không giữ chỗ replacement và
+không bảo đảm mutation tiếp theo thành công. Lock/terminate vẫn dùng owner
+F05 và V10 BR-28, kiểm tra lại current state, giải quyết Application bằng
+automatic Unassign và giữ nguyên semantics partial progress/retry.
+
+Không thêm dashboard, lịch sử bàn giao, homepage CM, entity hoặc lifecycle.
+
 ### Actor
 
 * Company Manager.

@@ -417,3 +417,47 @@ Contracts and project state:
 - Data contracts: `docs/data/backend/versions/{v01-authentication-data-model,v02-company-onboarding-platform-administration,v3-company-recruitment-staff-management-data-model,v4-platform-standard-catalogs-data-model}.md`
 - `docs/engineering/source-of-truth.md` and this API contract.
 - Affected V1–V4 status leaves and the common backend verification snapshot in `docs/project-status/backend/platform-and-operations.md`; the status index remains unchanged.
+
+## Company Manager handover preview — 2026-11-27
+
+Product authority: V6 F05 Company Manager FE integration and V10 BR-28.
+
+`GET /api/company/recruiters/:recruiterId/handover` requires the existing valid
+Company Manager business context; `recruiterId` is the User ID of a Recruiter
+in the actor's membership-derived tenant. It accepts `q`, `page`, `limit`,
+`sort=fullName|-fullName` (default fullName ASC, `_id` tie-break). q uses the
+existing Recruiter search (fullName/email/employeeCode/jobTitle); limit is 1–100,
+default 20. Unsupported/repeated controls fail 400. `companyId` is unsupported;
+a foreign tenant attempt can fail 403 in the existing authorization middleware
+before query validation. Same-Company `companyId` fails 400.
+
+Response:
+
+```text
+{
+  primaryJobs: [{ jobId, status }],
+  supportingJobCount,
+  recruiters: [{ companyMemberId, fullName, jobTitle }],
+  pagination: { page, limit, total, totalPages }
+}
+```
+
+`primaryJobs` is the complete unfinished Primary responsibility set, stable
+by Job ID; it is independent of replacement pagination/search. The unfinished
+Job predicates are the existing forced-transfer owners (DRAFT, PENDING_APPROVAL,
+and PUBLISHED before deadline). All Jobs expose only ID/status, never title or
+content. Replacements exclude the outgoing member and require same-Company
+Recruiter membership ACTIVE, User ACTIVE and mustChangePassword=false. Totals
+count eligible replacements before slicing. Empty/out-of-range pages return [].
+Missing/foreign/non-Recruiter target returns 404; malformed ID 400; target
+membership TERMINATED 409. Existing actor/Company restrictions remain enforced.
+The preview writes no business data and grants no general DRAFT Job access.
+
+Existing `POST /api/company/recruiters/:recruiterId/lock|terminate` consumes
+`{ transfers: [{ jobId, replacementCompanyMemberId }] }`. Replacement values
+are CompanyMember IDs, not User IDs. These mutations revalidate eligibility,
+resolve unfinished Job-team responsibility, automatically Unassign all affected
+non-terminal Applications (including on ended Jobs), and use the existing final
+zero-responsibility guard. Preview does not make these multi-resource operations
+all-or-nothing: after any failure reread preview and source membership before
+retry. No preview mutation, reservation or automatic mutation retry is added.

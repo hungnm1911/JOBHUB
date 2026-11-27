@@ -592,3 +592,14 @@ It is still a foundation rather than an implemented business client:
 
 These facts must not be interpreted as missing behavior to invent without an
 approved feature specification.
+
+## Company Manager composition
+
+The approved Company Manager screens reuse the existing Job/team/assignment
+owners through `recruiter-workspace/public.js` and the existing profile form
+through `company-onboarding/public.js`. These are explicit facades, not new
+owners or a shared hooks layer. Company management feature components own
+Manager orchestration and account/hand-over forms; pages bind route params;
+the layout owns only navigation. Business APIs continue to determine tenant,
+eligibility and commit outcomes. Manager mode never opens Recruiter processing,
+CV, Chat, Interview or sourcing actions. Homepage work remains separate.

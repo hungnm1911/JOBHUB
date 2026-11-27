@@ -9,6 +9,12 @@
 
 ## 1. Mục đích
 
+Company Manager FE integration (2026-11-27): bước preview của Product F05 là
+projection chỉ đọc từ Job/CompanyMember/User hiện tại. Không thêm field,
+collection, index, snapshot hoặc migration. Preview không phải nguồn xác
+định responsibility tại commit; owner forced transfer hiện tại tiếp tục
+kiểm tra current persisted state. Shape HTTP thuộc Engineering API contract.
+
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text

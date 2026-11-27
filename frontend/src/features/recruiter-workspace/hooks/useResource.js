@@ -10,8 +10,8 @@ function useResource(load, params) {
   useEffect(() => {
     let active = true
     load(JSON.parse(key)).then(
-      (data) => active && setView({ key, data, error: null }),
-      (error) => active && setView({ key, data: null, error }),
+      (data) => active && setView({ key, version, data, error: null }),
+      (error) => active && setView({ key, version, data: null, error }),
     )
     return () => {
       active = false
@@ -23,6 +23,7 @@ function useResource(load, params) {
 
   return {
     loading: !current,
+    refreshing: current && view.version !== version,
     data: current ? view.data : null,
     error: current ? view.error : null,
     reload,

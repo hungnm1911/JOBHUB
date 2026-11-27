@@ -123,3 +123,46 @@ do not grant Apply, Saved Jobs or Candidate CV/AI permissions; no schema or new
 endpoint. FE sends the current optional session rather than dropping credentials.
 The approved Recruiter website is `/`, public browsing uses `/jobs` and
 `/companies/:companyId`, and management stays under `/recruiter/*`.
+
+## Company Manager workspace consumption — 2026-11-27
+
+The approved Company Manager workspace reuses these existing resource APIs;
+it does not consume Recruiter-only `/managed`, `/workspace`, My Applications,
+CV preview/download, Conversation, Invitation or Interview mutations.
+
+- `/company/jobs` defaults to `GET /api/jobs?status=PENDING_APPROVAL` with
+  q/sort/page/limit; no Recruiter `scope` and no DRAFT list control. Visibility
+  stays V5 BR-37. PUBLISHED filtering uses persisted status; badges evaluate
+  deadline separately and do not recalculate a server total after paging.
+- `/company/jobs/:jobId` reads the internal Job, its team and, when published or
+  ended, its Application list. Creator/current Primary IDs remain the identifiers
+  supplied by the Job DTO; the team supplies current display summaries.
+- Approve/reject/close use `POST /api/jobs/:jobId/approve|reject|close`.
+  Approve publishes immediately; reject hard-deletes the pending Job. The UI
+  makes that consequence explicit and does not invent a REJECTED Job state,
+  edit/resubmit, reopen, or separate approve-without-publish action.
+- Team Supporting options/add/remove retain their current contracts. Manager
+  Primary replacement uses `POST /api/jobs/:jobId/team/replace-primary` with
+  `{ newPrimaryCompanyMemberId, keepOldPrimaryAsSupporting }`; new Primary must
+  be an eligible current Supporting. Assignment options are paginated; the UI
+  intersects eligible current-team choices with current Supporting for this
+  operation. Every mutation independently revalidates current eligibility.
+- Manager Application list uses `GET /api/jobs/:jobId/applications`. It displays
+  Candidate summary/status/source/current Assignee but does not link to the
+  Recruiter-only Application detail or CV/chat/pipeline surfaces. Assign sends
+  `{ assigneeCompanyMemberId, expectedVersion }`; Reassign sends
+  `{ assigneeCompanyMemberId, expectedAssigneeCompanyMemberId, expectedVersion }`;
+  Unassign sends `{ expectedAssigneeCompanyMemberId, expectedVersion }` to the
+  existing `assign|reassign|unassign` endpoints. IDs are CompanyMember IDs.
+  Terminal Applications have no assignment actions. CLOSED/EXPIRED Jobs still
+  allow management of non-terminal Applications. A conflict reloads the list;
+  the user reviews and opens a new action rather than automatically retrying.
+- Recruiter account routes use User IDs. Their CRUD/readiness/lifecycle contract
+  and the additive handover preview are in `v1-v4-api-contract.md`. Company active
+  profile uses GET/PATCH `/api/company` and image upload. PATCH omits immutable
+  name/businessRegistrationNumber/status fields, and submits descriptionHtml
+  through the existing V17 path only when description was edited.
+
+This workspace introduces no new realtime event. HTTP reads resynchronize after
+mutations and on explicit retry; it makes no live-update or real-provider claim.
+Homepage CM is deferred; existing post-login destination remains unchanged.

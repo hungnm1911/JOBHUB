@@ -15,6 +15,7 @@ function RootLayout() {
   const isAccountActivationFlow = location.pathname === '/activate-recruiter'
   const isCandidate = !isAccountActivationFlow && viewer.resolved && viewer.role === USER_ROLE.CANDIDATE
   const isFullBleedWorkspace = location.pathname.startsWith('/candidate/messages')
+  const isCompanyWorkspace = location.pathname.startsWith('/company/')
 
   return (
     <UnsavedChangesProvider>
@@ -27,6 +28,8 @@ function RootLayout() {
         <ScrollRestoration />
         <AppHeader
           accountArea={isAccountActivationFlow ? null : <HeaderAccountMenu />}
+          homeTo={isCompanyWorkspace ? '/company/jobs' : '/'}
+          showDiscoveryAction={!isCompanyWorkspace}
           isCandidate={isCandidate}
           isRecruiter={!isAccountActivationFlow && viewer.isRecruiter}
         />
