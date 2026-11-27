@@ -82,11 +82,10 @@ function toPostLoginLocation(user, navigationState, membership) {
     return { pathname: '/admin' }
   }
 
-  const defaultPath = user?.role === USER_ROLE.COMPANY_STAFF && membership?.role === COMPANY_MEMBER_ROLE.COMPANY_MANAGER
-    ? '/company/recruiters'
-    : '/'
+  const isCompanyManager = user?.role === USER_ROLE.COMPANY_STAFF && membership?.role === COMPANY_MEMBER_ROLE.COMPANY_MANAGER
+  const defaultPath = '/'
   const from = readReturnLocation(navigationState?.from)
-  if (!from || (from.pathname === '/' && defaultPath !== '/')) {
+  if (!from || (isCompanyManager && from.pathname !== '/' && !from.pathname.startsWith('/company/'))) {
     return { pathname: defaultPath }
   }
 

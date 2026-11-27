@@ -602,4 +602,9 @@ owners or a shared hooks layer. Company management feature components own
 Manager orchestration and account/hand-over forms; pages bind route params;
 the layout owns only navigation. Business APIs continue to determine tenant,
 eligibility and commit outcomes. Manager mode never opens Recruiter processing,
-CV, Chat, Interview or sourcing actions. Homepage work remains separate.
+CV, Chat, Interview or sourcing actions. The approved website homepage at `/`
+uses the same feature, resource API modules and useResource facade. RootLayout
+adapts shared header/footer through opt-in Manager props; WebsiteHomePage owns
+role composition, not fetching. Independent preview regions retain their own
+loading/error/retry state and use server totals. Auth navigation remains in the
+existing GuestRoute/helper owners, with a root-only Manager guard exception.

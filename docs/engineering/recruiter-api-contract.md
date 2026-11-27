@@ -147,7 +147,9 @@ CV preview/download, Conversation, Invitation or Interview mutations.
   be an eligible current Supporting. Assignment options are paginated; the UI
   intersects eligible current-team choices with current Supporting for this
   operation. Every mutation independently revalidates current eligibility.
-- Manager Application list uses `GET /api/jobs/:jobId/applications`. It displays
+- Manager Application list uses `GET /api/jobs/:jobId/applications`. Both legacy and
+  paginated responses enforce canonical internal Job visibility before embedding
+  Job content: a Manager receives 403 for DRAFT (V5 BR-37), even with no Applications. It displays
   Candidate summary/status/source/current Assignee but does not link to the
   Recruiter-only Application detail or CV/chat/pipeline surfaces. Assign sends
   `{ assigneeCompanyMemberId, expectedVersion }`; Reassign sends
@@ -165,4 +167,30 @@ CV preview/download, Conversation, Invitation or Interview mutations.
 
 This workspace introduces no new realtime event. HTTP reads resynchronize after
 mutations and on explicit retry; it makes no live-update or real-provider claim.
-Homepage CM is deferred; existing post-login destination remains unchanged.
+
+### Company Manager homepage consumption — 2026-11-27
+
+The approved website homepage `/` becomes the active Manager login default.
+Existing `/company/*` return links remain valid. This root-only presentation
+exception grants no access to `/jobs`, `/jobs/:jobId`, `/companies/:companyId`
+or the V8 Discovery APIs. User and CompanyMember must both be ACTIVE, account
+context resolved, membership role COMPANY_MANAGER and no password gate pending.
+
+Independent reads use existing internal transport (paths below relative to `/api`):
+
+- `GET /jobs?page=1&limit=3&status=PENDING_APPROVAL&sort=-createdAt`.
+- `GET /jobs?page=1&limit=2&status=PUBLISHED&sort=-createdAt`.
+- `GET /company/recruiters?page=1&limit=3&sort=-createdAt`.
+- `GET /company`.
+
+No client tenant/scope is supplied. Backend membership determines visibility.
+Job totals use each response's `pagination.total`, never preview length. The
+PUBLISHED filter remains persisted status; an expired deadline affects the badge,
+not a client-adjusted total. Independent failures show unknown totals and retries.
+Company profile and Recruiter readiness use the existing DTOs and helpers.
+
+Review links open Manager Job detail; team/assignment links open its existing
+tabs. No approval or Recruiter processing occurs on the homepage. Focus and the
+existing socket CONNECT lifecycle trigger HTTP rereads, with no new event or
+real-time delivery guarantee. Account changes remount previews by User ID.
+No new endpoint, response shape, persisted counter or dependency is required.

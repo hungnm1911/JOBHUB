@@ -28,7 +28,7 @@ Backend owners are recorded separately in [`source-of-truth.md`](source-of-truth
 | Feature subscribe/unsubscribe and event interpretation | The owning `frontend/src/features/<feature>/` (none exist yet) | Pages and components of that feature | Feature event handling inside the shared socket facade, pages, or common components |
 | Browser router creation and route-group composition | `frontend/src/routes/index.jsx` | `frontend/src/App.jsx` | A second router or `createBrowserRouter` outside this module |
 | Route declarations for one area | `frontend/src/routes/<name>.routes.jsx` (`public.routes.jsx`, `guest.routes.jsx`, `company-manager.routes.jsx`, `candidate.routes.jsx`, and `platform-admin.routes.jsx`); `frontend/src/routes/index.jsx` composes the first three under `RootLayout`, `/candidate` under `CandidateLayout`, and `/admin` under `PlatformAdminLayout` | `frontend/src/routes/index.jsx`, or a parent route-group module that nests the area under its layout | Routes declared inside layouts, pages, or features |
-| Client navigation guards | `frontend/src/routes/components/ProtectedRoute.jsx`, `GuestRoute.jsx`, `RoleRoute.jsx`, `JobDiscoveryRoute.jsx` (consume resolved authentication; `RoleRoute` supports optional CompanyMember role/status conditions; guest login/registration uses `GuestRoute`; `/onboarding/company` uses `ProtectedRoute` + `RoleRoute` for `COMPANY_STAFF` in `PENDING_ACTIVATION`; every `/candidate` route uses `ProtectedRoute` + `RoleRoute` for active `CANDIDATE`; every `/admin` route uses `ProtectedRoute` + `RoleRoute` for `PLATFORM_ADMIN`; V8 discovery pages use `JobDiscoveryRoute` for Guest/Candidate and resolved active Recruiter membership, with retry on context failure; `GuestRoute` alone owns post-login navigation and waits for CompanyMember context, while backend API authorization remains authoritative) | Route-group modules | Guard logic inside pages or layouts; guards that create auth state, call APIs, or decode authority |
+| Client navigation guards | `frontend/src/routes/components/ProtectedRoute.jsx`, `GuestRoute.jsx`, `RoleRoute.jsx`, `JobDiscoveryRoute.jsx` (consume resolved authentication; `RoleRoute` supports optional CompanyMember role/status conditions; guest login/registration uses `GuestRoute`; `/onboarding/company` uses `ProtectedRoute` + `RoleRoute` for `COMPANY_STAFF` in `PENDING_ACTIVATION`; every `/candidate` route uses `ProtectedRoute` + `RoleRoute` for active `CANDIDATE`; every `/admin` route uses `ProtectedRoute` + `RoleRoute` for `PLATFORM_ADMIN`; V8 discovery pages use `JobDiscoveryRoute` for Guest/Candidate and resolved active Recruiter membership, with retry on context failure; its opt-in Company Manager exception applies only to `/` and consumes internal APIs; `GuestRoute` alone owns post-login navigation and waits for CompanyMember context, while backend API authorization remains authoritative) | Route-group modules | Guard logic inside pages or layouts; guards that create auth state, call APIs, or decode authority |
 | Shared structural frames | `frontend/src/components/layouts/` (`RootLayout.jsx` for public, guest, and onboarding screens; `CandidateLayout.jsx` for Candidate dashboard screens, with static navigation to Candidate area routes and no feature business imports beyond shared account menu; `PlatformAdminLayout.jsx` for the V02 Platform Admin screens, with static navigation only to implemented admin screens and no feature imports; account controls are composed by pages/layouts) | Route-group modules | Layout markup inside route modules; role-specific layouts without approved screens |
 | URL-mapped screens | `frontend/src/pages/` (V8 discovery: `HomePage.jsx`, `JobSearchPage.jsx`, `JobDetailPage.jsx`, `CompanyDetailPage.jsx`) | Route-group modules | Business workflows, HTTP/socket configuration, or global state defined in pages |
 | Client behavior of one business feature | `frontend/src/features/<feature>/` (`components/`, `hooks/`, `services/`, `slice.js`, `utils.js` only when needed); `features/job-discovery/` owns V8 list/profile hooks and Company Jobs presentation, with independent Company profile and filtered Job list reads; `HomePage.jsx` keeps its Featured list on `FEATURED` and routes keyword, Category, and Location selections to `/jobs` using the canonical search params; `DiscoveryJobsSection.jsx` defaults to the 18-Job/6-per-page Featured list and `/jobs` link, and accepts the approved Recruiter NEWEST six-Job preview through its public interface; filtered search and `/jobs` default continue through the same hook/API owner; `HomeHero.jsx` links each newest-Job preview to Job detail; `JobCard.jsx` and `JobResultCard.jsx` link Job title and Company logo to Job detail and Company name to Company detail, while Apply/Save remain separate page-composed actions | Pages; route modules only through pages | Feature workflows in pages, common components, `utils/`, or `lib/`; importing another feature's internals |
@@ -117,11 +117,28 @@ Approved screen implementation (2026-11-27) lives under
 files compose that feature with URL params. `CompanyManagerLayout.jsx` owns
 only the three-item workspace navigation and Outlet, nested under RootLayout's
 existing header/footer and unsaved-change provider. RootLayout passes opt-in
-presentation props to AppHeader so the workspace brand returns to Company Jobs
-and omits the public Discovery action; public defaults are unchanged. `company-manager.routes.jsx`
+presentation props to AppHeader/AppFooter so active Manager navigation returns
+to `/`, offers Company management links and omits public Discovery actions;
+public defaults are unchanged. `company-manager.routes.jsx`
 owns the existing onboarding boundary and ACTIVE Company Manager membership
 boundary for `/company/jobs`, Job detail, Recruiter list/create/detail/handover,
-and `/company/profile`. No homepage or post-login owner is changed.
+and `/company/profile`.
+
+The approved website homepage `/` composes `CompanyHomePage.jsx` through
+`WebsiteHomePage.jsx` and the existing authentication viewer's `isCompanyManager`.
+`JobDiscoveryRoute` allows this root-only exception after active User/membership
+and account-context resolution; `/jobs`, Job Discovery detail and public Company
+detail remain unavailable to Managers. `GuestRoute` and the existing navigation
+helper still own post-login routing: Manager defaults to `/` and preserves only
+root/Company workspace return locations. WebsiteHomePage keys CompanyHomePage by
+User ID so account switches discard the previous tenant's previews.
+
+`features/company-management/components/CompanyHome/index.jsx` owns four
+independent reads (pending Jobs, persisted-published Jobs, latest Recruiters,
+owned Company) through existing API modules and resource hooks. Server paging
+totals remain authoritative. Focus and shared socket CONNECT subscriptions reread
+HTTP state; cleanup removes listeners. Homepage links enter existing workspace
+flows; no new mutation, endpoint, event, client or persistence owner is added.
 
 Resource calls extend the existing `company-recruiter.api.js`,
 `recruiter-job.api.js`, `recruiter-application.api.js`, and `company.api.js`.
@@ -138,9 +155,15 @@ not create another team or assignment implementation. `useResource.refreshing`
 lets mutation controls wait for current-state rereads while retaining current
 content. `company-onboarding/public.js` exposes its existing CompanyProfileForm
 with additive active mode; image upload, rich text, error association, validation
-and unsaved changes remain in their original owners. Default onboarding and
+and unsaved changes remain in their original owners. CompanyProfileForm locks
+text inputs while saving and tracks logo/banner requests through the optional
+CompanyImageField upload-state callback. Pending uploads block submission and
+participate in the existing departure guard; successful upload remains dirty
+until profile save, failed upload releases its pending lock, and unmounted image
+fields ignore late responses. Default onboarding and
 Recruiter callers preserve their behavior.
 
-Verification owner: `test/company-manager-workspace.test.js`, included by
+Verification owners: `test/company-manager-workspace.test.js` and
+`test/company-manager-home.test.js`, included by
 `test:company-manager` in the common `verify:agent` gate. HTTP API semantics are
 recorded in the V1–V4 and Recruiter API contracts; project status records evidence.
