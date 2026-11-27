@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 
 // First match wins, so deeper paths come before their parents.
 const TITLES = [
+  [/^\/recruiter$/, 'Trang chủ nhà tuyển dụng'],
   [/\/jobs\/new$/, 'Tạo job mới'],
   [/\/jobs\/[^/]+\/edit$/, 'Sửa Job'],
   [/\/jobs\/[^/]+\/applications\/[^/]+$/, 'Hồ sơ ứng viên'],

@@ -587,6 +587,12 @@ Platform Admin receive an access-denied state, while the Backend V8 APIs
 enforce authorization. Company Detail reads the public Company profile and
 the `companyId`-filtered Jobs list independently.
 
+The approved Recruiter home at `/recruiter` composes company-published internal
+Jobs with recent assigned Applications/workload and Notification previews.
+`RecruiterHomePage.jsx` delegates to the existing `recruiter-workspace` feature;
+the feature reuses resource API modules and the shared realtime subscriptions.
+It adds no persistence, client, store, discovery authority or dashboard entity.
+
 The canonical frontend owners and known mismatches remain in
 [`frontend-source-of-truth.md`](frontend-source-of-truth.md). This architecture
 document does not duplicate that owner matrix.

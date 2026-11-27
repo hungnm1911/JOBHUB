@@ -81,7 +81,7 @@ function LoginForm({ defaultEmail = '' }) {
     ) {
       const membership = await loadCurrentAccountContext()
       if (membership?.role === COMPANY_MEMBER_ROLE.RECRUITER) {
-        next = { pathname: '/recruiter/jobs' }
+        next = { pathname: '/recruiter' }
       } else if (membership?.role === COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
         next = { pathname: '/company/recruiters' }
       }

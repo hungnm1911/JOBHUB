@@ -111,7 +111,7 @@ function RecruiterActivationPage() {
       <StatusCard
         action={
           <Button asChild className="h-11 w-full">
-            <Link replace to={outcome.signedIn ? '/recruiter/jobs' : '/login'}>
+            <Link replace to={outcome.signedIn ? '/recruiter' : '/login'}>
               {outcome.signedIn ? 'Đi tới trang làm việc' : 'Đi tới đăng nhập'}
               <ArrowRight aria-hidden="true" className="size-4" />
             </Link>

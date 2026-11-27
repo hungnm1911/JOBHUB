@@ -215,6 +215,13 @@ Pages and page groups are created only for approved, concrete screens.
 
 ### Features
 
+For the approved Recruiter home, `recruiter-workspace/components/RecruiterHome/`
+owns screen queries, independent resource states and realtime resynchronization;
+its page is composition only. Cross-feature presentation uses the explicit
+`job-discovery/public.js` formatting interface and
+`candidate-dashboard/public.js` Application status interface. These re-export
+the existing owners; they do not create alternative formatting or status rules.
+
 `frontend/src/features/<feature>/` is the canonical owner for client-side
 behavior belonging to one business feature.
 

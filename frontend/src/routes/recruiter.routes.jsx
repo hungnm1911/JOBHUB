@@ -1,6 +1,5 @@
-import { Navigate } from 'react-router-dom'
-
 import RecruiterLayout from '@/components/layouts/RecruiterLayout'
+import RecruiterHomePage from '@/pages/RecruiterHomePage'
 import RecruiterCandidateCvPage from '@/pages/RecruiterCandidateCvPage'
 import RecruiterCandidateSearchPage from '@/pages/RecruiterCandidateSearchPage'
 import RecruiterChangePasswordPage from '@/pages/RecruiterChangePasswordPage'
@@ -43,7 +42,7 @@ const recruiterRoutes = [
           {
             element: <RecruiterLayout />,
             children: [
-              { index: true, element: <Navigate replace to="/recruiter/jobs" /> },
+              { index: true, element: <RecruiterHomePage /> },
               { path: 'jobs', element: <RecruiterJobsPage /> },
               { path: 'jobs/new', element: <RecruiterJobEditorPage /> },
               { path: 'jobs/:jobId', element: <RecruiterJobDetailPage /> },

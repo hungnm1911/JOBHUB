@@ -53,6 +53,20 @@ Backend owners are recorded separately in [`source-of-truth.md`](source-of-truth
 | Lint configuration | `frontend/eslint.config.js` | `yarn lint` and `yarn verify:agent` | Per-directory lint configuration files |
 | Common frontend verification gate | `verify:agent` script in `frontend/package.json` (focused authentication tests, ESLint, then the Vite production build) | Agents and contributors before declaring frontend work verified | Ad hoc final gates documented elsewhere |
 
+## Recruiter home owners
+
+- `/recruiter`: `routes/recruiter.routes.jsx` → `pages/RecruiterHomePage.jsx` →
+  `features/recruiter-workspace/components/RecruiterHome/index.jsx`.
+- The feature owns scoped Job search/paging, recent Application/workload and
+  Notification previews plus HTTP resync through shared realtime subscriptions.
+  Existing `recruiter-job.api.js`, `recruiter-application.api.js` and
+  `notification.api.js` own transport; no new endpoint or mutation is added.
+- `job-discovery/public.js` exposes existing employment/work-mode/salary
+  formatting; `candidate-dashboard/public.js` exposes the existing
+  `ApplicationStatusBadge`. Other features consume these stable interfaces.
+- Recruiter layout/navigation/title and the existing login/account-menu/
+  activation consumers resolve the approved home to `/recruiter`.
+
 ## Consumption rules
 
 - Consumers import the canonical owner; they do not reconstruct its state or configuration.
