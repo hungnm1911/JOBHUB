@@ -535,7 +535,7 @@ The current browser runtime is composed as follows:
 
 1. [`frontend/src/main.jsx`](../../frontend/src/main.jsx) imports global styles, creates the React root, and mounts the application inside the single Redux `Provider`.
 2. [`frontend/src/App.jsx`](../../frontend/src/App.jsx) composes authentication bootstrap around the single React Router `RouterProvider` and renders the single Sonner `<Toaster />` for transient action feedback. The Toaster receives the application-wide defaults from `TOASTER_CONFIG` in `frontend/src/utils/constant.js`: top-right position, rich success/error colors, close button, 4,000 ms duration, and theme-token styling. Components and feature hooks call `toast` from `sonner` directly without extra setup; toasts are not persisted business notifications.
-3. [`frontend/src/routes/index.jsx`](../../frontend/src/routes/index.jsx) composes route groups and creates the browser router. The public route group maps `/`, `/jobs`, `/jobs/:jobId`, and `/companies/:companyId` through `JobDiscoveryRoute` under `RootLayout`; the guard admits Guest and Candidate based on resolved User role, while backend authorization remains authoritative.
+3. [`frontend/src/routes/index.jsx`](../../frontend/src/routes/index.jsx) composes route groups and creates the browser router. The public route group maps `/`, `/jobs`, `/jobs/:jobId`, and `/companies/:companyId` through `JobDiscoveryRoute` under `RootLayout`; the guard admits Guest/Candidate and waits for resolved active Recruiter membership for Company Staff, while backend authorization remains authoritative.
 4. `RootLayout` composes the application-level `AppHeader` with an `Outlet`; the page owns the complete URL-mapped screen content.
 5. One configured Axios client applies `API_CONFIG` (base URL and timeout) from `frontend/src/utils/constant.js`, attaches access credentials only to requests declaring `requiresAuthentication: true`, coordinates reactive single-flight refresh/retry through the Authentication feature, and owns normalized `ApiError` output (including `requestId` from the backend `X-Request-Id` header) plus development-only console logging. Resource consumers include `authentication.api.js` and `job-discovery.api.js`; the latter sends an existing session for optional-auth V8 reads.
 6. One lazy Socket.IO client applies `SOCKET_CONFIG` from `frontend/src/utils/constant.js` and owns connection lifecycle and access-token handshake auth. Authentication login/bootstrap connects it, access refresh updates its credential and reconnects an active connection, and logout/session invalidation disconnects it.
@@ -581,11 +581,20 @@ yet.
 ### Current capability boundary
 
 The frontend has V1 authentication lifecycle infrastructure and concrete V8
-discovery screens. `JobDiscoveryRoute` guards the discovery routes using
-resolved authentication state and User role; authenticated Company Staff and
-Platform Admin receive an access-denied state, while the Backend V8 APIs
-enforce authorization. Company Detail reads the public Company profile and
+discovery screens. `JobDiscoveryRoute` guards them using resolved authentication
+and, for Company Staff, resolved active Recruiter membership. Company Manager
+and Platform Admin remain denied; Backend authorization is authoritative. Company Detail reads the public Company profile and
 the `companyId`-filtered Jobs list independently.
+
+The approved Recruiter home is `/` under `RootLayout`, with website header/footer.
+`WebsiteHomePage.jsx` selects the Recruiter page or existing Guest/Candidate home
+using the Authentication viewer. `RecruiterHomePage.jsx` delegates to the existing
+`recruiter-workspace` feature: company-published Jobs first, recent assigned
+Applications/workload, Notification previews, and public Discovery search/preview
+through `job-discovery/public.js`. `/recruiter` redirects to `/recruiter/jobs`;
+the management routes retain `RecruiterLayout`. `GuestRoute` owns post-login
+navigation through the auth navigation helper after CompanyMember context resolves;
+`LoginForm` only submits authentication. No persistence/client/store is added.
 
 The canonical frontend owners and known mismatches remain in
 [`frontend-source-of-truth.md`](frontend-source-of-truth.md). This architecture

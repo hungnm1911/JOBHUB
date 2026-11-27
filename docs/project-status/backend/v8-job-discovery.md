@@ -2,6 +2,14 @@
 
 ## Current project state
 
+2026-11-27: the approved Recruiter public-read extension is **IMPLEMENTED /
+BACKEND GATE VERIFIED**. All three existing V8 GET APIs admit Recruiters through
+the canonical current Company business context, including public cross-Company
+reads without a team requirement. Company Manager/Admin remain denied; internal
+projection, public visibility, historical access and Candidate-only permissions
+are unchanged. FE website composition and its gate limitations are recorded in
+[Recruiter home](../frontend/recruiter-home.md).
+
 **V8 — Job Discovery** retains its previously `COMPLETED AND VERIFIED` backend
 baseline. The V8 Enhancement (F01 Product/API contract, F02A actor
 authorization, F02B optional `companyId` filtering, and Frontend F03A–F03B)
@@ -9,8 +17,8 @@ is **ACCEPTED within the focused verification scope** as of 2026-11-03.
 This does not represent a new full-gate acceptance of V8 or other versions.
 The Backend Featured Ranking extension (F02/F05, BR-42/BR-43, API-V8-01 and
 Data V8 §6.7/§14.1) is **IMPLEMENTED / ACCEPTED within the focused verification
-scope** as of 2026-11-07 by Product Owner decision. The full Backend gate has
-not been rerun for this extension.
+scope** as of 2026-11-07 by Product Owner decision. The latest common Backend gate includes these Featured regressions; it does
+not establish query-plan or large-data performance acceptance.
 Its Product and Data contracts are
 [V8 Product](../../product/backend/versions/v8-job-discovery.md) and
 [V8 Data](../../data/backend/versions/v8-job-discovery-data-model.md); the
@@ -20,8 +28,8 @@ The read-only public surface is implemented under `/api/job-discovery` with
 optional authentication: `GET /jobs` (list, search, filter, sort, pagination),
 `GET /jobs/:jobId` (discoverable and historical read-only detail), and
 `GET /companies/:companyId` (public Company information). It covers F01–F08 and
-BR-01–BR-41: F02A allows Guest and Candidate and rejects authenticated
-Platform Admin and Company Staff (Manager or Recruiter) with `403`; a Job is
+BR-01–BR-41: F02A allows Guest/Candidate and eligible Recruiter (current V3
+User/membership/Company/password gate), while Manager/Admin remain denied; a Job is
 discoverable only while `PUBLISHED`, before its deadline, and owned by a
 publicly eligible Company. V8 adds no Job lifecycle mutation, Candidate–Job
 persistence, Saved Jobs, Apply, or Application mutation, and creates no new
@@ -52,9 +60,8 @@ pagination metadata are unchanged and no index or schema changed.
   must be kept in sync (the V8 owner row in `docs/engineering/source-of-truth.md`
   records this).
 - **Accepted coverage limit:** the MEDIUM transition regression coverage gap is
-  accepted by the Product Owner without additional tests. The full Backend
-  gate, MongoDB query plans (`explain`), and large-data performance remain
-  unverified for Featured. Frontend implementation, acceptance, and remaining
+  accepted by the Product Owner without additional transition tests. MongoDB
+  query plans (`explain`) and large-data performance remain unverified for Featured. Frontend implementation, acceptance, and remaining
   browser/E2E checks are recorded in the Frontend V03 leaf.
 - **Out of V8 by design:** Apply, Application mutation, Saved Jobs, Candidate Search,
   Job Invitation, Chat, Interview, Notification, Job recommendation, view
@@ -105,6 +112,18 @@ pagination metadata are unchanged and no index or schema changed.
   to pass.
 
 ## Verification status
+
+- 2026-11-27 Recruiter public reads: focused
+  `npx vitest run test/job/v8-job-discovery.test.js` passed **38/38 tests**.
+  Coverage includes every V8 endpoint for Guest/Candidate/Recruiter versus
+  Manager/Admin, public cross-Company reads without team membership, omitted
+  internal/Candidate fields, private and ineligible Company denial, historical
+  reads, and current membership/Company/password revocation after login.
+- Final `cd backend && npm run verify:agent` passed **219 files / 2,273 tests**,
+  ARCH-001–ARCH-019 and ESLint (0 errors / 2 existing V6 warnings). Cross-version
+  gate context is recorded in [Platform and operations](platform-and-operations.md).
+  No real provider/Atlas/browser E2E or load check is claimed; no schema/index,
+  migration, endpoint or production dependency was added.
 
 - 2026-11-07 Featured acceptance closure: the Product Owner accepted Backend
   Featured Ranking within the focused verification scope, including the MEDIUM

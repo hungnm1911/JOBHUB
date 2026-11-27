@@ -60,8 +60,8 @@ async function getDiscoveryCompanyApi(companyId) {
   return response.data
 }
 
-// The public Company profile read without the session: Company Staff sessions are not
-// Job Discovery actors, but their own Company's public profile is public data.
+// Anonymous public Company profile used by existing workspace presentation.
+// Discovery screens use getDiscoveryCompanyApi and keep the current session.
 async function getPublicCompanyProfileApi(companyId) {
   const response = await apiClient.get(
     `${JOB_DISCOVERY_PATH}/companies/${encodeURIComponent(companyId)}`,

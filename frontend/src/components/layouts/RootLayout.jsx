@@ -28,6 +28,7 @@ function RootLayout() {
         <AppHeader
           accountArea={isAccountActivationFlow ? null : <HeaderAccountMenu />}
           isCandidate={isCandidate}
+          isRecruiter={!isAccountActivationFlow && viewer.isRecruiter}
         />
 
         <FlashMessage />

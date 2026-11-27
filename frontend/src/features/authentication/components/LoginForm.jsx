@@ -1,17 +1,15 @@
 import { ArrowRight, CircleAlert, LoaderCircle, LockKeyhole, Mail } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { useAppDispatch } from '@/store/hooks'
-import { API_ERROR_MESSAGE, COMPANY_MEMBER_ROLE, USER_ROLE, USER_STATUS } from '@/utils/constant'
+import { API_ERROR_MESSAGE } from '@/utils/constant'
 import { loginSchema, zodResolver } from '@/validation'
 
 import { loginThunk } from '../services/authentication-thunks'
-import { loadCurrentAccountContext } from '../services/authentication.service'
-import { toPostLoginLocation } from '../utils'
 import { AuthFormField, PasswordVisibilityToggle } from './AuthFormFields'
 
 const LOGIN_FIELDS = ['email', 'password']
@@ -36,8 +34,6 @@ function getLoginRejectionMessage(error) {
 
 function LoginForm({ defaultEmail = '' }) {
   const dispatch = useAppDispatch()
-  const location = useLocation()
-  const navigate = useNavigate()
   const [passwordVisible, setPasswordVisible] = useState(false)
   const {
     formState: { errors, isSubmitting },
@@ -50,10 +46,8 @@ function LoginForm({ defaultEmail = '' }) {
   })
 
   const onSubmit = async ({ email, password }) => {
-    let authentication
-
     try {
-      authentication = await dispatch(loginThunk({ email, password })).unwrap()
+      await dispatch(loginThunk({ email, password })).unwrap()
     } catch (error) {
       const rejectionMessage = getLoginRejectionMessage(error)
       const field = error.details?.field
@@ -70,27 +64,7 @@ function LoginForm({ defaultEmail = '' }) {
 
     toast.success('Đăng nhập thành công.')
 
-    let next = toPostLoginLocation(authentication.user, location.state)
-
-    // Company staff land on their workspace; the Company role lives on the membership.
-    const user = authentication.user
-    if (
-      next.pathname === '/' &&
-      user?.role === USER_ROLE.COMPANY_STAFF &&
-      user?.status === USER_STATUS.ACTIVE
-    ) {
-      const membership = await loadCurrentAccountContext()
-      if (membership?.role === COMPANY_MEMBER_ROLE.RECRUITER) {
-        next = { pathname: '/recruiter/jobs' }
-      } else if (membership?.role === COMPANY_MEMBER_ROLE.COMPANY_MANAGER) {
-        next = { pathname: '/company/recruiters' }
-      }
-    }
-
-    navigate(
-      { pathname: next.pathname, search: next.search ?? '', hash: next.hash ?? '' },
-      { replace: true, state: next.state },
-    )
+    // GuestRoute owns the single post-login redirect after account context resolves.
   }
 
   return (

@@ -1,6 +1,5 @@
-import { Navigate } from 'react-router-dom'
-
 import RecruiterLayout from '@/components/layouts/RecruiterLayout'
+import { Navigate } from 'react-router-dom'
 import RecruiterCandidateCvPage from '@/pages/RecruiterCandidateCvPage'
 import RecruiterCandidateSearchPage from '@/pages/RecruiterCandidateSearchPage'
 import RecruiterChangePasswordPage from '@/pages/RecruiterChangePasswordPage'

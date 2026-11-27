@@ -34,6 +34,7 @@ const workspaces = [
     label: 'Quy trình tuyển dụng',
     icon: FolderKanban,
     items: [
+      { to: '/', label: 'Trang chủ', icon: House, end: true },
       { to: '/recruiter/jobs', label: 'Job tôi phụ trách chính', icon: BriefcaseBusiness },
       {
         to: '/recruiter/participating',
@@ -56,7 +57,7 @@ const workspaces = [
 // Shared screens such as notifications belong to the recruitment workspace.
 function getActiveWorkspace(pathname) {
   return (
-    workspaces.find((workspace) => workspace.items.some((item) => pathname.startsWith(item.to))) ??
+    workspaces.find((workspace) => workspace.items.some((item) => item.end ? pathname === item.to : pathname.startsWith(item.to))) ??
     workspaces[0]
   )
 }
@@ -174,7 +175,9 @@ function SidebarNavigation({ onNavigate }) {
       {workspace.items.map((item) => {
         const Icon = item.icon
         // Detail pages still belong to their list destination.
-        const active = [item.to, ...(item.also ?? [])].some((path) => location.pathname.startsWith(path))
+        const active = item.end
+          ? location.pathname.replace(/\/$/, '') === item.to
+          : [item.to, ...(item.also ?? [])].some((path) => location.pathname.startsWith(path))
         return (
           <Link
             aria-current={active ? 'page' : undefined}
@@ -235,7 +238,7 @@ function RecruiterLayout() {
               aria-label="JOBHUB, khu nhà tuyển dụng"
               className="inline-flex items-center gap-2 rounded-lg px-1 font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={closeMenu}
-              to="/recruiter/jobs"
+              to="/"
             >
               <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <BriefcaseBusiness aria-hidden="true" className="size-5" />

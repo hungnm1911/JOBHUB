@@ -1,7 +1,7 @@
 import CompanyDetailPage from '@/pages/CompanyDetailPage'
 import ConfirmCompanyApprovalPage from '@/pages/ConfirmCompanyApprovalPage'
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
-import HomePage from '@/pages/HomePage'
+import WebsiteHomePage from '@/pages/WebsiteHomePage'
 import JobDetailPage from '@/pages/JobDetailPage'
 import JobSearchPage from '@/pages/JobSearchPage'
 import RecruiterActivationPage from '@/pages/RecruiterActivationPage'
@@ -17,7 +17,7 @@ const publicRoutes = [
     children: [
       {
         index: true,
-        element: <HomePage />,
+        element: <WebsiteHomePage />,
       },
       {
         path: 'jobs',

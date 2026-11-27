@@ -33,7 +33,7 @@ When a detailed version specification exists and has been reviewed and approved,
 | V5 | Job và vòng đời phê duyệt Job | COMPLETED AND VERIFIED |
 | V6 | Recruitment Team và chuyển giao trách nhiệm | COMPLETED AND VERIFIED |
 | V7 | Candidate Profile và thư viện CV | IN PROGRESS |
-| V8 | Job Discovery | Baseline COMPLETED AND VERIFIED; Featured extension IMPLEMENTED / ACCEPTED (focused scope) |
+| V8 | Job Discovery | Baseline COMPLETED AND VERIFIED; Featured ACCEPTED (focused scope); Recruiter public read IMPLEMENTED / BACKEND VERIFIED |
 | V9 | Candidate chủ động Apply và tạo Application | COMPLETED AND VERIFIED |
 | V10 | Phân công Application và Recruitment Pipeline | COMPLETED AND VERIFIED |
 | V11 | Conversation và Chat thuộc Application | COMPLETED AND VERIFIED |
@@ -135,6 +135,11 @@ Ranking (F02/F05, BR-42/BR-43, API-V8-01 and Data V8 §6.7/§14.1) is
 2026-11-07; Frontend V03 Homepage Featured UX is also implemented and accepted
 within that scope with known risks. Featured reads existing Application data
 for ranking only on the Job list API; Application mutation remains outside V8.
+The 2026-11-27 approved Recruiter extension allows eligible Recruiters to use
+the three existing public read APIs, preserving Candidate-only actions and
+internal-data boundaries ([V8 §4.3](versions/v8-job-discovery.md#43-recruiter)).
+Its Backend gate is verified; the separate Frontend website status is recorded
+in [Recruiter home](../../project-status/frontend/recruiter-home.md).
 The MEDIUM transition regression coverage gap was accepted without new tests,
 and the LOW stale URL `page` case was deferred. Browser/E2E checks and Backend
 query-plan/performance checks remain unverified for the extension; the

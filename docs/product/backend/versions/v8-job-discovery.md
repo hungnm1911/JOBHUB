@@ -231,8 +231,15 @@ V8 chưa trao cho Candidate khả năng Apply Job.
 
 Recruiter thuộc Company Staff.
 
-Recruiter sử dụng các API nghiệp vụ Company Staff riêng. Request có
-authenticated Recruiter context không được sử dụng API V8 (`403`).
+Theo thay đổi được người dùng phê duyệt ngày 2026-11-27, Recruiter được
+sử dụng toàn bộ public read của V8: list/search/filter/sort, public/historical
+Job detail và Company public profile. Recruiter phải qua business gate hiện hữu
+của V3 (User ACTIVE, membership ACTIVE/RECRUITER, Company APPROVED/ACTIVE và đã
+thiết lập mật khẩu). Không yêu cầu tham gia Recruitment Team để đọc public.
+Không có Apply, Save Job, CV/AI Candidate hoặc quyền sửa từ Discovery.
+Các thao tác nội bộ vẫn sử dụng API Company Staff riêng. Gate sử dụng lỗi hiện
+hữu của V3: không có membership/Company trả `404`; sai role, bị khóa/chấm dứt
+hoặc chưa đủ điều kiện hoạt động trả `403`.
 
 ### 4.4. Company Manager
 
@@ -334,7 +341,7 @@ Một Position chỉ được sử dụng trong context của Field cha tương 
 
 ### 5.4. User và Job
 
-Guest và Candidate chỉ đọc Job thông qua V8.
+Guest, Candidate và Recruiter đủ điều kiện chỉ đọc Job thông qua V8.
 
 V8 không tạo quan hệ ownership giữa các actor này và Job.
 
@@ -342,7 +349,7 @@ V8 không tạo quan hệ Candidate--Job.
 
 ### 5.5. Public read và Company khác
 
-Guest và Candidate được phép đọc dữ liệu Job Discovery công khai của
+Guest, Candidate và Recruiter đủ điều kiện được phép đọc dữ liệu Job Discovery công khai của
 các Company khác nhau.
 
 Phần này chỉ mô tả **quan hệ nghiệp vụ**.
@@ -485,6 +492,7 @@ Không còn truy cập được qua public Job detail của V8
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Mục tiêu
 
@@ -514,8 +522,8 @@ hội tuyển dụng đang công khai.
 
 ### Trường hợp từ chối
 
--   Authenticated Platform Admin hoặc Company Staff (Company Manager,
-    Recruiter) không được sử dụng Job Discovery capability V8 (`403`).
+-   Platform Admin, Company Manager và Company Staff không đủ điều kiện
+    Recruiter không được sử dụng Job Discovery (`403`).
 -   Resource không đủ điều kiện public không được truy cập thông qua Job
     Discovery.
 
@@ -549,6 +557,7 @@ thực thông qua các public read API của `F02`--`F08`.
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Mục tiêu
 
@@ -645,6 +654,7 @@ Không đưa vào danh sách:
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Mục tiêu
 
@@ -706,6 +716,7 @@ Search không được làm xuất hiện:
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Mục tiêu
 
@@ -782,6 +793,7 @@ Actor có thể lọc theo:
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Mục tiêu
 
@@ -847,6 +859,7 @@ Quy tắc mặc định:
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Mục tiêu
 
@@ -918,6 +931,7 @@ Không public:
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Mục tiêu
 
@@ -978,6 +992,7 @@ và:
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Mục tiêu
 
@@ -1053,21 +1068,17 @@ với Job hiện hữu.
 Các actor được sử dụng Job Discovery gồm:
 
 -   Guest;
--   Candidate.
+-   Candidate;
+-   Recruiter đủ điều kiện theo §4.3.
 
 ------------------------------------------------------------------------
 
-## BR-04 --- Authenticated Platform Admin và Company Staff không phải actor của V8
+## BR-04 --- Authenticated Platform Admin và Company Manager không phải actor của V8
 
-V8 không bổ sung Job Discovery capability cho Platform Admin hoặc
-Company Staff (Company Manager, Recruiter) khi request có authenticated
-context của các role này. Các API V8 trả `403`.
-
-Điều này không thay đổi public access của Guest. Khi request không có
-authenticated context, hệ thống xử lý request theo Guest rules; V8
-không cố ngăn một người đã logout sử dụng public website.
-
-Platform Admin và Company Staff sử dụng các API nghiệp vụ riêng.
+Platform Admin và Company Manager bị từ chối `403`. Company Staff chỉ được
+đọc V8 khi thỏa Recruiter business gate tại §4.3. Không chuyển request có token
+thành Guest để né kiểm tra quyền. Request không có token tiếp tục theo Guest rules;
+token không hợp lệ tiếp tục theo authentication contract hiện hữu.
 
 ------------------------------------------------------------------------
 
@@ -1442,10 +1453,12 @@ V8 không công khai:
 
 ------------------------------------------------------------------------
 
-## BR-38 --- Recruiter sử dụng API nghiệp vụ riêng
+## BR-38 --- Recruiter đọc Discovery và dùng API riêng cho nghiệp vụ nội bộ
 
-Recruiter không có Job Discovery capability V8. Authenticated Recruiter
-request tới API V8 bị từ chối `403`.
+Recruiter đủ điều kiện tại §4.3 được đọc public V8 cross-Company. Projection,
+visibility, historical access, filter và pagination giống actor public khác;
+không mở rộng dữ liệu nội bộ hoặc bất kỳ quyền mutation/Candidate action nào.
+User, membership và Company của actor được kiểm tra lại ở mỗi request.
 
 ------------------------------------------------------------------------
 
@@ -1509,7 +1522,13 @@ persist count và không trả count trong public API.
 
 ## BR-43 --- Ngữ cảnh Featured trên Homepage
 
-Homepage luôn dùng `FEATURED` cho khối "Việc làm nổi bật", không áp dụng
+Trang chủ Recruiter tại `/` theo bố cục được duyệt trong V6 ưu tiên Job công ty,
+search dẫn `/jobs` và preview thị trường dùng `NEWEST` (tối đa 6 Job, không
+phân trang tại preview). Các màn Discovery `/jobs`, Job/Company detail dùng lại
+read capability V8; không có Candidate actions. Quy tắc Featured dưới đây
+áp dụng cho homepage Guest/Candidate, không ép homepage Recruiter dùng Featured.
+
+Homepage Guest/Candidate luôn dùng `FEATURED` cho khối "Việc làm nổi bật", không áp dụng
 keyword hoặc filter của thao tác tìm kiếm vào khối này. Tìm kiếm hoặc
 chọn Category/Location trên Homepage chuyển actor sang `/jobs` và áp dụng
 keyword/filter ở đó theo Job Discovery search/filter hiện hữu. Homepage
@@ -1596,17 +1615,19 @@ V8 không định nghĩa transition mới cho Job hoặc Company.
   information
 
   Job Discovery  Platform Admin,      Không thuộc V8   API V8 trả `403`
-  capability     Company Staff
+  capability     Company Manager
   riêng
   ---------------------------------------------------------------------------
 
 Nguyên tắc authorization:
 
+-   Các hàng public read trong bảng trên cũng cho phép Recruiter đủ điều kiện §4.3.
+
 -   Guest không cần account để sử dụng các chức năng public được V8 cho
     phép.
 -   Candidate không cần có CV để đọc Job.
--   Authenticated Platform Admin và Company Staff (Company Manager,
-    Recruiter) bị từ chối `403` trên các API V8.
+-   Platform Admin, Company Manager và Recruiter không đủ điều kiện bị từ chối
+    `403` trên các API V8.
 -   Không actor nào nhận được mutation permission đối với Job thông qua
     V8.
 
@@ -1631,7 +1652,7 @@ V8 không thay đổi ownership này.
 
 Job Discovery là public/read-only surface.
 
-Vì vậy Guest và Candidate có thể đọc Job của
+Vì vậy Guest, Candidate và Recruiter đủ điều kiện có thể đọc Job của
 nhiều Company khác nhau nếu Job thỏa mãn public visibility rules của V8.
 
 ### Tenant isolation đối với dữ liệu nội bộ
@@ -1686,7 +1707,7 @@ Các invariant sau phải luôn đúng đối với V8:
 17. Location và Work mode luôn là hai dimension độc lập.
 18. `REMOTE` không phải Location.
 19. Candidate không cần CV để sử dụng V8.
-20. Authenticated Recruiter không có V8 capability.
+20. Recruiter đủ điều kiện có public read V8, không có Candidate actions.
 21. Authenticated Platform Admin không có V8 capability.
 22. Authenticated Company Manager không có V8 capability.
 23. Public Job response không được leak Recruitment Team hoặc hiring
@@ -1890,7 +1911,7 @@ public Job Discovery.
 
   Candidate hợp lệ                    Cho phép V8
 
-  Recruiter hợp lệ                    Từ chối `403`
+  Recruiter đủ điều kiện §4.3         Cho phép public read V8
 
   Platform Admin hợp lệ               Từ chối `403`
 
@@ -1925,6 +1946,7 @@ GET /api/job-discovery/jobs
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Input
 
@@ -2126,6 +2148,7 @@ GET /api/job-discovery/jobs/:jobId
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Input
 
@@ -2241,6 +2264,7 @@ GET /api/job-discovery/companies/:companyId
 
 -   Guest.
 -   Candidate.
+-   Recruiter đủ điều kiện theo §4.3.
 
 ### Input
 

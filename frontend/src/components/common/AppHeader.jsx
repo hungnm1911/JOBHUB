@@ -14,7 +14,7 @@ const CANDIDATE_PRIMARY_NAV_LINKS = Object.freeze([
   { to: '/candidate/invitations', label: 'Lời mời ứng tuyển' },
 ])
 
-function AppHeader({ accountArea, isCandidate = false }) {
+function AppHeader({ accountArea, isCandidate = false, isRecruiter = false }) {
   const navLinkClass = ({ isActive }, visibleOnMobile = false) =>
     cn(
       'shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring xl:inline-flex',
@@ -55,7 +55,15 @@ function AppHeader({ accountArea, isCandidate = false }) {
               </NavLink>
             ))}
 
-          {!isCandidate && (
+          {isRecruiter && (
+            <div className="hidden items-center gap-5 xl:flex">
+              <NavLink className={navLinkClass} end to="/">Trang chủ</NavLink>
+              <NavLink className={navLinkClass} to="/jobs">Khám phá việc làm</NavLink>
+              <Button asChild size="sm"><Link to="/recruiter/jobs">Khu tuyển dụng</Link></Button>
+            </div>
+          )}
+
+          {!isCandidate && !isRecruiter && (
             <Button asChild size="sm" className="shrink-0 font-semibold">
               <Link to="/jobs">Tìm việc làm</Link>
             </Button>
@@ -78,6 +86,13 @@ function AppHeader({ accountArea, isCandidate = false }) {
           )}
         </nav>
       </div>
+      {isRecruiter && (
+        <nav aria-label="Điều hướng Recruiter" className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm font-semibold xl:hidden">
+          <NavLink className={({ isActive }) => cn('rounded-sm hover:text-primary focus-visible:ring-2 focus-visible:ring-ring', isActive && 'text-primary')} end to="/">Trang chủ</NavLink>
+          <NavLink className={({ isActive }) => cn('rounded-sm hover:text-primary focus-visible:ring-2 focus-visible:ring-ring', isActive && 'text-primary')} to="/jobs">Khám phá việc làm</NavLink>
+          <Link className="rounded-sm text-primary focus-visible:ring-2 focus-visible:ring-ring" to="/recruiter/jobs">Khu tuyển dụng</Link>
+        </nav>
+      )}
     </header>
   )
 }

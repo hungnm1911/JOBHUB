@@ -102,3 +102,24 @@ No second router, service layer, directory model or permission source is added.
 Tests: `backend/test/job/recruiter-fe-api-completion.test.js`, amended scoped
 Job/team projection regressions, and the official Backend gate. Live providers,
 Frontend UI and production load require separate verification.
+
+## Recruiter public Discovery
+
+Approved authority: [V8 §4.3, F01–F08, BR-03/04/35/37/38](../product/backend/versions/v8-job-discovery.md).
+The existing optional-auth reads now also admit Recruiters through
+`company.service.js::resolveRecruiterBusinessContext` on every request:
+
+- `GET /api/job-discovery/jobs`: existing public keyword/filter/sort/pagination
+  contract, including optional `companyId` for any publicly eligible Company.
+- `GET /api/job-discovery/jobs/:jobId`: public/historical read-only Job projection.
+- `GET /api/job-discovery/companies/:companyId`: public Company profile.
+
+Company Manager/Admin remain denied. Current User, membership, password setup
+and actor Company gates remain authoritative; missing membership/Company uses
+the existing resolver's not-found response. The actor's tenant does not constrain
+public resource ownership. Private/unpublished/deleted/ineligible Company data
+remains unavailable and public DTOs omit team/approval/internal metrics. Reads
+do not grant Apply, Saved Jobs or Candidate CV/AI permissions; no schema or new
+endpoint. FE sends the current optional session rather than dropping credentials.
+The approved Recruiter website is `/`, public browsing uses `/jobs` and
+`/companies/:companyId`, and management stays under `/recruiter/*`.

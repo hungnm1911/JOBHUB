@@ -12,6 +12,8 @@ import {
 import APPLICATION_SOURCE from "../../src/constants/application-source.js";
 import APPLICATION_STATUS from "../../src/constants/application-status.js";
 import CANDIDATE_CV_SOURCE_TYPE from "../../src/constants/candidate-cv-source-type.js";
+import COMPANY_MEMBER_STATUS from "../../src/constants/company-member-status.js";
+import CompanyMember from "../../src/models/company-member.model.js";
 import COMPANY_APPROVAL_STATUS from "../../src/constants/company-approval-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../../src/constants/company-operational-status.js";
 import EMPLOYMENT_TYPE from "../../src/constants/employment-type.js";
@@ -692,7 +694,7 @@ describe("V8 — Job Discovery", () => {
     });
   });
 
-  it("allows Guest and Candidate and rejects Company Staff and Platform Admin on every V8 endpoint", async () => {
+  it("allows Guest, Candidate and eligible Recruiter and rejects Manager/Admin on every V8 endpoint", async () => {
     const { manager, recruiter, catalog, agent } = await createBaseContext();
     const job = await createJob({
       company: manager.company,
@@ -729,10 +731,58 @@ describe("V8 — Job Discovery", () => {
     for (const endpoint of endpoints) {
       expect((await agent.get(endpoint)).status).toBe(200);
       expect((await agent.get(endpoint).set("Authorization", `Bearer ${candidateToken}`)).status).toBe(200);
-      for (const token of [recruiterToken, managerToken, adminToken]) {
+      expect((await agent.get(endpoint).set("Authorization", `Bearer ${recruiterToken}`)).status).toBe(200);
+      for (const token of [managerToken, adminToken]) {
         expect((await agent.get(endpoint).set("Authorization", `Bearer ${token}`)).status).toBe(403);
       }
       expect((await agent.get(endpoint).set("Authorization", "Bearer invalid-token")).status).toBe(401);
+    }
+  });
+
+  it("allows a Recruiter without a team to read another Company's public data, never private Jobs or Candidate fields", async () => {
+    const { manager, recruiter, catalog, agent } = await createBaseContext();
+    const readerCompany = await createActiveCompanyManagerContext({ email: "reader.manager@example.com", businessRegistrationNumber: "V8-READER" });
+    const reader = await createActiveRecruiterContext({ email: "reader.recruiter@example.com", company: readerCompany.company, employeeCode: "READER" });
+    const token = await loginAndGetAccessToken(agent, { email: reader.user.email });
+    const publicJob = await createJob({ company: manager.company, recruiter, catalog });
+    const privateJob = await createJob({ company: manager.company, recruiter, catalog, title: "Secret", status: JOB_STATUS.DRAFT, publishedAt: null });
+    const historical = await createJob({ company: manager.company, recruiter, catalog, title: "Historical", status: JOB_STATUS.CLOSED });
+    const list = await agent.get("/api/job-discovery/jobs").query({ companyId: manager.company.id, keyword: "Backend", page: 1, limit: 1 }).set("Authorization", `Bearer ${token}`);
+    expect(list.status).toBe(200);
+    expect(list.body.jobs.map((job) => job.id)).toEqual([publicJob.id]);
+    expect(list.body.pagination.total).toBe(1);
+    const detail = await agent.get(`/api/job-discovery/jobs/${publicJob.id}`).set("Authorization", `Bearer ${token}`);
+    expect(detail.status).toBe(200);
+    for (const field of ["primaryRecruiterCompanyMemberId", "supportingRecruiterCompanyMemberIds", "createdByCompanyMemberId", "isSaved"]) {
+      expect(detail.body.job).not.toHaveProperty(field);
+      expect(list.body.jobs[0]).not.toHaveProperty(field);
+    }
+    expect((await agent.get(`/api/job-discovery/jobs/${privateJob.id}`).set("Authorization", `Bearer ${token}`)).status).toBe(404);
+    expect((await agent.get(`/api/job-discovery/jobs/${historical.id}`).set("Authorization", `Bearer ${token}`)).body.job.isHistoricalReadOnly).toBe(true);
+    const profile = await agent.get(`/api/job-discovery/companies/${manager.company.id}`).set("Authorization", `Bearer ${token}`);
+    expect(profile.status).toBe(200);
+    expect(profile.body.company).not.toHaveProperty("managerUserId");
+    await Company.updateOne({ _id: manager.company.id }, { operationalStatus: COMPANY_OPERATIONAL_STATUS.LOCKED });
+    for (const endpoint of [`/api/job-discovery/jobs/${publicJob.id}`, `/api/job-discovery/companies/${manager.company.id}`]) {
+      expect((await agent.get(endpoint).set("Authorization", `Bearer ${token}`)).status).toBe(404);
+    }
+  });
+
+  it.each(["membershipLocked", "membershipTerminated", "membershipMissing", "companyLocked", "passwordSetup"])("rechecks Recruiter eligibility after login: %s", async (restriction) => {
+    const { manager, recruiter, catalog, agent } = await createBaseContext();
+    const job = await createJob({ company: manager.company, recruiter, catalog });
+    const token = await loginAndGetAccessToken(agent, { email: recruiter.user.email });
+    if (restriction === "membershipLocked" || restriction === "membershipTerminated") {
+      await CompanyMember.updateOne({ _id: recruiter.membership.id }, { status: restriction === "membershipLocked" ? COMPANY_MEMBER_STATUS.LOCKED : COMPANY_MEMBER_STATUS.TERMINATED });
+    } else if (restriction === "membershipMissing") {
+      await CompanyMember.deleteOne({ _id: recruiter.membership.id });
+    } else if (restriction === "companyLocked") {
+      await Company.updateOne({ _id: manager.company.id }, { operationalStatus: COMPANY_OPERATIONAL_STATUS.LOCKED });
+    } else {
+      await User.updateOne({ _id: recruiter.user.id }, { mustChangePassword: true });
+    }
+    for (const endpoint of ["/api/job-discovery/jobs", `/api/job-discovery/jobs/${job.id}`, `/api/job-discovery/companies/${manager.company.id}`]) {
+      expect((await agent.get(endpoint).set("Authorization", `Bearer ${token}`)).status).toBe(restriction === "membershipMissing" ? 404 : 403);
     }
   });
 
