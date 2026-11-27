@@ -14,7 +14,7 @@ const CANDIDATE_PRIMARY_NAV_LINKS = Object.freeze([
   { to: '/candidate/invitations', label: 'Lời mời ứng tuyển' },
 ])
 
-function AppHeader({ accountArea, isCandidate = false, isRecruiter = false }) {
+function AppHeader({ accountArea, isCandidate = false, isRecruiter = false, homeTo = '/', showDiscoveryAction = true }) {
   const navLinkClass = ({ isActive }, visibleOnMobile = false) =>
     cn(
       'shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring xl:inline-flex',
@@ -33,7 +33,7 @@ function AppHeader({ accountArea, isCandidate = false, isRecruiter = false }) {
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-6">
         <Link
           className="inline-flex shrink-0 items-center gap-1.5 text-xl font-extrabold tracking-tight"
-          to="/"
+          to={homeTo}
         >
           JOBHUB
           <span aria-hidden="true" className="size-2 rounded-full bg-primary" />
@@ -63,7 +63,7 @@ function AppHeader({ accountArea, isCandidate = false, isRecruiter = false }) {
             </div>
           )}
 
-          {!isCandidate && !isRecruiter && (
+          {!isCandidate && !isRecruiter && showDiscoveryAction && (
             <Button asChild size="sm" className="shrink-0 font-semibold">
               <Link to="/jobs">Tìm việc làm</Link>
             </Button>

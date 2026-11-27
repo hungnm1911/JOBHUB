@@ -109,3 +109,38 @@ The target conventions do not settle these points:
 - whether the dependency-free Node authentication tests should later be expanded into a browser-oriented frontend test harness, and which deterministic architecture checks become part of `verify:agent`.
 
 Until those decisions are made, code must not establish a second owner or infer a new architectural layer.
+
+## Company Manager workspace owners
+
+Approved screen implementation (2026-11-27) lives under
+`frontend/src/features/company-management/components/`; `Company*Page.jsx`
+files compose that feature with URL params. `CompanyManagerLayout.jsx` owns
+only the three-item workspace navigation and Outlet, nested under RootLayout's
+existing header/footer and unsaved-change provider. RootLayout passes opt-in
+presentation props to AppHeader so the workspace brand returns to Company Jobs
+and omits the public Discovery action; public defaults are unchanged. `company-manager.routes.jsx`
+owns the existing onboarding boundary and ACTIVE Company Manager membership
+boundary for `/company/jobs`, Job detail, Recruiter list/create/detail/handover,
+and `/company/profile`. No homepage or post-login owner is changed.
+
+Resource calls extend the existing `company-recruiter.api.js`,
+`recruiter-job.api.js`, `recruiter-application.api.js`, and `company.api.js`.
+No second HTTP client, store, router or socket is introduced. New Recruiter
+form schemas live in `validation/company-recruiter.schema.js`; the active
+Company schema extends the existing company profile schema through the
+`@/validation` facade.
+
+`recruiter-workspace/public.js` is the explicit cross-feature interface to the
+existing JobOverviewTab, JobTeamTab (additive isManager mode), AssignmentPanel
+(additive allowProcessing/disabled inputs), status/date helpers and resource/list
+hooks; those underlying modules remain the canonical owners. The facade does
+not create another team or assignment implementation. `useResource.refreshing`
+lets mutation controls wait for current-state rereads while retaining current
+content. `company-onboarding/public.js` exposes its existing CompanyProfileForm
+with additive active mode; image upload, rich text, error association, validation
+and unsaved changes remain in their original owners. Default onboarding and
+Recruiter callers preserve their behavior.
+
+Verification owner: `test/company-manager-workspace.test.js`, included by
+`test:company-manager` in the common `verify:agent` gate. HTTP API semantics are
+recorded in the V1–V4 and Recruiter API contracts; project status records evidence.

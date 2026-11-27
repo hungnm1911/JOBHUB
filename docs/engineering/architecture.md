@@ -720,3 +720,15 @@ realtime behavior when it does not need them.
 - Frontend technical design must not invent business rules absent from an approved product specification or duplicate backend sources of truth.
 
 Current deviations from these constraints are catalogued in [`frontend-source-of-truth.md`](frontend-source-of-truth.md). They are documentation of the existing state, not authorization to duplicate or extend the mismatch.
+
+## Company Manager frontend integration
+
+The 2026-11-27 approved workspace is composed by the existing Company Manager
+route group under RootLayout, with CompanyManagerLayout navigation and thin
+Company pages delegating to `features/company-management`. Explicit public
+facades reuse existing recruiter-workspace Job/team/assignment owners and the
+company-onboarding profile form. Existing auth, router, client, socket, storage
+and unsaved-change ownership remains unchanged. The only new Backend read is
+forced-transfer preview in the existing recruiter route/controller/service;
+it reuses unfinished-Job query owners and the Recruiter list aggregation and
+introduces no persistence model. Endpoint details live in the API contracts.

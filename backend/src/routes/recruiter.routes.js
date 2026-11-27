@@ -4,6 +4,7 @@ import {
   updateRecruiterHandler, resendRecruiterActivationHandler,
   createRecruiterHandler,
   getRecruiterDetailHandler,
+  getRecruiterHandoverHandler,
   initiateRecruiterPasswordResetHandler,
   listRecruitersHandler,
   lockRecruiterHandler,
@@ -17,6 +18,9 @@ import validateCreateRecruiter from "../middlewares/validate-create-recruiter.js
 import validateUpdateRecruiter from "../middlewares/validate-update-recruiter.js";
 
 const router = express.Router();
+
+router.get("/:recruiterId/handover", authenticateAccess,
+  authorizeCompanyManagerBusinessAccess, getRecruiterHandoverHandler);
 
 router.get(
   "/",

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -8,26 +8,46 @@ import {
   unassignApplicationApi,
 } from '@/apis/recruiter-application.api'
 import { listAssignmentOptionsApi } from '@/apis/recruiter-job.api'
-import { ErrorState, ListSkeleton } from '@/components/common/ListStates'
+import { ErrorState, ListSkeleton, Pager } from '@/components/common/ListStates'
 import { Button } from '@/components/ui/button'
 import { JOB_STATUS } from '@/utils/constant'
 
 import useResource from '../hooks/useResource'
-import { TERMINAL_STATUSES, getEffectiveJobStatus, toRecruiterErrorMessage } from '../utils'
+import { useDebouncedValue } from '../hooks/useListSearch'
+import {
+  TERMINAL_STATUSES,
+  getEffectiveJobStatus,
+  toRecruiterErrorMessage,
+} from '../utils'
 import ConfirmDialog from './ConfirmDialog'
-import Panel, { Avatar } from './Panel'
+import Panel, { Avatar, SearchInput } from './Panel'
 
-// A Recruitment Team is small; one page of the maximum size covers it.
-const loadOptions = (jobId) => listAssignmentOptionsApi(jobId, { limit: 100 })
+const loadOptions = ({ jobId, query }) => listAssignmentOptionsApi(jobId, query)
 
-const ASSIGNABLE_JOB_STATUSES = [JOB_STATUS.PUBLISHED, JOB_STATUS.CLOSED, JOB_STATUS.EXPIRED]
+const ASSIGNABLE_JOB_STATUSES = [
+  JOB_STATUS.PUBLISHED,
+  JOB_STATUS.CLOSED,
+  JOB_STATUS.EXPIRED,
+]
 
 function AssignDialog({ jobId, application, membershipId, onClose, onDone }) {
   const current = application.assignedRecruiterCompanyMemberId
-  const { data, loading, error, reload } = useResource(loadOptions, jobId)
+  const [keyword, setKeyword] = useState('')
+  const [page, setPage] = useState(1)
+  const q = useDebouncedValue(keyword.trim())
+  const params = useMemo(
+    () => ({ jobId, query: { page, limit: 10, ...(q ? { q } : {}) } }),
+    [jobId, page, q],
+  )
+  const { data, loading, refreshing, error, reload } = useResource(
+    loadOptions,
+    params,
+  )
   const [selected, setSelected] = useState('')
   const [busy, setBusy] = useState(false)
-  const options = (data?.recruiters ?? []).filter((item) => item.companyMemberId !== current)
+  const options = (data?.recruiters ?? []).filter(
+    (item) => item.companyMemberId !== current,
+  )
 
   const confirm = async () => {
     setBusy(true)
@@ -56,9 +76,14 @@ function AssignDialog({ jobId, application, membershipId, onClose, onDone }) {
 
   let list
   if (loading) list = <ListSkeleton label="Đang tải đội tuyển dụng" rows={3} />
-  else if (error) list = <ErrorState className="py-6" error={error} onRetry={reload} />
+  else if (error)
+    list = <ErrorState className="py-6" error={error} onRetry={reload} />
   else if (options.length === 0) {
-    list = <p className="text-sm text-muted-foreground">Không còn ai trong đội đủ điều kiện nhận hồ sơ.</p>
+    list = (
+      <p className="text-sm text-muted-foreground">
+        Không còn ai trong đội đủ điều kiện nhận hồ sơ.
+      </p>
+    )
   } else {
     list = (
       <ul className="max-h-72 divide-y overflow-y-auto">
@@ -76,9 +101,13 @@ function AssignDialog({ jobId, application, membershipId, onClose, onDone }) {
               <span className="text-sm">
                 <span className="block font-medium">
                   {member.fullName}
-                  {member.companyMemberId === membershipId ? ' (bạn nhận xử lý)' : ''}
+                  {member.companyMemberId === membershipId
+                    ? ' (bạn nhận xử lý)'
+                    : ''}
                 </span>
-                <span className="block text-xs text-muted-foreground">{member.jobTitle}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {member.jobTitle}
+                </span>
               </span>
             </label>
           </li>
@@ -90,7 +119,12 @@ function AssignDialog({ jobId, application, membershipId, onClose, onDone }) {
   return (
     <ConfirmDialog
       busy={busy}
-      confirmDisabled={!selected}
+      confirmDisabled={
+        loading ||
+        refreshing ||
+        Boolean(error) ||
+        !options.some((item) => item.companyMemberId === selected)
+      }
       confirmLabel="Xác nhận"
       description="Trạng thái tuyển dụng của hồ sơ được giữ nguyên."
       onCancel={onClose}
@@ -98,17 +132,42 @@ function AssignDialog({ jobId, application, membershipId, onClose, onDone }) {
       open
       title={current ? 'Đổi người xử lý' : 'Phân công hồ sơ'}
     >
+      <SearchInput
+        label="Tìm người nhận hồ sơ"
+        onChange={(value) => {
+          setKeyword(value)
+          setPage(1)
+          setSelected('')
+        }}
+        value={keyword}
+      />
       {list}
+      <Pager
+        onPageChange={(value) => {
+          setPage(value)
+          setSelected('')
+        }}
+        pagination={data?.pagination}
+        unit="người"
+      />
     </ConfirmDialog>
   )
 }
 
-function AssignmentPanel({ job, application, membershipId, onChanged }) {
+function AssignmentPanel({
+  job,
+  application,
+  membershipId,
+  onChanged,
+  allowProcessing = true,
+  disabled = false,
+}) {
   const [mode, setMode] = useState(null)
   const [busy, setBusy] = useState(false)
   const assignee = application.assignedRecruiter
   const assigneeId = application.assignedRecruiterCompanyMemberId
   const canManage =
+    !disabled &&
     !TERMINAL_STATUSES.includes(application.status) &&
     ASSIGNABLE_JOB_STATUSES.includes(getEffectiveJobStatus(job))
 
@@ -134,7 +193,9 @@ function AssignmentPanel({ job, application, membershipId, onChanged }) {
       <div className="flex items-center gap-3">
         {assigneeId && <Avatar person={assignee} />}
         <p className="text-sm font-medium">
-          {assigneeId ? (assignee?.fullName ?? 'Không còn thông tin') : 'Chưa phân công'}
+          {assigneeId
+            ? assignee?.fullName ?? 'Không còn thông tin'
+            : 'Chưa phân công'}
           {assigneeId === membershipId ? ' (bạn)' : ''}
         </p>
       </div>
@@ -145,13 +206,20 @@ function AssignmentPanel({ job, application, membershipId, onChanged }) {
           </Button>
         )}
         {canManage && assigneeId && (
-          <Button onClick={() => setMode('unassign')} size="sm" type="button" variant="outline">
+          <Button
+            onClick={() => setMode('unassign')}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             Bỏ phân công
           </Button>
         )}
-        {assigneeId === membershipId && (
+        {allowProcessing && assigneeId && assigneeId === membershipId && (
           <Button asChild size="sm" variant="outline">
-            <Link to={`/recruiter/my-applications/${application.id}`}>Xử lý hồ sơ</Link>
+            <Link to={`/recruiter/my-applications/${application.id}`}>
+              Xử lý hồ sơ
+            </Link>
           </Button>
         )}
       </div>

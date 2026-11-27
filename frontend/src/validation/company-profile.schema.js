@@ -8,7 +8,9 @@ const optionalText = (maxLength) =>
   z.string().trim().max(maxLength, VALIDATION_MESSAGE.MAX_LENGTH(maxLength))
 
 const requiredText = (maxLength) =>
-  validators.requiredText().max(maxLength, VALIDATION_MESSAGE.MAX_LENGTH(maxLength))
+  validators
+    .requiredText()
+    .max(maxLength, VALIDATION_MESSAGE.MAX_LENGTH(maxLength))
 
 // Draft saves accept any subset of the V02 profile; empty strings are stored as
 // null by the backend.
@@ -34,4 +36,9 @@ const companySubmissionSchema = companyDraftSchema.extend({
   ),
 })
 
-export { companyDraftSchema, companySubmissionSchema }
+const companyActiveSchema = companyDraftSchema.omit({
+  name: true,
+  businessRegistrationNumber: true,
+})
+
+export { companyActiveSchema, companyDraftSchema, companySubmissionSchema }

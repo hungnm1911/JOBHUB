@@ -60,6 +60,7 @@ Reading rules:
 
 ## Frontend
 
+- [Company Manager workspace](frontend/company-manager-workspace.md)
 - [Recruiter home — Company Jobs first](frontend/recruiter-home.md)
 - [V1 — Authentication foundation](frontend/v01-authentication-foundation.md)
 - [V2 — Company onboarding](frontend/v02-company-onboarding.md)

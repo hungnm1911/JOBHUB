@@ -2,6 +2,12 @@
 
 ## Current project state
 
+2026-11-27: Company Manager forced-transfer preview passed the common Backend
+gate. Scoped read integration is recorded in [V6](v6-recruitment-team-responsibility-transfer.md);
+Frontend screens and their separate gate limitation are recorded in
+[Company Manager workspace](../frontend/company-manager-workspace.md). No schema,
+dependency or lifecycle change was introduced.
+
 2026-11-27: the Recruiter public Discovery extension passed the common Backend gate. Scoped behavior is recorded in [V8 status](v8-job-discovery.md); the Recruiter website and Frontend limitations are recorded in [Recruiter home](../frontend/recruiter-home.md). No schema, dependency or lifecycle change was introduced.
 
 Error handling and runtime request logging are standardized across Backend
@@ -104,6 +110,16 @@ and its injected AI Kit logger.
 - **Documented only:** repository-level and backend-specific agent contracts exist.
 
 ## Verification status
+
+- 2026-11-27 Company Manager handover preview: `cd backend && npm run verify:agent`
+  passed **220 files / 2,275 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors /
+  2 existing V6 warnings**. Default sequential configuration, no excluded tests,
+  logging suppression or changed timeouts; total run 972.25 seconds. The unchanged
+  pre-existing V15 test delta was present in the working tree and remains outside
+  this task. Focused preview passed **2/2** tests; existing lock/terminate suites
+  passed **31/31**. MongoDB tests use disposable replicas and mocked external
+  services. No real Atlas, SMTP, Cloudinary or authenticated browser-to-Backend
+  E2E is claimed; the UI browser checks used mocked transport.
 
 - 2026-11-27 Recruiter website / public Discovery: final `cd backend && npm run verify:agent` passed **219 files / 2,273 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors / 2 existing V6 warnings**. Default sequential configuration, no excluded tests or changed timeouts. The working tree included the unchanged pre-existing uncommitted V15 test delta; that file remains outside this feature commit. Focused Discovery passed **1 file / 38 tests**. Integration uses disposable MongoDB and mocked external services; no live Atlas/SMTP/Cloudinary/provider or browser E2E is claimed. Frontend has its separate gate and known lint failures as recorded in [Recruiter home](../frontend/recruiter-home.md).
 

@@ -390,6 +390,9 @@ Ký hiệu quyền:
 | `GET` | `/api/company/recruiters` | Company Manager | Danh sách Recruiter |
 | `POST` | `/api/company/recruiters` | Company Manager | Tạo Recruiter |
 | `GET` | `/api/company/recruiters/:recruiterId` | Company Manager | Chi tiết Recruiter |
+| `PATCH` | `/api/company/recruiters/:recruiterId` | Company Manager | Cập nhật employeeCode/jobTitle của Recruiter chưa chấm dứt |
+| `POST` | `/api/company/recruiters/:recruiterId/resend-activation` | Company Manager | Gửi lại email kích hoạt cho Recruiter chưa thiết lập mật khẩu |
+| `GET` | `/api/company/recruiters/:recruiterId/handover` | Company Manager | Xem trước định danh Job cần bàn giao và lựa chọn thay thế hợp lệ, không lộ nội dung DRAFT |
 | `POST` | `/api/company/recruiters/:recruiterId/password-reset` | Company Manager | Khởi tạo đặt lại mật khẩu |
 | `POST` | `/api/company/recruiters/:recruiterId/lock` | Company Manager | Khóa Recruiter, kèm chuyển giao bắt buộc nếu có |
 | `POST` | `/api/company/recruiters/:recruiterId/unlock` | Company Manager | Mở khóa Recruiter |

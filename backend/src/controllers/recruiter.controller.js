@@ -6,6 +6,7 @@ import {
   listRecruitersByCompany, updateRecruiter, resendRecruiterActivation,
   createRecruiter,
   getRecruiterDetail,
+  getRecruiterHandover,
   initiateRecruiterPasswordReset,
   listRecruiters,
   lockRecruiter,
@@ -178,4 +179,14 @@ export const resendRecruiterActivationHandler = async (request, response, next) 
   try { return response.json(await resendRecruiterActivation({ managerUser: request.auth.user,
     recruiterId: request.params.recruiterId, clientCompanyId: readClientCompanyId(request) })); }
   catch (error) { next(error); }
+};
+
+export const getRecruiterHandoverHandler = async (request, response, next) => {
+  try {
+    const options = parseListQuery(request.query, { sorts: ["fullName"], defaultSort: "fullName" });
+    return response.json(await getRecruiterHandover({
+      managerUser: request.auth.user, recruiterId: request.params.recruiterId,
+      clientCompanyId: readClientCompanyId(request), options,
+    }));
+  } catch (error) { return next(error); }
 };

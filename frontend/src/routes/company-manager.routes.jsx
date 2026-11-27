@@ -1,4 +1,11 @@
+import CompanyManagerLayout from '@/components/layouts/CompanyManagerLayout'
 import CompanyOnboardingPage from '@/pages/CompanyOnboardingPage'
+import CompanyJobsPage from '@/pages/CompanyJobsPage'
+import CompanyJobDetailPage from '@/pages/CompanyJobDetailPage'
+import CompanyProfilePage from '@/pages/CompanyProfilePage'
+import CompanyRecruiterCreatePage from '@/pages/CompanyRecruiterCreatePage'
+import CompanyRecruiterDetailPage from '@/pages/CompanyRecruiterDetailPage'
+import CompanyRecruiterHandoverPage from '@/pages/CompanyRecruiterHandoverPage'
 import CompanyRecruitersPage from '@/pages/CompanyRecruitersPage'
 import {
   COMPANY_MEMBER_ROLE,
@@ -38,8 +45,23 @@ const companyManagerRoutes = {
       ),
       children: [
         {
-          path: 'company/recruiters',
-          element: <CompanyRecruitersPage />,
+          path: 'company',
+          element: <CompanyManagerLayout />,
+          children: [
+            { path: 'jobs', element: <CompanyJobsPage /> },
+            { path: 'jobs/:jobId', element: <CompanyJobDetailPage /> },
+            { path: 'recruiters', element: <CompanyRecruitersPage /> },
+            { path: 'recruiters/new', element: <CompanyRecruiterCreatePage /> },
+            {
+              path: 'recruiters/:recruiterId',
+              element: <CompanyRecruiterDetailPage />,
+            },
+            {
+              path: 'recruiters/:recruiterId/handover',
+              element: <CompanyRecruiterHandoverPage />,
+            },
+            { path: 'profile', element: <CompanyProfilePage /> },
+          ],
         },
       ],
     },
