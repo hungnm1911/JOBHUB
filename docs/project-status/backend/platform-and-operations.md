@@ -2,7 +2,7 @@
 
 ## Current project state
 
-2026-11-27: Admin phases 2–3 passed the common Backend gate. Manager search and registration summary implementation status is recorded in [V2 status](v02-company-onboarding-platform-administration.md). No schema, dependency or business lifecycle change was introduced.
+2026-11-27: the Recruiter public Discovery extension passed the common Backend gate. Scoped behavior is recorded in [V8 status](v8-job-discovery.md); the Recruiter website and Frontend limitations are recorded in [Recruiter home](../frontend/recruiter-home.md). No schema, dependency or lifecycle change was introduced.
 
 Error handling and runtime request logging are standardized across Backend
 and its injected AI Kit logger.
@@ -104,6 +104,8 @@ and its injected AI Kit logger.
 - **Documented only:** repository-level and backend-specific agent contracts exist.
 
 ## Verification status
+
+- 2026-11-27 Recruiter website / public Discovery: final `cd backend && npm run verify:agent` passed **219 files / 2,273 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors / 2 existing V6 warnings**. Default sequential configuration, no excluded tests or changed timeouts. The working tree included the unchanged pre-existing uncommitted V15 test delta; that file remains outside this feature commit. Focused Discovery passed **1 file / 38 tests**. Integration uses disposable MongoDB and mocked external services; no live Atlas/SMTP/Cloudinary/provider or browser E2E is claimed. Frontend has its separate gate and known lint failures as recorded in [Recruiter home](../frontend/recruiter-home.md).
 
 - 2026-11-27 Admin phases 2–3: final `cd backend && npm run verify:agent` passed **219 files / 2,267 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors / 2 existing V6 warnings**. No tests were excluded and timeouts were unchanged. Focused registration search/summary and existing read regressions passed **3 files / 18 tests**. An earlier gate run was stopped to include the empty-key query regression; the final run above verified the completed code. Route/README/integration inventory matched **15/15 endpoints** and `git diff --check` passed. The gate ran on the working tree including the unchanged pre-existing V15 test delta, outside this feature. Integration tests use MongoMemoryReplSet and mocked external services; no live MongoDB/SMTP/Cloudinary, browser or Frontend verification is claimed. Scoped implementation state is recorded in [V2](v02-company-onboarding-platform-administration.md).
 

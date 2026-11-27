@@ -173,12 +173,17 @@ API modules must not:
 Route guards have these responsibilities:
 
 - `ProtectedRoute` redirects users who do not have resolved authenticated state.
-- `GuestRoute` redirects authenticated users away from guest-only routes.
+- `GuestRoute` owns post-login navigation using the auth helper and preserved
+  return context. For active Company Staff it waits for CompanyMember context
+  or renders retry on failure; `LoginForm` does not also navigate.
 - `RoleRoute` checks resolved user role/status and, when a route declares
   `allowedMembershipRoles` or `allowedMembershipStatuses`, waits for the
   authenticated CompanyMember context before checking its role/status. A failed
   context load presents a retry state rather than granting access.
-- `JobDiscoveryRoute` checks resolved authentication status and User role for V8 discovery screens. It does not wait for CompanyMember context; the Authentication feature continues to load that context through `/auth/me` for routes that require it.
+- `JobDiscoveryRoute` admits Guest/Candidate by resolved User role. Company Staff
+  wait for resolved active Recruiter membership (including completed password
+  setup); failed context loads show retry. Company Manager/Admin remain denied.
+  `/auth/me` loading stays in the existing Authentication bootstrap/loader.
 - Guards may render nested content through `Outlet` and may preserve navigation context when an approved flow requires it.
 - Guards must consume auth/role state from the approved authentication owner. They must not create auth state, call business APIs, decode authority independently, or hard-code speculative destinations.
 - Frontend guards improve navigation and user experience only. Backend authentication and authorization remain mandatory and authoritative.
@@ -218,7 +223,7 @@ Pages and page groups are created only for approved, concrete screens.
 For the approved Recruiter home, `recruiter-workspace/components/RecruiterHome/`
 owns screen queries, independent resource states and realtime resynchronization;
 its page is composition only. Cross-feature presentation uses the explicit
-`job-discovery/public.js` formatting interface and
+`job-discovery/public.js` formatting, read-only search/preview and URL interface and
 `candidate-dashboard/public.js` Application status interface. These re-export
 the existing owners; they do not create alternative formatting or status rules.
 

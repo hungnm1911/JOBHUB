@@ -16,11 +16,14 @@ function DiscoveryJobsSection({
   provinceNameByCode,
   renderJobAction,
   onPageChange,
+  sort = 'FEATURED',
+  title = 'Việc làm nổi bật',
+  description = 'Khám phá các vị trí tuyển dụng nổi bật trên JOBHUB',
 }) {
   const { jobs, pagination, loading, error, reload } = useDiscoveryJobs({
     page,
     limit: JOBS_PER_PAGE,
-    sort: 'FEATURED',
+    sort,
   })
 
   return (
@@ -28,10 +31,10 @@ function DiscoveryJobsSection({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight sm:text-3xl" id={`${id}-heading`}>
-            Việc làm nổi bật
+            {title}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Khám phá các vị trí tuyển dụng nổi bật trên JOBHUB
+            {description}
           </p>
         </div>
         <Link className="text-sm font-medium text-primary hover:underline focus-visible:underline" to="/jobs">
@@ -82,7 +85,7 @@ function DiscoveryJobsSection({
         )}
       </div>
 
-      {!error && (
+      {!error && onPageChange && (
         <div className="mt-8">
           <JobListPagination
             onPageChange={onPageChange}

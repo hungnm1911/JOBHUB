@@ -448,6 +448,12 @@ bao gồm query/body, DTO, phân trang, quyền, lỗi và quy tắc account/mem
 | `GET` | `/api/jobs/candidate-search/cvs` | Recruiter đủ quyền | Tìm Candidate CV `PUBLIC` |
 | `GET` | `/api/jobs/candidate-search/cvs/:cvId/preview` | Recruiter đủ quyền | Preview CV đủ điều kiện tìm kiếm |
 
+Ba API `/api/job-discovery/*` nhận Guest, Candidate và Recruiter đủ điều kiện
+business access hiện hữu; Company Manager/Admin vẫn bị từ chối. Recruiter chỉ
+nhận public projection, không có Apply/Save/AI Candidate. FE giữ token phiên
+hiện tại trên các public read, không hạ request thành Guest. Chi tiết ở
+[Recruiter API contract](../docs/engineering/recruiter-api-contract.md#recruiter-public-discovery).
+
 ### Candidate Application, Interview và Invitation
 
 | Method | Endpoint | Quyền | Mô tả |

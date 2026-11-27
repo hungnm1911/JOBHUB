@@ -110,7 +110,11 @@ Các entity từ version trước như:
 
 không cần relationship hoặc field mới để hỗ trợ V8.
 
-V8 không thay đổi schema của chúng.
+V8 không thay đổi schema của chúng. Mở rộng public read cho Recruiter được
+Product phê duyệt ngày 2026-11-27 đọc lại quan hệ `User → CompanyMember → Company`
+của V3/V6 để kiểm tra eligibility hiện tại; không thêm relationship, snapshot,
+field hoặc index. Tenant của actor không thay thế `Job.companyId` khi đọc public
+cross-Company; quyền và business gate tiếp tục do Product V8 §4.3 quy định.
 
 ---
 
@@ -1328,8 +1332,8 @@ Các constraint cần cross-document, actor, current time hoặc business contex
 | Featured chỉ đếm Application cho Job `DISCOVERABLE` sau các điều kiện list | Service              | Public pool + read-time ranking  |
 | Featured Top 18 trước pagination 6 Job/trang                            | Service                 | Ranking + bounded list           |
 | Relevance priority `title > skills > Company > jobDescription`          | Service                 | Business relevance rule          |
-| Guest/Candidate được cross-Company public read                           | Service / authorization | Actor + public scope             |
-| Platform Admin/Company Staff không có V8 discovery capability            | Authorization layer     | Product authorization            |
+| Guest/Candidate/Recruiter hợp lệ được cross-Company public read                           | Service / authorization | Actor + public scope             |
+| Platform Admin/Company Manager không có V8 discovery capability            | Authorization layer     | Product authorization            |
 | Internal Job fields không public                                        | Service / projection    | Data exposure rule               |
 | Internal Company fields không public                                    | Service / projection    | Data exposure rule               |
 
@@ -1426,6 +1430,7 @@ V8 cho phép:
 ```text
 Guest
 Candidate
+Recruiter đủ điều kiện (Product V8 §4.3)
         ↓
 public Job Discovery
         ↓
@@ -1438,8 +1443,10 @@ nếu từng Job thỏa public visibility contract.
 
 Đây là **public cross-tenant read**, không phải ownership transfer.
 
-Candidate có thể đọc Job public của nhiều Company khác nhau thông qua V8.
-Authenticated Platform Admin và Company Staff sử dụng API nghiệp vụ riêng.
+Candidate và Recruiter đủ điều kiện có thể đọc Job public của nhiều Company
+khác nhau thông qua V8.
+Platform Admin/Company Manager sử dụng API nghiệp vụ riêng. Recruiter đủ điều
+kiện theo Product V8 §4.3 được đọc public cross-Company, không nhận dữ liệu nội bộ.
 
 ---
 
@@ -1953,7 +1960,7 @@ Các field Recruitment Team hiện hữu trên Job không bị remove hoặc rei
 
 ### PI-16 — Public cross-tenant read không thay đổi ownership
 
-Guest hoặc Candidate đọc Job của Company khác không làm thay đổi:
+Guest, Candidate hoặc Recruiter đủ điều kiện đọc Job của Company khác không làm thay đổi:
 
 ```text
 Job.companyId

@@ -1,48 +1,30 @@
-import { CircleX, LoaderCircle, RotateCw } from 'lucide-react'
 import { Navigate, Outlet } from 'react-router-dom'
 
-import CenteredState from '@/components/common/CenteredState'
-import { Button } from '@/components/ui/button'
 import {
+  ACCOUNT_CONTEXT_STATUS,
   AUTHENTICATION_STATUS,
+  selectAccountContextStatus,
   selectAuthenticatedUser,
   selectAuthenticationStatus,
 } from '@/features/authentication/slice'
+import useSessionViewer from '@/features/authentication/hooks/useSessionViewer'
 import { useAppSelector } from '@/store/hooks'
 import { API_ERROR_MESSAGE, USER_ROLE, USER_STATUS } from '@/utils/constant'
 
-function AccessState({ title, description, loading = false, retry = false }) {
-  return (
-    <div className="mx-auto w-full max-w-2xl px-6 py-10">
-      <CenteredState
-        action={
-          retry && (
-            <Button onClick={() => window.location.reload()} variant="outline">
-              <RotateCw aria-hidden="true" className="size-4" />
-              Thử lại
-            </Button>
-          )
-        }
-        description={description}
-        icon={loading ? LoaderCircle : CircleX}
-        spinning={loading}
-        title={title}
-        tone={loading ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground'}
-      />
-    </div>
-  )
-}
+import RouteAccessState from './RouteAccessState'
 
 function JobDiscoveryRoute() {
   const status = useAppSelector(selectAuthenticationStatus)
   const user = useAppSelector(selectAuthenticatedUser)
+  const accountContextStatus = useAppSelector(selectAccountContextStatus)
+  const viewer = useSessionViewer()
 
   if (status === AUTHENTICATION_STATUS.IDLE || status === AUTHENTICATION_STATUS.RESTORING) {
-    return <AccessState loading title="Đang xác định phiên truy cập" />
+    return <RouteAccessState loading title="Đang xác định phiên truy cập" />
   }
 
   if (status === AUTHENTICATION_STATUS.TEMPORARILY_UNAVAILABLE) {
-    return <AccessState description="Không thể xác định phiên truy cập. Vui lòng thử lại." retry title="Chưa tải được quyền truy cập" />
+    return <RouteAccessState description="Không thể xác định phiên truy cập. Vui lòng thử lại." retry title="Chưa tải được quyền truy cập" />
   }
 
   if (status === AUTHENTICATION_STATUS.UNAUTHENTICATED) {
@@ -57,7 +39,17 @@ function JobDiscoveryRoute() {
     return <Outlet />
   }
 
-  return <AccessState description={API_ERROR_MESSAGE.JOB_DISCOVERY_NOT_AVAILABLE} title="Không thể truy cập Job Discovery" />
+  if (user?.role === USER_ROLE.COMPANY_STAFF) {
+    if ([ACCOUNT_CONTEXT_STATUS.UNRESOLVED, ACCOUNT_CONTEXT_STATUS.LOADING].includes(accountContextStatus)) {
+      return <RouteAccessState loading title="Đang xác định quyền trong doanh nghiệp" />
+    }
+    if (accountContextStatus === ACCOUNT_CONTEXT_STATUS.UNAVAILABLE) {
+      return <RouteAccessState description="Không thể xác định vai trò trong doanh nghiệp. Vui lòng thử lại." retry title="Chưa tải được quyền truy cập" />
+    }
+    if (viewer.isRecruiter) return <Outlet />
+  }
+
+  return <RouteAccessState description={API_ERROR_MESSAGE.JOB_DISCOVERY_NOT_AVAILABLE} title="Không thể truy cập Job Discovery" />
 }
 
 export default JobDiscoveryRoute

@@ -102,7 +102,7 @@ function JobDetail({ jobId, renderJobAction }) {
     <article className="flex flex-col gap-6">
       <Link
         className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
-        to="/"
+        to="/jobs"
       >
         <ArrowLeft aria-hidden="true" className="size-4" />
         Quay lại danh sách việc làm

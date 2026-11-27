@@ -105,7 +105,7 @@ function AccountMenu({ user }) {
   let workspacePath = defaultPath
   let workspaceLabel = defaultPath === '/' ? null : WORKSPACE_LINK_LABEL[user.role]
   if (isRecruiter) {
-    workspacePath = '/recruiter'
+    workspacePath = '/recruiter/jobs'
     workspaceLabel = 'Khu nhà tuyển dụng'
   } else if (isCompanyManager) {
     workspacePath = '/company/recruiters'

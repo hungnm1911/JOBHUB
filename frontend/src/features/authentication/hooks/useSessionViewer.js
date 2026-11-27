@@ -1,6 +1,14 @@
 import { useAppSelector } from '@/store/hooks'
+import { COMPANY_MEMBER_ROLE, COMPANY_MEMBER_STATUS, USER_ROLE, USER_STATUS } from '@/utils/constant'
 
-import { AUTHENTICATION_STATUS, selectAuthenticatedUser, selectAuthenticationStatus } from '../slice'
+import {
+  ACCOUNT_CONTEXT_STATUS,
+  AUTHENTICATION_STATUS,
+  selectAccountContextStatus,
+  selectAuthenticatedUser,
+  selectAuthenticationStatus,
+  selectMembership,
+} from '../slice'
 
 // Public read model for pages that adapt content to who is browsing;
 // `role` is null for guests and `resolved` stays false while a session is restoring.
@@ -8,9 +16,20 @@ function useSessionViewer() {
   const status = useAppSelector(selectAuthenticationStatus)
   const user = useAppSelector(selectAuthenticatedUser)
 
+  const membership = useAppSelector(selectMembership)
+  const accountContextStatus = useAppSelector(selectAccountContextStatus)
+
   const authenticated = status === AUTHENTICATION_STATUS.AUTHENTICATED
 
   return {
+    isRecruiter:
+      authenticated &&
+      user?.role === USER_ROLE.COMPANY_STAFF &&
+      user.status === USER_STATUS.ACTIVE &&
+      !user.mustChangePassword &&
+      accountContextStatus === ACCOUNT_CONTEXT_STATUS.RESOLVED &&
+      membership?.role === COMPANY_MEMBER_ROLE.RECRUITER &&
+      membership.status === COMPANY_MEMBER_STATUS.ACTIVE,
     resolved:
       authenticated || status === AUTHENTICATION_STATUS.UNAUTHENTICATED,
     role: authenticated ? (user?.role ?? null) : null,

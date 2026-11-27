@@ -85,6 +85,7 @@ test('the four public discovery paths share JobDiscoveryRoute', () => {
 for (const [actor, auth] of [
   ['Guest', authentication('unauthenticated')],
   ['Candidate', authentication('authenticated', 'CANDIDATE')],
+  ['Recruiter', authentication('authenticated', 'COMPANY_STAFF', { accountContextStatus: 'resolved', membership: { role: 'RECRUITER', status: 'ACTIVE' } })],
 ]) {
   test(`${actor} can access each public discovery path`, async () => {
     for (const path of discoveryPaths) {
@@ -100,13 +101,12 @@ for (const [actor, auth] of [
 }
 
 for (const [actor, role, membership] of [
-  ['Recruiter', 'COMPANY_STAFF', { role: 'RECRUITER', status: 'ACTIVE' }],
   ['Company Manager', 'COMPANY_STAFF', { role: 'COMPANY_MANAGER', status: 'ACTIVE' }],
   ['Platform Admin', 'PLATFORM_ADMIN', null],
 ]) {
   test(`${actor} is denied across discovery paths regardless of CompanyMember state`, async () => {
     for (const path of discoveryPaths) {
-      for (const accountContextStatus of ['loading', 'unavailable', 'resolved']) {
+      for (const accountContextStatus of role === 'COMPANY_STAFF' ? ['resolved'] : ['loading', 'unavailable', 'resolved']) {
         for (const companyMembership of membership ? [null, membership] : [null]) {
           const mounted = await mountRoute(authentication('authenticated', role, {
             membership: companyMembership,
@@ -172,3 +172,24 @@ test('PENDING_ACTIVATION still redirects to Company onboarding with replace', as
     await mounted.unmount()
   }
 })
+
+for (const [status, expected] of [['loading', /Đang xác định quyền/], ['unavailable', /Thử lại/]]) {
+  test(`Company Staff ${status} context waits or retries without granting or denying Discovery early`, async () => {
+    const mounted = await mountRoute(authentication('authenticated', 'COMPANY_STAFF', { accountContextStatus: status }), '/jobs')
+    try {
+      assert.match(mounted.container.textContent, expected)
+      assert.doesNotMatch(mounted.container.textContent, /Discovery page:|Không thể truy cập Job Discovery/)
+    } finally { await mounted.unmount() }
+  })
+}
+for (const overrides of [
+  { membership: { role: 'RECRUITER', status: 'LOCKED' } },
+  { membership: { role: 'RECRUITER', status: 'TERMINATED' } },
+  { user: { role: 'COMPANY_STAFF', status: 'ACTIVE', mustChangePassword: true } },
+]) {
+  test(`Recruiter without business eligibility is denied: ${JSON.stringify(overrides)}`, async () => {
+    const mounted = await mountRoute(authentication('authenticated', 'COMPANY_STAFF', { accountContextStatus: 'resolved', membership: { role: 'RECRUITER', status: 'ACTIVE' }, ...overrides }), '/jobs')
+    try { assert.match(mounted.container.textContent, /Không thể truy cập Job Discovery/) }
+    finally { await mounted.unmount() }
+  })
+}

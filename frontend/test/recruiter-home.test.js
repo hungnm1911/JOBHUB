@@ -32,7 +32,7 @@ async function click(element) {
   assert.ok(element)
   await act(async () => element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true })))
 }
-async function mount(path = '/recruiter', { failJobs = false, failApplications = false } = {}) {
+async function mount(path = '/', { failJobs = false, failApplications = false } = {}) {
   const requests = []
   apiClient.get = async (url, options = {}) => {
     requests.push({ url, params: options.params })
@@ -45,6 +45,7 @@ async function mount(path = '/recruiter', { failJobs = false, failApplications =
       return { data: { applications, currentWorkloadCount: 12 } }
     }
     if (url === '/notifications') return { data: { notifications: [{ _id: 'notice-1', content: 'Thông báo riêng của người dùng', createdAt: '2026-11-27T01:00:00Z' }] } }
+    if (url === '/job-discovery/jobs') return { data: { jobs: [{ ...jobs[0], id: 'market-job', title: 'Market Developer', company: { id: 'company-2', name: 'Công ty thị trường' }, fieldCategories: [], positionCategories: [] }], pagination: { page: 1, totalPages: 1, total: 1 } } }
     if (url === '/locations/provinces') return { data: { provinces: [{ code: '01', name: 'Hà Nội' }] } }
     if (url === '/experience-levels') return { data: { experienceLevels: [] } }
     if (url === '/locations/provinces/01/district-level-units') return { data: { districtLevelUnits: [] } }
@@ -60,11 +61,13 @@ async function mount(path = '/recruiter', { failJobs = false, failApplications =
   }
 }
 
-test('Recruiter home uses internal published Jobs and independent full-scope workload, never discovery or notification writes', async () => {
+test('Recruiter website home prioritizes internal published Jobs and links to public detail with an independent market preview', async () => {
   const view = await mount()
   try {
     assert.deepEqual(view.requests.find(({ url }) => url === '/jobs').params, { limit: 6, page: 1, scope: 'COMPANY_PUBLISHED', sort: '-createdAt', status: 'PUBLISHED' })
-    assert.equal(view.requests.some(({ url }) => url.startsWith('/job-discovery')), false)
+    assert.equal(view.requests.find(({ url }) => url === '/job-discovery/jobs').params.sort, 'NEWEST')
+    assert.match(view.container.textContent, /Market Developer/)
+    assert.ok(view.container.querySelector('a[href="/companies/company-2"]'))
     assert.match(view.container.textContent, /19 Job/)
     assert.match(view.container.textContent, /12 hồ sơ bạn đang xử lý/)
     assert.match(view.container.textContent, /Hết hạn/)
@@ -73,13 +76,13 @@ test('Recruiter home uses internal published Jobs and independent full-scope wor
     assert.equal(view.container.querySelector('a[href="/recruiter/my-applications/application-1"]')?.textContent.includes('Ứng viên mẫu'), true)
     assert.equal(view.container.querySelector('[aria-label*="Lưu Job"]'), null)
     assert.doesNotMatch(view.container.textContent, /Ứng tuyển ngay/)
-    await click(view.container.querySelector(`a[href="/recruiter/jobs/${jobId}"]`))
-    assert.equal(view.container.querySelector('[data-path]').textContent, `/recruiter/jobs/${jobId}`)
+    await click(view.container.querySelector(`a[href="/jobs/${jobId}"]`))
+    assert.equal(view.container.querySelector('[data-path]').textContent, `/jobs/${jobId}`)
   } finally { await view.unmount() }
 })
 
 test('changing Home scope resets paging and keeps the published restriction; paging and title search stay server-side', async () => {
-  const view = await mount('/recruiter?page=2&q=React')
+  const view = await mount('/?page=2&q=React')
   try {
     assert.equal(view.requests.find(({ url }) => url === '/jobs').params.q, 'React')
     await click(view.container.querySelector('button[aria-label="Phạm vi Job"]'))
@@ -96,14 +99,14 @@ test('changing Home scope resets paging and keeps the published restriction; pag
 })
 
 test('independent read failures preserve other sections and never present unknown workload as zero', async () => {
-  const failedJobs = await mount('/recruiter', { failJobs: true })
+  const failedJobs = await mount('/', { failJobs: true })
   try {
     assert.match(failedJobs.container.textContent, /Chưa tải được dữ liệu/)
     assert.match(failedJobs.container.textContent, /Ứng viên mẫu/)
     assert.match(failedJobs.container.textContent, /12 hồ sơ bạn đang xử lý/)
     assert.match(failedJobs.container.textContent, /Thông báo riêng của người dùng/)
   } finally { await failedJobs.unmount() }
-  const failedApplications = await mount('/recruiter', { failApplications: true })
+  const failedApplications = await mount('/', { failApplications: true })
   try {
     assert.match(failedApplications.container.textContent, /— hồ sơ bạn đang xử lý/)
     assert.match(failedApplications.container.textContent, /React Developer/)

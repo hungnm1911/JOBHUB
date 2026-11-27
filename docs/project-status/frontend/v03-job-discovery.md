@@ -17,10 +17,13 @@ Homepage keyword, Category, Position, and Location actions now navigate to
 filtered `/jobs`; the Homepage Featured list remains `FEATURED` and no longer
 renders a filtered-results transition. The focused test and frontend code gate
 passed on 2026-11-07; browser/E2E verification remains unconfirmed.
+The Recruiter website `/` and read-only Discovery extension are implemented;
+current FE verification and known lint limitations are recorded in
+[Recruiter home status](recruiter-home.md).
 The [Backend V8 status](../backend/v8-job-discovery.md) records its baseline and
 focused backend evidence.
 
-- **Homepage (`/`) implemented baseline:** hero with the two newest
+- **Guest/Candidate homepage (`/`) implemented baseline:** hero with the two newest
   discoverable Jobs and the live discoverable total; keyword search and the
   same Province/District-level unit multi-select picker as `/jobs`; Field Category panel
   (client-side pages of six, per-Field counts read from the discovery list
@@ -38,8 +41,9 @@ focused backend evidence.
   is sent (optional authentication) and the backend applies its actor rules.
 - `JobDiscoveryRoute` gates `/`, `/jobs`, `/jobs/:jobId`, and
   `/companies/:companyId` using resolved authentication state and User role:
-  Guest and Candidate can enter; authenticated Company Staff and Platform Admin
-  see an access-denied state. It no longer reads CompanyMember context. Pending
+  Guest and Candidate can enter. The approved 2026-11-27 extension admits
+  Recruiter after active CompanyMember context resolves; loading/failure waits
+  or offers retry. Company Manager/Admin remain denied. Pending
   activation enters Company onboarding. The backend API remains the authority
   for every discovery request. F03A is accepted.
 - **Company Detail (`/companies/:companyId`):** F03B Company Jobs section is
@@ -84,6 +88,11 @@ focused backend evidence.
   links to non-existent tools.
 
 ## Verification status
+
+- 2026-11-27 Recruiter public-read extension: 138 tests passed in the final
+  frontend gate; it failed on three pre-existing Candidate lint errors. Separate
+  production build and focused changed-file lint passed. Actual component/browser
+  fixture checks and live-E2E limitations are in [Recruiter home](recruiter-home.md).
 
 - 2026-11-07 Homepage filter navigation: `cd frontend && yarn test:featured-homepage`
   passed 9 focused tests covering unfiltered Featured rendering, ignored old

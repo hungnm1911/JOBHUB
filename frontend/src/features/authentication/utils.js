@@ -1,4 +1,4 @@
-import { USER_ROLE, USER_STATUS } from '@/utils/constant'
+import { COMPANY_MEMBER_ROLE, USER_ROLE, USER_STATUS } from '@/utils/constant'
 
 const USER_ROLE_LABEL = Object.freeze({
   [USER_ROLE.CANDIDATE]: 'Ứng viên',
@@ -72,7 +72,7 @@ function toLoginNavigationState(location, intent) {
   }
 }
 
-function toPostLoginLocation(user, navigationState) {
+function toPostLoginLocation(user, navigationState, membership) {
   // Onboarding and Platform Admin destinations are mandatory session landings.
   if (user?.status === USER_STATUS.PENDING_ACTIVATION) {
     return { pathname: '/onboarding/company' }
@@ -82,9 +82,11 @@ function toPostLoginLocation(user, navigationState) {
     return { pathname: '/admin' }
   }
 
-  const defaultPath = '/'
+  const defaultPath = user?.role === USER_ROLE.COMPANY_STAFF && membership?.role === COMPANY_MEMBER_ROLE.COMPANY_MANAGER
+    ? '/company/recruiters'
+    : '/'
   const from = readReturnLocation(navigationState?.from)
-  if (!from) {
+  if (!from || (from.pathname === '/' && defaultPath !== '/')) {
     return { pathname: defaultPath }
   }
 

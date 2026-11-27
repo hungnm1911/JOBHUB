@@ -17,6 +17,7 @@ import Company from "../models/company.model.js";
 import ExperienceLevel from "../models/experience-level.model.js";
 import Job from "../models/job.model.js";
 import SavedJob from "../models/saved-job.model.js";
+import { resolveRecruiterBusinessContext } from "./company.service.js";
 import {
   resolveJobDiscoveryVisibility,
   toPublicJobLocation,
@@ -283,7 +284,12 @@ const resolveCategoryBranches = async (categoryBranches) => {
   });
 };
 
-const assertJobDiscoveryActor = (user) => {
+const assertJobDiscoveryActor = async (user) => {
+  if (user?.role === USER_ROLE.COMPANY_STAFF) {
+    await resolveRecruiterBusinessContext({ user });
+    return;
+  }
+
   if (user && user.role !== USER_ROLE.CANDIDATE) {
     throw new AppError(403, "Job Discovery access is not available for this actor", {
       field: "role",

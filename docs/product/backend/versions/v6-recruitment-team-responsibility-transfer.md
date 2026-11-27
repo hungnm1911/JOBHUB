@@ -51,27 +51,34 @@ V6 bao gồm:
 
 ### Trang chủ Recruiter — bố cục được duyệt ngày 2026-11-27
 
-Người dùng phê duyệt triển khai bố cục “Ưu tiên Job công ty” tại `/recruiter`.
-Đây là màn tổng hợp các read capability hiện có, không bổ sung quyền nghiệp vụ:
+Người dùng phê duyệt triển khai bố cục “Ưu tiên Job công ty” tại `/` dành riêng cho Recruiter,
+dùng header/footer website, tách khỏi sidebar workspace `/recruiter/*`.
+Thay đổi được duyệt ngày 2026-11-27 bổ sung public read V8 theo spec V8:
 
 - Vùng chính dùng F01/scoped Job read: Job cùng Company có persisted `PUBLISHED`,
   mặc định `COMPANY_PUBLISHED`; cho chọn `MY_TEAM` nhưng vẫn lọc `PUBLISHED`.
   Tìm theo tiêu đề, sắp xếp và phân trang tại BE. Job effectively expired vẫn
   được hiển thị với nhãn hết hạn; không lọc sau phân trang hoặc gọi đó là tổng
-  Job còn nhận hồ sơ. Thẻ Job mở internal detail, không có Apply/Save.
+  Job còn nhận hồ sơ. Thẻ Job mở public detail `/jobs/:jobId`, không có Apply/Save.
 - Cột phụ dùng My Applications/Current Workload V10 F07/F10 và Notification
   inbox V13 F01: hồ sơ mới cập nhật gồm cả terminal để xem lại, workload do BE
   trả trên toàn phạm vi được phép, thông báo gần đây chỉ đọc. Xem preview không
   đánh dấu Notification đã đọc; thao tác mở tiếp tục thuộc màn Notifications.
 - Có lối vào các màn Recruiter hiện hữu; menu Trang chủ, logo và điểm đến mặc
-  định sau đăng nhập/kích hoạt dẫn về `/recruiter`. Giữ deep link được phép.
+  định sau đăng nhập/kích hoạt dẫn về `/`. Giữ deep link được phép.
+  Chờ CompanyMember context trước điều hướng; lỗi context cho thử lại.
+  Khu tuyển dụng dẫn `/recruiter/jobs`; `/recruiter` là alias tới workspace này.
+- Search từ khóa/địa điểm dẫn `/jobs`; preview thị trường NEWEST phía dưới
+  dùng public Discovery V8. Recruiter chỉ xem public Job/Company detail, không
+  Apply, Save Job hoặc CV/AI Candidate.
 - Loading/error/empty độc lập cho từng vùng, không biến số chưa tải thành 0;
   resync HTTP khi reconnect và khi nhận Notification cho dữ liệu liên quan.
-- Giữ Company Staff business gate, tenant và quyền từng endpoint. Không mở V8
-  cross-Company discovery, KPI dashboard, Calendar riêng hoặc quyền Invitation
+- Giữ Company Staff business gate, tenant và quyền từng endpoint. V8 cho phép
+  public cross-Company read theo spec V8; không thêm KPI dashboard, Calendar riêng hoặc quyền Invitation
   của Supporting. Các lỗi được nêu trong review trước vẫn thuộc đợt sửa riêng.
 
-Không thêm entity, persistence field, API, dependency hoặc migration.
+Không thêm entity, persistence field, endpoint, dependency hoặc migration;
+chỉ mở quyền Recruiter trên ba public read endpoint V8 hiện hữu.
 
 ### 2.2. Ngoài phạm vi
 

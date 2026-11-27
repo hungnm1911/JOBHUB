@@ -1,6 +1,6 @@
 import { ArrowRight, Bell, BriefcaseBusiness, MapPin } from 'lucide-react'
-import { useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { listExperienceLevelsApi } from '@/apis/experience-level.api'
 import { listProvincesApi } from '@/apis/location.api'
@@ -10,9 +10,9 @@ import { listRecruiterJobsApi } from '@/apis/recruiter-job.api'
 import { ErrorState, ListSkeleton, Pager, StateMessage } from '@/components/common/ListStates'
 import { Button } from '@/components/ui/button'
 import { SelectDropdown } from '@/components/ui/select-dropdown'
-import { selectMembership } from '@/features/authentication/slice'
+import { selectAuthenticatedUser, selectMembership } from '@/features/authentication/slice'
 import { ApplicationStatusBadge } from '@/features/candidate-dashboard/public'
-import { EMPLOYMENT_TYPE_LABEL, formatSalary, formatWorkModes } from '@/features/job-discovery/public'
+import { DiscoveryJobsSection, JobSearchBar, JOB_DISCOVERY_SORT, parseJobSearch, toJobSearchParams, EMPLOYMENT_TYPE_LABEL, formatSalary, formatWorkModes } from '@/features/job-discovery/public'
 import { subscribeRealtimeEvent } from '@/socket/realtime-subscriptions'
 import { useAppSelector } from '@/store/hooks'
 import { JOB_STATUS, REALTIME_EVENT, SOCKET_LIFECYCLE_EVENT } from '@/utils/constant'
@@ -48,7 +48,7 @@ function HomeJobCard({ job, membershipId, location, experience }) {
     : job.supportingRecruiterCompanyMemberIds?.includes(membershipId)
       ? JOB_ROLE.SUPPORTING
       : JOB_ROLE.NONE
-  const path = `/recruiter/jobs/${job.id}`
+  const path = `/jobs/${job.id}`
 
   return (
     <li className="rounded-xl border bg-card p-5">
@@ -146,6 +146,13 @@ function RecentNotifications({ resource }) {
 
 function RecruiterHome() {
   const membership = useAppSelector(selectMembership)
+  const user = useAppSelector(selectAuthenticatedUser)
+  const navigate = useNavigate()
+  const [marketLocations, setMarketLocations] = useState([])
+  const navigateToDiscovery = (keyword) => {
+    const params = toJobSearchParams({ ...parseJobSearch(new URLSearchParams()), keyword, locations: marketLocations })
+    navigate({ pathname: '/jobs', search: params.toString() })
+  }
   const { search, setFilters, setPage, reset } = useListSearch(SEARCH_SPEC)
   const q = useDebouncedValue(search.q)
   // Both scopes on Home are published Jobs; effective expiry is displayed, never filtered after paging.
@@ -199,11 +206,18 @@ function RecruiterHome() {
   )
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Một ngày tuyển dụng hiệu quả</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Theo dõi công việc của bạn và khám phá vị trí trong công ty.</p>
-      </div>
+    <div className="mx-auto w-full max-w-6xl space-y-8 px-4 py-8 sm:px-6 sm:py-10">
+      <section aria-labelledby="recruiter-home-heading" className="space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="mb-2 text-sm font-medium text-primary">Dành cho nhà tuyển dụng</p>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" id="recruiter-home-heading">Chào {user?.fullName || 'bạn'}, một ngày tuyển dụng hiệu quả</h1>
+            <p className="mt-2 text-sm text-muted-foreground">Ưu tiên cơ hội của công ty, kết nối với thị trường tuyển dụng.</p>
+          </div>
+          <Button asChild variant="outline"><Link to="/recruiter/jobs">Vào khu tuyển dụng <ArrowRight aria-hidden="true" className="size-4" /></Link></Button>
+        </div>
+        <JobSearchBar ariaLabel="Khám phá việc làm trên JOBHUB" keyword="" locations={marketLocations} onLocationChange={setMarketLocations} onSearch={navigateToDiscovery} provinces={provinces.data?.provinces ?? []} />
+      </section>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-y py-4">
         <p aria-live="polite" className="text-sm text-muted-foreground">
           <span className="mr-2 text-xl font-semibold text-foreground tabular-nums">{applications.error || applications.loading ? '—' : applications.data.currentWorkloadCount}</span>{' '}
@@ -226,9 +240,21 @@ function RecruiterHome() {
           {jobList}
         </section>
         <aside aria-label="Công việc gần đây" className="grid min-w-0 gap-8 md:grid-cols-2 xl:grid-cols-1">
+          <section aria-labelledby="home-workspace-heading" className="space-y-3 md:col-span-2 xl:col-span-1">
+            <h2 className="text-base font-semibold" id="home-workspace-heading">Khu tuyển dụng</h2>
+            <p className="text-sm text-muted-foreground">Quản lý Job, xử lý hồ sơ và trao đổi với ứng viên.</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-3">
+              <Link className={linkClass} to="/recruiter/jobs">Job tôi phụ trách</Link>
+              <Link className={linkClass} to="/recruiter/participating">Job tôi tham gia</Link>
+              <Link className={linkClass} to="/recruiter/messages">Tin nhắn</Link>
+            </div>
+          </section>
           <RecentApplications resource={applications} />
           <RecentNotifications resource={notifications} />
         </aside>
+      </div>
+      <div className="border-t pt-8">
+        <DiscoveryJobsSection description="Tham khảo các vị trí đang tuyển trên toàn nền tảng." id="market-jobs" page={1} provinceNameByCode={new Map((provinces.data?.provinces ?? []).map((province) => [province.code, province.name]))} sort={JOB_DISCOVERY_SORT.NEWEST} title="Khám phá thị trường việc làm" />
       </div>
     </div>
   )

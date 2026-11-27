@@ -34,7 +34,7 @@ const workspaces = [
     label: 'Quy trình tuyển dụng',
     icon: FolderKanban,
     items: [
-      { to: '/recruiter', label: 'Trang chủ', icon: House, end: true },
+      { to: '/', label: 'Trang chủ', icon: House, end: true },
       { to: '/recruiter/jobs', label: 'Job tôi phụ trách chính', icon: BriefcaseBusiness },
       {
         to: '/recruiter/participating',
@@ -238,7 +238,7 @@ function RecruiterLayout() {
               aria-label="JOBHUB, khu nhà tuyển dụng"
               className="inline-flex items-center gap-2 rounded-lg px-1 font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={closeMenu}
-              to="/recruiter"
+              to="/"
             >
               <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <BriefcaseBusiness aria-hidden="true" className="size-5" />
