@@ -80,6 +80,34 @@ Thay đổi được duyệt ngày 2026-11-27 bổ sung public read V8 theo spec
 Không thêm entity, persistence field, endpoint, dependency hoặc migration;
 chỉ mở quyền Recruiter trên ba public read endpoint V8 hiện hữu.
 
+### Trang chủ Company Manager — bố cục được duyệt ngày 2026-11-27
+
+Người dùng phê duyệt triển khai bản homepage “Việc cần xử lý”, sau khi commit
+và push workspace Company Manager. Đây là composition của các quyền hiện có
+trong V2 F09, V3 F08 và V5 F05/BR-37, không phải KPI dashboard mới.
+
+- `/` dành cho Company Manager hợp lệ dùng header/footer website, tách khỏi
+  sidebar `/company/*`. User ACTIVE, đã thiết lập mật khẩu và membership
+  ACTIVE/COMPANY_MANAGER; Company operational vẫn do từng API BE kiểm tra.
+  Chờ CompanyMember context; khi lỗi có retry. Homepage là đích mặc định sau
+  đăng nhập; giữ deep link vào `/company/*` được phép và bỏ intent Candidate.
+- Vùng chính đọc Job cùng Company: chờ duyệt (`PENDING_APPROVAL`, tối đa 3)
+  và nhóm đã đăng (persisted `PUBLISHED`, tối đa 2), sort `-createdAt`, page 1.
+  Tổng số lấy từ pagination BE, không đếm preview thành tổng toàn Company.
+  Effective expiration được thể hiện ở nhãn Job; không lọc sau phân trang hoặc
+  gọi tổng persisted PUBLISHED là tổng Job đang nhận hồ sơ.
+- Homepage dẫn vào màn chi tiết Job hiện hữu để xét duyệt, đội tuyển dụng hoặc
+  phân công Application. Không approve/reject, chỉnh team hay phân công trực
+  tiếp từ preview; giữ nguyên authority V5/V6/V10 và các confirmation hiện có.
+- Cột phụ đọc hồ sơ Company active và 3 Recruiter mới nhất theo `-createdAt`.
+  Hiển thị tên/địa chỉ Company, readiness Recruiter đúng User/membership/activation
+  và liên kết tới màn hồ sơ, danh sách/chi tiết/tạo Recruiter hiện có.
+- Loading/error/empty độc lập từng vùng; dữ liệu chưa biết không hiển thị thành
+  0. Reread HTTP khi quay lại focus hoặc socket reconnect, không có event mới.
+- Company Manager chỉ dùng Company Staff APIs; không được cấp V8 Discovery,
+  Candidate actions, Recruiter Chat/CV/Interview/Invitation hoặc quyền pipeline.
+  Không đổi lifecycle, persistence, dependency, migration hoặc thêm endpoint.
+
 ### 2.2. Ngoài phạm vi
 
 V6 không bao gồm:

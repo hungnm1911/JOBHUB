@@ -13,7 +13,7 @@ import JobDiscoveryRoute from './components/JobDiscoveryRoute'
 
 const publicRoutes = [
   {
-    element: <JobDiscoveryRoute />,
+    element: <JobDiscoveryRoute allowCompanyManagerHome />,
     children: [
       {
         index: true,

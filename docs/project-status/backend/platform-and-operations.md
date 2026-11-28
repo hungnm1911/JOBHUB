@@ -2,6 +2,17 @@
 
 ## Current project state
 
+2026-11-28: the Company Manager DRAFT Application-list disclosure is fixed by
+reusing canonical V5 Job visibility. The common Backend gate passes 221 files /
+2,277 tests; scoped behavior is recorded in [V10](v10-application-assignment-recruitment-pipeline.md).
+The shared Company profile async fixes and separate Frontend gate limitation are
+recorded in [Company Manager workspace](../frontend/company-manager-workspace.md).
+
+2026-11-28: a separate Company Manager manual-QA tenant was provisioned in the
+configured development `jobhub` database. It has one active Manager, 36 Recruiters,
+48 Jobs and 261 Applications, with three instances per fixture group. Real HTTP
+login/read verification passed; no Backend runtime or business rule changed.
+
 2026-11-27: Company Manager forced-transfer preview passed the common Backend
 gate. Scoped read integration is recorded in [V6](v6-recruitment-team-responsibility-transfer.md);
 Frontend screens and their separate gate limitation are recorded in
@@ -75,7 +86,7 @@ and its injected AI Kit logger.
   (10 tests), changed-file ESLint and ARCH-001–ARCH-019 passed, and
   `git diff --check` passed. The full Backend gate was intentionally skipped
   at the user's request; no live Cloudinary operation was performed.
-- Latest backend gate (2026-11-27 Admin phases 2–3): `npm run verify:agent` passed 219 files / 2,267 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 existing warnings.
+- Latest backend gate (2026-11-28 CM correctness fixes): `npm run verify:agent` passed 221 files / 2,277 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 existing warnings.
 - 2026-10-18 clean-install check on temporary `ai-kit/` + `backend/` copies
   without `node_modules`/`.env` (Node 20.19.1, npm 10.8.2): after the
   canonical two-step install, `npm ls @jobhub/ai-kit --depth=0` passed,
@@ -173,6 +184,17 @@ and its injected AI Kit logger.
   `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt
   password hash. Its previous sessions and temporary authentication tokens
   were revoked during provisioning; the verification session was removed.
+- **2026-11-28 Company Manager fixtures:** the isolated An Phúc Company is
+  APPROVED/ACTIVE with an active Manager and three copies of each Recruiter/Job
+  scenario: activation/password readiness, membership and Platform lifecycle,
+  pending/published/closed/expired/deadline-effective Jobs, team changes, forced
+  transfer including DRAFT IDs, and assigned/unassigned/terminal Applications.
+  Thirteen generated Candidate CVs use real restricted Cloudinary snapshot PDFs;
+  existing Users, Companies and catalogs were preserved. The explicit operational
+  script and scenario guide are under `work/company-manager-seed/`; credentials,
+  activation links and asset provenance remain only in the ignored 0600 manifest.
+  Reapplication preserves manual test progress. No SMTP messages were sent;
+  delivery needs a real inbox rather than the fixture's reserved `.example` domain.
 
 ## Previously completed and verified baseline
 
@@ -190,6 +212,32 @@ and its injected AI Kit logger.
 - **Documented only:** repository-level and backend-specific agent contracts exist.
 
 ## Verification status
+
+- 2026-11-28 Company Manager correctness fixes: `cd backend && npm run verify:agent`
+  passed **221 files / 2,277 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors /
+  2 existing V6 warnings** in 998.16 seconds. The new legacy/paginated DRAFT
+  regression passes 2/2 tests with allowed-status coverage. Twelve real-component
+  FE → HTTP → Express → disposable MongoDB flows passed after the fix, including
+  review decisions, team changes, assignment changes, Recruiter activation-mail
+  requests, lock/unlock/terminate transfers and active Company PATCH. SMTP and
+  Location catalog were mocked; no development seed records were changed.
+  Frontend tests/build and its existing Candidate lint blocker are recorded in
+  the Frontend leaf; this Backend gate does not verify Frontend behavior.
+
+- 2026-11-28 operational Company Manager provisioning:
+  `node ../work/company-manager-seed/seed.mjs --dry-run`, `--apply` and `--verify`
+  (from `backend/`) passed model/catalog/identity preflight, transactional Atlas
+  creation and real Express HTTP login/read checks. Verified homepage totals
+  (12 pending, 21 persisted-published), all visible Job group details/teams,
+  Application lists with all eight statuses, Recruiter lifecycle projections,
+  three-Job handover previews, and 403 boundaries for DRAFT/Discovery. Counts:
+  50 new Users (1 Manager, 36 Recruiters, 13 Candidates), 1 Company, 37 memberships,
+  48 Jobs, 13 CVs, 261 Applications, 93 Availability and 93 Schedule records.
+  Terminal Interview schedules are CANCELLED under the V12 rule. Verification
+  sessions were removed. Both operational `.mjs` files passed scoped ESLint;
+  repository diff whitespace check passed. This was data provisioning under
+  `work/`, with no Backend runtime/test/dependency change; the common Backend
+  gate was not rerun. No browser E2E, SMTP delivery or external AI call is claimed.
 
 - 2026-11-27 Company Manager handover preview: `cd backend && npm run verify:agent`
   passed **220 files / 2,275 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors /

@@ -2,6 +2,12 @@
 
 ## Current project state
 
+2026-11-28: the Application list's embedded Job now goes through the canonical
+V5 internal visibility assertion after assignment-management authorization.
+Company Manager DRAFT reads return 403 for legacy and paginated requests, with
+no title/description in the response. Allowed PENDING_APPROVAL/PUBLISHED/CLOSED/
+EXPIRED Job reads remain available. No persistence or mutation semantics changed.
+
 2026-11-26 Recruiter FE API read extension: Current-team Assignee choices (including ended Jobs), Primary Application detail, and optional list controls are implemented; mutation and workload semantics are preserved. Focused verification and the common Backend gate now pass after the logging fix and list-read follow-up. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
 
 **V10 — Phân công Application và Recruitment Pipeline** Slices 01–10 of the
@@ -800,6 +806,13 @@ the current V10 revision complete.
   / 665 tests).
 
 ## Verification status
+
+- 2026-11-28 DRAFT privacy regression: the isolated pre-fix HTTP assertion failed
+  with actual 200 versus expected 403. The permanent
+  `test/job/company-manager-draft-application-privacy.test.js` passes 2/2 tests,
+  covering both response modes and all five Job statuses. The common Backend
+  gate passes 221 files / 2,277 tests; cross-version evidence is recorded in
+  Platform and operations.
 
 - 2026-11-26: Recruiter API completion focused HTTP regression passed (including tenant/actor eligibility, choices, detail, filters and compatibility). The common gate now passes after the logging fix and list-read follow-up. Cross-version counts and baseline evidence are recorded in [Platform and operations](platform-and-operations.md#verification-status).
 

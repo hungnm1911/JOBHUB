@@ -15,6 +15,11 @@ collection, index, snapshot hoặc migration. Preview không phải nguồn xác
 định responsibility tại commit; owner forced transfer hiện tại tiếp tục
 kiểm tra current persisted state. Shape HTTP thuộc Engineering API contract.
 
+Homepage Company Manager được duyệt ngày 2026-11-27 chỉ đọc các projection
+Job, Company, Recruiter/User/CompanyMember hiện có. Không persist tổng số,
+readiness, preview hoặc trạng thái homepage; pagination thuộc HTTP contract,
+không trở thành counter hoặc collection mới.
+
 Tài liệu này định nghĩa canonical persistence/data contract để hỗ trợ:
 
 ```text

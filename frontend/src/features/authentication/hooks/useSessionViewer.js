@@ -1,5 +1,10 @@
 import { useAppSelector } from '@/store/hooks'
-import { COMPANY_MEMBER_ROLE, COMPANY_MEMBER_STATUS, USER_ROLE, USER_STATUS } from '@/utils/constant'
+import {
+  COMPANY_MEMBER_ROLE,
+  COMPANY_MEMBER_STATUS,
+  USER_ROLE,
+  USER_STATUS,
+} from '@/utils/constant'
 
 import {
   ACCOUNT_CONTEXT_STATUS,
@@ -20,21 +25,24 @@ function useSessionViewer() {
   const accountContextStatus = useAppSelector(selectAccountContextStatus)
 
   const authenticated = status === AUTHENTICATION_STATUS.AUTHENTICATED
+  const activeCompanyStaff =
+    authenticated &&
+    user?.role === USER_ROLE.COMPANY_STAFF &&
+    user.status === USER_STATUS.ACTIVE &&
+    !user.mustChangePassword &&
+    accountContextStatus === ACCOUNT_CONTEXT_STATUS.RESOLVED &&
+    membership?.status === COMPANY_MEMBER_STATUS.ACTIVE
 
   return {
     isRecruiter:
-      authenticated &&
-      user?.role === USER_ROLE.COMPANY_STAFF &&
-      user.status === USER_STATUS.ACTIVE &&
-      !user.mustChangePassword &&
-      accountContextStatus === ACCOUNT_CONTEXT_STATUS.RESOLVED &&
-      membership?.role === COMPANY_MEMBER_ROLE.RECRUITER &&
-      membership.status === COMPANY_MEMBER_STATUS.ACTIVE,
-    resolved:
-      authenticated || status === AUTHENTICATION_STATUS.UNAUTHENTICATED,
-    role: authenticated ? (user?.role ?? null) : null,
+      activeCompanyStaff && membership.role === COMPANY_MEMBER_ROLE.RECRUITER,
+    isCompanyManager:
+      activeCompanyStaff &&
+      membership.role === COMPANY_MEMBER_ROLE.COMPANY_MANAGER,
+    resolved: authenticated || status === AUTHENTICATION_STATUS.UNAUTHENTICATED,
+    role: authenticated ? user?.role ?? null : null,
     // Used by discovery surfaces so Candidate-only fields like isSaved refetch after login/logout.
-    userId: authenticated ? (user?.id ?? null) : null,
+    userId: authenticated ? user?.id ?? null : null,
   }
 }
 
