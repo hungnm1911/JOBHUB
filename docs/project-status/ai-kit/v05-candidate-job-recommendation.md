@@ -10,7 +10,15 @@ Embedding Foundation (F02 support) is implemented and verified with focused
 offline tests: READY JobMatchProfile formatting, optional Job `embeddingText`,
 best-effort sync after publish, and explicit reconciliation. Slice 02's
 `jobhub-dev` Atlas Vector Search Index is `READY` and queryable on all three
-nodes. Slice 03 — Default CV query and eligible Job retrieval — is implemented
+nodes. The separate production `jobhub` database also has the same
+`job_embedding_text_v05_vector_idx` definition; live `--check` returned
+`READY` and `queryable: true` on 2026-11-28. Production now contains 500
+published sample Jobs with nonempty `embeddingText`; a live semantic query with
+the Slice 03 vector-search shape returned 50 eligible hits (query limit), enough
+to supply a top-10 candidate set. Full CV normalization, semantic assessment,
+final ranking quality, and candidate HTTP delivery have not been live-verified
+against this production dataset. Slice 03 — Default
+CV query and eligible Job retrieval — is implemented
 as an internal runtime service and passed focused offline and one live
 development checkpoint. Slice 04 — Batch Semantic Assessment & Reason (F03)
 is implemented and focused offline verified; the H1 Job normalization failure

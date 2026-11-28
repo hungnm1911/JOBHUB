@@ -8,6 +8,7 @@ const requiredEnvironmentVariables = [
   "CLOUDINARY_CLOUD_NAME",
   "CLOUDINARY_API_KEY",
   "CLOUDINARY_API_SECRET",
+  "CLOUDINARY_ROOT_FOLDER",
   "BYTES_PER_MEGABYTE",
   "MAX_FILE_SIZE_MB",
   "JWT_SECRET",
@@ -66,10 +67,17 @@ const database = Object.freeze({
 });
 
 // cloudinary:
+const cloudinaryRootFolder = process.env.CLOUDINARY_ROOT_FOLDER.trim();
+
+if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(cloudinaryRootFolder)) {
+  throw new Error("CLOUDINARY_ROOT_FOLDER must be a single non-empty folder name");
+}
+
 const cloudinary = Object.freeze({
   cloudName: process.env.CLOUDINARY_CLOUD_NAME,
   apiKey: process.env.CLOUDINARY_API_KEY,
   apiSecret: process.env.CLOUDINARY_API_SECRET,
+  rootFolder: cloudinaryRootFolder,
 });
 
 // file upload:

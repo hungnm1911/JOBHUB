@@ -231,6 +231,7 @@ Các biến dưới đây đang được `src/config/index.js` yêu cầu phải
 | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name | giá trị từ Cloudinary |
 | `CLOUDINARY_API_KEY` | Cloudinary API key | secret cấu hình |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret | secret cấu hình |
+| `CLOUDINARY_ROOT_FOLDER` | Folder gốc của asset Cloudinary | `jobhub` cho development; `jobhub-production` cho production |
 | `BYTES_PER_MEGABYTE` | Hệ số đổi MB sang byte | `1048576` |
 | `MAX_FILE_SIZE_MB` | Giới hạn upload chung | `10` |
 | `JWT_SECRET` | Secret ký access token | chuỗi ngẫu nhiên dài |
@@ -771,6 +772,28 @@ backend/
 - Thu thập JSON logs và giữ `X-Request-Id` xuyên qua reverse proxy để truy vết.
 - Worker hiện chạy trong mỗi process ứng dụng. Chúng được thiết kế non-overlapping trong một process và chịu được chạy song song giữa nhiều process, nhưng không phải scheduler exactly-once phân tán.
 - Thực hiện smoke test thực tế cho HTTP, Socket.IO, email và file storage sau deploy; `npm run verify:agent` không thay thế kiểm tra hạ tầng.
+
+### Khởi tạo Atlas production mới, không nhập dữ liệu development
+
+Từ `backend/`, sao chép `.env.example` thành `.env.production.local`, đặt `NODE_ENV=production`, điền Atlas URI có **tên database tường minh** cùng toàn bộ cấu hình bắt buộc. File local này được Git và Docker build bỏ qua; Render dùng Environment/Secret Manager, không dùng file này. Các lệnh dưới đây chỉ đọc file production và không tự nạp `backend/.env` của development:
+
+```bash
+prodnode() { env -i PATH="$PATH" HOME="$HOME" DOTENV_CONFIG_PATH=.env.production.local node "$@"; }
+ATLAS_HOST=your-production-cluster.mongodb.net
+DATABASE_NAME=jobhub_production
+prodnode scripts/run-migration.js v42-legacy-salary-cutover --preflight
+prodnode scripts/run-migration.js v42-legacy-salary-cutover
+prodnode scripts/run-migration.js v4-experience-level-dataset
+prodnode scripts/manage-job-embedding-index.js --check --production-target "$ATLAS_HOST" "$DATABASE_NAME"
+prodnode scripts/manage-job-embedding-index.js --create --production-target "$ATLAS_HOST" "$DATABASE_NAME"
+prodnode scripts/manage-job-embedding-index.js --check --production-target "$ATLAS_HOST" "$DATABASE_NAME"
+```
+
+Thay `ATLAS_HOST` và `DATABASE_NAME` bằng đúng host và database trong URI. Script index từ chối Atlas development, đích không khớp và index xung đột; đợi kết quả `queryable: true` trước khi dùng recommendation. Bước V4.2 áp validator cho `jobs` dù database trống; bước V4 khởi tạo Experience Level chuẩn. Không chạy migration dữ liệu legacy hay seed AI-V05 development trên production trống. Job mới được publish sẽ có `embeddingText`; nếu nạp Job đã publish từ một nguồn được duyệt thì chạy `reconcile:job-embedding-text` tường minh trước khi kiểm tra index.
+
+### Cloudinary dùng chung credential, tách folder theo môi trường
+
+Đặt `CLOUDINARY_ROOT_FOLDER=jobhub` trong development và `CLOUDINARY_ROOT_FOLDER=jobhub-production` trong Render production. Có thể dùng cùng Cloudinary cloud name/API key/secret; tất cả upload mới sẽ đi vào các thư mục con tương ứng dưới root đã chọn. `asset_folder` là vị trí trong Media Library; với Cloudinary dynamic folders, nó không tự thêm tiền tố vào `publicId` hoặc URL của asset. Cùng credential vẫn có quyền truy cập asset của cả hai môi trường, nên folder chỉ phân tách vị trí quản lý, không tạo ranh giới bảo mật. Không cần tạo folder thủ công trước khi upload.
 
 ## Tài liệu nguồn chuẩn
 

@@ -1,4 +1,6 @@
-const CLOUDINARY_ROOT_FOLDER = "jobhub";
+import config from "../config/index.js";
+
+const CLOUDINARY_ROOT_FOLDER = config.cloudinary.rootFolder;
 
 const CLOUDINARY_FOLDER = Object.freeze({
   // Chỉ dùng cho route kiểm thử Cloudinary.

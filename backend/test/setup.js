@@ -6,6 +6,7 @@ const testEnvironment = {
   CLOUDINARY_CLOUD_NAME: "test-cloud",
   CLOUDINARY_API_KEY: "test-api-key",
   CLOUDINARY_API_SECRET: "test-api-secret",
+  CLOUDINARY_ROOT_FOLDER: "jobhub",
   BYTES_PER_MEGABYTE: "1048576",
   MAX_FILE_SIZE_MB: "10",
   JWT_SECRET: "test-jwt-secret-with-enough-length",

@@ -3,8 +3,8 @@ import mongoose from "mongoose";
 import config from "../src/config/index.js";
 
 const INDEX_NAME = "job_embedding_text_v05_vector_idx";
-const EXPECTED_HOST = "jobhub-dev.cffome0.mongodb.net";
-const EXPECTED_DATABASE = "jobhub";
+const DEVELOPMENT_HOST = "jobhub-dev.cffome0.mongodb.net";
+const DEVELOPMENT_DATABASE = "jobhub";
 const DEFINITION = Object.freeze({
   fields: [
     { type: "autoEmbed", modality: "text", path: "embeddingText", model: "voyage-4" },
@@ -15,18 +15,34 @@ const DEFINITION = Object.freeze({
   ],
 });
 
-const command = process.argv[2] ?? "--check";
-if (!["--check", "--create"].includes(command) || process.argv.length > 3) {
-  throw new Error("Usage: node scripts/manage-job-embedding-index.js [--check|--create]");
+const [command = "--check", targetFlag, expectedHost, expectedDatabase, ...extra] = process.argv.slice(2);
+const usage = "Usage: node scripts/manage-job-embedding-index.js [--check|--create] [--production-target <atlas-host> <database-name>]";
+if (!["--check", "--create"].includes(command) || extra.length > 0) {
+  throw new Error(usage);
 }
-
 const uri = new URL(config.database.uri);
-if (
-  config.env !== "development" ||
-  uri.hostname !== EXPECTED_HOST ||
-  decodeURIComponent(uri.pathname.slice(1)) !== EXPECTED_DATABASE
-) {
-  throw new Error("Refusing to access a MongoDB target other than the verified jobhub-dev database");
+const databaseName = decodeURIComponent(uri.pathname.slice(1));
+
+if (config.env === "development") {
+  if (targetFlag != null || uri.hostname !== DEVELOPMENT_HOST || databaseName !== DEVELOPMENT_DATABASE) {
+    throw new Error("Refusing to access a development target other than the verified jobhub-dev database");
+  }
+} else if (config.env === "production") {
+  if (targetFlag !== "--production-target" || !expectedHost || !expectedDatabase) {
+    throw new Error(usage);
+  }
+  if (
+    uri.protocol !== "mongodb+srv:" ||
+    !uri.username ||
+    !uri.hostname.endsWith(".mongodb.net") ||
+    uri.hostname === DEVELOPMENT_HOST ||
+    uri.hostname !== expectedHost ||
+    databaseName !== expectedDatabase
+  ) {
+    throw new Error("Refusing to access a production MongoDB target that does not match the explicit Atlas host and database");
+  }
+} else {
+  throw new Error("Job embedding index management requires NODE_ENV=development or production");
 }
 
 const client = new mongoose.mongo.MongoClient(config.database.uri, {
@@ -35,7 +51,7 @@ const client = new mongoose.mongo.MongoClient(config.database.uri, {
 
 try {
   await client.connect();
-  const jobs = client.db(EXPECTED_DATABASE).collection("jobs");
+  const jobs = client.db(databaseName).collection("jobs");
   const indexes = await jobs.listSearchIndexes().toArray();
   const matching = indexes.filter(
     (index) => index.name === INDEX_NAME || index.type === "vectorSearch",
