@@ -20,9 +20,8 @@ import {
   declineOwnInterviewProposalApi,
 } from '@/apis/application.api'
 import { Button } from '@/components/ui/button'
-import ApplicationStatusBadge, {
-  APPLICATION_STATUS_STYLE,
-} from '@/features/candidate-dashboard/components/ApplicationStatusBadge'
+import ApplicationStatusBadge from '@/features/candidate-dashboard/components/ApplicationStatusBadge'
+import { APPLICATION_STATUS_STYLE } from '@/features/candidate-dashboard/application-status-style'
 import CompanyLogo from '@/features/job-discovery/components/CompanyLogo'
 import {
   EMPLOYMENT_TYPE_LABEL,

@@ -7,7 +7,7 @@ import { ErrorState, ListSkeleton, Pager, StateMessage } from '@/components/comm
 import { Button } from '@/components/ui/button'
 import { SelectDropdown } from '@/components/ui/select-dropdown'
 import useCvCatalogOptions from '@/features/candidate-cvs/hooks/useCvCatalogOptions'
-import { APPLICATION_STATUS_STYLE } from '@/features/candidate-dashboard/components/ApplicationStatusBadge'
+import { APPLICATION_STATUS_STYLE } from '@/features/candidate-dashboard/application-status-style'
 import { APPLICATION_STATUS_LABEL } from '@/features/candidate-dashboard/utils'
 import { EMPLOYMENT_TYPE_LABEL, formatSalary } from '@/features/job-discovery/utils'
 import { JOB_STATUS } from '@/utils/constant'

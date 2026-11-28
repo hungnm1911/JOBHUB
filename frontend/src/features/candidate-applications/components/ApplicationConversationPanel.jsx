@@ -87,7 +87,7 @@ function ChatBubble({ message, currentUserId }) {
 }
 
 function ApplicationConversationPanel({ applicationId, open, onClose, currentUserId = null }) {
-  const [loading, setLoading] = useState(false)
+  const [loadedKey, setLoadedKey] = useState(null)
   const [error, setError] = useState(null)
   const [missing, setMissing] = useState(false)
   const [messages, setMessages] = useState([])
@@ -97,10 +97,13 @@ function ApplicationConversationPanel({ applicationId, open, onClose, currentUse
   const { confirmDiscard } = useUnsavedChangesPrompt(open && Boolean(content.trim()))
   const handleClose = () => confirmDiscard(() => {
     setContent('')
+    setLoadedKey(null)
     onClose()
   })
   const [reloadKey, setReloadKey] = useState(0)
   const listRef = useRef(null)
+  const requestKey = `${applicationId}:${open}:${reloadKey}`
+  const loading = open && loadedKey !== requestKey
 
   useEffect(() => {
     if (!open) {
@@ -108,25 +111,23 @@ function ApplicationConversationPanel({ applicationId, open, onClose, currentUse
     }
 
     let active = true
-    setLoading(true)
-    setError(null)
-    setMissing(false)
 
     getOwnApplicationConversationApi(applicationId).then(
       (response) => {
         if (!active) {
           return
         }
+        setError(null)
         setMessages(response.messages ?? [])
         setAuthority(response.authority ?? null)
         setMissing(false)
-        setLoading(false)
+        setLoadedKey(requestKey)
       },
       (loadError) => {
         if (!active) {
           return
         }
-        setLoading(false)
+        setLoadedKey(requestKey)
         if (isConversationMissingError(loadError)) {
           setMissing(true)
           setMessages([])
@@ -141,7 +142,7 @@ function ApplicationConversationPanel({ applicationId, open, onClose, currentUse
     return () => {
       active = false
     }
-  }, [applicationId, open, reloadKey])
+  }, [applicationId, open, requestKey])
 
   useEffect(() => {
     if (!listRef.current) {
@@ -219,7 +220,7 @@ function ApplicationConversationPanel({ applicationId, open, onClose, currentUse
             </div>
           ) : null}
 
-          {error ? (
+          {!loading && error ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error.message || 'Không tải được hội thoại.'}
               <Button

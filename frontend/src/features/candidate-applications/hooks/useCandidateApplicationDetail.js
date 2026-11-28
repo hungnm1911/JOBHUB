@@ -12,11 +12,6 @@ function useCandidateApplicationDetail(applicationId) {
 
   useEffect(() => {
     if (!applicationId) {
-      setView({
-        key: String(loadAttempt),
-        application: null,
-        error: new Error('Thiếu mã đơn ứng tuyển.'),
-      })
       return undefined
     }
 
@@ -60,9 +55,9 @@ function useCandidateApplicationDetail(applicationId) {
   }, [])
 
   return {
-    loading: view.key !== String(loadAttempt),
+    loading: Boolean(applicationId) && view.key !== String(loadAttempt),
     application: view.application,
-    error: view.error,
+    error: applicationId ? view.error : new Error('Thiếu mã đơn ứng tuyển.'),
     reload,
     setApplication,
   }
