@@ -156,6 +156,7 @@ const smtp = Object.freeze({
   user: process.env.SMTP_USER,
   pass: process.env.SMTP_PASS,
   fromName: process.env.MAIL_FROM_NAME || "JobHub Admin",
+  fromAddress: process.env.MAIL_FROM_ADDRESS?.trim() || process.env.SMTP_USER,
 });
 
 const emailVerificationExpiresInMs = Number(

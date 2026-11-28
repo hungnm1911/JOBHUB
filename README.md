@@ -252,7 +252,7 @@ JOBHUB/
 
 ## Yêu cầu hệ thống
 
-- Node.js `>=20.19.0`. Frontend Vite 8 hỗ trợ `^20.19.0` hoặc `>=22.12.0`.
+- Backend/AI Kit production dùng Node.js 22 (dependency `file-type@22` yêu cầu `>=22`); frontend Vite 8 hỗ trợ `^20.19.0` hoặc `>=22.12.0`.
 - npm cho backend và `ai-kit` vì `backend/package-lock.json` và `ai-kit/package-lock.json` là lockfile được dùng trong hướng dẫn.
 - Yarn Classic 1.x cho frontend vì `frontend/yarn.lock` là lockfile v1.
 - MongoDB replica set hoặc MongoDB Atlas; nhiều workflow backend sử dụng multi-document transaction.
@@ -348,14 +348,24 @@ Thiết lập deployment khi chọn domain (origin HTTPS không có dấu `/` cu
 
 | Nền tảng | Thiết lập |
 | --- | --- |
-| Vercel frontend | Root Directory `frontend`; Vite build `yarn build`, Output Directory `dist`. Đặt `VITE_APP_ENV=production`, `VITE_API_BASE_URL=https://<backend-domain>/api`, `VITE_SOCKET_URL=https://<backend-domain>`. `frontend/vercel.json` rewrite browser routes về `index.html`. |
-| Render backend | Docker Web Service; để Root Directory là repo root, Dockerfile Path `backend/Dockerfile`, Docker Build Context `.` để build được `ai-kit/`. Đặt `NODE_ENV=production`, `APP_BASE_URL=https://<backend-domain>`, `FRONTEND_BASE_URL=https://<frontend-domain>`, `CORS_ALLOWED_ORIGINS=https://<frontend-domain>` và toàn bộ secret bắt buộc trong `backend/.env.example`. Dùng `PORT` do Render cung cấp và Health Check Path `/api/`. |
+| Vercel frontend | Đã deploy tại <https://jobhub-vn.vercel.app/>. Root Directory `frontend`; Production Branch `main`; Node.js 22.x. `frontend/vercel.json` khai báo Vite, `yarn install --frozen-lockfile`, `yarn build`, Output Directory `dist`, SPA rewrite và bỏ qua build nhánh khác `main` (không có preview deployment). Đặt `VITE_APP_ENV=production`, `VITE_API_BASE_URL=https://<backend-domain>/api`, `VITE_SOCKET_URL=https://<backend-domain>`. Chi tiết: [Frontend README](frontend/README.md#vercel-production). |
+| Render backend | GitHub Integration, Docker Web Service, branch `main`, Auto-Deploy `On Commit`; để Root Directory là repo root, Dockerfile Path `backend/Dockerfile`, Docker Build Context `.` để build được `ai-kit/`. Dùng Dockerfile `CMD` mặc định, không đặt pre-deploy command. Đặt `NODE_ENV=production`, `APP_BASE_URL=https://<backend-domain>`, `FRONTEND_BASE_URL=https://<frontend-domain>`, `CORS_ALLOWED_ORIGINS=https://<frontend-domain>` và toàn bộ biến bắt buộc trong `backend/.env.example`. Dùng `PORT` do Render cung cấp (mặc định `10000`) và Health Check Path `/api/`. |
+
+> [!NOTE]
+> Backend Render chưa được deploy; các biến `VITE_*` trên Vercel hiện là giá trị giữ chỗ, nên chức năng cần API chưa hoạt động trên domain production. Khi backend có URL, cập nhật hai biến `VITE_*`, redeploy frontend và đặt `CORS_ALLOWED_ORIGINS`/`FRONTEND_BASE_URL` trên Render thành `https://jobhub-vn.vercel.app`.
 
 Compose không tạo MongoDB local hoặc tự chạy migration. Với database mới, đọc
 hướng dẫn migration bên dưới trước khi khởi động backend. Image backend cần
-process luôn chạy cho Socket.IO và các worker hiện có. Render Free spin down khi
-không có traffic và chặn outbound SMTP port `465`/`587`; cần gói phù hợp khi
-triển khai chức năng email và worker production.
+process luôn chạy cho Socket.IO và các worker hiện có. Render Free có 512 MB RAM,
+spin down khi không có traffic và chặn outbound SMTP port `25`/`465`/`587`.
+Brevo hỗ trợ SMTP port `2525`: dùng `SMTP_HOST=smtp-relay.brevo.com`,
+`SMTP_PORT=2525`, `SMTP_SECURE=false` để Nodemailer nâng cấp kết nối bằng
+STARTTLS khi server quảng bá hỗ trợ. Cần thử gửi email thực tế trên Render và
+đặt `MAIL_FROM_ADDRESS` thành sender đã xác minh nếu `SMTP_USER` là login kỹ thuật
+của Brevo; xác nhận credential và gửi email thực tế trên Render trước khi coi
+email production hoạt động.
+Render Free không phù hợp nếu worker cần chạy liên tục hoặc Socket.IO cần
+kết nối không gián đoạn.
 
 ### 1. Clone repository
 
@@ -656,6 +666,7 @@ Agent/contributor workflow đầy đủ nằm trong [AGENTS.md](AGENTS.md), [bac
 - Cấu hình SPA fallback về `index.html` cho browser routes.
 - Không dùng `yarn preview` làm production server.
 - Thêm frontend production origin vào backend `CORS_ALLOWED_ORIGINS`.
+- Trên Vercel chỉ nhánh `main` được deploy (`ignoreCommand` trong `frontend/vercel.json`); không có GitHub Actions.
 - Bật HTTPS và hỗ trợ WebSocket/Socket.IO upgrade qua reverse proxy.
 
 Checklist chi tiết nằm trong [Backend README](backend/README.md#triển-khai-production) và [Frontend README](frontend/README.md#build-và-triển-khai-production).

@@ -596,12 +596,43 @@ Khi triển khai:
 
 - Đặt `VITE_APP_ENV=production`, `VITE_API_BASE_URL` và `VITE_SOCKET_URL` đúng tại thời điểm build.
 - Serve `dist/` bằng static hosting/CDN hoặc web server production; không dùng `yarn preview` làm production server.
-- Khi dùng Vercel, đặt Root Directory là `frontend/`, build `yarn build`, Output Directory `dist`; `vercel.json` trong thư mục này rewrite browser routes về `index.html`.
+- Khi dùng Vercel, xem mục [Vercel production](#vercel-production) bên dưới.
 - Dùng HTTPS cho frontend, backend HTTP API và Socket.IO.
 - Thêm frontend production origin vào backend `CORS_ALLOWED_ORIGINS`.
 - Đảm bảo reverse proxy/CDN không làm mất WebSocket/Socket.IO upgrade khi dùng cùng domain gateway.
 - Không cache `index.html` quá lâu nếu cần phát hành config/bundle mới; hashed assets có thể cache dài hạn.
 - Thực hiện smoke check trang `/`, request đến backend, auth refresh và Socket.IO trên môi trường thật.
+
+### Vercel production
+
+Frontend production được deploy tại <https://jobhub-vn.vercel.app/>. Backend Render **chưa được deploy** tại thời điểm cập nhật này, nên các biến `VITE_*` trên Vercel đang là giá trị giữ chỗ (draft) và các chức năng cần API (đăng nhập, dữ liệu, Socket.IO) chưa hoạt động trên domain này.
+
+`frontend/vercel.json` là cấu hình deployment duy nhất trong repository và không chứa domain hay credential:
+
+| Khóa | Giá trị | Ý nghĩa |
+| --- | --- | --- |
+| `framework` | `vite` | Vercel nhận diện Vite |
+| `installCommand` | `yarn install --frozen-lockfile` | Dùng `frontend/yarn.lock` (Yarn v1, được Git track); lockfile lệch `package.json` sẽ làm build lỗi |
+| `buildCommand` / `outputDirectory` | `yarn build` / `dist` | Bundle production |
+| `rewrites` | mọi path trừ `assets/` về `/index.html` | Truy cập trực tiếp hoặc refresh browser route không bị 404; file thiếu trong `assets/` trả 404 thật thay vì HTML |
+| `ignoreCommand` | bỏ qua build khi `VERCEL_GIT_COMMIT_REF` khác `main` | Chỉ nhánh `main` được build/deploy; không có preview deployment |
+
+Repository không có GitHub Actions; CD hoàn toàn do tích hợp Git của Vercel, và merge vào `main` deploy mà không chạy `yarn verify:agent`.
+
+Thiết lập thủ công trên Vercel Dashboard (không đặt được trong `vercel.json`):
+
+| Mục | Giá trị |
+| --- | --- |
+| Root Directory | `frontend` |
+| Production Branch | `main` |
+| Node.js Version | 22.x (Vite 8 cần Node `^20.19` hoặc `>=22.12`) |
+| Environment Variables | scope Production: `VITE_APP_ENV=production`, `VITE_API_BASE_URL=https://<backend-domain>/api`, `VITE_SOCKET_URL=https://<backend-domain>` |
+
+- Trong lúc backend chưa có, dùng URL không phân giải được (ví dụ `https://backend-chua-deploy.invalid/api`) thay vì để trống: `VITE_API_BASE_URL` trống fallback về `/api` trên chính domain Vercel và nhận về `index.html` do rewrite.
+- `VITE_*` được đóng vào bundle lúc build; sau khi có backend, sửa hai biến rồi **Redeploy**.
+- Trên backend đặt `CORS_ALLOWED_ORIGINS=https://jobhub-vn.vercel.app` và `FRONTEND_BASE_URL=https://jobhub-vn.vercel.app` (cùng giá trị này cũng là whitelist origin của Socket.IO; không có `/` cuối).
+- Không có file `.env*` nào được Git track ngoài `.env.example`; `.env.production.local` chỉ có tác dụng với build local, không đến được Vercel.
+- Đã kiểm tra bằng HTTP: `/` và một deep path trả `200 text/html`, `/assets/<file thiếu>` trả `404`. Chưa kiểm tra request đến backend, auth refresh và Socket.IO vì backend chưa deploy.
 
 ## Giới hạn và mismatch đã biết
 

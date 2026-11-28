@@ -2,6 +2,23 @@
 
 ## Current project state
 
+2026-11-28: the Backend production lockfile resolves `mongoose@9.11.4`,
+`proxy-addr@2.0.8`, `body-parser@2.4.0`, `engine.io@6.6.10`, and
+`multer@2.3.0`. The two critical and three public-deploy denial-of-service
+blockers identified in the dependency review are cleared. Package ranges and
+business logic are unchanged. Clean install, focused REST/Socket.IO/CV-upload
+regressions, and repository-root Docker production build passed; the full
+Backend gate was not run by user request. Production audit reports 0 critical,
+6 high, and 2 moderate package findings. The remaining high findings in
+`multer` (unused disk storage/async file filter), `nanoid`, `nodemailer`,
+`pdfjs-dist`, `source-map-js`, and `zod`, plus the moderate findings in
+`ip-address` and `sanitize-html`, are accepted for this demo deployment under
+the reviewed runtime paths and current input limits: `express-rate-limit` is
+not imported by Backend source, and the rich-text sanitizer does not allow
+SVG, `textarea`, or `meta` tags. This is GO for the
+dependency-security gate of a Render Free demo; live Render startup, Atlas,
+Cloudinary, and SMTP behavior remain unverified by this patch.
+
 2026-11-28: the Company Manager DRAFT Application-list disclosure is fixed by
 reusing canonical V5 Job visibility. The common Backend gate passes 221 files /
 2,277 tests; scoped behavior is recorded in [V10](v10-application-assignment-recruitment-pipeline.md).
@@ -111,6 +128,18 @@ and its injected AI Kit logger.
 
 ## Operational provisioning
 
+- **Frontend deployed on Vercel 2026-11-28; Backend not deployed:** the
+  Frontend is reported deployed at `https://jobhub-vn.vercel.app/` using
+  `frontend/vercel.json` (Vite, frozen-lockfile install, `dist`, SPA rewrite,
+  builds only for `main`). Its `VITE_*` values are placeholders because no
+  Render Backend exists yet, so API and Socket.IO flows are not functional there.
+  An HTTP check confirmed `/` and a deep path return `200 text/html` and a
+  missing `/assets/` file returns `404`; a production build with dummy
+  `VITE_*` values succeeded and contained no `localhost:8000`. No backend
+  request, auth refresh, Socket.IO, CORS, or `yarn verify:agent` check was run.
+  Pending: deploy Backend, set real `VITE_*` values and redeploy, and set
+  `CORS_ALLOWED_ORIGINS`/`FRONTEND_BASE_URL` to the Vercel origin. See
+  [Frontend README](../../../frontend/README.md#vercel-production).
 - **Atlas production initialized; live verified 2026-11-28:** The new `jobhub`
   database on `jobhub-prod.a956r7b.mongodb.net` began with zero collections.
   The V4.2 Salary cutover applied and verified the strict `jobs` validator;
@@ -179,6 +208,39 @@ and its injected AI Kit logger.
   changed-file ESLint, the architecture checker (ARCH-001–019), and 19 Job
   approval/team tests passed. The full Backend gate was skipped at the user's
   request.
+- **Production Candidate sample accounts seeded and live-verified 2026-11-28:**
+  `backend/scripts/seed-production-candidates.js` provisioned 200 synthetic
+  `CANDIDATE` Users as `ACTIVE`, email-verified, and login-ready with individual
+  hashed passwords and optional birth dates. Their owner-only credential source
+  is the Git-ignored
+  `tmp/production-seed-data/seed-normaliztion/production-candidates.json`.
+  Stable seed IDs and email collision checks make the explicit operator run
+  resumable; a repeat dry-run found 200 existing and zero missing. The live
+  database audit found exactly 200 Candidate Users, zero Candidate CVs, and zero
+  sessions for the seeded Candidates. Two real Candidate logins and Profile
+  reads succeeded; their test sessions were removed. No verification email was
+  sent for the reserved `.invalid` addresses. Focused Node syntax and
+  changed-file ESLint, ARCH-001–019, and 13 auth/profile tests passed. The full
+  Backend gate was skipped at the user's request.
+- **Production Candidate CV sample data seeded and live-verified 2026-11-28:**
+  `backend/scripts/prepare-production-cvs.mjs` selected 200 distinct Vietnamese
+  personas from the local Parquet dataset, derived each professional summary's
+  goal from source career goals without copying persona names, and filled missing
+  chronology, employer, project, certification, and location fields with
+  synthetic sample content. The owner-only normalized JSON is Git-ignored at
+  `tmp/production-seed-data/seed-normaliztion/production-cvs.json`; source UUIDs
+  and inferred fields remain there for traceability. The explicit operator script
+  `backend/scripts/seed-production-cvs.js` created 400 `GENERATED`/`ACTIVE`/
+  `PUBLIC` CVs through the canonical CV service: two per seeded Candidate and
+  one Default each. The live audit verified all 25 FIELD quotas, all six
+  experience quotas (Candidate counts 21/6/106/45/21/1), 400 career-goal
+  summaries, 150 project sections, 150 certification sections, and persisted
+  project descriptions of 139–150
+  words. A repeat dry-run reported 400 existing, zero missing, and zero summary
+  updates needed; re-running the preparation script reproduced the normalized
+  file hash exactly. Focused
+  syntax/ESLint, ARCH-001–019, and four focused Candidate CV suites (36 tests)
+  passed. The full Backend gate was skipped at the user's request.
 - **Development Platform Admin previously provisioned and login-verified:** The
   separate development Atlas database has one configured `PLATFORM_ADMIN` with
   `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt
@@ -212,6 +274,30 @@ and its injected AI Kit logger.
 - **Documented only:** repository-level and backend-specific agent contracts exist.
 
 ## Verification status
+
+- 2026-11-28 Render denial-of-service dependency patch: `npm ci --no-audit
+  --no-fund` passed locally (Node 20 emitted an existing `file-type@22.0.1`
+  Node >=22 engine warning); `npm ls body-parser engine.io multer --all
+  --omit=dev` resolved exactly `2.4.0`, `6.6.10`, and `2.3.0` respectively.
+  `npm audit --omit=dev --json` reported 0 critical, 6 high, 2 moderate;
+  the `body-parser` and `engine.io` findings disappeared, and `multer` retains
+  only disk-storage/async-file-filter advisories outside the current upload
+  configuration. Focused REST, Socket.IO, and CV-upload regressions passed
+  5 files / 34 tests against the isolated test database. `docker build
+  --target production -f backend/Dockerfile -t jobhub-backend:security-blockers
+  .` passed from the repository root on Node 22, and image-local `npm ls`
+  confirmed the same three versions. The full Backend gate and live Render,
+  Atlas, Cloudinary, and SMTP checks were not run.
+
+- 2026-11-28 Render dependency patch: `npm ci --no-audit --no-fund` passed on
+  the Backend working tree; a separate Node 22 clean install with the candidate
+  lockfile also passed. `npm ls mongoose proxy-addr --all --omit=dev` resolved
+  `mongoose@9.11.4` and `express@5.2.1 → proxy-addr@2.0.8`.
+  `npm audit --omit=dev --json` reported 0 critical, 8 high, 3 moderate.
+  Focused MongoDB tests passed 3 files / 33 tests, and the repository-root
+  production Docker build passed. `git diff --check` and
+  `git diff --cached --check` passed. The full Backend gate and live Atlas,
+  Cloudinary, SMTP, and Render deployment checks were not run.
 
 - 2026-11-28 Company Manager correctness fixes: `cd backend && npm run verify:agent`
   passed **221 files / 2,277 tests**, **ARCH-001–ARCH-019**, ESLint **0 errors /
