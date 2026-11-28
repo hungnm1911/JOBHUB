@@ -191,6 +191,20 @@ and its injected AI Kit logger.
   changed-file ESLint, the architecture checker (ARCH-001–019), and 19 Job
   approval/team tests passed. The full Backend gate was skipped at the user's
   request.
+- **Production Candidate sample accounts seeded and live-verified 2026-11-28:**
+  `backend/scripts/seed-production-candidates.js` provisioned 200 synthetic
+  `CANDIDATE` Users as `ACTIVE`, email-verified, and login-ready with individual
+  hashed passwords and optional birth dates. Their owner-only credential source
+  is the Git-ignored
+  `tmp/production-seed-data/seed-normaliztion/production-candidates.json`.
+  Stable seed IDs and email collision checks make the explicit operator run
+  resumable; a repeat dry-run found 200 existing and zero missing. The live
+  database audit found exactly 200 Candidate Users, zero Candidate CVs, and zero
+  sessions for the seeded Candidates. Two real Candidate logins and Profile
+  reads succeeded; their test sessions were removed. No verification email was
+  sent for the reserved `.invalid` addresses. Focused Node syntax and
+  changed-file ESLint, ARCH-001–019, and 13 auth/profile tests passed. The full
+  Backend gate was skipped at the user's request.
 - **Development Platform Admin previously provisioned and login-verified:** The
   separate development Atlas database has one configured `PLATFORM_ADMIN` with
   `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt
