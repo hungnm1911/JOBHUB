@@ -43,8 +43,9 @@ When a detailed version specification exists and has been reviewed and approved,
 | V15 | Job Invitation và nhánh Recruiter săn ứng viên | COMPLETED AND VERIFIED |
 | V16 | Saved Jobs | PLANNED |
 | V17 | Rich Text Content Integration | READY FOR IMPLEMENTATION |
+| V18 | Admin communication, Company support and platform statistics | READY FOR IMPLEMENTATION |
 
-Dashboard, thống kê tuyển dụng và giám sát toàn nền tảng vẫn `PLANNED`; chưa được gán version. Summary số lượng hồ sơ xét duyệt Company thuộc mở rộng F04 của V2 được duyệt ngày 2026-11-27, không mở phạm vi dashboard toàn nền tảng.
+V18 Admin communication, Company support và thống kê tổng hợp được người dùng duyệt ngày 2026-11-28; authority: [Product V18](versions/v18-admin-communication-statistics.md) và [Data V18](../../data/backend/versions/v18-admin-communication-statistics-data-model.md). Các dashboard tuyển dụng nâng cao, tăng trưởng và giám sát ngoài phạm vi V18 vẫn `PLANNED`. Summary số lượng hồ sơ xét duyệt Company thuộc mở rộng F04 của V2 được duyệt ngày 2026-11-27, không mở phạm vi dashboard toàn nền tảng.
 
 ---
 
