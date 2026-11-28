@@ -1,6 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "yarn install --frozen-lockfile",
+  "buildCommand": "yarn build",
+  "outputDirectory": "dist",
+  "ignoreCommand": "test \"$VERCEL_GIT_COMMIT_REF\" != \"main\"",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ]
 }
