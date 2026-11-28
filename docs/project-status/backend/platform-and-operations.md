@@ -49,6 +49,10 @@ and its injected AI Kit logger.
 - Bootstrap, MongoDB, Cloudinary, workers, realtime fan-out, and Notification
   recovery log through the logger. The previously silent fan-out and
   recovery-item failures are logged at `warn`.
+- Cloudinary upload folders now use the required `CLOUDINARY_ROOT_FOLDER` from
+  normalized Backend configuration. The local development root is `jobhub`;
+  production local configuration uses `jobhub-production`. This separates
+  Media Library locations while retaining the same Cloudinary credentials.
 - `src/services/ai-kit.service.js` is the sole Backend integration owner for
   the local `@jobhub/ai-kit` package. It injects optional normalized
   `config.aiKit.llm` values and the canonical Backend logger while creating the
@@ -67,6 +71,10 @@ and its injected AI Kit logger.
   changed.
 
 **Verification:**
+- 2026-11-28 Cloudinary folder configuration: three focused test files passed
+  (10 tests), changed-file ESLint and ARCH-001–ARCH-019 passed, and
+  `git diff --check` passed. The full Backend gate was intentionally skipped
+  at the user's request; no live Cloudinary operation was performed.
 - Latest backend gate (2026-11-27 Admin phases 2–3): `npm run verify:agent` passed 219 files / 2,267 tests, ARCH-001–ARCH-019, ESLint 0 errors / 2 existing warnings.
 - 2026-10-18 clean-install check on temporary `ai-kit/` + `backend/` copies
   without `node_modules`/`.env` (Node 20.19.1, npm 10.8.2): after the
@@ -92,7 +100,33 @@ and its injected AI Kit logger.
 
 ## Operational provisioning
 
-- **Provisioned and login-verified:** The single platform-configured administrator account is present in MongoDB Atlas as one `PLATFORM_ADMIN`, with `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt password hash. Its previous sessions and temporary authentication tokens were revoked during provisioning; a live login verification succeeded and the verification session was removed. The account identifier and secrets are intentionally not recorded in repository documentation.
+- **Atlas production initialized; live verified 2026-11-28:** The new `jobhub`
+  database on `jobhub-prod.a956r7b.mongodb.net` began with zero collections.
+  The V4.2 Salary cutover applied and verified the strict `jobs` validator;
+  a subsequent read-only preflight reported it active with zero Jobs. The V4
+  migration inserted and verified all six canonical Experience Levels. The
+  database has zero Jobs.
+- **Production Platform Admin provisioned and login-verified 2026-11-28:** The
+  new Atlas database has exactly one `User`, with role `PLATFORM_ADMIN`, status
+  `ACTIVE`, verified email, `mustChangePassword=false`, and a bcrypt password
+  hash verified against the configured credential. The canonical login service
+  succeeded, and its verification session was removed; zero sessions remain.
+  The account identifier and credentials are not recorded here.
+- **Production Category catalog seeded and live-verified 2026-11-28:** The
+  production Atlas `categories` collection now has 25 FIELDs and 886 POSITIONs
+  (911 total). The normalized TopCV-derived catalog is in
+  `backend/src/database/seeds/topcv-jobhub-category-catalog.json`; its audit
+  list excludes 25 clearly unrelated source positions from the Tài xế, Biên
+  phiên dịch, and Luật groups. The explicit production seed script uses the
+  canonical Category service, verifies the compound unique index and exact
+  FIELD→POSITION relationships, and a second dry-run reported zero missing
+  records. Focused Node syntax and changed-file ESLint passed; the full Backend
+  gate was skipped at the user's request.
+- **Development Platform Admin previously provisioned and login-verified:** The
+  separate development Atlas database has one configured `PLATFORM_ADMIN` with
+  `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt
+  password hash. Its previous sessions and temporary authentication tokens
+  were revoked during provisioning; the verification session was removed.
 
 ## Previously completed and verified baseline
 
