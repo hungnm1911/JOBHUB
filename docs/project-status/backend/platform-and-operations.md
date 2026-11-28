@@ -205,6 +205,25 @@ and its injected AI Kit logger.
   sent for the reserved `.invalid` addresses. Focused Node syntax and
   changed-file ESLint, ARCH-001–019, and 13 auth/profile tests passed. The full
   Backend gate was skipped at the user's request.
+- **Production Candidate CV sample data seeded and live-verified 2026-11-28:**
+  `backend/scripts/prepare-production-cvs.mjs` selected 200 distinct Vietnamese
+  personas from the local Parquet dataset, derived each professional summary's
+  goal from source career goals without copying persona names, and filled missing
+  chronology, employer, project, certification, and location fields with
+  synthetic sample content. The owner-only normalized JSON is Git-ignored at
+  `tmp/production-seed-data/seed-normaliztion/production-cvs.json`; source UUIDs
+  and inferred fields remain there for traceability. The explicit operator script
+  `backend/scripts/seed-production-cvs.js` created 400 `GENERATED`/`ACTIVE`/
+  `PUBLIC` CVs through the canonical CV service: two per seeded Candidate and
+  one Default each. The live audit verified all 25 FIELD quotas, all six
+  experience quotas (Candidate counts 21/6/106/45/21/1), 400 career-goal
+  summaries, 150 project sections, 150 certification sections, and persisted
+  project descriptions of 139–150
+  words. A repeat dry-run reported 400 existing, zero missing, and zero summary
+  updates needed; re-running the preparation script reproduced the normalized
+  file hash exactly. Focused
+  syntax/ESLint, ARCH-001–019, and four focused Candidate CV suites (36 tests)
+  passed. The full Backend gate was skipped at the user's request.
 - **Development Platform Admin previously provisioned and login-verified:** The
   separate development Atlas database has one configured `PLATFORM_ADMIN` with
   `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt
