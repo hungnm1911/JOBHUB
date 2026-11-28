@@ -7,6 +7,7 @@ import COMPANY_APPROVAL_STATUS from "../constants/company-approval-status.js";
 import COMPANY_OPERATIONAL_STATUS from "../constants/company-operational-status.js";
 
 import {
+  getPlatformStatistics,
   listAccounts, getAccount, listCompanies, getCompany,
   getCompanyRegistrationSummary,
   approveCompanyRegistration,
@@ -176,3 +177,11 @@ export const getCompanyHandler = async (request, response, next) => {
   try { return response.json(await getCompany({ companyId: request.params.companyId })); }
   catch (error) { next(error); }
 };
+
+const getPlatformStatisticsHandler = async (request, response, next) => {
+  try {
+    if (Object.keys(request.query).length) throw new AppError(400, "Query parameters not supported");
+    return response.json({ statistics: await getPlatformStatistics() });
+  } catch (error) { return next(error); }
+};
+export { getPlatformStatisticsHandler };

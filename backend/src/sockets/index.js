@@ -1,4 +1,5 @@
 export {
+  emitSupportMessageToRecipients,
   emitConversationStateToRecipients,
   emitMessageToRecipients,
   emitNotificationToRecipient,

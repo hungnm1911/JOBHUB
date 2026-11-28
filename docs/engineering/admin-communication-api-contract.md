@@ -8,7 +8,7 @@ idempotency conflict. Body keys strict; extra keys rejected. Plain-text inputs a
 trimmed and bounded per Product V18. IDs valid Mongo ObjectIds or 404.
 
 All list queries: page default1, limit default20/max100, q optional trimmed <=200,
-sort default-createdAt; unsupported/repeated keys return400. Stable _id tie-breaker.
+sort default-createdAt (support inbox defaults to -lastMessageAt); unsupported/repeated keys return400. Stable _id tie-breaker.
 Response pagination {page,limit,total,totalPages}; empty totalPages0, beyond-last200.
 
 | Method/path | Input | Result |

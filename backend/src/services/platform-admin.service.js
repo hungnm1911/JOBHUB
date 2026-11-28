@@ -1,3 +1,7 @@
+import JOB_STATUS from "../constants/job-status.js";
+import APPLICATION_STATUS from "../constants/application-status.js";
+import Job from "../models/job.model.js";
+import Application from "../models/application.model.js";
 import mongoose from "mongoose";
 
 import AUTH_TOKEN_TYPE from "../constants/auth-token-type.js";
@@ -908,3 +912,28 @@ export {
   rejectCompanyRegistration,
   terminateAccount,
 };
+
+const getPlatformStatistics = async () => {
+  const breakdown = async (model, field, vocabulary) => {
+    const rows = await model.aggregate([{ $group: { _id: `$${field}`, count: { $sum: 1 } } }]);
+    return Object.assign(Object.fromEntries(Object.values(vocabulary).map((key) => [key, 0])), Object.fromEntries(rows.map((row) => [row._id, row.count])));
+  };
+  const [usersStatus, approval, operational, jobsStatus, applicationsStatus, actors] = await Promise.all([
+    breakdown(User, "status", USER_STATUS), breakdown(Company, "approvalStatus", COMPANY_APPROVAL_STATUS),
+    breakdown(Company, "operationalStatus", COMPANY_OPERATIONAL_STATUS), breakdown(Job, "status", JOB_STATUS),
+    breakdown(Application, "status", APPLICATION_STATUS),
+    User.aggregate([
+      { $lookup: { from: CompanyMember.collection.name, localField: "_id", foreignField: "userId", as: "membership" } },
+      { $group: { _id: { $cond: [{ $eq: ["$role", USER_ROLE.COMPANY_STAFF] },
+        { $ifNull: [{ $arrayElemAt: ["$membership.role", 0] }, "UNRESOLVED"] }, "$role"] }, count: { $sum: 1 } } },
+    ]),
+  ]);
+  const total = (values) => Object.values(values).reduce((sum, count) => sum + count, 0);
+  return { generatedAt: new Date(), users: { total: total(usersStatus), byStatus: usersStatus,
+    byActorType: Object.assign({ [USER_ROLE.CANDIDATE]: 0, [USER_ROLE.PLATFORM_ADMIN]: 0,
+      [COMPANY_MEMBER_ROLE.COMPANY_MANAGER]: 0, [COMPANY_MEMBER_ROLE.RECRUITER]: 0, UNRESOLVED: 0 },
+    Object.fromEntries(actors.map((row) => [row._id, row.count]))) },
+    companies: { total: total(approval), byApprovalStatus: approval, byOperationalStatus: operational },
+    jobs: { total: total(jobsStatus), byStatus: jobsStatus }, applications: { total: total(applicationsStatus), byStatus: applicationsStatus } };
+};
+export { getPlatformStatistics };

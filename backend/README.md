@@ -421,6 +421,25 @@ bao gồm query/body, DTO, phân trang, quyền, lỗi và quy tắc account/mem
 | `POST` | `/api/platform-admin/company-registrations/:companyId/reject` | Platform Admin | Từ chối hồ sơ Company |
 | `POST` | `/api/platform-admin/companies/:companyId/lock` | Platform Admin | Khóa Company đang hoạt động |
 
+### Admin communication, support và statistics (V18)
+
+[Contract V18](../docs/engineering/admin-communication-api-contract.md) bổ sung
+broadcast theo tập User ACTIVE, inbox Admin, chat hỗ trợ riêng với Company Manager
+và thống kê tổng hợp. Chat này không cấp quyền đọc Conversation thuộc Application.
+
+| Method | Endpoint | Quyền | Mô tả |
+| --- | --- | --- | --- |
+| `GET/POST` | `/api/platform-admin/announcements` | Platform Admin | Lịch sử phân trang / phát hành thông báo idempotent |
+| `GET` | `/api/platform-admin/announcements/:announcementId` | Platform Admin | Nội dung và tiến độ tạo inbox |
+| `GET` | `/api/platform-admin/support-conversations` | Platform Admin | Hộp thư hỗ trợ chung, tìm Company/phân trang |
+| `GET/POST` | `/api/platform-admin/companies/:companyId/support/messages` | Platform Admin | Lịch sử / gửi tin hỗ trợ |
+| `GET/POST` | `/api/company/support/messages` | Company Manager | Hội thoại thuộc Company được server resolve |
+| `GET` | `/api/platform-admin/statistics` | Platform Admin | Tổng và phân bố trạng thái User/Company/Job/Application |
+
+Inbox dùng lại `/api/notifications`, `/unread-count`, `/:notificationId` và
+`/:notificationId/open`. Worker Notification hiện có phục hồi cả broadcast và
+nghĩa vụ Company submit; startup khởi tạo index mới trước khi chạy worker.
+
 ### Candidate Profile và thư viện CV
 
 | Method | Endpoint | Quyền | Mô tả |

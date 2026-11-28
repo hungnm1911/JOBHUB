@@ -15,7 +15,12 @@ import validateCompanyActiveUpdate from "../middlewares/validate-company-active-
 import validateCompanyDraftUpdate from "../middlewares/validate-company-draft-update.js";
 import validateFileType from "../middlewares/validate-file-type.js";
 
+import authenticateAccess from "../middlewares/authenticate-access.js";
+import { validateCommunicationBody } from "../middlewares/validate-admin-communication.js";
+import { getSupportMessagesHandler, sendSupportMessageHandler } from "../controllers/support.controller.js";
 const router = express.Router();
+router.get("/support/messages", authenticateAccess, getSupportMessagesHandler);
+router.post("/support/messages", authenticateAccess, validateCommunicationBody(["content", "clientRequestId"]), sendSupportMessageHandler);
 
 const validateCompanySelfServiceUpdate = (request, response, next) => {
   if (request.companySelfServiceMode === "active") {

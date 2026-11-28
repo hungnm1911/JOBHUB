@@ -1,3 +1,5 @@
+import SupportConversation from "./src/models/support-conversation.model.js";
+import SupportMessage from "./src/models/support-message.model.js";
 import Announcement from "./src/models/announcement.model.js";
 import AnnouncementRecipient from "./src/models/announcement-recipient.model.js";
 import app from "./src/app.js";
@@ -174,7 +176,7 @@ const startServer = async () => {
   await ensureCandidateAvailabilityCollection();
   await ensureInterviewScheduleCollection();
   await ensureNotificationEventCollection();
-  await Promise.all([Announcement.init(), AnnouncementRecipient.init()]);
+  await Promise.all([Announcement.init(), AnnouncementRecipient.init(), SupportConversation.init(), SupportMessage.init()]);
   await ensureNotificationCollection();
   await ensureSavedJobCollection();
 

@@ -6,6 +6,16 @@ This document identifies the single canonical owner for each backend responsibil
 
 “Allowed consumers” identifies which code may import or call the owner. It does not grant a consumer permission to take ownership of the responsibility itself.
 
+## V18 support and statistics owners
+
+- Support persistence: `support-conversation.model.js`, `support-message.model.js`;
+  permission, lifecycle guards, send/idempotency and source obligations:
+  `backend/src/services/support.service.js`. `support.controller.js` owns transport.
+- Point-in-time platform aggregates extend `platform-admin.service.js`, with
+  existing Admin controller/router authorization. No counter collection.
+- `realtime-events.socket.js` owns support:message payload/fan-out; support service
+  supplies current eligible recipients. Application chat owners are unchanged.
+
 ## V18 approved owners
 
 - Announcement / audience persistence: `backend/src/models/announcement.model.js`,

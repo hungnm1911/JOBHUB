@@ -184,3 +184,14 @@ export {
   emitMessageToRecipients,
   emitNotificationToRecipient,
 };
+
+// Services supply trusted, currently authorized recipients; transport owns fan-out.
+const emitSupportMessageToRecipients = ({ recipientUserIds, companyId, message }) => {
+  if (!isRealtimeDistributionAttached()) return;
+  for (const id of new Set(recipientUserIds.map(String))) {
+    try { emitRealtimeEventToUser({ recipientUserId: id, eventName: REALTIME_EVENT.SUPPORT_MESSAGE,
+      payload: { companyId: String(companyId), message } }); }
+    catch (error) { logFanOutFailure({ eventName: REALTIME_EVENT.SUPPORT_MESSAGE, recipientUserId: id, error }); }
+  }
+};
+export { emitSupportMessageToRecipients };

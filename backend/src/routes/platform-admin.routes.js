@@ -5,6 +5,7 @@ import {
   createPositionCategoryHandler,
 } from "../controllers/category.controller.js";
 import {
+  getPlatformStatisticsHandler,
   listAccountsHandler, getAccountHandler, listCompaniesHandler, getCompanyHandler,
   getCompanyRegistrationSummaryHandler,
   approveCompanyRegistrationHandler,
@@ -25,7 +26,12 @@ import { listCompanyRecruitersHandler } from "../controllers/recruiter.controlle
 import { listAnnouncementsHandler, getAnnouncementHandler, publishAnnouncementHandler } from "../controllers/announcement.controller.js";
 import { validateCommunicationBody } from "../middlewares/validate-admin-communication.js";
 
+import { listSupportConversationsHandler, getSupportMessagesHandler, sendSupportMessageHandler } from "../controllers/support.controller.js";
 const router = express.Router();
+router.get("/statistics", authenticateAccess, authorizePlatformAdmin, getPlatformStatisticsHandler);
+router.get("/support-conversations", authenticateAccess, authorizePlatformAdmin, listSupportConversationsHandler);
+router.get("/companies/:companyId/support/messages", authenticateAccess, authorizePlatformAdmin, getSupportMessagesHandler);
+router.post("/companies/:companyId/support/messages", authenticateAccess, authorizePlatformAdmin, validateCommunicationBody(["content", "clientRequestId"]), sendSupportMessageHandler);
 router.get("/announcements", authenticateAccess, authorizePlatformAdmin, listAnnouncementsHandler);
 router.get("/announcements/:announcementId", authenticateAccess, authorizePlatformAdmin, getAnnouncementHandler);
 router.post("/announcements", authenticateAccess, authorizePlatformAdmin, validateCommunicationBody(["title", "content", "clientRequestId"]), publishAnnouncementHandler);
