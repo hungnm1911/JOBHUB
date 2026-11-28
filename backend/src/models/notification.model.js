@@ -50,6 +50,9 @@ const notificationSchema = new Schema(
         message: "content must be a non-empty string",
       },
     },
+    announcementId: { type: Schema.Types.ObjectId, ref: "Announcement", default: null, immutable: true },
+    companyId: { type: Schema.Types.ObjectId, ref: "Company", default: null, immutable: true },
+    supportMessageId: { type: Schema.Types.ObjectId, ref: "SupportMessage", default: null, immutable: true },
     applicationId: {
       type: Schema.Types.ObjectId,
       ref: "Application",

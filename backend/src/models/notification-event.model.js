@@ -28,6 +28,22 @@ const isNonEmptyTrimmedString = (value) => {
 };
 
 const assertNotificationReferenceInvariant = (event) => {
+  const adminReferenceTypes = {
+    [NOTIFICATION_TYPE.PLATFORM_ANNOUNCEMENT]: ["announcementId"],
+    [NOTIFICATION_TYPE.COMPANY_SUBMITTED]: ["companyId"],
+    [NOTIFICATION_TYPE.SUPPORT_MESSAGE_CREATED]: ["companyId", "supportMessageId"],
+  };
+  const expected = adminReferenceTypes[event.type];
+  const adminRefs = ["announcementId", "companyId", "supportMessageId"];
+  if (expected) {
+    for (const key of [...adminRefs, "applicationId", "jobInvitationId", "messageId", "interviewScheduleId"]) {
+      if (expected.includes(key) ? event[key] == null : event[key] != null) {
+        return `Invalid ${key} for ${event.type}`;
+      }
+    }
+    return null;
+  }
+  if (adminRefs.some((key) => event[key] != null)) return "Admin references require an Admin Notification type";
   const isChatEvent = event.type === NOTIFICATION_TYPE.CHAT_MESSAGE_CREATED;
   const isScheduleEvent = SCHEDULE_NOTIFICATION_TYPES.has(event.type);
   const isPureInvitationEvent = PURE_JOB_INVITATION_NOTIFICATION_TYPES.has(
@@ -128,6 +144,9 @@ const notificationEventSchema = new Schema(
       default: null,
       immutable: true,
     },
+    announcementId: { type: Schema.Types.ObjectId, ref: "Announcement", default: null, immutable: true },
+    companyId: { type: Schema.Types.ObjectId, ref: "Company", default: null, immutable: true },
+    supportMessageId: { type: Schema.Types.ObjectId, ref: "SupportMessage", default: null, immutable: true },
     applicationId: {
       type: Schema.Types.ObjectId,
       ref: "Application",

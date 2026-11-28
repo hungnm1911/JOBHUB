@@ -22,7 +22,13 @@ import validateCreatePositionCategory from "../middlewares/validate-create-posit
 
 import { listCompanyRecruitersHandler } from "../controllers/recruiter.controller.js";
 
+import { listAnnouncementsHandler, getAnnouncementHandler, publishAnnouncementHandler } from "../controllers/announcement.controller.js";
+import { validateCommunicationBody } from "../middlewares/validate-admin-communication.js";
+
 const router = express.Router();
+router.get("/announcements", authenticateAccess, authorizePlatformAdmin, listAnnouncementsHandler);
+router.get("/announcements/:announcementId", authenticateAccess, authorizePlatformAdmin, getAnnouncementHandler);
+router.post("/announcements", authenticateAccess, authorizePlatformAdmin, validateCommunicationBody(["title", "content", "clientRequestId"]), publishAnnouncementHandler);
 
 router.post(
   "/categories/fields",

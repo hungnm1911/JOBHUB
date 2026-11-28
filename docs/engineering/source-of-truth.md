@@ -6,6 +6,16 @@ This document identifies the single canonical owner for each backend responsibil
 
 “Allowed consumers” identifies which code may import or call the owner. It does not grant a consumer permission to take ownership of the responsibility itself.
 
+## V18 approved owners
+
+- Announcement / audience persistence: `backend/src/models/announcement.model.js`,
+  `announcement-recipient.model.js`; workflow and derived progress:
+  `backend/src/services/announcement.service.js`.
+- Admin source notifications extend the canonical Notification/Event models and
+  `notification.service.js`; Company submit seed remains in `company.service.js`.
+- The existing Notification recovery worker additionally delegates bounded Admin
+  submission/broadcast recovery to `announcement.service.js`; no second scheduler.
+
 ## Ownership table
 
 | Responsibility | Canonical owner | Allowed consumers | Forbidden duplication |

@@ -1,3 +1,5 @@
+import Announcement from "./src/models/announcement.model.js";
+import AnnouncementRecipient from "./src/models/announcement-recipient.model.js";
 import app from "./src/app.js";
 import config from "./src/config/index.js";
 import logger from "./src/utils/logger.js";
@@ -172,6 +174,7 @@ const startServer = async () => {
   await ensureCandidateAvailabilityCollection();
   await ensureInterviewScheduleCollection();
   await ensureNotificationEventCollection();
+  await Promise.all([Announcement.init(), AnnouncementRecipient.init()]);
   await ensureNotificationCollection();
   await ensureSavedJobCollection();
 

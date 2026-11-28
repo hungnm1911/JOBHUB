@@ -270,6 +270,8 @@ const COMPANY_COLLECTION_VALIDATOR = Object.freeze({
 
 const companySchema = new Schema(
   {
+    submittedAdminRecipients: { type: [Schema.Types.ObjectId], default: null },
+    submittedAdminNotifiedAt: { type: Date, default: null },
     name: {
       type: String,
       trim: true,

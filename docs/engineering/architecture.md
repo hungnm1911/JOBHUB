@@ -741,3 +741,14 @@ chooses `/` after resolved Manager login, preserving safe Company deep links.
 Four independent internal resource reads provide pending/published Job previews,
 Recruiters and the owned Company; focus and the shared socket CONNECT lifecycle
 reread them. No V8 access, new Backend API, schema or realtime protocol is added.
+
+## V18 approved extension
+
+The existing Notification worker also schedules bounded announcement/Company-submit
+obligation recovery through announcement.service.js. AnnouncementRecipient is
+source delivery work, not a second inbox/event log. Existing NotificationEvent
+materialization remains the sole inbox writer. V18 source services may invoke the
+same sockets facade after committed support messages; support:message is a distinct
+payload and never changes Application chat authority. New models are initialized
+before starting the existing worker. Announcement progress retry telemetry belongs
+to its source delivery rows, not to NotificationEvent or Socket distribution.

@@ -732,6 +732,7 @@ const submitOwnedCompany = async ({ managerUserId }) => {
     );
   }
 
+  const adminRecipients = await User.find({ role: USER_ROLE.PLATFORM_ADMIN, status: USER_STATUS.ACTIVE }).select("_id");
   const updatedCompany = await Company.findOneAndUpdate(
     {
       _id: company._id,
@@ -757,6 +758,7 @@ const submitOwnedCompany = async ({ managerUserId }) => {
             businessRegistrationNumber: "$businessRegistrationNumber",
           },
           submittedAt: "$$NOW",
+          submittedAdminRecipients: { $literal: adminRecipients.map((user) => user._id) },
           approvalStatus: COMPANY_APPROVAL_STATUS.PENDING,
           operationalStatus: COMPANY_OPERATIONAL_STATUS.INACTIVE,
         },
