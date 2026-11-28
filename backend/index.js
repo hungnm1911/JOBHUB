@@ -40,7 +40,7 @@ let isShuttingDown = false;
 
 const startHttpServer = () => {
   return new Promise((resolve, reject) => {
-    const server = app.listen(config.port);
+    const server = app.listen(config.port, "0.0.0.0");
 
     const handleListening = () => {
       server.off("error", handleStartupError);

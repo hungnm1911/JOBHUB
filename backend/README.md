@@ -129,7 +129,7 @@ Nếu một bước bắt buộc thất bại, tiến trình sẽ dừng thay v�
 
 ## Yêu cầu hệ thống
 
-- Node.js `>= 20.19.0` (Mongoose 9 trong lockfile yêu cầu mức này).
+- Node.js 22 cho production image (`file-type@22` yêu cầu `>=22`; Mongoose 9 chỉ yêu cầu `>=20.19.0`).
 - npm, sử dụng cùng `package-lock.json` đã commit.
 - MongoDB chạy dưới dạng replica set, kể cả local, vì các workflow nghiệp vụ sử dụng multi-document transaction.
 - Tài khoản Cloudinary hợp lệ.
@@ -257,6 +257,7 @@ Các biến dưới đây đang được `src/config/index.js` yêu cầu phải
 | Biến | Default | Ý nghĩa |
 | --- | --- | --- |
 | `APP_BASE_URL` | `http://localhost:8000` | Origin API dùng để tạo link trong email; không thêm `/api` |
+| `MAIL_FROM_ADDRESS` | `SMTP_USER` | Địa chỉ sender đã xác minh; bắt buộc đặt riêng nếu Brevo SMTP login không phải sender hợp lệ |
 | `FRONTEND_BASE_URL` | `http://localhost:5173` | Origin frontend cho link email mở màn frontend (hiện là `/verify-email` và `/confirm-company-approval`) |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Danh sách origin frontend, phân cách bằng dấu phẩy |
 | `EMAIL_VERIFICATION_EXPIRES_IN_MS` | `86400000` | TTL xác minh email |
