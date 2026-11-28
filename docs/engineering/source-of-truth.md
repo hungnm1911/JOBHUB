@@ -6,30 +6,16 @@ This document identifies the single canonical owner for each backend responsibil
 
 “Allowed consumers” identifies which code may import or call the owner. It does not grant a consumer permission to take ownership of the responsibility itself.
 
-## V18 support and statistics owners
-
-- Support persistence: `support-conversation.model.js`, `support-message.model.js`;
-  permission, lifecycle guards, send/idempotency and source obligations:
-  `backend/src/services/support.service.js`. `support.controller.js` owns transport.
-- Point-in-time platform aggregates extend `platform-admin.service.js`, with
-  existing Admin controller/router authorization. No counter collection.
-- `realtime-events.socket.js` owns support:message payload/fan-out; support service
-  supplies current eligible recipients. Application chat owners are unchanged.
-
-## V18 approved owners
-
-- Announcement / audience persistence: `backend/src/models/announcement.model.js`,
-  `announcement-recipient.model.js`; workflow and derived progress:
-  `backend/src/services/announcement.service.js`.
-- Admin source notifications extend the canonical Notification/Event models and
-  `notification.service.js`; Company submit seed remains in `company.service.js`.
-- The existing Notification recovery worker additionally delegates bounded Admin
-  submission/broadcast recovery to `announcement.service.js`; no second scheduler.
-
 ## Ownership table
 
 | Responsibility | Canonical owner | Allowed consumers | Forbidden duplication |
 | --- | --- | --- | --- |
+| V18 announcement and immutable audience persistence | `backend/src/models/announcement.model.js`, `backend/src/models/announcement-recipient.model.js` | Announcement service and index readiness | Second announcement/audience models; unbounded recipient array; treating delivery as read/Socket receipt |
+| V18 publish, audience snapshot, derived progress and bounded recovery | `backend/src/services/announcement.service.js`; existing `backend/src/workers/notification-recovery.worker.js` schedules recovery | Announcement controller; canonical Notification worker | Second scheduler/inbox or Notification materializer; recomputing historical audience |
+| V18 Company-submit Admin notification source seed | `backend/src/services/company.service.js`, `backend/src/models/company.model.js` | Existing Company submit; announcement recovery consumes seed through canonical Notification service | Best-effort-only source obligation; exposing internal seed in Company DTO |
+| V18 independent Company support persistence and workflow | `backend/src/models/support-conversation.model.js`, `backend/src/models/support-message.model.js`, `backend/src/services/support.service.js` | Support controller; startup index readiness | Application chat access; client-owned tenant/sender; separate chat authority for same support workflow |
+| V18 platform status aggregates | `backend/src/services/platform-admin.service.js` (`getPlatformStatistics`) | Existing Admin controller/router | Persisted KPI counters; raw COMPANY_STAFF inferred as Recruiter; exposing entity details through aggregates |
+| V18 support realtime payload and fan-out | `backend/src/sockets/realtime-events.socket.js` through existing facade; support service supplies current authorized recipients after commit | Support post-commit workflow | Socket-owned authorization/DB access; second Socket.IO server; Application Message payload reused for support |
 | Company Manager forced-transfer preview (V6 F05, approved 2026-11-27) | `backend/src/services/recruiter.service.js` (`getRecruiterHandover`, `listRecruitersByCompany` internal outgoing-member/eligibility filter); unfinished-Job predicates remain `backend/src/services/job.service.js` (`findAllUnfinishedJobsAsPrimary`, `findAllUnfinishedJobsAsSupporting`); existing recruiter controller/routes own transport | Same-Company Manager handover read after the canonical business guard; existing lock/terminate reuse the same responsibility-query owners | Exposing DRAFT title/content; trusting a client Company ID; persisting preview state/reservations; a second eligibility or forced-transfer mutation engine; treating preview as commit authority |
 | V17 Slice 01 Rich Text core: Full/Minimal HTML sanitization and matching plain-text derivation (BR-01–BR-03, BR-09; Data §10) | `backend/src/services/rich-text.service.js` (`normalizeRichText`) | Approved Job, Generated CV, and Company service integrations in later V17 slices | Parallel HTML/preset/URL sanitizers or HTML-to-plain-text rules in resource services; applying new business rejection or persistence from this core |
 | V17 Slice 05 legacy Job/Generated CV HTML backfill (F05; BR-01, BR-02, BR-04, BR-07, BR-10; Data §8.6, §13, §15–§16) | `backend/src/database/migrations/v17-legacy-rich-text-backfill.js` (`preflight` and `migrate`; literal plain text is escaped, then accepted only on exact plain-text round trip through `normalizeRichText`; DRAFT Jobs and non-archived Generated DRAFT/ACTIVE CVs only; conditional HTML-only writes preserve plain text, timestamps, lifecycle, and snapshots) | Canonical migration runner and focused migration tests | Import-time/startup writes; HTML inference from legacy markup-looking text; locked Job, archived/Uploaded CV, Company, Application, or JobInvitation writes; parallel conversion or HTML normalization rules |

@@ -2,6 +2,9 @@
 
 ## Current project state
 
+V18 extends the canonical inbox/recovery with Admin source notifications and
+announcements; implementation/verification is recorded in [V18](v18-admin-communication-statistics.md).
+
 2026-11-26 Recruiter FE API read extension: Optional recipient inbox content search, type/read-state filters, sorting and pagination are implemented; global unread count is preserved. Focused verification and the common Backend gate now pass after the logging fix and list-read follow-up. The earlier accepted baseline below is retained. HTTP contract: [Recruiter API](../../engineering/recruiter-api-contract.md).
 
 **V13 — Notification và phân phối realtime** is `COMPLETED AND VERIFIED`:
@@ -36,8 +39,8 @@ add `InterviewSchedule.COMPLETED` or `INTERVIEW_SCHEDULE_COMPLETED`.
     candidate-facing `APPLICATION_UNASSIGNED`, `actorUserId` being null vs set
     lets a Candidate infer automatic vs manual Unassign. Needs a public
     Notification projection in a later API-contract change.
-  - The inbox list is unpaginated; Data Contract IDX-N01 defers pagination to
-    the later Data/API layer.
+  - Inbox pagination is no longer deferred: the 2026-11-26 optional list-read
+    extension supplies search/filter/sort/pagination; V18 Admin consumes it.
 
 ## Implementation record (slice detail)
 

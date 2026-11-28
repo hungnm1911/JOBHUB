@@ -20,10 +20,13 @@ import {
   AdminStatus,
 } from './AdminUi'
 const spec = { q: 'text', limit: ['20', '10', '50', '100'] }
-function AnnouncementProgress({ id }) {
+function AnnouncementProgress({ id, onComplete }) {
   const resource = useAdminResource(getAnnouncementApi, id)
   const item = resource.data?.announcement
   const { reload } = resource
+  useEffect(() => {
+    if (item?.status === 'COMPLETE') onComplete()
+  }, [item?.status, onComplete])
   useEffect(() => {
     if (item?.status !== 'PENDING') return
     const timer = setInterval(reload, 5000)
@@ -152,7 +155,9 @@ function AdminAnnouncements() {
         </p>
         <Button type="submit">Xem trước và phát hành</Button>
       </form>
-      {selected && <AnnouncementProgress id={selected} key={selected} />}
+      {selected && (
+        <AnnouncementProgress id={selected} key={selected} onComplete={resource.reload} />
+      )}
       <h2 className="font-semibold">Lịch sử phát hành</h2>
       <AdminToolbar {...{ search, setFilters }} reload={resource.reload} />
       <AdminState resource={resource}>

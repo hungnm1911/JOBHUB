@@ -58,6 +58,8 @@ Reading rules:
 - V16 does not yet have an implementation snapshot; see the Backend Product Roadmap.
 - [V17 — Rich Text Content Integration](backend/v17-rich-text-content-integration.md)
 
+- [V18 — Admin communication and statistics](backend/v18-admin-communication-statistics.md)
+
 ## Frontend
 
 - [Company Manager workspace](frontend/company-manager-workspace.md)
@@ -67,6 +69,8 @@ Reading rules:
 - [V03 — Job discovery](frontend/v03-job-discovery.md)
 - [V04 — Tiptap](frontend/v04-tibtab.md)
 - [V17 — Rich Text Content Integration](frontend/v17-rich-text-content-integration.md)
+
+- [V18 — Admin Bàn điều hành](frontend/v18-admin-control-desk.md)
 
 ## AI Kit
 

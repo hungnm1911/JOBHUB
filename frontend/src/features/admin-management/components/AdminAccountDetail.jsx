@@ -23,8 +23,9 @@ function AdminAccountDetail({ userId }) {
   const canManage =
     account &&
     account.id !== viewer.userId &&
-    account.role !== USER_ROLE.PLATFORM_ADMIN &&
-    account.membership?.role !== COMPANY_MEMBER_ROLE.COMPANY_MANAGER
+    (account.role === USER_ROLE.CANDIDATE ||
+      (account.role === USER_ROLE.COMPANY_STAFF &&
+        account.membership?.role === COMPANY_MEMBER_ROLE.RECRUITER))
   const mutate = async () => {
     if (submitting.current) return
     submitting.current = true
