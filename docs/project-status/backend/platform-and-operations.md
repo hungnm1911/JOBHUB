@@ -111,6 +111,18 @@ and its injected AI Kit logger.
 
 ## Operational provisioning
 
+- **Frontend deployed on Vercel 2026-11-28; Backend not deployed:** the
+  Frontend is reported deployed at `https://jobhub-vn.vercel.app/` using
+  `frontend/vercel.json` (Vite, frozen-lockfile install, `dist`, SPA rewrite,
+  builds only for `main`). Its `VITE_*` values are placeholders because no
+  Render Backend exists yet, so API and Socket.IO flows are not functional there.
+  An HTTP check confirmed `/` and a deep path return `200 text/html` and a
+  missing `/assets/` file returns `404`; a production build with dummy
+  `VITE_*` values succeeded and contained no `localhost:8000`. No backend
+  request, auth refresh, Socket.IO, CORS, or `yarn verify:agent` check was run.
+  Pending: deploy Backend, set real `VITE_*` values and redeploy, and set
+  `CORS_ALLOWED_ORIGINS`/`FRONTEND_BASE_URL` to the Vercel origin. See
+  [Frontend README](../../../frontend/README.md#vercel-production).
 - **Atlas production initialized; live verified 2026-11-28:** The new `jobhub`
   database on `jobhub-prod.a956r7b.mongodb.net` began with zero collections.
   The V4.2 Salary cutover applied and verified the strict `jobs` validator;
