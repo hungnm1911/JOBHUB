@@ -105,7 +105,7 @@ and its injected AI Kit logger.
   The V4.2 Salary cutover applied and verified the strict `jobs` validator;
   a subsequent read-only preflight reported it active with zero Jobs. The V4
   migration inserted and verified all six canonical Experience Levels. The
-  database has zero Jobs.
+  production Job sample data was subsequently seeded as recorded below.
 - **Production Platform Admin provisioned and login-verified 2026-11-28:** The
   new Atlas database has exactly one `User`, with role `PLATFORM_ADMIN`, status
   `ACTIVE`, verified email, `mustChangePassword=false`, and a bcrypt password
@@ -115,13 +115,59 @@ and its injected AI Kit logger.
 - **Production Category catalog seeded and live-verified 2026-11-28:** The
   production Atlas `categories` collection now has 25 FIELDs and 886 POSITIONs
   (911 total). The normalized TopCV-derived catalog is in
-  `backend/src/database/seeds/topcv-jobhub-category-catalog.json`; its audit
+  `tmp/production-seed-data/seed-normaliztion/topcv-jobhub-category-catalog.json`; its audit
   list excludes 25 clearly unrelated source positions from the Tài xế, Biên
   phiên dịch, and Luật groups. The explicit production seed script uses the
   canonical Category service, verifies the compound unique index and exact
   FIELD→POSITION relationships, and a second dry-run reported zero missing
   records. Focused Node syntax and changed-file ESLint passed; the full Backend
   gate was skipped at the user's request.
+- **Production Company sample data seeded and live-verified 2026-11-28:** The
+  Atlas database now has 50 `APPROVED + ACTIVE` Companies, 50 active Company
+  Manager memberships, and 50 active, email-verified Company Staff accounts.
+  Their source definitions and owner-only credential file are local under
+  `tmp/production-seed-data/seed-normaliztion/` and ignored by Git. Profiles
+  cover all 25 seeded FIELDs, including six IT Companies; each description has
+  520–527 words and matching Full rich-text HTML/plain text. FIELD affinity is
+  seed metadata and profile wording because Company has no FIELD reference in
+  its approved schema. The explicit seed uses one MongoDB transaction per
+  Company/User/Membership trio and verifies the Company validator plus unique
+  Manager membership index. A real Manager login and owned active Company read
+  succeeded; the test session was removed. A second dry-run found zero missing
+  records. Focused syntax, changed-file ESLint, dataset audit and live Atlas
+  checks passed; the full Backend gate was skipped at the user's request.
+- **Production Recruiter sample data seeded and live-verified 2026-11-28:**
+  Each of the 50 active Companies has exactly three active Recruiter
+  memberships, for 150 Recruiter Users and 150 memberships. The owner-only,
+  Git-ignored `tmp/production-seed-data/seed-normaliztion/production-recruiters.json`
+  groups each Company with its three Recruiters and their individual login
+  credentials. This explicit operator seed provisions the final activated
+  state directly; the normal V3 invitation and self-activation workflow is
+  unchanged. Production dry-run reported zero missing records, the employee
+  code unique index was verified, two real Recruiter logins and their own
+  Company access succeeded, foreign-Company access returned 403, and the test
+  sessions were removed. Focused checks passed; the full Backend gate was
+  skipped at the user's request.
+- **Production Job sample data seeded and live-verified 2026-11-28:**
+  `backend/scripts/seed-production-jobs.js` used canonical Recruiter draft,
+  submit, Company Manager publish, and Supporting Recruiter assignment services
+  to create 500 `PUBLISHED` Jobs from the normalized, Git-ignored
+  `tmp/production-seed-data/seed-normaliztion/production-jobs.json`. There are
+  exactly 10 Jobs per each of 50 Companies; every Job has one Primary and two
+  distinct, active, same-Company Supporting Recruiters, one valid FIELD→POSITION
+  pair, a valid Structured Salary, a future deadline, and nonempty rich-text
+  HTML/plain content and `embeddingText`. A repeat dry-run found 500 existing,
+  zero missing; a separate live audit verified all counts and relations. The
+  production Atlas Vector Search index remained `READY` and queryable, and a
+  sample semantic query returned 50 eligible hits (the query limit), sufficient
+  to supply 10 candidates. Source salaries of zero were treated as negotiable;
+  numeric `triệu` salaries were interpreted as monthly VND. The local, ignored
+  state file supports safe resumption. This is sample data derived from a raw
+  dataset, and some source benefit wording retains third-party insurance names;
+  content accuracy has not been manually certified. Focused Node syntax,
+  changed-file ESLint, the architecture checker (ARCH-001–019), and 19 Job
+  approval/team tests passed. The full Backend gate was skipped at the user's
+  request.
 - **Development Platform Admin previously provisioned and login-verified:** The
   separate development Atlas database has one configured `PLATFORM_ADMIN` with
   `ACTIVE` status, a verified email, `mustChangePassword=false`, and a bcrypt
