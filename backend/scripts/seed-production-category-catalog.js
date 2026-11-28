@@ -18,7 +18,7 @@ import {
 const EXPECTED_HOST = "jobhub-prod.a956r7b.mongodb.net";
 const EXPECTED_DATABASE = "jobhub";
 const DATA_URL = new URL(
-  "../src/database/seeds/topcv-jobhub-category-catalog.json",
+  "../../tmp/production-seed-data/seed-normaliztion/topcv-jobhub-category-catalog.json",
   import.meta.url,
 );
 
