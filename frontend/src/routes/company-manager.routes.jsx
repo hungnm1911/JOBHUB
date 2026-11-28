@@ -1,3 +1,5 @@
+import CompanySupportPage from '@/pages/CompanySupportPage'
+import CompanyNotificationsPage from '@/pages/CompanyNotificationsPage'
 import CompanyManagerLayout from '@/components/layouts/CompanyManagerLayout'
 import CompanyOnboardingPage from '@/pages/CompanyOnboardingPage'
 import CompanyJobsPage from '@/pages/CompanyJobsPage'
@@ -61,6 +63,8 @@ const companyManagerRoutes = {
               element: <CompanyRecruiterHandoverPage />,
             },
             { path: 'profile', element: <CompanyProfilePage /> },
+            { path: 'support', element: <CompanySupportPage /> },
+            { path: 'notifications', element: <CompanyNotificationsPage /> },
           ],
         },
       ],

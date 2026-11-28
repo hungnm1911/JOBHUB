@@ -2,7 +2,7 @@
 
 Frontend của JOBHUB là ứng dụng React chạy trên Vite, cung cấp nền tảng kỹ thuật cho các trải nghiệm Candidate, Recruiter, Company Manager và Platform Admin.
 
-Ứng dụng hiện có routing, Redux, HTTP client, authentication lifecycle, Socket.IO client, validation, Tailwind CSS, shadcn/ui và hệ thống toast dùng chung. Phạm vi hiện tại vẫn là frontend foundation: chỉ có trang mẫu công khai tại `/`, chưa có màn hình đăng nhập/đăng xuất hoặc màn hình nghiệp vụ hoàn chỉnh.
+Ứng dụng hiện có routing, Redux, HTTP client, authentication lifecycle, Socket.IO client, validation, Tailwind CSS, shadcn/ui và hệ thống toast dùng chung. Các màn hình nghiệp vụ đã có được theo dõi tại Project Status; không dùng các mục foundation cũ bên dưới làm inventory triển khai hiện tại.
 
 > [!IMPORTANT]
 > README này mô tả cách chạy và kiến trúc frontend hiện có. Yêu cầu nghiệp vụ chính thức nằm trong [`docs/product/backend/versions/`](../docs/product/backend/versions/), API thực tế do backend routes/controllers quyết định, và trạng thái triển khai được tra cứu từ [Project Status](../docs/project-status/index.md). Không suy ra một màn hình hoặc workflow frontend chỉ từ việc backend đã có endpoint tương ứng.
@@ -632,3 +632,21 @@ Khi các nguồn khác nhau mâu thuẫn: Product Specification quyết định 
 ## Giấy phép
 
 Frontend thuộc repository JOBHUB và sử dụng các điều khoản giấy phép của dự án.
+
+## Admin Bàn điều hành (V18)
+
+Đã nối API thật cho `/admin`, `/admin/company-registrations` và snapshot detail,
+`/admin/companies` + detail/Recruiter, `/admin/accounts` + detail,
+`/admin/categories`, `/admin/announcements`, `/admin/notifications`,
+`/admin/support` + `/:companyId`, `/admin/statistics`.
+Manager dùng `/company/support` và `/company/notifications`; Candidate/Recruiter
+nhận broadcast qua inbox hiện có. Không dùng dữ liệu prototype trong production.
+
+Tái sử dụng HTTP client, session guards, Socket.IO, useResource/useListSearch và
+component JOBHUB. Read events/resync đều reread HTTP; chưa có receipts/typing,
+attachment, broadcast recall hoặc chart tăng trưởng. Contract:
+[Admin communication API](../docs/engineering/admin-communication-api-contract.md).
+Trạng thái và bằng chứng: [Admin control desk](../docs/project-status/frontend/v18-admin-control-desk.md).
+
+Node 24 cung cấp `navigator` toàn cục; các test hiện có tự khai báo navigator cần
+`NODE_OPTIONS=--no-experimental-global-navigator yarn verify:agent` trong môi trường này.

@@ -29,6 +29,7 @@ const NOTIFICATION_SORT_OPTIONS = Object.freeze([
 
 // V13 F02–F07 and V15: the types whose recipient can be a Recruiter.
 const RECRUITER_NOTIFICATION_TYPES = Object.freeze([
+  NOTIFICATION_TYPE.PLATFORM_ANNOUNCEMENT,
   NOTIFICATION_TYPE.DIRECT_APPLICATION_CREATED,
   NOTIFICATION_TYPE.APPLICATION_ASSIGNED,
   NOTIFICATION_TYPE.APPLICATION_REASSIGNED,
@@ -62,10 +63,15 @@ function readNotificationSearch(searchParams) {
   const sort = searchParams.get('sort')
 
   return {
-    keyword: (searchParams.get('q') ?? '').slice(0, NOTIFICATION_SEARCH_MAX_LENGTH),
+    keyword: (searchParams.get('q') ?? '').slice(
+      0,
+      NOTIFICATION_SEARCH_MAX_LENGTH,
+    ),
     readState: Object.values(READ_STATE).includes(readState) ? readState : '',
     type: RECRUITER_NOTIFICATION_TYPES.includes(type) ? type : '',
-    sort: Object.values(NOTIFICATION_SORT).includes(sort) ? sort : NOTIFICATION_SORT.NEWEST,
+    sort: Object.values(NOTIFICATION_SORT).includes(sort)
+      ? sort
+      : NOTIFICATION_SORT.NEWEST,
     page: /^[1-9]\d{0,5}$/.test(pageParam) ? Number(pageParam) : 1,
   }
 }

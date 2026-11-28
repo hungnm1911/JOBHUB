@@ -167,3 +167,30 @@ Verification owners: `test/company-manager-workspace.test.js` and
 `test/company-manager-home.test.js`, included by
 `test:company-manager` in the common `verify:agent` gate. HTTP API semantics are
 recorded in the V1–V4 and Recruiter API contracts; project status records evidence.
+
+## V18 Admin control desk and Company support
+
+- `features/company-registration-review/` remains canonical for review overview,
+  list and snapshot decision. Overview now reads server summary independently;
+  list uses server search, filters, stable sort and pagination.
+- `features/admin-management/` owns Admin accounts/current Companies/Recruiters,
+  immutable category creation, announcements/inbox and statistics presentation.
+  `public.js` is its explicit interface for Admin notification bell and shared
+  Admin resource/presentation used by review and support screens; it does not
+  introduce a second data cache or another hook layer.
+- `features/company-support/` owns shared Admin/Manager support UI. Pages bind
+  Company route params and key tenant/User changes; Manager tenant comes from BE.
+- Existing `platform-admin.api.js`, `notification.api.js`, `category.api.js` and
+  new `support.api.js` own transport. Layouts only compose navigation and feature
+  widgets, never call resource APIs. `useAdminResource` wraps canonical useResource
+  with focus/CONNECT/Notification/support-event HTTP rereads and cleanup.
+- `utils/constant.js` owns NOTIFICATION_TYPE, REALTIME_EVENT.SUPPORT_MESSAGE and
+  the local NOTIFICATION_READ_EVENT, which refreshes the bell after read mutation.
+  Candidate notification utility reexports its former vocabulary for compatibility;
+  Candidate/Recruiter inbox owners retain their presentation/navigation behavior.
+- `validation/admin-communication.schema.js` owns actual form schemas and is
+  reexported through `@/validation`; existing ConfirmDialog and CompanyProfileCard
+  are consumed through their existing facade/presentation mode.
+- Candidate Application status presentation metadata lives in
+  `features/candidate-dashboard/application-status-style.js`; badge/list consumers
+  share it. The component exports only a React component for Fast Refresh.

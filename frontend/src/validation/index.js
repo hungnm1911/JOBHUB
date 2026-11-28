@@ -32,3 +32,5 @@ export {
   z,
   zodResolver,
 }
+
+export { announcementSchema, supportMessageSchema, adminCategorySchema } from './admin-communication.schema'

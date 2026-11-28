@@ -9,29 +9,7 @@ import {
 } from 'lucide-react'
 
 // Must stay aligned with backend/src/constants/notification-type.js
-const NOTIFICATION_TYPE = Object.freeze({
-  DIRECT_APPLICATION_CREATED: 'DIRECT_APPLICATION_CREATED',
-  APPLICATION_ASSIGNED: 'APPLICATION_ASSIGNED',
-  APPLICATION_REASSIGNED: 'APPLICATION_REASSIGNED',
-  APPLICATION_UNASSIGNED: 'APPLICATION_UNASSIGNED',
-  APPLICATION_STATUS_CHANGED: 'APPLICATION_STATUS_CHANGED',
-  APPLICATION_HIRED: 'APPLICATION_HIRED',
-  APPLICATION_REJECTED: 'APPLICATION_REJECTED',
-  APPLICATION_WITHDRAWN: 'APPLICATION_WITHDRAWN',
-  INTERVIEW_AVAILABILITY_REQUESTED: 'INTERVIEW_AVAILABILITY_REQUESTED',
-  INTERVIEW_AVAILABILITY_SUBMITTED: 'INTERVIEW_AVAILABILITY_SUBMITTED',
-  INTERVIEW_SCHEDULE_CREATED: 'INTERVIEW_SCHEDULE_CREATED',
-  INTERVIEW_SCHEDULE_CHANGED: 'INTERVIEW_SCHEDULE_CHANGED',
-  INTERVIEW_SCHEDULE_CONFIRMED: 'INTERVIEW_SCHEDULE_CONFIRMED',
-  INTERVIEW_SCHEDULE_DECLINED: 'INTERVIEW_SCHEDULE_DECLINED',
-  CHAT_MESSAGE_CREATED: 'CHAT_MESSAGE_CREATED',
-  JOB_INVITATION_RECEIVED: 'JOB_INVITATION_RECEIVED',
-  JOB_INVITATION_ACCEPTED: 'JOB_INVITATION_ACCEPTED',
-  JOB_INVITATION_REJECTED: 'JOB_INVITATION_REJECTED',
-  JOB_INVITATION_REVOKED: 'JOB_INVITATION_REVOKED',
-  JOB_INVITATION_INVALIDATED: 'JOB_INVITATION_INVALIDATED',
-  INVITED_APPLICATION_CREATED: 'INVITED_APPLICATION_CREATED',
-})
+import { NOTIFICATION_TYPE } from '@/utils/constant'
 
 const NOTIFICATION_LIST_FILTER = Object.freeze({
   ALL: 'ALL',
@@ -83,6 +61,11 @@ const INTERVIEW_TYPES = new Set([
 ])
 
 const NOTIFICATION_TYPE_META = Object.freeze({
+  [NOTIFICATION_TYPE.PLATFORM_ANNOUNCEMENT]: {
+    label: 'Thông báo hệ thống',
+    icon: Mail,
+    tone: 'bg-primary/10 text-primary',
+  },
   [NOTIFICATION_TYPE.DIRECT_APPLICATION_CREATED]: {
     label: 'Đơn ứng tuyển',
     icon: BriefcaseBusiness,
@@ -196,7 +179,9 @@ const DEFAULT_TYPE_META = Object.freeze({
   tone: 'bg-secondary text-muted-foreground',
 })
 
-const relativeTimeFormatter = new Intl.RelativeTimeFormat('vi', { numeric: 'auto' })
+const relativeTimeFormatter = new Intl.RelativeTimeFormat('vi', {
+  numeric: 'auto',
+})
 
 function formatRelativeTime(value) {
   if (!value) {
@@ -220,7 +205,10 @@ function formatRelativeTime(value) {
     return relativeTimeFormatter.format(Math.round(deltaSeconds / 3600), 'hour')
   }
   if (absolute < 86_400 * 30) {
-    return relativeTimeFormatter.format(Math.round(deltaSeconds / 86_400), 'day')
+    return relativeTimeFormatter.format(
+      Math.round(deltaSeconds / 86_400),
+      'day',
+    )
   }
 
   return new Intl.DateTimeFormat('vi', {
@@ -337,7 +325,10 @@ function getNotificationDestination(notification) {
     return null
   }
 
-  if (notification.type === NOTIFICATION_TYPE.CHAT_MESSAGE_CREATED && notification.applicationId) {
+  if (
+    notification.type === NOTIFICATION_TYPE.CHAT_MESSAGE_CREATED &&
+    notification.applicationId
+  ) {
     return `/candidate/messages?applicationId=${encodeURIComponent(notification.applicationId)}`
   }
 

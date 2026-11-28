@@ -1,6 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
 
-import SessionAccountCard from '@/features/authentication/components/SessionAccountCard'
 import CompanyRegistrationList from '@/features/company-registration-review/components/CompanyRegistrationList'
 import { isRegistrationStage } from '@/features/company-registration-review/utils'
 
@@ -12,14 +11,12 @@ function AdminCompanyRegistrationsPage() {
 
   return (
     <CompanyRegistrationList
-      accountPanel={
-        <SessionAccountCard
-          logoutMessage="Đăng nhập lại để tiếp tục quản trị JOBHUB."
-          roleLabel="Platform Admin"
-        />
+      detailPath={(companyId) =>
+        `${REGISTRATIONS_PATH}/${encodeURIComponent(companyId)}`
       }
-      detailPath={(companyId) => `${REGISTRATIONS_PATH}/${encodeURIComponent(companyId)}`}
-      onStageChange={(stage) => setSearchParams(stage ? { stage } : {}, { replace: true })}
+      onStageChange={(stage) =>
+        setSearchParams(stage ? { stage } : {}, { replace: true })
+      }
       stage={isRegistrationStage(requestedStage) ? requestedStage : null}
     />
   )

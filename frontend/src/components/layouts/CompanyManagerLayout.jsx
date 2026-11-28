@@ -1,4 +1,11 @@
-import { ArrowLeft, BriefcaseBusiness, Building2, Users } from 'lucide-react'
+import {
+  ArrowLeft,
+  BriefcaseBusiness,
+  Building2,
+  Users,
+  MessageSquare,
+  Bell,
+} from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 
 import { cn } from '@/lib/utils'
@@ -7,6 +14,8 @@ const navigation = [
   { to: '/company/jobs', label: 'Job tuyển dụng', icon: BriefcaseBusiness },
   { to: '/company/recruiters', label: 'Recruiter', icon: Users },
   { to: '/company/profile', label: 'Hồ sơ công ty', icon: Building2 },
+  { to: '/company/support', label: 'Hỗ trợ JOBHUB', icon: MessageSquare },
+  { to: '/company/notifications', label: 'Thông báo', icon: Bell },
 ]
 
 function CompanyManagerLayout() {
@@ -16,7 +25,13 @@ function CompanyManagerLayout() {
       data-area="company-manager"
     >
       <aside className="shrink-0 border-b bg-card p-4 lg:w-56 lg:border-r lg:border-b-0 lg:py-7">
-        <Link className="mb-4 inline-flex items-center gap-2 px-3 text-sm text-muted-foreground hover:text-primary" to="/"><ArrowLeft aria-hidden="true" className="size-4" />Trang chủ</Link>
+        <Link
+          className="mb-4 inline-flex items-center gap-2 px-3 text-sm text-muted-foreground hover:text-primary"
+          to="/"
+        >
+          <ArrowLeft aria-hidden="true" className="size-4" />
+          Trang chủ
+        </Link>
         <p className="mb-4 px-3 text-xs font-semibold tracking-wide text-muted-foreground">
           COMPANY WORKSPACE
         </p>
